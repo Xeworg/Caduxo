@@ -1,0 +1,19 @@
+project: Caduxo
+language: en
+artifactStore: both
+sdd:
+  executionMode: interactive
+  reviewBudgetChangedLines: 800
+  chainedPrStrategy: auto-forecast
+  strictTdd: false
+product:
+  summary: Local-first desktop application for product expiry tracking only.
+  priorityPlatforms:
+    - windows
+    - linux
+  nonGoals:
+    - POS
+    - billing
+    - payments
+    - accounting
+    - full inventory management
