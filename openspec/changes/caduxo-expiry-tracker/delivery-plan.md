@@ -46,12 +46,17 @@ Some slices may still exceed 400 lines because Tauri/Rust/Svelte setup, generate
 
 Establish the runnable desktop app skeleton and backend persistence boundaries without implementing product workflows.
 
+### Architecture guardrail
+
+Use the modular layered architecture from `design.md`: thin Tauri commands, application services, pure domain modules, SQLite repositories, DTOs, shared errors, app state, and structured logging. Do not implement business rules directly in Svelte components, Tauri command handlers, or repository SQL modules.
+
 ### Included tasks
 
 From `tasks.md`:
 
 - Initialize Tauri v2 project with Svelte + TypeScript.
 - Configure Rust workspace and app metadata.
+- Establish modular layered backend structure: commands, services, domain, repositories, DTOs, shared errors, and app state.
 - Add SQLite support with `sqlx`.
 - Add database migration runner.
 - Add app data directory resolution for Windows/Linux.

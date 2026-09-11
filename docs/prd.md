@@ -77,6 +77,31 @@ Tauri applications depend on the operating system WebView:
 
 If the strict requirement is “copy one binary to any machine and run with no runtime dependency surprises,” then a pure Rust desktop UI such as `egui`/`eframe` is safer than Tauri. If the requirement is “modern lightweight desktop app with no admin rights for normal use on target machines,” Tauri + Rust remains the best fit.
 
+## Architecture standard
+
+Caduxo shall use a simple modular layered architecture, not a heavy enterprise/clean-architecture framework. The goal is to keep the app easy to test, debug, and extend while avoiding unnecessary abstraction.
+
+```text
+Svelte UI
+  ↓
+Tauri command API
+  ↓
+Application services
+  ↓
+Domain logic + repositories
+  ↓
+SQLite
+```
+
+Architecture rules:
+
+- Svelte owns presentation, forms, navigation, and lightweight UI state.
+- Tauri commands are thin adapters that receive DTOs, call services, and return user-safe errors.
+- Application services implement use cases and coordinate validation, repositories, transactions, logging, and error handling.
+- Domain modules contain pure business rules that are cheap to unit test.
+- Repositories contain SQLite access and mapping; they should not contain complex business rules.
+- Product, lot, alert, notification, import, report, and backup behavior should be organized by feature module where practical.
+
 ## v1 scope
 
 ### Product catalog management

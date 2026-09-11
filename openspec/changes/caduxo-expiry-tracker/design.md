@@ -2,15 +2,24 @@
 
 ## Architecture decision
 
-Caduxo will use a local desktop architecture:
+Caduxo will use a local desktop app with a simple modular layered architecture. This is intentionally lighter than full Clean Architecture: enough separation to test and evolve safely, without adding unnecessary framework ceremony.
 
 ```text
 Tauri v2 desktop shell
 ├── Frontend UI: Svelte + TypeScript
-├── Rust command layer: Tauri commands
-├── Domain services: products, lots, reports, notifications, import
+│   └── presentation, forms, navigation, lightweight UI state
+├── Rust command layer: thin Tauri command adapters
+│   └── DTO input/output, user-safe error conversion
+├── Application services: feature use cases
+│   └── products, stores, lots, dashboard, notifications, import, reports, backup
+├── Domain modules: pure rules and calculations
+│   └── alert windows, expiry status, partial resolution, validation, report filters
+├── Repositories: SQLite persistence boundaries
+│   └── SQL queries, transactions, database-to-DTO mapping
 └── SQLite database: local file with migrations
 ```
+
+Dependency direction should stay one-way: commands call services; services call domain functions and repositories; repositories talk to SQLite. Domain logic must not depend on Tauri, SQLite, or Svelte.
 
 ## Technology choices
 
@@ -34,26 +43,60 @@ Tauri v2 desktop shell
 ```text
 src-tauri/src/
 ├── main.rs
+├── state.rs
+├── error.rs
 ├── logging.rs
 ├── db/
 │   ├── mod.rs
 │   ├── migrations.rs
-│   └── pool.rs
+│   ├── pool.rs
+│   └── repositories/
+│       ├── products.rs
+│       ├── stores.rs
+│       ├── lots.rs
+│       ├── settings.rs
+│       └── notification_log.rs
 ├── commands/
 │   ├── products.rs
 │   ├── stores.rs
 │   ├── lots.rs
+│   ├── dashboard.rs
 │   ├── reports.rs
 │   ├── import.rs
 │   └── settings.rs
+├── services/
+│   ├── products.rs
+│   ├── stores.rs
+│   ├── lots.rs
+│   ├── dashboard.rs
+│   ├── notifications.rs
+│   ├── import.rs
+│   ├── reports.rs
+│   └── backup.rs
 ├── domain/
 │   ├── alerts.rs
-│   ├── reports.rs
-│   ├── csv_import.rs
-│   └── validation.rs
+│   ├── expiry_status.rs
+│   ├── lot_resolution.rs
+│   ├── validation.rs
+│   └── report_filters.rs
+├── dto/
+│   ├── products.rs
+│   ├── stores.rs
+│   ├── lots.rs
+│   └── reports.rs
 └── pdf/
     └── report_pdf.rs
 ```
+
+### Layer responsibilities
+
+- `commands/`: thin Tauri adapters only. No SQL and no complex business decisions.
+- `services/`: use-case orchestration, transactions, logging points, and business error selection.
+- `domain/`: pure functions and value-level rules; primary target for fast unit tests.
+- `db/repositories/`: persistence and SQL mapping; primary target for temporary-SQLite tests.
+- `dto/`: command input/output structs that define the frontend/backend boundary.
+- `error.rs`: shared internal and command-safe error shape.
+- `state.rs`: app-wide dependencies such as database pool and services.
 
 ```text
 src/

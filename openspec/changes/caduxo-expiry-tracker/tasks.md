@@ -4,6 +4,7 @@
 
 - [ ] Initialize Tauri v2 project with Svelte + TypeScript.
 - [ ] Configure Rust workspace and app metadata.
+- [ ] Establish modular layered backend structure: commands, services, domain, repositories, DTOs, shared errors, and app state.
 - [ ] Add SQLite support with `sqlx`.
 - [ ] Add database migration runner.
 - [ ] Add app data directory resolution for Windows/Linux.
