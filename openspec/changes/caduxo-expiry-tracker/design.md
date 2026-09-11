@@ -26,12 +26,15 @@ Tauri v2 desktop shell
 | PDF | Rust structured generation, starting with `printpdf` | Avoid external binaries and platform-specific PDF APIs |
 | CSV | Rust `csv` crate | Reliable import/export parsing |
 | Notifications | Tauri notification plugin/API | Local OS notifications while app is running |
+| Logging | Rust `tracing` + `tracing-subscriber` and app-local log file layer | Structured diagnostics without leaking business data |
+| Tests | Rust unit/integration tests plus TypeScript/Vitest where configured | Keep implementation slices safe and regression-resistant |
 
 ## Module boundaries
 
 ```text
 src-tauri/src/
 ├── main.rs
+├── logging.rs
 ├── db/
 │   ├── mod.rs
 │   ├── migrations.rs
@@ -73,6 +76,32 @@ src/
 └── api/
     └── tauriCommands.ts
 ```
+
+## Engineering safety design
+
+### Testing approach
+
+Testing is part of each implementation slice. The project should prefer small, focused tests near the behavior under development instead of a large test pass at the end.
+
+- Rust domain logic: unit tests in the owning module.
+- Rust command/persistence behavior: integration-style tests using temporary SQLite databases where practical.
+- Migrations: tests or verification helpers that apply migrations to a fresh temporary database and assert required tables, constraints, and indexes.
+- Frontend state/validation: Vitest/component tests where practical once the UI test harness exists.
+- End-to-end/manual verification: reserved for desktop shell behavior that cannot be cheaply automated early.
+
+Each delivery slice should record test evidence in its review notes: added tests, commands run, and any deferred coverage with rationale.
+
+### Logging approach
+
+The foundation slice should install a Rust-side structured logger before feature workflows are implemented. Recommended baseline:
+
+- Use `tracing` instrumentation in Rust services and Tauri commands.
+- Initialize logging at app startup before database initialization.
+- Write logs under the app-specific local data directory, for example `logs/caduxo.log`, with console logging enabled in development.
+- Use event fields for technical identifiers and error categories, but avoid raw SKU, barcode, product description, imported row contents, or free-form notes by default.
+- Convert internal errors into user-safe UI messages while preserving detailed diagnostics in logs.
+
+Initial log coverage should include startup, app data path resolution, database open/migration, command failures, notification check summary, import/export start/end, report generation, and backup/restore start/end.
 
 ## Database schema
 

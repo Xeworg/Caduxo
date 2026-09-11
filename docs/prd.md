@@ -292,6 +292,28 @@ Caduxo v1 keeps notifications local and simple.
 - After the expiry date, daily system notifications stop, but expired lots must remain highly visible in the dashboard.
 - No WhatsApp, Telegram, email, cloud service, or remote notification channel is required for v1.
 
+## Engineering safety standards
+
+Caduxo shall treat automated tests and structured logging as project standards, not optional cleanup. Every implementation slice should include tests for the behavior it adds or changes, unless a task is explicitly documentation-only or a short-lived scaffold that cannot be meaningfully tested yet. When a test is deferred, the slice notes must explain why and where coverage will be added.
+
+### Testing standard
+
+- Backend/domain behavior must be covered with Rust tests close to the code under test.
+- Database migrations and persistence rules must have focused tests or reproducible verification scripts.
+- Frontend behavior that contains non-trivial state, validation, or user flow logic must have component or unit tests where practical.
+- Critical workflows require regression tests as they are implemented: first-run setup, SKU/barcode uniqueness, lot alert calculations, partial resolution, notification deduplication, CSV import mapping, report generation, and backup/restore validation.
+- Pull requests/slices should report which tests were added and which commands were run.
+
+### Logging standard
+
+Caduxo shall include a structured application logger early in the foundation work. The logger must help diagnose local desktop failures without exposing sensitive business data.
+
+- Use Rust-side structured logging for backend startup, database initialization, migrations, command errors, notification checks, import/export operations, report generation, and backup/restore operations.
+- Log levels should distinguish developer diagnostics from user-relevant warnings/errors.
+- Logs should avoid storing product names, barcodes, SKU values, full file contents, or personal/business-sensitive notes unless explicitly required for a specific debug mode.
+- Logs should be written to an app-specific local data/log directory and be safe for normal offline use.
+- UI-visible errors should remain user-friendly; detailed technical information belongs in logs.
+
 ## Non-functional requirements
 
 - Offline by default.

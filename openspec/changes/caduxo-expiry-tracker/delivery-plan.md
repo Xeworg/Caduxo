@@ -28,6 +28,10 @@ tracker/caduxo-expiry-tracker
 
 Each child PR should target the previous branch. The tracker PR stays draft/no-merge until all child PRs are reviewed and integrated.
 
+## Cross-slice engineering standard
+
+Every slice that adds or changes behavior must add or update tests in the same slice. If useful coverage is not practical yet, the slice must state the reason and the follow-up task. Structured logging is part of the foundation and should be used in later backend operations without logging sensitive business data such as product names, SKU/barcode values, imported row contents, or free-form notes.
+
 ## Review budget
 
 Target budget: **400 changed lines per slice**.
@@ -52,6 +56,8 @@ From `tasks.md`:
 - Add database migration runner.
 - Add app data directory resolution for Windows/Linux.
 - Add basic error handling shape shared by Tauri commands.
+- Add structured Rust logging with safe app-local log output.
+- Add baseline Rust test harness for backend/domain/persistence code.
 
 ### Out of scope
 
@@ -65,6 +71,8 @@ From `tasks.md`:
 - Run TypeScript check/build if configured.
 - Run Rust compile/check if configured.
 - Verify the app can initialize its app data path and database connection in development.
+- Verify logs are created in the app-local log directory and avoid sensitive business data by default.
+- Run the baseline Rust test command and frontend check/test command if configured.
 
 ### Risk
 
@@ -92,6 +100,7 @@ From `tasks.md` section 2:
 - Run migrations on a fresh database.
 - Verify schema constraints and indexes exist.
 - Add focused migration/schema tests where practical.
+- Include tests for migration idempotency/fresh database setup where practical.
 
 ### Risk
 

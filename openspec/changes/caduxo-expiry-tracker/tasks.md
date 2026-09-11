@@ -8,6 +8,9 @@
 - [ ] Add database migration runner.
 - [ ] Add app data directory resolution for Windows/Linux.
 - [ ] Add basic error handling shape shared by Tauri commands.
+- [ ] Add structured Rust logging with safe app-local log output.
+- [ ] Add baseline Rust test harness for backend/domain/persistence code.
+- [ ] Add baseline frontend test harness when non-trivial UI logic begins.
 
 ## 2. Database schema
 
@@ -134,7 +137,21 @@
 - [ ] Check Tauri/WebKitGTK assumptions for Linux.
 - [ ] Document user-level install or portable run options.
 
-## 14. MVP verification
+## 14. Engineering safety
+
+- [ ] Add or update tests in each implementation slice that changes behavior.
+- [ ] Add migration tests or verification for schema creation and indexes.
+- [ ] Add regression tests for first-run setup.
+- [ ] Add regression tests for SKU and barcode uniqueness.
+- [ ] Add regression tests for alert-window calculations and notification deduplication.
+- [ ] Add regression tests for partial lot resolution.
+- [ ] Add regression tests for CSV mapping/import validation.
+- [ ] Add regression tests for report generation/export behavior.
+- [ ] Add regression tests for backup/restore validation.
+- [ ] Verify logs are created in the app-local log directory.
+- [ ] Verify logs avoid sensitive product, SKU, barcode, imported-row, and notes content by default.
+
+## 15. MVP verification
 
 - [ ] Verify first-run store flow.
 - [ ] Verify product SKU uniqueness.

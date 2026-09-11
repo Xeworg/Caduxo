@@ -205,3 +205,28 @@ Caduxo shall provide a manual backup/export and restore path.
 ### Requirement: migrations
 
 Caduxo shall preserve existing local data across database schema migrations.
+
+## Capability: Engineering safety
+
+### Requirement: tests accompany implementation
+
+Caduxo shall add or update automated tests in the same implementation slice as the behavior being introduced or changed, except for documentation-only work or explicitly justified temporary scaffolding.
+
+#### Scenario: behavior slice is implemented
+
+- Given a slice introduces backend, persistence, domain, or non-trivial frontend behavior
+- When the slice is prepared for review
+- Then matching tests are added or updated
+- And the slice notes list the test commands that were run
+
+### Requirement: regression coverage for critical workflows
+
+Caduxo shall maintain regression coverage for first-run setup, SKU/barcode uniqueness, lot alert calculations, partial resolution, notification deduplication, CSV import mapping, report generation, and backup/restore validation as those workflows are implemented.
+
+### Requirement: structured local logging
+
+Caduxo shall provide structured local application logging for backend startup, database initialization, migrations, command errors, notification checks, import/export, report generation, and backup/restore operations.
+
+### Requirement: safe log content
+
+Caduxo logs shall avoid sensitive business data such as product names, barcodes, SKU values, full imported file contents, and free-form notes unless a deliberate debug mode is introduced later.
