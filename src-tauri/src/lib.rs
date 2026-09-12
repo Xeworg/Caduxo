@@ -49,6 +49,7 @@ pub fn run() {
             commands::products::get_product,
             commands::products::search_products,
             commands::products::suggested_product_alert_days,
+            commands::products::find_product_by_scan,
             commands::products::add_product_barcode,
             commands::products::list_product_barcodes,
             commands::products::remove_product_barcode,
@@ -62,6 +63,8 @@ pub fn run() {
             commands::expiry_lots::archive_expiry_lot,
             commands::expiry_lots::resolve_expiry_lot,
             commands::expiry_lots::list_lot_resolution_events,
+            // Dashboard (Slice 6a)
+            commands::dashboard::list_dashboard_lots,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

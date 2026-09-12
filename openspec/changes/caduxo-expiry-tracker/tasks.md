@@ -69,23 +69,23 @@
 
 ## 7. Dashboard
 
-- [ ] Implement dashboard query command.
-- [ ] Compute expired, today, alert-window, and next-30-days groups.
-- [ ] Build urgency cards.
-- [ ] Build prominent expired section.
-- [ ] Build urgent lot table sorted by urgency.
-- [ ] Add store/local filter.
-- [ ] Add quick filters: expired, today, next 7 days, next 30 days, alert window.
-- [ ] Add row actions: view product, edit lot, resolve quantity, report selection.
+- [x] Implement dashboard query command. <!-- sdd-owner: implementation -->
+- [x] Compute expired, today, alert-window, and next-30-days groups. <!-- sdd-owner: implementation -->
+- [x] Build urgency cards. <!-- sdd-owner: implementation -->
+- [x] Build prominent expired section. <!-- sdd-owner: implementation -->
+- [x] Build urgent lot table sorted by urgency. <!-- sdd-owner: implementation -->
+- [x] Add store/local filter. <!-- sdd-owner: implementation -->
+- [x] Add quick filters: expired, today, next 7 days, next 30 days, alert window. <!-- sdd-owner: implementation -->
+- [ ] Add row actions: view product, edit lot, resolve quantity, report selection. <!-- report selection deferred — reports do not exist yet; view product, edit lot, resolve quantity implemented -->
 
 ## 8. Scanner/search workflow
 
-- [ ] Build always-visible scan/search input.
-- [ ] On Enter, search exact barcode first.
-- [ ] If no barcode match, search exact SKU.
-- [ ] If match exists, open product or lot entry flow.
-- [ ] If no match exists, open quick product creation with scanned value pre-filled.
-- [ ] Support manual typed SKU/UPC input.
+- [x] Build always-visible scan/search input.
+- [x] On Enter, search exact barcode first.
+- [x] If no barcode match, search exact SKU.
+- [x] If match exists, open product or lot entry flow.
+- [x] If no match exists, open quick product creation with scanned value pre-filled.
+- [x] Support manual typed SKU/UPC input.
 
 ## 9. Local notifications
 

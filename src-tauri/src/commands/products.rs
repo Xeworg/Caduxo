@@ -8,6 +8,7 @@ use crate::dto::products::{
     ProductBarcodeRemoveInput, ProductBarcodeResponse, ProductCreate, ProductDetailResponse,
     ProductResponse, ProductSearchQuery, ProductSearchResult, ProductUpdate,
 };
+use crate::dto::scanner::ScanSearchResult;
 use crate::error::{AppError, CommandError};
 use crate::services::products as service;
 use crate::state::AppState;
@@ -100,6 +101,22 @@ pub async fn search_products(
     query: ProductSearchQuery,
 ) -> Result<Vec<ProductSearchResult>, CommandError> {
     service::search_products(&state.pool, query)
+        .await
+        .map_err(AppError::into)
+}
+
+/// Scanner workflow: barcode-first exact lookup, then SKU-second exact lookup.
+///
+/// Returns `Found { product, has_lots }` when a barcode or SKU matches, or
+/// `NotFound { scanned_value }` when nothing matched. The `has_lots` field
+/// tells the frontend whether to jump directly to lot entry or show the
+/// product detail first.
+#[tauri::command]
+pub async fn find_product_by_scan(
+    state: State<'_, AppState>,
+    scanned_value: String,
+) -> Result<ScanSearchResult, CommandError> {
+    service::find_product_by_scan(&state.pool, &scanned_value)
         .await
         .map_err(AppError::into)
 }

@@ -2,6 +2,7 @@
 //
 // Each module owns its SQL and maps to/from DTOs.
 
+pub mod dashboard;
 pub mod expiry_lots;
 pub mod products;
 pub mod settings;

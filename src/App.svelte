@@ -1,6 +1,7 @@
 <script lang="ts">
   import StoresPage from "./components/StoresPage.svelte";
   import ProductCatalogPage from "./components/ProductCatalogPage.svelte";
+  import DashboardPage from "./components/DashboardPage.svelte";
 
   type Tab = "dashboard" | "stores" | "products";
   let activeTab: Tab = "stores";
@@ -35,38 +36,7 @@
 
   <!-- Views -->
   {#if activeTab === "dashboard"}
-    <main class="shell">
-      <section class="hero">
-        <p class="eyebrow">Caduxo</p>
-        <h1>Product expiry tracking</h1>
-        <p>
-          Local-first desktop app for tracking product expiry lots by SKU, barcode,
-          store, alert window, and reports.
-        </p>
-      </section>
-
-      <section class="cards" aria-label="Dashboard preview">
-        <article>
-          <span>Expired</span>
-          <strong>—</strong>
-        </article>
-        <article>
-          <span>Today</span>
-          <strong>—</strong>
-        </article>
-        <article>
-          <span>Alert window</span>
-          <strong>—</strong>
-        </article>
-        <article>
-          <span>Next 30 days</span>
-          <strong>—</strong>
-        </article>
-      </section>
-
-      <p class="coming-soon">Dashboard, scanner, and reports are coming in later slices.</p>
-    </main>
-
+    <DashboardPage />
   {:else if activeTab === "stores"}
     <StoresPage />
   {:else if activeTab === "products"}
@@ -124,69 +94,4 @@
     color: #fff;
   }
 
-  /* Dashboard placeholder styles */
-  .shell {
-    min-height: calc(100vh - 48px);
-    padding: 48px;
-  }
-
-  .hero {
-    max-width: 760px;
-  }
-
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 16px;
-    margin-top: 32px;
-  }
-
-  .cards article {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 10px;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .cards article span {
-    font-size: 0.8rem;
-    color: #6b7280;
-  }
-
-  .cards article strong {
-    font-size: 1.8rem;
-    color: #1e293b;
-    margin-top: 4px;
-  }
-
-  .coming-soon {
-    margin-top: 24px;
-    color: #9ca3af;
-    font-size: 0.85rem;
-    font-style: italic;
-  }
-
-  .eyebrow {
-    color: #2563eb;
-    font-weight: 600;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin: 0 0 4px;
-  }
-
-  h1 {
-    margin: 0 0 12px;
-    font-size: 1.6rem;
-    color: #0f172a;
-  }
-
-  p {
-    color: #475569;
-    margin: 0;
-    line-height: 1.6;
-  }
 </style>

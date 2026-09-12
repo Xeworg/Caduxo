@@ -15,6 +15,7 @@ use crate::dto::products::{
     ProductBarcodeRemoveInput, ProductBarcodeResponse, ProductCreate, ProductDetailResponse,
     ProductResponse, ProductSearchQuery, ProductSearchResult, ProductUpdate,
 };
+use crate::dto::scanner::ScanSearchResult;
 use crate::error::{AppError, DomainError};
 
 /// Software-suggested default for `default_alert_days_before` when the user
@@ -219,6 +220,54 @@ pub async fn search_products(
     repo::search_products(pool, &query)
         .await
         .map_err(AppError::from)
+}
+
+/// Scanner workflow: barcode-first exact lookup, then SKU-second exact lookup.
+///
+/// 1. Search `product_barcodes` for an exact barcode match.
+/// 2. If not found, search `products` for an exact SKU match.
+/// 3. If neither matches, return `NotFound` with the scanned value for pre-fill.
+///
+/// Returns `Found { product, has_lots }` when a match is found, or
+/// `NotFound { scanned_value }` when nothing matched.
+pub async fn find_product_by_scan(
+    pool: &DbPool,
+    scanned_value: &str,
+) -> Result<ScanSearchResult, AppError> {
+    let trimmed = scanned_value.trim();
+    if trimmed.is_empty() {
+        return Err(DomainError::Validation {
+            message: "Scan value cannot be empty".to_string(),
+        }
+        .into());
+    }
+
+    // Step 1: exact barcode match
+    if let Some(product) = repo::find_by_barcode_exact(pool, trimmed)
+        .await
+        .map_err(AppError::from)?
+    {
+        let has_lots = repo::product_has_active_lots(pool, &product.id)
+            .await
+            .map_err(AppError::from)?;
+        return Ok(ScanSearchResult::Found { product, has_lots });
+    }
+
+    // Step 2: exact SKU match
+    if let Some(product) = repo::find_by_sku_exact(pool, trimmed)
+        .await
+        .map_err(AppError::from)?
+    {
+        let has_lots = repo::product_has_active_lots(pool, &product.id)
+            .await
+            .map_err(AppError::from)?;
+        return Ok(ScanSearchResult::Found { product, has_lots });
+    }
+
+    // Step 3: no match
+    Ok(ScanSearchResult::NotFound {
+        scanned_value: trimmed.to_string(),
+    })
 }
 
 // ============================================================
@@ -985,6 +1034,130 @@ mod tests {
         .await?;
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].primary_barcode.as_deref(), Some("PB-001"));
+        Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // Scanner workflow — find_product_by_scan (barcode-first, SKU-second)
+    // ------------------------------------------------------------------
+
+    use crate::dto::scanner::ScanSearchResult;
+    use crate::services::products::find_product_by_scan;
+
+    #[tokio::test]
+    async fn scan_barcode_exact_returns_found_with_barcode_match(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let p = create_product(&pool, basic_product("SCAN-SKU")).await?;
+        add_barcode(
+            &pool,
+            ProductBarcodeCreate {
+                product_id: p.id.clone(),
+                barcode: "0123456789012".into(),
+                barcode_type: Some("EAN13".into()),
+                is_primary: true,
+            },
+        )
+        .await?;
+
+        let result = find_product_by_scan(&pool, "0123456789012").await?;
+        match result {
+            ScanSearchResult::Found { product, has_lots } => {
+                assert_eq!(product.sku, "SCAN-SKU");
+                assert!(!has_lots, "new product should not have lots");
+            }
+            ScanSearchResult::NotFound { .. } => {
+                panic!("expected Found for barcode match");
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn scan_sku_exact_when_no_barcode_match_returns_found(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let _p = create_product(&pool, basic_product("SCAN-SKU-EXACT")).await?;
+
+        let result = find_product_by_scan(&pool, "SCAN-SKU-EXACT").await?;
+        match result {
+            ScanSearchResult::Found {
+                product,
+                has_lots: _,
+            } => {
+                assert_eq!(product.sku, "SCAN-SKU-EXACT");
+            }
+            ScanSearchResult::NotFound { .. } => {
+                panic!("expected Found for SKU match");
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn scan_unknown_value_returns_not_found() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let _p = create_product(&pool, basic_product("KNOWN-SKU")).await?;
+
+        let result = find_product_by_scan(&pool, "totally-unknown-value").await?;
+        match result {
+            ScanSearchResult::NotFound { scanned_value } => {
+                assert_eq!(scanned_value, "totally-unknown-value");
+            }
+            ScanSearchResult::Found { .. } => {
+                panic!("expected NotFound for unknown scan");
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn scan_rejects_empty_value() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let err = find_product_by_scan(&pool, "   ")
+            .await
+            .expect_err("empty scan must be rejected");
+        assert!(matches!(
+            err,
+            AppError::Domain(crate::error::DomainError::Validation { .. })
+        ));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn scan_barcode_takes_precedence_over_sku() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        // Create a product whose SKU is also a valid barcode value for another product.
+        let p = create_product(&pool, basic_product("BARCODE-VALUE")).await?;
+        add_barcode(
+            &pool,
+            ProductBarcodeCreate {
+                product_id: p.id.clone(),
+                barcode: "SOME-REAL-BC".into(),
+                barcode_type: None,
+                is_primary: true,
+            },
+        )
+        .await?;
+        // Create a second product whose SKU is "SOME-REAL-BC" (same as barcode above).
+        let _p2 = create_product(&pool, basic_product("SOME-REAL-BC")).await?;
+
+        // Scanning "SOME-REAL-BC" must match the barcode product (first), not the SKU product.
+        let result = find_product_by_scan(&pool, "SOME-REAL-BC").await?;
+        match result {
+            ScanSearchResult::Found {
+                product,
+                has_lots: _,
+            } => {
+                assert_eq!(
+                    product.sku, "BARCODE-VALUE",
+                    "barcode match must win over SKU"
+                );
+            }
+            ScanSearchResult::NotFound { .. } => {
+                panic!("expected Found");
+            }
+        }
         Ok(())
     }
 }

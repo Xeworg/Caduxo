@@ -350,3 +350,72 @@ pub async fn remove_barcode(pool: &SqlitePool, id: &str) -> Result<bool, sqlx::E
     .await?;
     Ok(affected.rows_affected() > 0)
 }
+
+// ============================================================
+// Exact lookups for scanner workflow
+// ============================================================
+
+/// Looks up a product by exact barcode. Returns the product row (active or
+/// archived) if the barcode exists, `None` otherwise.
+///
+/// The barcode column is `UNIQUE`, so this is a single-row lookup.
+pub async fn find_by_barcode_exact(
+    pool: &SqlitePool,
+    barcode: &str,
+) -> Result<Option<ProductSearchResult>, sqlx::Error> {
+    sqlx::query_as::<_, ProductSearchResult>(
+        r#"
+        SELECT
+p.id, p.sku, p.description, p.category_id, p.is_active,
+$1 AS primary_barcode
+        FROM products p
+        INNER JOIN product_barcodes pb ON pb.product_id = p.id
+        WHERE pb.barcode = $1
+        "#,
+    )
+    .bind(barcode)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Looks up a product by exact SKU. Returns the product row (active or
+/// archived) if the SKU exists, `None` otherwise.
+pub async fn find_by_sku_exact(
+    pool: &SqlitePool,
+    sku: &str,
+) -> Result<Option<ProductSearchResult>, sqlx::Error> {
+    sqlx::query_as::<_, ProductSearchResult>(
+        r#"
+        SELECT
+p.id, p.sku, p.description, p.category_id, p.is_active,
+(
+SELECT pb.barcode FROM product_barcodes pb
+WHERE pb.product_id = p.id AND pb.is_primary = 1
+LIMIT 1
+) AS primary_barcode
+        FROM products p
+        WHERE p.sku = $1
+        "#,
+    )
+    .bind(sku)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Checks whether a product has at least one active expiry lot.
+/// Used by the scanner workflow to determine whether to jump to lot entry.
+pub async fn product_has_active_lots(
+    pool: &SqlitePool,
+    product_id: &str,
+) -> Result<bool, sqlx::Error> {
+    let row: Option<(i64,)> = sqlx::query_as(
+        r#"
+        SELECT COUNT(*) FROM expiry_lots
+        WHERE product_id = $1 AND status = 'active'
+        "#,
+    )
+    .bind(product_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(n,)| n > 0).unwrap_or(false))
+}

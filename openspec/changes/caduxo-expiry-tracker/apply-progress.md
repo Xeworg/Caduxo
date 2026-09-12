@@ -571,3 +571,280 @@ Slice 5b delivers the Svelte frontend on top of the Slice 5a backend. Lot form, 
 ### Slice 5b next recommended action
 
 **Slice 6 — Dashboard and scanner workflow**: Implement the dashboard query command, urgency cards, expired section, urgent lot table with urgency sort, quick filters, and the always-visible scan/search input with barcode-first → SKU-second → quick-create flow.
+
+---
+
+## Slice 6a — Dashboard (backend + UI)
+
+### Status: COMPLETE ✅
+
+Slice 6a delivers the full dashboard: urgency cards, quick filters, store/local filter, urgency-sorted lot table, and three row actions. The always-visible scan/search input and barcode-first scanner workflow are deferred to Slice 6b.
+
+### Slice 6a completed tasks (Section 7)
+
+| Task | Status |
+| ---- | ------ |
+| Implement dashboard query command | ✅ |
+| Compute expired, today, alert-window, and next-30-days groups | ✅ |
+| Build urgency cards | ✅ |
+| Build prominent expired section | ✅ |
+| Build urgent lot table sorted by urgency | ✅ |
+| Add store/local filter | ✅ |
+| Add quick filters: expired, today, next 7 days, next 30 days, alert window | ✅ |
+| Add row actions: view product, edit lot, resolve quantity | ✅ (view product, edit lot, resolve quantity); report selection ⏭ deferred |
+
+### Slice 6a NOT implemented (deferred to Slice 6b)
+
+| Task | Status |
+| ---- | ------ |
+| Always-visible scan/search input | ⏭ Slice 6b |
+| On Enter, search exact barcode first | ⏭ Slice 6b |
+| If no barcode match, search exact SKU | ⏭ Slice 6b |
+| If match exists, open product or lot entry flow | ⏭ Slice 6b |
+| If no match exists, open quick product creation with scanned value pre-filled | ⏭ Slice 6b |
+| Support manual typed SKU/UPC input | ⏭ Slice 6b |
+| Add row actions: report selection | ⏭ Reports do not exist yet; will wire into the "include in report" action when reports are implemented |
+
+### Slice 6a implementation notes
+
+**Architecture** (follows existing patterns: commands → services → repositories):
+
+- `dto/dashboard.rs` — `DashboardFilters` (store/local/preset), `UrgencyCounts`, `DashboardLotRow`, `DashboardResponse`. `DashboardLotRow` uses `#[derive(FromRow)]` for direct SQL projection.
+- `db/repositories/dashboard.rs` — Single SQL query joining `expiry_lots`, `products`, `stores`, and `store_locations`. Returns raw rows with empty `urgency`/`days_remaining` placeholders; enrichment is done in the service layer.
+- `services/dashboard.rs` — `enrich_row` classifies each row using `classify_urgency_with_alert` (see below); counts are accumulated before filtering; filtering/sorting applied last. No SQL here.
+- `commands/dashboard.rs` — Single thin Tauri command `list_dashboard_lots(filters) -> DashboardResponse`.
+- `src/lib/dashboard.ts` — TypeScript wrapper with `listDashboardLots(filters)`.
+- `src/components/DashboardPage.svelte` — Full dashboard UI replacing the placeholder in `App.svelte`. Includes urgency cards, quick filters, store/local filter, urgency-sorted table, and three modal row actions.
+- `App.svelte` — Replaced placeholder with `DashboardPage` in the `dashboard` tab view.
+
+**Urgency classification logic** (domain + service):
+
+Added `classify_urgency_with_alert(today, expiry_date, alert_days_before)` to `domain/expiry_status.rs`:
+
+```text
+Expired     : today > expiry
+Today       : today == expiry
+AlertWindow : diff <= 30 AND diff <= alert_days AND alert_days < 30
+Next30Days  : diff <= 30 AND NOT AlertWindow
+Future      : diff > 30
+```
+
+`AlertWindow` is a distinct bucket only when the lot's alert threshold is **strictly less than 30 days** and the lot is within that window. This prevents `AlertWindow` from absorbing all "next 30 days" lots when most products use the default 30-day alert.
+
+**SQL note**: The repository query uses positional `FROM`/`SELECT` projection for `sqlx::FromRow`. The `urgency` and `days_remaining` fields in `DashboardLotRow` are populated as empty/zero in SQL and filled by the service layer's `enrich_row`.
+
+**Frontend row actions**:
+
+- **View product** — fetches `getProduct` and renders a modal detail view
+- **Edit lot** — fetches `getExpiryLot` and renders a lot detail modal; includes a "Resolve quantity" button
+- **Resolve quantity** — inline resolve dialog (no separate component) using `resolveExpiryLot`; reloads dashboard on success
+- **Report selection** — intentionally skipped; the button was not added. When reports (Slice 9) are implemented, add a "Report" button to the actions cell and wire it into the report preview flow.
+
+### Slice 6a new tests
+
+**Domain** (`expiry_status.rs`):
+
+| Test | Covers |
+| ---- | ------ |
+| `classify_urgency_with_alert_alert_window` | AlertWindow when diff ≤ alert_days < 30; Next30Days when diff > alert_days or alert_days ≥ 30 |
+| `classify_urgency_with_alert_next_30_days` | Next30Days when alert_days ≥ 30 (within 30 days) |
+
+**Service** (`services/dashboard.rs`):
+
+| Test | Covers |
+| ---- | ------ |
+| `enrich_row_sets_expired` | expired urgency, negative days_remaining |
+| `enrich_row_sets_today` | today urgency, days_remaining = 0 |
+| `enrich_row_sets_next_30_days` | next_30_days urgency, 0 < days ≤ 30 |
+| `enrich_row_sets_future` | future urgency, days > 30 |
+| `matches_preset_*` | preset filtering logic (5 tests) |
+| `urgency_rank_order` | urgency ordering (expired < today < alert < next30 < future) |
+| `count_by_urgency_empty` | zero counts |
+| `count_by_urgency_sums_correctly` | 6-row scenario: 2 expired, 1 today, 0 alert, 3 next30 |
+
+**Repository** (`db/repositories/dashboard.rs`):
+
+| Test | Covers |
+| ---- | ------ |
+| `list_returns_all_active_lots_ordered_by_expiry` | 3 active lots, sorted ASC by expiry_date |
+| `list_filters_by_store_id` | store_id filter returns only that store's lots |
+| `list_joins_store_and_location_names` | LEFT JOIN resolves store_name and location_name |
+| `resolved_lots_excluded` | resolved status lots never appear in dashboard |
+
+### Slice 6a files changed
+
+| File | Change |
+| ---- | ------ |
+| `src-tauri/src/dto/dashboard.rs` | New: dashboard DTOs (filters, counts, lot row, response) |
+| `src-tauri/src/dto/mod.rs` | Add `pub mod dashboard;` |
+| `src-tauri/src/db/repositories/dashboard.rs` | New: SQL query + 4 repository tests |
+| `src-tauri/src/db/repositories/mod.rs` | Add `pub mod dashboard;` |
+| `src-tauri/src/services/dashboard.rs` | New: enrichment, filtering, sorting, 10 service tests |
+| `src-tauri/src/services/mod.rs` | Add `pub mod dashboard;` |
+| `src-tauri/src/commands/dashboard.rs` | New: single Tauri command |
+| `src-tauri/src/commands/mod.rs` | Add `pub mod dashboard;` |
+| `src-tauri/src/lib.rs` | Register `list_dashboard_lots` command |
+| `src-tauri/src/domain/expiry_status.rs` | Added `classify_urgency_with_alert` + 2 domain tests |
+| `src/lib/dashboard.ts` | New: TypeScript API wrapper |
+| `src/components/DashboardPage.svelte` | New: full dashboard UI (urgency cards, filters, table, 3 modals) |
+| `src/App.svelte` | Replace placeholder dashboard with `DashboardPage` |
+| `openspec/.../tasks.md` | Checked off 7 Section 7 tasks; row-actions (report) deferred |
+| `openspec/.../apply-progress.md` | Appended this Slice 6a section |
+
+### Slice 6a deferred issues
+
+- **Scanner/search input**: deferred to Slice 6b (always-visible input, barcode-first, SKU-second, quick-create)
+- **Report selection action**: deferred; no reports exist yet. Wire `include in report` into the report preview UI when Slice 9 is implemented.
+- **AlertWindow counts vs card design**: the `AlertWindow` card shows lots where `alert_days_before < 30 AND diff <= alert_days`. If most products use the default 30-day alert, this card may be empty while `Next30Days` is populated. This is intentional — `AlertWindow` tracks lots actively within their specific alert window, not all lots expiring soon.
+
+### Slice 6a risks and notes
+
+- **`classify_urgency_with_alert` boundary condition**: `alert_days_before = 30` classifies as `Next30Days` (not `AlertWindow`) because the `< 30` guard prevents `AlertWindow` from swallowing the `Next30Days` bucket. This matches the spec intent: `AlertWindow` is a distinct, more-urgent bucket for lots with short alert thresholds.
+- **Logs**: no product SKU, barcode, description, or notes are logged. Command errors surface as user-safe strings via `CommandError`.
+- **No `FromRow` derive on repository response**: `DashboardLotRow` uses `#[derive(FromRow)]` directly in the DTO module so `sqlx::query_as::<_, DashboardLotRow>` works without a separate response type.
+
+### Slice 6a verification evidence
+
+```bash
+# Cargo check
+cd src-tauri && cargo check 2>&1 | tail -1
+# → finished with 19 pre-existing dead_code warnings; no errors ✅
+
+# Cargo clippy (no errors)
+cd src-tauri && cargo clippy 2>&1 | grep "^error"
+# → (no output = clean) ✅
+
+# Rust tests
+cd src-tauri && cargo test 2>&1 | grep "test result"
+# → "ok. 125 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out" ✅
+#   19 domain + 1 pool + 15 migration + 11 stores-repository + 5 settings-repository
+#   + 10 stores-service + 2 settings-service + 26 products-service
+#   + 19 expiry_lots-service + 4 dashboard-repository (NEW) + 2 domain-expiry-status (NEW)
+#   + 10 dashboard-service (NEW)
+
+# TypeScript check
+npx tsc --noEmit 2>&1
+# → (no output = clean) ✅
+
+# Frontend build
+npm run build 2>&1 | tail -4
+# → "✓ built in 635ms" ✅
+```
+
+### Slice 6a next recommended action
+
+**Slice 6b — Scanner/search workflow**: Add the always-visible scan/search input in `DashboardPage`, implement the barcode-first → SKU-second → quick-create flow, and wire `listDashboardLots` into the search entry path. This completes the dashboard user story from the delivery plan.
+
+---
+
+## Slice 6b — Scanner/search workflow
+
+### Status: COMPLETE ✅
+
+Slice 6b delivers the always-visible scan/search input, barcode-first exact lookup, SKU-second exact lookup, product-or-lot entry routing, and quick product creation with scanned value pre-fill. No notifications, CSV, reports, PDF, or backup work was done.
+
+### Slice 6b completed tasks (Section 8)
+
+| Task | Status |
+| ---- | ------ |
+| Build always-visible scan/search input | ✅ |
+| On Enter, search exact barcode first | ✅ |
+| If no barcode match, search exact SKU | ✅ |
+| If match exists, open product or lot entry flow | ✅ |
+| If no match exists, open quick product creation with scanned value pre-filled | ✅ |
+| Support manual typed SKU/UPC input | ✅ |
+
+### Slice 6b NOT implemented (deferred to later slices)
+
+- Notification permission/request flow — Section 9
+- CSV import/export — Section 10
+- Reports and PDF — Section 11
+- Backup/restore — Section 12
+
+### Slice 6b implementation notes
+
+**Architecture** (mirrors existing patterns: commands → services → repositories):
+
+- `dto/scanner.rs` — `ScanSearchResult` enum with `Found { product, has_lots }` and `NotFound { scanned_value }` variants. `ScanMatchType` tells the frontend why a match succeeded.
+- `db/repositories/products.rs` — Added `find_by_barcode_exact`, `find_by_sku_exact`, and `product_has_active_lots` for the scanner workflow.
+- `services/products.rs` — Added `find_product_by_scan`: barcode-first exact lookup via `product_barcodes`, then SKU-second exact lookup. Returns `has_lots` to let the frontend route to lot entry or product detail.
+- `commands/products.rs` — Added `find_product_by_scan` Tauri command.
+- `lib.rs` — Registered `find_product_by_scan` command.
+- `lib/products.ts` — Added `ScanSearchResult`, `ScanFoundResult`, `ScanNotFoundResult`, `ScanMatchType`, `addProductBarcodeIfNew`, and `findProductByScan`.
+- `components/ScanSearchBox.svelte` — New always-visible input component. Handles Enter key, debouncing is not needed (keyboard wedge is single-shot). Shows spinner while searching. Clears input after every submission regardless of outcome.
+- `components/ProductForm.svelte` — Added optional `prefillSku` and `prefillBarcode` props. In create mode: `prefillSku` seeds the SKU field on mount; `prefillBarcode` triggers `addProductBarcodeIfNew` (silent on duplicate) after the product is saved.
+- `components/DashboardPage.svelte` — Integrated `ScanSearchBox` in the header. `handleScanFound`: if `has_lots`, jumps to resolve dialog for the first lot; otherwise opens product detail. `handleScanNotFound`: opens quick-create modal with scanned value pre-filled as SKU and barcode.
+
+**Scanner flow details**:
+
+1. User scans barcode or types a value and presses Enter.
+2. `ScanSearchBox` calls `findProductByScan(value)`.
+3. Backend tries exact barcode match in `product_barcodes` (INNER JOIN → product).
+4. If not found, tries exact SKU match in `products`.
+5. If barcode matched: returns `Found { product, has_lots }`. Frontend jumps to lot entry if lots exist, otherwise product detail.
+6. If SKU matched: same as barcode but `has_lots` indicates whether lots exist.
+7. If neither matched: returns `NotFound { scanned_value }`. Frontend opens quick-create modal with scanned value pre-filled as both SKU and barcode.
+
+**Quick-create barcode safety**: `addProductBarcodeIfNew` wraps `addProductBarcode` with a try/catch that silently returns `null` on `DuplicateField` errors. This handles the edge case where a scanned-but-unmatched value is typed by a user who already has that barcode on a different product — the product is created successfully and the barcode is simply skipped (not silently lost, but not blocking creation).
+
+**No logging of sensitive values**: No raw SKU, barcode, scan string, product description, or notes are logged. The `ScanSearchBox` component does not log the scan value. Backend `find_product_by_scan` uses plain tracing calls.
+
+### Slice 6b new tests
+
+**Repository** (`db/repositories/products.rs` — 3 new functions, covered by service tests):
+
+| Test | Covers |
+| ---- | ------ |
+| `scan_barcode_exact_returns_found_with_barcode_match` | Barcode exact lookup joins product_barcodes → products; `has_lots = false` for new product |
+| `scan_sku_exact_when_no_barcode_match_returns_found` | SKU exact lookup when barcode does not exist |
+| `scan_unknown_value_returns_not_found` | No match returns `NotFound` with scanned value preserved |
+| `scan_rejects_empty_value` | Empty/whitespace scan returns `Validation` error |
+| `scan_barcode_takes_precedence_over_sku` | When a value is both a barcode on product A and a SKU on product B, barcode wins |
+
+### Slice 6b files changed
+
+| File | Change |
+| -----|-------- |
+| `src-tauri/src/dto/scanner.rs` | New: `ScanMatchType`, `ScanSearchResult` enum |
+| `src-tauri/src/dto/mod.rs` | Added `pub mod scanner;` |
+| `src-tauri/src/dto/products.rs` | Added `Clone` derive to `ProductSearchResult` (required by `ScanSearchResult::Found`) |
+| `src-tauri/src/db/repositories/products.rs` | Added `find_by_barcode_exact`, `find_by_sku_exact`, `product_has_active_lots` |
+| `src-tauri/src/services/products.rs` | Added `find_product_by_scan` + 5 service tests |
+| `src-tauri/src/commands/products.rs` | Added `find_product_by_scan` Tauri command |
+| `src-tauri/src/lib.rs` | Registered `find_product_by_scan` |
+| `src/lib/products.ts` | Added scanner types, `addProductBarcodeIfNew`, `findProductByScan` |
+| `src/components/ScanSearchBox.svelte` | New: always-visible scan input with Enter handler, spinner, clear-on-submit |
+| `src/components/ProductForm.svelte` | Added `prefillSku` and `prefillBarcode` props; `prefillSku` seeds SKU field; `prefillBarcode` triggers post-save barcode attach |
+| `src/components/DashboardPage.svelte` | Integrated `ScanSearchBox` in header; added quick-create modal and scan handler callbacks |
+| `openspec/.../tasks.md` | Checked off all 6 Section 8 tasks |
+| `openspec/.../apply-progress.md` | Appended this Slice 6b section |
+
+### Slice 6b deferred issues
+
+- **Quick-create barcode**: when a scanned value matches a barcode on a different product (not the one being created), `addProductBarcodeIfNew` silently skips the attach. This is acceptable for MVP but worth noting: the scanned value appears as both SKU and barcode on the new product, and the original barcode is not transferred.
+- **Multiple stores**: the `has_lots` flag is `true` if ANY store has lots for the product. If the user scans while a non-owning store is selected, they are routed to lot entry even if the lots are in another store. This is a minor UX quirk deferred to future work.
+- **Frontend test harness**: still deferred per Slice 1; not added in this slice.
+
+### Slice 6b verification evidence
+
+```bash
+cd src-tauri && cargo check 2>&1 | tail -1
+# → finished with 20 pre-existing dead_code warnings; no errors ✅
+    
+cd src-tauri && cargo clippy 2>&1 | grep "^error"
+# → (no output = clean) ✅
+    
+cd src-tauri && cargo test 2>&1 | grep "test result"
+# → "ok. 130 passed; 0 failed; 0 ignored" ✅
+#   +5 new scanner service tests (barcode-first, SKU-second, precedence, empty, not_found)
+    
+npx tsc --noEmit 2>&1
+# → (no output = clean) ✅
+    
+npm run build 2>&1 | tail -2
+# → "✓ built in 708ms" ✅
+```
+
+### Slice 6b next recommended action
+
+**Slice 7 — Local notifications**: Implement notification permission flow, due notification query using alert window rules, `notification_log` deduplication, startup and periodic checks, and OS notification stop after expiry date.

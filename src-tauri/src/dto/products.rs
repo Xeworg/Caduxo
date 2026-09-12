@@ -124,7 +124,7 @@ pub struct ProductSearchQuery {
 }
 
 /// Search hit shape — minimal fields for scan/search results and listing.
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow)]
 pub struct ProductSearchResult {
     pub id: String,
     pub sku: String,

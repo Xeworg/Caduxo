@@ -1,26 +1,38 @@
 <script lang="ts">
-  import {
-    createProduct,
-    updateProduct,
-    createCategory,
-    suggestedProductAlertDays,
-    type CategoryResponse,
-    type ProductResponse,
-  } from "../lib/products.js";
+      import {
+        createProduct,
+        updateProduct,
+        createCategory,
+        suggestedProductAlertDays,
+        addProductBarcodeIfNew,
+        type CategoryResponse,
+        type ProductResponse,
+      } from "../lib/products.js";
 
-  // ── Props ──────────────────────────────────────────────────────────────────
+      // ── Props ──────────────────────────────────────────────────────────────────
 
-  export let mode: "create" | "edit";
-  /** Required for edit mode; ignored in create mode. */
-  export let initial: ProductResponse | null = null;
-  /** Master category list from the parent; used to populate the dropdown. */
-  export let categories: CategoryResponse[];
-  /** Called after a successful save with the saved product. */
-  export let onSaved: (product: ProductResponse) => void;
-  /** Called when the user cancels the form. */
-  export let onCancel: () => void;
-  /** Called after a successful inline category create. */
-  export let onCategoryCreated: (category: CategoryResponse) => void;
+      export let mode: "create" | "edit";
+      /** Required for edit mode; ignored in create mode. */
+      export let initial: ProductResponse | null = null;
+      /** Master category list from the parent; used to populate the dropdown. */
+      export let categories: CategoryResponse[];
+      /** Called after a successful save with the saved product. */
+      export let onSaved: (product: ProductResponse) => void;
+      /** Called when the user cancels the form. */
+      export let onCancel: () => void;
+      /** Called after a successful inline category create. */
+      export let onCategoryCreated: (category: CategoryResponse) => void;
+
+      /**
+       * Optional SKU pre-fill for scan/keyboard quick-create.
+       * Applied only in create mode on first mount.
+       */
+      export let prefillSku: string | undefined = undefined;
+      /**
+       * Optional barcode to attach to the product after successful creation.
+       * Applied only in create mode; silently ignored if the barcode is already attached.
+       */
+      export let prefillBarcode: string | undefined = undefined;
 
   // ── Local state ────────────────────────────────────────────────────────────
 
@@ -58,9 +70,14 @@
   }
 
   // Pre-fill alert days from the backend suggestion on first create mount.
+  // Pre-fill SKU from the optional prefillSku prop.
   let suggestedFetched = false;
   $: if (mode === "create" && !suggestedFetched) {
     suggestedFetched = true;
+    // Apply SKU pre-fill if provided.
+    if (prefillSku !== undefined) {
+      sku = prefillSku;
+    }
     suggestedProductAlertDays()
       .then((d) => {
         defaultAlertDays = d;
@@ -125,17 +142,26 @@
         default_alert_days_before: defaultAlertDays,
         notes: notes.trim() || null,
       };
-      let saved: ProductResponse;
-      if (mode === "edit" && initial) {
-        saved = await updateProduct({
-          ...payload,
-          id: initial.id,
-          is_active: isActive,
-        });
-      } else {
-        saved = await createProduct(payload);
-      }
-      onSaved(saved);
+          let saved: ProductResponse;
+          if (mode === "edit" && initial) {
+            saved = await updateProduct({
+              ...payload,
+              id: initial.id,
+              is_active: isActive,
+            });
+          } else {
+            saved = await createProduct(payload);
+            // Attach the scanned barcode to the newly created product if provided.
+            if (prefillBarcode !== undefined) {
+              await addProductBarcodeIfNew({
+                product_id: saved.id,
+                barcode: prefillBarcode,
+                barcode_type: null,
+                is_primary: true,
+              });
+            }
+          }
+          onSaved(saved);
     } catch (e: unknown) {
       errorMsg = String(e);
     } finally {
