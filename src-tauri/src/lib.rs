@@ -40,6 +40,18 @@ pub fn run() {
             commands::stores::get_settings,
             commands::stores::update_settings,
             commands::stores::has_store,
+            commands::products::list_categories,
+            commands::products::create_category,
+            commands::products::update_category,
+            commands::products::create_product,
+            commands::products::update_product,
+            commands::products::archive_product,
+            commands::products::get_product,
+            commands::products::search_products,
+            commands::products::suggested_product_alert_days,
+            commands::products::add_product_barcode,
+            commands::products::list_product_barcodes,
+            commands::products::remove_product_barcode,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

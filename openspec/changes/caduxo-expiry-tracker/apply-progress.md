@@ -239,3 +239,118 @@ npx tsc --noEmit
 ### Slice 3 next recommended action
 
 **Slice 4 — Product catalog, categories, and barcodes**: Implement product identity/search backend and UI, keeping category/barcode constraints covered by focused tests.
+
+---
+
+## Slice 4 — Product catalog (backend)
+
+### Status: BACKEND COMPLETE ✅ — UI DEFERRED ⏭
+
+Slice 4 is split: the backend (categories, products, barcodes, search) is implemented and verified with focused tests. The three product UI tasks (product list UI, product form UI, product detail UI) remain intentionally unchecked and will be picked up in a follow-up slice.
+
+### Slice 4 completed tasks
+
+| Task | Status |
+| ---- | ------ |
+| Implement product create/update/archive commands | ✅ Backend |
+| Enforce required unique SKU | ✅ |
+| Implement category list CRUD | ✅ |
+| Implement product default alert-days-before with software suggestion of 30 days | ✅ |
+| Implement barcode add/remove/list commands | ✅ |
+| Enforce barcode uniqueness across products | ✅ |
+| Implement product search by description, SKU, and barcode | ✅ |
+| Build product list UI | ⏭ Deferred |
+| Build product form UI | ⏭ Deferred |
+| Build product detail UI with barcode list and expiry lots | ⏭ Deferred |
+
+### Slice 4 implementation notes
+
+- Added DTOs for categories, products, product barcodes, and a search query/result bundle (`ProductDetailResponse` includes product + barcodes + resolved category).
+- Added the `products` repository module with all SQL; services hold validation and uniqueness-error translation. Repository returns raw `sqlx::Error`; the service layer detects `UNIQUE constraint failed: <table>.<column>` and converts it to `DomainError::DuplicateField { field, value }` for SKU, barcode, and category name.
+- Added the `products` service module: `suggested_alert_days` constant (`30`), `validate_alert_days` (range 0..=3650), business rules (archived products cannot receive new barcodes), and full CRUD/search use cases.
+- Added the `products` Tauri command module and registered the 12 new IPC commands in `lib.rs`.
+- Added a soft-archive (`is_active = 0`) for products; `archive_product` returns `NotFound` when the id is unknown and is otherwise idempotent for already-archived rows.
+- Barcode management keeps at most one primary barcode per product: setting `is_primary = true` demotes existing primary barcodes for that product before the insert.
+- Product search uses a single SQL query with `LIKE` on description and SKU and an `EXISTS` subquery on barcode (case-insensitive, partial match). An empty query returns all products, which the UI can use as a default listing path.
+- Logs avoid raw product/SKU/barcode/notes per the engineering safety rules: services use plain `tracing` calls and the current implementation does not log payload fields. Errors surface as user-safe `CommandError` variants.
+- UI tasks are deferred; this slice is intentionally backend-only to keep review bounded.
+
+### Slice 4 verification evidence
+
+```bash
+cd src-tauri && cargo test
+# → 85 passed; 0 failed; 0 ignored ✅
+#   19 domain + 1 pool + 15 migrations + 11 stores-repository
+#   + 5 settings-repository + 10 stores-service + 2 settings-service
+#   + 26 products-service (NEW for Slice 4)
+
+cd src-tauri && cargo check
+# → finished with expected scaffold dead_code warnings; no errors ✅
+
+cd src-tauri && cargo clippy
+# → no clippy errors; same pre-existing dead_code warnings as Slice 3 ✅
+
+npm run build
+# → ✓ built in 439ms ✅
+
+npx tsc --noEmit
+# → clean ✅
+```
+
+### Slice 4 new tests (services::products)
+
+| Test | Covers |
+| ---- | ------ |
+| `create_and_list_categories` | Category create + list alphabetical order |
+| `create_category_rejects_duplicate_name` | Category name uniqueness → `DuplicateField(name)` |
+| `create_category_rejects_empty_name` | `validate_name` rejection |
+| `update_category_renames_and_archives` | Category rename + archive toggles `is_active` |
+| `update_category_missing_returns_not_found` | `NotFound(category)` when id is unknown |
+| `suggested_alert_days_is_thirty` | Backend suggestion constant is 30 |
+| `create_product_succeeds` | Happy path with default alert days = 30 |
+| `create_product_rejects_empty_sku` | `validate_sku` rejection |
+| `create_product_rejects_empty_description` | `validate_description` rejection |
+| `create_product_rejects_negative_alert_days` | `validate_alert_days` lower bound |
+| `create_product_rejects_excessive_alert_days` | `validate_alert_days` upper bound (3650) |
+| `create_product_enforces_sku_uniqueness` | `DuplicateField(sku)` on duplicate insert |
+| `update_product_works` | Update round-trip, including `default_alert_days_before` |
+| `update_product_enforces_sku_uniqueness` | `DuplicateField(sku)` on rename collision |
+| `update_product_missing_returns_not_found` | `NotFound(product)` when id is unknown |
+| `archive_product_soft_deletes` | `is_active` flips to 0 |
+| `archive_product_missing_returns_not_found` | `NotFound(product)` when id is unknown |
+| `add_list_remove_barcodes` | Add primary + secondary, list, remove both |
+| `add_barcode_validates_value` | `validate_barcode` rejection |
+| `add_barcode_to_archived_product_is_rejected` | Business-rule guard for archived products |
+| `add_barcode_to_missing_product_returns_not_found` | `NotFound(product)` when id is unknown |
+| `barcode_uniqueness_across_products` | `DuplicateField(barcode)` across products |
+| `add_secondary_barcode_to_same_product_is_allowed` | Multiple barcodes per product |
+| `remove_barcode_missing_returns_not_found` | `NotFound(product_barcode)` when id is unknown |
+| `search_finds_by_description_sku_and_barcode` | Search by description, SKU partial, barcode partial/exact, empty query, no match |
+| `search_includes_primary_barcode_in_results` | `primary_barcode` field in results |
+
+### Slice 4 changes summary
+
+| File | Change |
+| ------ | -------- |
+| `src-tauri/src/dto/products.rs` | New: categories, products, barcodes, search DTOs |
+| `src-tauri/src/dto/mod.rs` | Add `pub mod products;` |
+| `src-tauri/src/db/repositories/products.rs` | New: SQL for categories, products, barcodes, search |
+| `src-tauri/src/db/repositories/mod.rs` | Add `pub mod products;` |
+| `src-tauri/src/services/products.rs` | New: business logic, validation, uniqueness translation, 26 service tests |
+| `src-tauri/src/services/mod.rs` | Add `pub mod products;` |
+| `src-tauri/src/commands/products.rs` | New: 12 Tauri commands (categories, products, barcodes, search, suggested alert days) |
+| `src-tauri/src/commands/mod.rs` | Add `pub mod products;` |
+| `src-tauri/src/lib.rs` | Register 12 new commands in `tauri::generate_handler!` |
+| `openspec/.../tasks.md` | Check off 7 backend tasks in Section 4; UI tasks remain unchecked |
+| `openspec/.../apply-progress.md` | Append this Slice 4 section |
+
+### Slice 4 risks and notes
+
+- The frontend does not yet call any of the new commands; the UI tasks (list, form, detail) are intentionally deferred to a follow-up slice to keep review bounded.
+- `services::products::list_all_categories` and `repo::list_all_categories` are not yet wired to a command — they mirror the existing `list_all_stores`/`get_store`/`list_all_locations` scaffold pattern and are available for the future UI that needs to show archived categories.
+- The search uses `LIKE '%query%'` against `description`, `sku`, and `barcode`. SQLite's default `LIKE` is case-insensitive for ASCII; for non-ASCII searches the results follow SQLite's case behavior. If the UI later needs accent-insensitive search, add a `COLLATE NOCASE` index or normalize inputs upstream.
+- Lot creation is still untouched, so the `Block expiry lot creation until at least one store exists` task from Slice 3 remains intentionally unchecked.
+
+### Slice 4 next recommended action
+
+**Slice 4 UI — Product catalog frontend**: Build the Svelte product list, form, and detail views (with barcode list and expiry lot placeholders) on top of the new backend commands. Optionally fold lot creation (`create_expiry_lot` + `Block lot creation until store exists`) into the same slice so the product detail screen can land together.

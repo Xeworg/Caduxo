@@ -35,13 +35,13 @@
 
 ## 4. Product catalog
 
-- [ ] Implement product create/update/archive commands.
-- [ ] Enforce required unique SKU.
-- [ ] Implement category list CRUD.
-- [ ] Implement product default alert-days-before with software suggestion of 30 days.
-- [ ] Implement barcode add/remove/list commands.
-- [ ] Enforce barcode uniqueness across products.
-- [ ] Implement product search by description, SKU, and barcode.
+- [x] Implement product create/update/archive commands. <!-- sdd-owner: implementation -->
+- [x] Enforce required unique SKU. <!-- sdd-owner: implementation -->
+- [x] Implement category list CRUD. <!-- sdd-owner: implementation -->
+- [x] Implement product default alert-days-before with software suggestion of 30 days. <!-- sdd-owner: implementation -->
+- [x] Implement barcode add/remove/list commands. <!-- sdd-owner: implementation -->
+- [x] Enforce barcode uniqueness across products. <!-- sdd-owner: implementation -->
+- [x] Implement product search by description, SKU, and barcode. <!-- sdd-owner: implementation -->
 - [ ] Build product list UI.
 - [ ] Build product form UI.
 - [ ] Build product detail UI with barcode list and expiry lots.

@@ -4,4 +4,5 @@
 //! Business logic lives in `../services/` and `../domain/`.
 
 pub mod health;
+pub mod products;
 pub mod stores;
