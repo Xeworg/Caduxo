@@ -3,6 +3,7 @@
 //! Each command module exposes one group of related commands.
 //! Business logic lives in `../services/` and `../domain/`.
 
+pub mod csv_io;
 pub mod dashboard;
 pub mod expiry_lots;
 pub mod health;

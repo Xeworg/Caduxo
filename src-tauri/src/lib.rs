@@ -21,6 +21,7 @@ use crate::state::AppState;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async_init(app)).map_err(|e| {
@@ -68,6 +69,11 @@ pub fn run() {
             // Local notifications (Slice 7 — backend only)
             commands::notifications::list_due_notifications,
             commands::notifications::mark_notification_shown,
+            // CSV import/export (Slice 10a — preview + exports only)
+            commands::csv_io::read_csv_text,
+            commands::csv_io::preview_product_csv,
+            commands::csv_io::export_products_csv,
+            commands::csv_io::export_report_csv,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

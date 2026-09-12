@@ -97,7 +97,7 @@ pub struct ProductBarcodeCreate {
 }
 
 /// Response shape for a product barcode.
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow)]
 pub struct ProductBarcodeResponse {
     pub id: String,
     pub product_id: String,

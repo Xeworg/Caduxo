@@ -7,6 +7,7 @@
     type ProductResponse,
     type ProductSearchResult,
   } from "../lib/products.js";
+  import { exportProductsWithDialog } from "../lib/csv.js";
   import ProductForm from "./ProductForm.svelte";
   import ProductDetailPage from "./ProductDetailPage.svelte";
 
@@ -27,6 +28,7 @@
   let searching = false;
   let errorMsg = "";
   let successMsg = "";
+  let exporting = false;
 
   // Debounce timer for search input
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -127,20 +129,50 @@
     runSearch(appliedQuery);
   }
 
-  function handleEditedFromDetail(product: ProductResponse) {
-    startEdit(product);
-  }
+      function handleEditedFromDetail(product: ProductResponse) {
+        startEdit(product);
+      }
+
+      // ── CSV export (Slice 10a) ───────────────────────────────────────────────
+
+      async function exportProducts() {
+        exporting = true;
+        try {
+          const result = await exportProductsWithDialog();
+          if (result) {
+            flash(
+              `Exported ${result.rows_written} ${result.rows_written === 1 ? "product" : "products"}`,
+              "success",
+            );
+          }
+        } catch (e: unknown) {
+          errorMsg = String(e);
+          setTimeout(() => (errorMsg = ""), 5000);
+        } finally {
+          exporting = false;
+        }
+      }
 </script>
 
 <div class="page">
-  <header class="page-header">
-    <h1>Products</h1>
-    {#if view === "list"}
-      <button class="btn-primary" on:click={startCreate}>
-        + New Product
-      </button>
-    {/if}
-  </header>
+      <header class="page-header">
+        <h1>Products</h1>
+        {#if view === "list"}
+          <div class="page-header-actions">
+            <button
+              class="btn-secondary"
+              on:click={exportProducts}
+              disabled={exporting}
+              title="Export all products to a CSV file"
+            >
+              {exporting ? "Exporting…" : "Export CSV"}
+            </button>
+            <button class="btn-primary" on:click={startCreate}>
+              + New Product
+            </button>
+          </div>
+        {/if}
+      </header>
 
   {#if errorMsg}
     <div class="alert alert-error" role="alert">{errorMsg}</div>

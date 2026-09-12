@@ -106,8 +106,31 @@
 - [ ] Implement import preview with invalid rows and duplicate warnings.
 - [ ] Implement conflict strategies: skip, update, review.
 - [ ] Import products and barcodes.
-- [ ] Export products CSV.
-- [ ] Export report rows CSV.
+- [x] Export products CSV. <!-- sdd-owner: implementation -->
+- [x] Export report rows CSV. <!-- sdd-owner: implementation -->
+
+### 10a. CSV foundation, exports, and backend preview (Slice 10a)
+
+- [x] Add `csv` Rust crate and `tauri-plugin-dialog` dependency. <!-- sdd-owner: implementation -->
+- [x] Register `tauri-plugin-dialog` and add `dialog:default` capability. <!-- sdd-owner: implementation -->
+- [x] Add backend DTO/service/command module for CSV I/O. <!-- sdd-owner: implementation -->
+- [x] Implement `preview_product_csv` backend preview/classification (no import commit). <!-- sdd-owner: implementation -->
+- [x] Implement header detection for canonical and aliased columns. <!-- sdd-owner: implementation -->
+- [x] Classify duplicate SKU/barcode against existing data in preview. <!-- sdd-owner: implementation -->
+- [x] Return rows and status counts from preview. <!-- sdd-owner: implementation -->
+- [x] Implement `export_products_csv` writing canonical products CSV. <!-- sdd-owner: implementation -->
+- [x] Implement `export_report_csv` reusing dashboard filters/rows. <!-- sdd-owner: implementation -->
+- [x] Add TypeScript wrapper `src/lib/csv.ts` with command wrappers and dialog helpers. <!-- sdd-owner: implementation -->
+- [x] Add ProductCatalogPage export button. <!-- sdd-owner: implementation -->
+- [x] Add DashboardPage export button. <!-- sdd-owner: implementation -->
+- [x] Add backend tests for preview validation/classification and exports. <!-- sdd-owner: implementation -->
+
+### 10b. CSV import commit, conflict strategies, mapping modal (deferred to Slice 10b)
+
+- [ ] Build column mapping UI for SKU, description, UPC/barcode.
+- [ ] Implement import preview UI surfacing invalid rows and duplicate warnings.
+- [ ] Implement conflict strategies: skip, update, review.
+- [ ] Import products and barcodes (commit).
 
 ## 11. Reports and PDF
 

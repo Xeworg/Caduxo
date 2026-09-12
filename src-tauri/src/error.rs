@@ -31,6 +31,9 @@ pub enum InfrastructureError {
     #[error("I/O error")]
     Io(#[from] std::io::Error),
 
+    #[error("CSV error: {0}")]
+    Csv(#[from] csv::Error),
+
     #[error("serialization error")]
     Serialization(#[from] serde_json::Error),
 

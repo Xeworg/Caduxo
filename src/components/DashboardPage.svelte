@@ -25,6 +25,7 @@
     getExpiryLot,
     type ExpiryLotResponse,
   } from "../lib/expiry_lots.js";
+  import { exportReportWithDialog } from "../lib/csv.js";
   import ScanSearchBox from "./ScanSearchBox.svelte";
   import ProductForm from "./ProductForm.svelte";
 
@@ -76,6 +77,9 @@
   let showProductDetail = false;
   let detailProduct: ProductDetailResponse | null = null;
   let detailLoading = false;
+
+  // CSV export state (Slice 10a)
+  let exporting = false;
 
   let showLotDetail = false;
   let detailLot: ExpiryLotResponse | null = null;
@@ -164,11 +168,40 @@
     }
   }
 
-  function clearStoreFilter() {
-    selectedStoreId = null;
-    selectedLocationId = null;
-    locations = [];
-  }
+      function clearStoreFilter() {
+        selectedStoreId = null;
+        selectedLocationId = null;
+        locations = [];
+      }
+
+      // ─── CSV export (Slice 10a) ────────────────────────────────────────────────
+
+      async function exportReport() {
+        exporting = true;
+        try {
+          const result = await exportReportWithDialog({
+            store_id: selectedStoreId,
+            location_id: selectedLocationId,
+            preset: activePreset,
+            urgency: null,
+          });
+          if (result) {
+            errorMsg = "";
+            // Use a transient success indicator via errorMsg reset path:
+            // a small ephemeral log line keeps the wiring minimal.
+            // (A dedicated success banner can land in Slice 10b alongside the
+            // import commit and mapping modal.)
+            // eslint-disable-next-line no-console
+            console.info(
+              `Exported ${result.rows_written} lot row(s) to ${result.path}`,
+            );
+          }
+        } catch (e) {
+          errorMsg = String(e);
+        } finally {
+          exporting = false;
+        }
+      }
 
       // ─── Scan handler ──────────────────────────────────────────────────────────
 
@@ -333,19 +366,29 @@
 <!-- Dashboard layout -->
 <div class="dashboard">
 
-  <!-- ── Header ─────────────────────────────────────────────────────────── -->
-  <header class="dash-header">
-    <div class="dash-title-row">
-      <h2>Dashboard</h2>
-      {#if selectedStoreId}
-        <span class="store-chip">
-          {stores.find((s) => s.id === selectedStoreId)?.name ?? "Store"}
-          <button class="chip-clear" on:click={clearStoreFilter} title="Clear store filter">✕</button>
-        </span>
-      {:else}
-        <span class="store-chip store-chip-all">All stores</span>
-      {/if}
-    </div>
+      <!-- ── Header ─────────────────────────────────────────────────────────── -->
+      <header class="dash-header">
+        <div class="dash-title-row">
+          <h2>Dashboard</h2>
+          <div class="dash-title-actions">
+            <button
+              class="btn-secondary btn-small"
+              on:click={exportReport}
+              disabled={exporting}
+              title="Export the current dashboard report to a CSV file"
+            >
+              {exporting ? "Exporting…" : "Export CSV"}
+            </button>
+            {#if selectedStoreId}
+              <span class="store-chip">
+                {stores.find((s) => s.id === selectedStoreId)?.name ?? "Store"}
+                <button class="chip-clear" on:click={clearStoreFilter} title="Clear store filter">✕</button>
+              </span>
+            {:else}
+              <span class="store-chip store-chip-all">All stores</span>
+            {/if}
+          </div>
+        </div>
 
     <!-- Always-visible scan/search input -->
     <div class="scan-row">

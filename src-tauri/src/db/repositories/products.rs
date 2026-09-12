@@ -410,12 +410,30 @@ pub async fn product_has_active_lots(
 ) -> Result<bool, sqlx::Error> {
     let row: Option<(i64,)> = sqlx::query_as(
         r#"
-        SELECT COUNT(*) FROM expiry_lots
-        WHERE product_id = $1 AND status = 'active'
-        "#,
+            SELECT COUNT(*) FROM expiry_lots
+            WHERE product_id = $1 AND status = 'active'
+            "#,
     )
     .bind(product_id)
     .fetch_optional(pool)
     .await?;
     Ok(row.map(|(n,)| n > 0).unwrap_or(false))
+}
+
+/// Returns every product (active and archived) ordered by SKU, suitable for
+/// CSV export. Each product appears once; barcodes are joined in `list_barcodes`.
+pub async fn list_all_products_for_export(
+    pool: &SqlitePool,
+) -> Result<Vec<ProductResponse>, sqlx::Error> {
+    sqlx::query_as::<_, ProductResponse>(
+        r#"
+        SELECT id, sku, description, category_id, default_unit,
+               default_alert_days_before, notes, is_active,
+               created_at, updated_at
+        FROM products
+        ORDER BY sku ASC
+        "#,
+    )
+    .fetch_all(pool)
+    .await
 }

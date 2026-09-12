@@ -1123,3 +1123,137 @@ cd src-tauri && cargo check 2>&1 | tail -2
 ### Slice 7b next recommended action
 
 **Slice 10 — CSV import/export**: Implement CSV file selection, header detection, column mapping UI, import preview with conflict strategies, and CSV export for products and report rows.
+
+## Slice 10a — CSV foundation, exports, and backend preview
+
+### Status: COMPLETE ✅
+
+Slice 10a delivers the bounded foundation slice requested by the mapping scout: CSV crate + Tauri dialog plugin wiring, backend DTO/service/command module, header detection + preview classification, canonical products CSV export, dashboard report CSV export, and TypeScript/page wiring for the export buttons. Import commit, conflict strategies, and the mapping modal are deliberately deferred to Slice 10b. No database changes and no frontend test harness were introduced in this slice.
+
+### Slice 10a completed tasks (Section 10)
+
+| Task | Status |
+| ------ | -------- |
+| Add `csv` Rust crate and `tauri-plugin-dialog` dependency | ✅ |
+| Register `tauri-plugin-dialog` and add `dialog:default` capability | ✅ |
+| Add backend DTO/service/command module for CSV I/O | ✅ |
+| Implement `preview_product_csv` backend preview/classification (no commit) | ✅ |
+| Detect CSV headers with canonical aliases (sku/code/ref → sku, name/title → description, upc/ean/gtin → barcode, etc.) | ✅ |
+| Classify duplicate SKU/barcode against existing data | ✅ |
+| Return rows + status counts from preview (valid/invalid/duplicate_sku/duplicate_barcode/missing_required) | ✅ |
+| Implement `export_products_csv` writing canonical products CSV | ✅ |
+| Implement `export_report_csv` reusing dashboard filters/rows | ✅ |
+| Add TypeScript wrapper `src/lib/csv.ts` with command wrappers and dialog helpers | ✅ |
+| Add ProductCatalogPage export button | ✅ |
+| Add DashboardPage export button | ✅ |
+| Add backend tests for preview validation/classification and exports | ✅ |
+
+### Slice 10a NOT implemented (deferred to Slice 10b)
+
+- Column mapping modal UI (auto-detection works for canonical and aliased headers; explicit per-column override is plumbed through the `mapping` field on `CsvPreviewInput` but the UI is not built yet).
+- Import commit command.
+- Conflict strategies (skip / update / review).
+- CSV preview UI panel that surfaces invalid rows and duplicate warnings to the user (the backend summary is fully available; the UI is not wired in this slice).
+
+### Slice 10a implementation notes
+
+**`src-tauri/Cargo.toml`** — added `csv = "1.3"` for read/write and `tauri-plugin-dialog = "2"` for native save/open dialogs.
+
+**`src-tauri/capabilities/default.json`** — added `"dialog:default"` so the frontend can call `open()` and `save()`.
+
+**`src-tauri/src/lib.rs`** — registered `tauri_plugin_dialog::init()` and added four commands: `read_csv_text`, `preview_product_csv`, `export_products_csv`, `export_report_csv`.
+
+**`src-tauri/src/dto/csv_io.rs`** — new module. `CsvPreviewInput`, `CsvColumnMapping`, `CsvPreviewRowStatus` (tagged enum: `Ok | DuplicateSku | DuplicateBarcode | MissingRequired | Invalid`), `CsvPreviewRow`, `CsvPreviewResponse`, `ReportExportInput`, `CsvExportResult`.
+
+**`src-tauri/src/services/csv_io.rs`** — new module. Header detection strips non-alphanumeric chars and lowercases for case-insensitive alias matching (e.g. `Item SKU`, `item_sku`, `ITEM-SKU` all map to `sku`). Preview classification runs four checks in order: required-field presence, domain validation (re-uses `validate_sku`/`validate_description`/`validate_barcode` + alert-days bounds), SKU uniqueness, and barcode uniqueness. The preview never touches the database beyond read-only lookups. Exports write via `csv::WriterBuilder::from_path`/`from_writer` and reuse `services::dashboard::get_dashboard` so the report rows reflect the current dashboard urgency/sorting/preset filter.
+
+**`src-tauri/src/error.rs`** — added `InfrastructureError::Csv(#[from] csv::Error)` so `?` propagates cleanly.
+
+**`src-tauri/src/db/repositories/products.rs`** — added `list_all_products_for_export` (every product, ordered by SKU) for the canonical export.
+
+**`src/lib/csv.ts`** — TypeScript wrapper mirroring the Rust DTOs plus `pickCsvFile`, `pickCsvSavePath`, `importProductCsvPreview`, `exportProductsWithDialog`, `exportReportWithDialog`. Sensitive row content (raw CSV text) is not logged anywhere.
+
+**`src/components/ProductCatalogPage.svelte`** — added "Export CSV" button next to the "New Product" button. Uses `exportProductsWithDialog` and flashes a success message with the row count.
+
+**`src/components/DashboardPage.svelte`** — added "Export CSV" button in the dashboard header. Uses `exportReportWithDialog` and passes the current store/location/preset filters so the exported report matches the dashboard view.
+
+### Slice 10a logging discipline
+
+The backend does not log raw SKU/barcode/description/notes/imported row content. Preview classification surfaces only aggregate counts (`valid_rows`, `duplicate_sku_count`, etc.) and high-level status tags, not per-row values, to `tracing`. Errors are wrapped through `AppError` which the existing `CommandError` boundary already sanitizes for the UI.
+
+### Slice 10a new tests (16 added, 155 → 171 total)
+
+`src-tauri/src/services/csv_io.rs::tests`:
+
+| Test | Covers |
+| ------ | -------- |
+| `detect_mapping_from_canonical_headers` | Canonical header detection |
+| `detect_mapping_handles_aliases_and_case` | Alias + case + non-alphanumeric normalization |
+| `detect_mapping_missing_required_fields_returns_none` | Header detection returns `None` for unknown headers |
+| `resolve_mapping_merges_explicit_overrides_with_detected` | Explicit mapping overrides with auto-detect fallback |
+| `preview_classifies_valid_rows_as_ok` | Happy-path classification |
+| `preview_detects_duplicate_sku_against_existing_product` | SKU uniqueness check |
+| `preview_detects_duplicate_barcode_against_existing_product` | Barcode uniqueness check |
+| `preview_flags_missing_required_fields` | Missing SKU/description → `MissingRequired` |
+| `preview_rejects_when_required_columns_missing` | Top-level `Validation` when SKU/description columns are absent |
+| `preview_flags_invalid_alert_days` | Out-of-range alert days → `Invalid` |
+| `export_products_writes_canonical_csv_with_header_and_rows` | Canonical CSV header + row content |
+| `export_products_returns_empty_csv_for_no_products` | Empty-DB export |
+| `export_report_writes_dashboard_rows_with_filters` | Dashboard report CSV with filters |
+| `export_report_respects_preset_filter` | Preset filter narrows exported rows |
+| `read_csv_text_returns_file_contents` | File read helper |
+| `format_quantity_strips_trailing_zero` | Quantity formatting helper |
+
+### Slice 10a files changed
+
+| Path | Change |
+| ------ | -------- |
+| `src-tauri/Cargo.toml` | Added `csv = "1.3"` and `tauri-plugin-dialog = "2"` |
+| `src-tauri/Cargo.lock` | Auto-regenerated by `cargo` |
+| `src-tauri/capabilities/default.json` | Added `"dialog:default"` permission |
+| `src-tauri/src/lib.rs` | Registered `tauri_plugin_dialog::init()` and the 4 CSV commands |
+| `src-tauri/src/dto/mod.rs` | `pub mod csv_io;` |
+| `src-tauri/src/dto/csv_io.rs` | New: DTOs for preview, mapping, export |
+| `src-tauri/src/services/mod.rs` | `pub mod csv_io;` |
+| `src-tauri/src/services/csv_io.rs` | New: service layer + 16 tests |
+| `src-tauri/src/commands/mod.rs` | `pub mod csv_io;` |
+| `src-tauri/src/commands/csv_io.rs` | New: thin Tauri command adapters |
+| `src-tauri/src/db/repositories/products.rs` | Added `list_all_products_for_export` |
+| `src-tauri/src/error.rs` | Added `InfrastructureError::Csv` variant |
+| `package.json` | Added `@tauri-apps/plugin-dialog` |
+| `package-lock.json` | Auto-regenerated by `npm install` |
+| `src/lib/csv.ts` | New: TypeScript wrapper + Tauri dialog helpers |
+| `src/components/ProductCatalogPage.svelte` | Added "Export CSV" button + handler |
+| `src/components/DashboardPage.svelte` | Added "Export CSV" button + handler |
+| `openspec/changes/caduxo-expiry-tracker/tasks.md` | Marked Slice 10a items; added 10a/10b subsections |
+| `openspec/changes/caduxo-expiry-tracker/apply-progress.md` | Appended this Slice 10a section |
+
+### Slice 10a deferred issues
+
+- **Import UI is intentionally deferred to Slice 10b.** The backend preview is fully implemented and tested; wiring it to a user-facing panel is part of Slice 10b alongside the mapping modal.
+- **Frontend test harness is still deferred per Slice 1.** No UI tests were added in this slice.
+- **No new product/barcode database writes** — preview and exports are read-only operations on existing data.
+
+### Slice 10a verification evidence
+
+```bash
+# Rust check
+cd src-tauri && cargo check --tests 2>&1 | tail -2
+# → "Finished `dev` profile" ✅  (21 pre-existing warnings unchanged)
+
+# Rust tests for the new module
+cd src-tauri && cargo test --lib services::csv_io 2>&1 | tail -3
+# → "test result: ok. 16 passed; 0 failed" ✅
+
+# TypeScript check
+npx tsc --noEmit 2>&1
+# → (no output = clean) ✅
+
+# Frontend build
+npm run build 2>&1 | tail -3
+# → "✓ built in …" ✅
+```
+
+### Slice 10a next recommended action
+
+**Slice 10b — CSV import commit, conflict strategies, mapping modal**: Add the frontend preview panel that calls `previewProductCsv`, build the column mapping UI (auto-detect with per-column override), implement conflict strategies (skip / update / review), wire the commit command, and surface invalid rows + duplicate warnings in the catalog UI.
