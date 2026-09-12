@@ -407,3 +407,167 @@ Slice 4b delivers the Svelte frontend on top of the Slice 4 backend. The three r
 ### Slice 4b next recommended action
 
 **Slice 5 — Expiry lots (backend + UI)**: Implement `create_expiry_lot` and the partial-resolution flow, enforce the store precondition via `has_store`, and build the lot form + resolve-quantity UI so the product detail placeholder becomes real data.
+
+---
+
+## Slice 5a — Expiry lots (backend only)
+
+### Status: COMPLETE ✅
+
+Slice 5a delivers the expiry lot backend (DTOs, repository, service, Tauri commands) without Svelte UI. Lot CRUD and partial resolution are fully implemented and tested. The store precondition is enforced. The lot form UI and resolve-quantity UI remain intentionally unchecked for Slice 5b.
+
+### Slice 5a completed tasks
+
+| Task | Status |
+| ---- | ------ |
+| Implement expiry lot create/update/archive commands | ✅ Backend |
+| Pre-fill lot unit from product default when available | ✅ |
+| Pre-fill lot alert days from product default | ✅ |
+| Allow per-lot alert-days-before override | ✅ |
+| Support optional internal location and batch code | ✅ |
+| Implement partial quantity resolution | ✅ |
+| Record partial resolutions in `lot_resolution_events` | ✅ |
+| Block expiry lot creation until at least one store exists | ✅ |
+| Add regression tests for partial lot resolution | ✅ |
+| Verify lot alert default and override behavior | ✅ |
+
+### Slice 5a NOT implemented (UI, deferred to 5b)
+
+| Task | Status |
+| ---- | ------ |
+| Build lot form UI | ⏭ Deferred |
+| Build resolve quantity UI | ⏭ Deferred |
+| Require store selection only when multiple stores exist | ⏭ UI concern |
+
+### Slice 5a implementation notes
+
+**Schema constraint note — fully-resolved lots store `quantity = 1.0`**:
+
+The `expiry_lots` table has `CHECK(quantity > 0)`. When remaining quantity reaches zero via partial resolution, the repository clamps `quantity` to `1.0` (the DB row is kept as an audit trail; `lot_resolution_events` is the authoritative record of exact resolved quantities). The `status = 'resolved'` field ensures these rows are excluded from all active-lot queries.
+
+**DTO design**:
+
+`ExpiryLotCreate.unit` and `ExpiryLotCreate.alert_days_before` are `Option`-wrapped. The service resolves them against product defaults: `None` or blank unit → product `default_unit`; `None` or negative alert days → product `default_alert_days_before`. User-supplied values always win.
+
+**Partial resolution flow**:
+
+1. Validate lot exists and is `active`.
+2. Validate `resolved_qty <= remaining_quantity`.
+3. Record `lot_resolution_events` row (source of truth).
+4. Update lot: remaining → `max(0, current - resolved)`, clamp to `1.0` for DB; set `status = 'resolved'` and fill `resolution`/`resolved_at` when fully consumed.
+
+**Commands registered** (10 total):
+
+`list_expiry_lots`, `list_expiry_lots_by_store`, `list_expiry_lots_by_product`, `get_expiry_lot`, `create_expiry_lot`, `update_expiry_lot`, `archive_expiry_lot`, `resolve_expiry_lot`, `list_lot_resolution_events`, `has_store` (was in Slice 3).
+
+### Slice 5a new tests (17 service tests)
+
+| Test | Covers |
+| ---- | ------ |
+| `create_lot_requires_store` | Precondition: fails without active store |
+| `create_lot_succeeds` | Happy-path create |
+| `create_lot_pre_fills_unit_from_product` | Unit pre-fill fallback |
+| `create_lot_user_unit_overrides_product_default` | User unit wins |
+| `create_lot_pre_fills_alert_days_from_product` | Alert days pre-fill fallback |
+| `create_lot_user_alert_days_overrides_product_default` | User alert days wins |
+| `create_lot_rejects_negative_quantity` | Validation |
+| `create_lot_rejects_zero_quantity` | Validation |
+| `create_lot_rejects_invalid_expiry_date` | Date format validation |
+| `update_lot_works` | Update round-trip |
+| `update_missing_lot_returns_not_found` | NotFound on missing |
+| `archive_lot_works` | Soft-archive removes from active list |
+| `archive_missing_lot_returns_not_found` | NotFound on missing |
+| `list_lots_by_product_ordered_by_expiry` | Ordered list |
+| `partial_resolution_reduces_quantity_and_records_event` | Partial consume |
+| `full_resolution_marks_lot_resolved` | Full consume + DB clamp |
+| `cannot_resolve_more_than_remaining` | Validation guard |
+| `cannot_resolve_archived_or_resolved_lot` | Business-rule guard |
+| `resolve_rejects_invalid_resolution_type` | Type validation |
+| `resolve_rejects_zero_quantity` | Validation |
+| `multiple_partial_resolutions_accumulate` | Multiple partial events |
+
+### Slice 5a files changed
+
+| File | Change |
+| ---- | ------ |
+| `src-tauri/src/dto/expiry_lots.rs` | New: DTOs for lot CRUD, resolve, events |
+| `src-tauri/src/dto/mod.rs` | Add `pub mod expiry_lots;` |
+| `src-tauri/src/db/repositories/expiry_lots.rs` | New: SQL for lots + resolution events |
+| `src-tauri/src/db/repositories/mod.rs` | Add `pub mod expiry_lots;` |
+| `src-tauri/src/services/expiry_lots.rs` | New: business logic, pre-fill, resolution, 17 tests |
+| `src-tauri/src/services/mod.rs` | Add `pub mod expiry_lots;` |
+| `src-tauri/src/commands/expiry_lots.rs` | New: 9 Tauri commands |
+| `src-tauri/src/commands/mod.rs` | Add `pub mod expiry_lots;` |
+| `src-tauri/src/lib.rs` | Register 9 new commands |
+| `openspec/.../tasks.md` | Check off 9 backend tasks in Section 6; UI tasks remain unchecked |
+| `openspec/.../apply-progress.md` | Append this Slice 5a section |
+
+### Slice 5a risks and notes
+
+- **No Svelte UI**: lot form, resolve quantity UI, and store-selection logic are intentionally deferred. The product detail placeholder remains.
+- **DB CHECK constraint**: `quantity > 0` means fully-resolved lots keep `quantity = 1.0` in the DB; exact resolved amounts are in `lot_resolution_events`.
+- Logs do not include sensitive product/SKU/barcode/notes content; errors surface via `CommandError`.
+- No migrations needed — schema was already in place from Slice 2.
+
+### Slice 5a next recommended action
+
+**Slice 5b — Expiry lots (frontend UI)**: Build the lot form and resolve-quantity UI so the product detail placeholder becomes real data. Wire `list_expiry_lots_by_product` into the product detail page. Implement the store/local filter and the store-selection requirement (only when multiple stores exist).
+
+---
+
+## Slice 5b — Expiry lots (frontend UI)
+
+### Status: COMPLETE ✅
+
+Slice 5b delivers the Svelte frontend on top of the Slice 5a backend. Lot form, resolve-quantity dialog, and product detail integration are all implemented. The product detail placeholder is replaced with real data. No backend changes were made.
+
+### Slice 5b completed tasks
+
+| Task | Status |
+| ---- | ------ |
+| Build lot form UI | ✅ |
+| Build resolve quantity UI | ✅ |
+
+### Slice 5b NOT implemented (deferred to later slices)
+
+| Task | Status |
+| ---- | ------ |
+| Require store selection only when multiple stores exist | ⏭ UI concern |
+| Add store/local filter | ⏭ Slice 6 |
+
+### Slice 5b implementation notes
+
+**`src/lib/expiry_lots.ts`** — TypeScript wrapper for all 9 expiry lot Tauri commands. Mirrors conventions in `products.ts` and `stores.ts`: one async function per command, camelCase arguments, exported response/input types. DTOs mirror the Rust DTOs in `src-tauri/src/dto/expiry_lots.rs`.
+
+**`LotForm.svelte`** — Handles both create and edit modes. On create: pre-fills unit and alert days from `defaultUnit`/`defaultAlertDays` props, auto-selects the first available store, and sets default expiry date to today + alert days. On edit: loads the full lot state. Shows the store selector only when more than one store exists; shows the location dropdown only when locations are available for the selected store. Calls `createExpiryLot`/`updateExpiryLot` and reports errors locally. No business logic in the component.
+
+**`ResolveQuantityDialog.svelte`** — Modal dialog for partial quantity resolution. Shows remaining quantity and expiry date. Validates `qty > 0` and `qty <= remaining`. Resolution type is a select: consumed/discarded/transferred. Optional notes. Loads and displays resolution event history for the lot via `listLotResolutionEvents`. Calls `resolveExpiryLot` and reports errors locally. Fixed import: `listStoreLocations` and `StoreLocationResponse` are from `stores.ts`, not `expiry_lots.ts`.
+
+**`ProductDetailPage.svelte`** — Replaced the expiry lots placeholder with a real list. Loads lots via `listExpiryLotsByProduct(productId)` on mount and when `productId` changes. Each lot row shows: urgency badge (expired / today / N days / normal), quantity + unit, expiry date, batch code, location, and status badge. Active lots expose three icon actions: resolve (↓), edit (✏️), archive (🗄). Archived/resolved lots show status badges but no actions. "+ New lot" button opens `LotForm` in create mode (hidden for archived products). `ResolveQuantityDialog` renders as an overlay when `resolvingLot` is set. Urgency is computed client-side from the expiry date string. No product names, SKUs, barcodes, or notes are logged.
+
+### Slice 5b compatibility notes
+
+- All components use Svelte 5 legacy syntax (`let`, `$:`, `bind:value`, `class:`, `on:`) consistent with the rest of the codebase.
+- No runes mode used.
+- `tsconfig.json` covers all new files; `tsc --noEmit` is clean.
+- Business logic (pre-fill rules, quantity validation, archive/resolution state) is in Rust; Svelte only calls commands and does local form validation.
+
+### Slice 5b files changed
+
+| File | Change |
+| ---- | ------ |
+| `src/lib/expiry_lots.ts` | New: API wrapper for 9 expiry lot commands |
+| `src/components/LotForm.svelte` | New: create/edit lot form |
+| `src/components/ResolveQuantityDialog.svelte` | New: partial resolution modal |
+| `src/components/ProductDetailPage.svelte` | Replaced expiry lots placeholder with real list + form + resolve dialog |
+| `openspec/.../tasks.md` | Checked off Section 6 lot form and resolve quantity UI tasks |
+| `openspec/.../apply-progress.md` | Appended this Slice 5b section |
+
+### Slice 5b deferred issues
+
+- **Store/local filter** (quick filter in dashboard): deferred to Slice 6 dashboard.
+- **Require store selection only when multiple stores exist**: the LotForm shows store selector only when `stores.length > 1`, satisfying the rule at form-render time. The backend precondition (`has_store`) is unchanged.
+
+### Slice 5b next recommended action
+
+**Slice 6 — Dashboard and scanner workflow**: Implement the dashboard query command, urgency cards, expired section, urgent lot table with urgency sort, quick filters, and the always-visible scan/search input with barcode-first → SKU-second → quick-create flow.

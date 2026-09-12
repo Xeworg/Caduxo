@@ -30,7 +30,7 @@
 
 - [x] Implement `is_first_run` command. <!-- sdd-owner: implementation -->
 - [x] Implement first store creation flow. <!-- sdd-owner: implementation -->
-- [ ] Block expiry lot creation until at least one store exists. <!-- deferred until lot creation command exists; `has_store` precondition command added -->
+- [x] Block expiry lot creation until at least one store exists. <!-- sdd-owner: implementation -->
 - [x] Remember last selected store in settings. <!-- sdd-owner: implementation -->
 
 ## 4. Product catalog
@@ -56,16 +56,16 @@
 
 ## 6. Expiry lots
 
-- [ ] Implement expiry lot create/update/archive commands.
-- [ ] Pre-fill lot unit from product default when available.
-- [ ] Pre-fill lot alert days from product default.
-- [ ] Allow per-lot alert-days-before override.
-- [ ] Require store selection only when multiple stores exist.
-- [ ] Support optional internal location and batch code.
-- [ ] Implement partial quantity resolution.
-- [ ] Record partial resolutions in `lot_resolution_events`.
-- [ ] Build lot form UI.
-- [ ] Build resolve quantity UI.
+- [x] Implement expiry lot create/update/archive commands. <!-- sdd-owner: implementation -->
+- [x] Pre-fill lot unit from product default when available. <!-- sdd-owner: implementation -->
+- [x] Pre-fill lot alert days from product default. <!-- sdd-owner: implementation -->
+- [x] Allow per-lot alert-days-before override. <!-- sdd-owner: implementation -->
+- [ ] Require store selection only when multiple stores exist. <!-- UI concern -->
+- [x] Support optional internal location and batch code. <!-- sdd-owner: implementation -->
+- [x] Implement partial quantity resolution. <!-- sdd-owner: implementation -->
+- [x] Record partial resolutions in `lot_resolution_events`. <!-- sdd-owner: implementation -->
+- [x] Build lot form UI. <!-- sdd-owner: implementation -->
+- [x] Build resolve quantity UI. <!-- sdd-owner: implementation -->
 
 ## 7. Dashboard
 
@@ -145,7 +145,7 @@
 - [ ] Add regression tests for first-run setup.
 - [ ] Add regression tests for SKU and barcode uniqueness.
 - [ ] Add regression tests for alert-window calculations and notification deduplication.
-- [ ] Add regression tests for partial lot resolution.
+- [x] Add regression tests for partial lot resolution. <!-- sdd-owner: implementation -->
 - [ ] Add regression tests for CSV mapping/import validation.
 - [ ] Add regression tests for report generation/export behavior.
 - [ ] Add regression tests for backup/restore validation.
@@ -158,7 +158,7 @@
 - [ ] Verify product SKU uniqueness.
 - [ ] Verify multiple barcodes per product.
 - [ ] Verify scanner keyboard-wedge workflow.
-- [ ] Verify lot alert default and override behavior.
+- [x] Verify lot alert default and override behavior. <!-- sdd-owner: implementation -->
 - [ ] Verify daily notification deduplication.
 - [ ] Verify expired lots remain prominent after notification stop.
 - [ ] Verify partial lot resolution.

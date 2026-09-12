@@ -52,6 +52,16 @@ pub fn run() {
             commands::products::add_product_barcode,
             commands::products::list_product_barcodes,
             commands::products::remove_product_barcode,
+            // Expiry lots (Slice 5a)
+            commands::expiry_lots::list_expiry_lots,
+            commands::expiry_lots::list_expiry_lots_by_store,
+            commands::expiry_lots::list_expiry_lots_by_product,
+            commands::expiry_lots::get_expiry_lot,
+            commands::expiry_lots::create_expiry_lot,
+            commands::expiry_lots::update_expiry_lot,
+            commands::expiry_lots::archive_expiry_lot,
+            commands::expiry_lots::resolve_expiry_lot,
+            commands::expiry_lots::list_lot_resolution_events,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
