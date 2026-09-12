@@ -15,16 +15,16 @@
 
 ## 2. Database schema
 
-- [ ] Create migration for `stores`.
-- [ ] Create migration for `store_locations`.
-- [ ] Create migration for `categories`.
-- [ ] Create migration for `products`.
-- [ ] Create migration for `product_barcodes`.
-- [ ] Create migration for `expiry_lots`.
-- [ ] Create migration for `lot_resolution_events`.
-- [ ] Create migration for `notification_log`.
-- [ ] Create migration for `app_settings`.
-- [ ] Add indexes for SKU, barcode, expiry date, store/date, product lots, and store locations.
+- [x] Create migration for `stores`.
+- [x] Create migration for `store_locations`.
+- [x] Create migration for `categories`.
+- [x] Create migration for `products`.
+- [x] Create migration for `product_barcodes`.
+- [x] Create migration for `expiry_lots`.
+- [x] Create migration for `lot_resolution_events`.
+- [x] Create migration for `notification_log`.
+- [x] Create migration for `app_settings`.
+- [x] Add indexes for SKU, barcode, expiry date, store/date, product lots, and store locations.
 
 ## 3. First-run setup
 

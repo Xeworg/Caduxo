@@ -15,7 +15,7 @@
 //! Log safe identifiers: UUIDs, internal IDs, operation names,
 //! counts, durations, and error categories.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing_subscriber::{
     fmt::{self, format::FmtSpan},
     layer::SubscriberExt,
@@ -26,7 +26,7 @@ use tracing_subscriber::{
 ///
 /// Creates the directory if it does not exist.
 /// Returns `None` if resolution fails.
-pub fn resolve_log_dir(app_data: &PathBuf) -> Option<PathBuf> {
+pub fn resolve_log_dir(app_data: &Path) -> Option<PathBuf> {
     let log_dir = app_data.join("logs");
     std::fs::create_dir_all(&log_dir).ok()?;
     Some(log_dir)
@@ -37,7 +37,7 @@ pub fn resolve_log_dir(app_data: &PathBuf) -> Option<PathBuf> {
 /// - `log_dir`: directory for the rotating log file (e.g. `logs/`)
 /// - `app_version`: current application version for log metadata
 /// - `is_dev`: whether the app is running in development mode
-pub fn init(log_dir: Option<&PathBuf>, app_version: &str, is_dev: bool) {
+pub fn init(log_dir: Option<&Path>, app_version: &str, is_dev: bool) {
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("caduxo=info,tauri=info"));
 

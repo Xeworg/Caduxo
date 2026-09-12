@@ -47,7 +47,7 @@ async fn async_init(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> 
     // 2. Initialize structured logging.
     let log_dir = resolve_log_dir(&app_data);
     let version = env!("CARGO_PKG_VERSION");
-    logging::init(log_dir.as_ref(), version, is_dev);
+    logging::init(log_dir.as_deref(), version, is_dev);
     tracing::info!(data_dir = %app_data.display(), "App data directory resolved");
 
     // 3. Initialize the database pool.

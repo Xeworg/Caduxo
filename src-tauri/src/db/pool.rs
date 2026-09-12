@@ -12,6 +12,11 @@ pub fn sqlite_options(db_path: &Path) -> SqliteConnectOptions {
     SqliteConnectOptions::new()
         .filename(db_path)
         .create_if_missing(true)
+        // Enable foreign-key enforcement for all connections in the pool.
+        // SQLite FK constraints are disabled by default; this ensures that
+        // ON DELETE CASCADE and ON UPDATE CASCADE behave as declared in the
+        // schema, not just in the single connection that ran the PRAGMA.
+        .pragma("foreign_keys", "ON")
 }
 
 /// Returns a configured `SqlitePoolOptions` with Caduxo defaults.
