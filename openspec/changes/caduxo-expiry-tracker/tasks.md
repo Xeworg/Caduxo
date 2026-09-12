@@ -2,16 +2,16 @@
 
 ## 1. Project foundation
 
-- [ ] Initialize Tauri v2 project with Svelte + TypeScript.
-- [ ] Configure Rust workspace and app metadata.
-- [ ] Establish modular layered backend structure: commands, services, domain, repositories, DTOs, shared errors, and app state.
-- [ ] Add SQLite support with `sqlx`.
-- [ ] Add database migration runner.
-- [ ] Add app data directory resolution for Windows/Linux.
-- [ ] Add basic error handling shape shared by Tauri commands.
-- [ ] Add structured Rust logging with safe app-local log output.
-- [ ] Add baseline Rust test harness for backend/domain/persistence code.
-- [ ] Add baseline frontend test harness when non-trivial UI logic begins.
+- [x] Initialize Tauri v2 project with Svelte + TypeScript. <!-- sdd-owner: implementation -->
+- [x] Configure Rust workspace and app metadata. <!-- sdd-owner: implementation -->
+- [x] Establish modular layered backend structure: commands, services, domain, repositories, DTOs, shared errors, and app state. <!-- sdd-owner: implementation -->
+- [x] Add SQLite support with `sqlx`. <!-- sdd-owner: implementation -->
+- [x] Add database migration runner. <!-- sdd-owner: implementation -->
+- [x] Add app data directory resolution for Windows/Linux. <!-- sdd-owner: implementation -->
+- [x] Add basic error handling shape shared by Tauri commands. <!-- sdd-owner: implementation -->
+- [x] Add structured Rust logging with safe app-local log output. <!-- sdd-owner: implementation -->
+- [x] Add baseline Rust test harness for backend/domain/persistence code. <!-- sdd-owner: implementation -->
+- [ ] Add baseline frontend test harness when non-trivial UI logic begins. <!-- sdd-owner: implementation -->
 
 ## 2. Database schema
 
