@@ -28,7 +28,19 @@ pub fn run() {
                 e
             })
         })
-        .invoke_handler(tauri::generate_handler![commands::health::health_check,])
+        .invoke_handler(tauri::generate_handler![
+            commands::health::health_check,
+            commands::stores::is_first_run,
+            commands::stores::list_stores,
+            commands::stores::create_store,
+            commands::stores::update_store,
+            commands::stores::list_store_locations,
+            commands::stores::create_store_location,
+            commands::stores::update_store_location,
+            commands::stores::get_settings,
+            commands::stores::update_settings,
+            commands::stores::has_store,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

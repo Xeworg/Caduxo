@@ -28,10 +28,10 @@
 
 ## 3. First-run setup
 
-- [ ] Implement `is_first_run` command.
-- [ ] Implement first store creation flow.
-- [ ] Block expiry lot creation until at least one store exists.
-- [ ] Remember last selected store in settings.
+- [x] Implement `is_first_run` command. <!-- sdd-owner: implementation -->
+- [x] Implement first store creation flow. <!-- sdd-owner: implementation -->
+- [ ] Block expiry lot creation until at least one store exists. <!-- deferred until lot creation command exists; `has_store` precondition command added -->
+- [x] Remember last selected store in settings. <!-- sdd-owner: implementation -->
 
 ## 4. Product catalog
 
@@ -48,11 +48,11 @@
 
 ## 5. Stores and internal locations
 
-- [ ] Implement store CRUD.
-- [ ] Implement optional internal location CRUD per store.
-- [ ] Enforce unique location name per store.
-- [ ] Build store/local management UI.
-- [ ] Build optional internal location UI.
+- [x] Implement store CRUD. <!-- sdd-owner: implementation -->
+- [x] Implement optional internal location CRUD per store. <!-- sdd-owner: implementation -->
+- [x] Enforce unique location name per store. <!-- sdd-owner: implementation -->
+- [x] Build store/local management UI. <!-- sdd-owner: implementation -->
+- [x] Build optional internal location UI. <!-- sdd-owner: implementation -->
 
 ## 6. Expiry lots
 

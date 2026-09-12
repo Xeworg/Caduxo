@@ -48,6 +48,12 @@ pub enum AppError {
     Infrastructure(#[from] InfrastructureError),
 }
 
+impl From<sqlx::Error> for AppError {
+    fn from(e: sqlx::Error) -> Self {
+        AppError::Infrastructure(InfrastructureError::Database(e))
+    }
+}
+
 /// User-safe error shape that is safe to return over the Tauri IPC boundary.
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", content = "detail")]

@@ -180,3 +180,62 @@ npm run build 2>&1 | tail -2
 ## Next recommended action
 
 **Slice 3 — First-run setup and stores**: Implement `is_first_run`, first store creation flow, store/local management, last-selected-store persistence, and block lot creation until at least one store exists.
+
+---
+
+## Slice 3 — First-run setup and stores
+
+### Status: PARTIAL COMPLETE ✅
+
+Slice 3 backend and UI store management are implemented and verified. One task remains intentionally unchecked: blocking expiry lot creation until a store exists, because lot creation is not implemented yet. A `has_store` Tauri command/service/repository precondition is available for the future lot workflow.
+
+### Slice 3 completed tasks
+
+| Task | Status |
+| ---- | ------ |
+| Implement `is_first_run` command | ✅ |
+| Implement first store creation flow | ✅ |
+| Remember last selected store in settings | ✅ |
+| Implement store CRUD | ✅ |
+| Implement optional internal location CRUD per store | ✅ |
+| Enforce unique location name per store | ✅ |
+| Build store/local management UI | ✅ |
+| Build optional internal location UI | ✅ |
+| Block expiry lot creation until at least one store exists | ⏭ Deferred until lot creation command exists; `has_store` precondition command added |
+
+### Slice 3 implementation notes
+
+- Added store/settings DTOs and Tauri commands for first-run, store CRUD, location CRUD, settings, and `has_store`.
+- Added repositories and services for stores, internal locations, and app settings.
+- Added Svelte store/local management UI and first-run flow.
+- Removed the first-run form autofocus warning after verification surfaced it.
+- Kept business logic in Rust services/repositories; Svelte remains command/API client UI.
+
+### Slice 3 verification evidence
+
+```bash
+cd src-tauri && cargo test
+# → 59 passed; 0 failed ✅
+
+cd src-tauri && cargo check
+# → finished with expected scaffold dead_code warnings ✅
+
+cd src-tauri && cargo clippy
+# → finished with expected scaffold dead_code warnings; no clippy errors ✅
+
+npm run build
+# → built successfully ✅
+
+npx tsc --noEmit
+# → clean ✅
+```
+
+### Slice 3 risks and notes
+
+- The SDD subagent reported an execution error after making changes, so parent verification and artifact updates were completed directly.
+- The UI is functional but intentionally simple; future slices can refine navigation and visual polish.
+- The lot creation precondition should be enforced in Slice 5 when `create_expiry_lot` is introduced.
+
+### Slice 3 next recommended action
+
+**Slice 4 — Product catalog, categories, and barcodes**: Implement product identity/search backend and UI, keeping category/barcode constraints covered by focused tests.

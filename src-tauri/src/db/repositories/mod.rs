@@ -1,4 +1,6 @@
-//! Repository stubs — data access layer.
+//! Repository layer — data access boundaries.
 //
-// These modules are populated in later slices.
-// Slice 1 provides the module tree so the layered structure is in place.
+// Each module owns its SQL and maps to/from DTOs.
+
+pub mod settings;
+pub mod stores;
