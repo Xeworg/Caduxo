@@ -90,11 +90,11 @@
 ## 9. Local notifications
 
 - [ ] Add notification permission/request flow.
-- [ ] Implement due notification query using alert window rules.
-- [ ] Use `notification_log` to prevent duplicate same-day notifications.
+- [x] Implement due notification query using alert window rules. <!-- sdd-owner: implementation, Slice 7 (backend-first) -->
+- [x] Use `notification_log` to prevent duplicate same-day notifications. <!-- sdd-owner: implementation, Slice 7 (backend-first) -->
 - [ ] Trigger notification check on app startup.
 - [ ] Trigger periodic notification check while app is open.
-- [ ] Stop OS notifications after expiry date.
+- [x] Stop OS notifications after expiry date. <!-- sdd-owner: implementation, Slice 7 (backend-first, query-level exclusion; frontend OS trigger deferred) -->
 - [ ] Keep expired lots prominent on dashboard after notification period ends.
 
 ## 10. CSV import/export
@@ -144,7 +144,7 @@
 - [ ] Add migration tests or verification for schema creation and indexes.
 - [ ] Add regression tests for first-run setup.
 - [ ] Add regression tests for SKU and barcode uniqueness.
-- [ ] Add regression tests for alert-window calculations and notification deduplication.
+- [x] Add regression tests for alert-window calculations and notification deduplication. <!-- sdd-owner: implementation, Slice 7 (backend-first) — 25 new behavior tests across repository + service layers -->
 - [x] Add regression tests for partial lot resolution. <!-- sdd-owner: implementation -->
 - [ ] Add regression tests for CSV mapping/import validation.
 - [ ] Add regression tests for report generation/export behavior.
@@ -159,7 +159,7 @@
 - [ ] Verify multiple barcodes per product.
 - [ ] Verify scanner keyboard-wedge workflow.
 - [x] Verify lot alert default and override behavior. <!-- sdd-owner: implementation -->
-- [ ] Verify daily notification deduplication.
+- [x] Verify daily notification deduplication. <!-- sdd-owner: implementation, Slice 7 (backend-first) — verified at the SQL/service layer via repository + service tests; frontend OS notification delivery still pending -->
 - [ ] Verify expired lots remain prominent after notification stop.
 - [ ] Verify partial lot resolution.
 - [ ] Verify CSV import with mapped columns.

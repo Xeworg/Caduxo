@@ -65,6 +65,9 @@ pub fn run() {
             commands::expiry_lots::list_lot_resolution_events,
             // Dashboard (Slice 6a)
             commands::dashboard::list_dashboard_lots,
+            // Local notifications (Slice 7 — backend only)
+            commands::notifications::list_due_notifications,
+            commands::notifications::mark_notification_shown,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

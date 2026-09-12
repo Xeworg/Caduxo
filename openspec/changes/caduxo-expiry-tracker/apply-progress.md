@@ -848,3 +848,167 @@ npm run build 2>&1 | tail -2
 ### Slice 6b next recommended action
 
 **Slice 7 — Local notifications**: Implement notification permission flow, due notification query using alert window rules, `notification_log` deduplication, startup and periodic checks, and OS notification stop after expiry date.
+
+---
+
+## Slice 7 — Local notifications (backend-first)
+
+### Status: BACKEND COMPLETE ✅ — FRONTEND DEFERRED ⏭
+
+Slice 7 delivers the backend contract for local notifications: due-notification candidate query using the alert window rules, same-day deduplication via `notification_log`, expired-lot exclusion at the SQL filter, and idempotent `mark_notification_shown` with a not-found error for unknown lot ids. Two thin Tauri commands are wired and registered in `lib.rs`, ready for later frontend permission/polling wiring. No frontend, dashboard, migration, or domain-alerts changes were made.
+
+### Slice 7 completed tasks (Section 9)
+
+| Task | Status |
+| ---- | ------ |
+| Implement due notification query using alert window rules | ✅ Backend (repository + service + Tauri command) |
+| Use `notification_log` to prevent duplicate same-day notifications | ✅ Backend (SQL `NOT EXISTS` + idempotent upsert) |
+| Stop OS notifications after expiry date | ✅ Backend (SQL `expiry_date >= today` filter; OS trigger deferred to frontend) |
+| Add regression tests for alert-window calculations and notification deduplication | ✅ (25 new tests) |
+| Verify daily notification deduplication | ✅ (covered at SQL + service layer; OS delivery verification deferred to frontend) |
+
+### Slice 7 NOT implemented (deferred)
+
+| Task | Status |
+| ---- | ------ |
+| Add notification permission/request flow | ⏭ Frontend (Tauri notification plugin permission wiring) |
+| Trigger notification check on app startup | ⏭ Frontend (startup invocation) |
+| Trigger periodic notification check while app is open | ⏭ Frontend (interval timer) |
+| Keep expired lots prominent on dashboard after notification period ends | ⏭ Dashboard concern (untouched per scope) |
+
+### Slice 7 implementation notes
+
+**Architecture** (follows existing patterns: commands → services → repositories):
+
+- `dto/notifications.rs` — `DueNotificationLot`, `NotificationLogResponse`, `MarkNotificationShownInput`. The `notification_date` field on the input is `Option<String>` so callers may pass an explicit date or omit it to use today (UTC).
+- `db/repositories/notification_log.rs` — New module. `list_due_notification_lots(pool, today)` runs a single SQL query that joins `expiry_lots` (filtered to `status='active'`), `products`, `stores`, and `store_locations`, applies the alert-window rules and the same-day dedup `NOT EXISTS` subquery, and orders by `expiry_date ASC`. `upsert_notification_log` uses `INSERT OR IGNORE` with a deterministic id (`{lot_id}|{date}`) so the call is fully idempotent without an extra SELECT/UPDATE.
+- `services/notifications.rs` — New module. `list_due_notifications(pool, today)` validates the date format and delegates to the repository. `mark_notification_shown(pool, input)` validates that the lot exists (NotFound for unknown ids) and that the date is well-formed before calling the idempotent upsert. Date defaults to today UTC when omitted or blank.
+- `commands/notifications.rs` — Two thin Tauri adapters: `list_due_notifications(today?)` and `mark_notification_shown(input)`. Both return `CommandError` via the existing `AppError` conversion.
+- `lib.rs` — Registered both new commands in `tauri::generate_handler!`.
+
+**SQL note — alert-window inclusivity**:
+
+The repository query uses two bounds to make the window inclusive:
+
+```text
+WHERE el.status = 'active'
+  AND el.expiry_date >= $today                              -- not expired
+  AND el.expiry_date <= date($today, '+' || el.alert_days_before || ' days')  -- inside window
+  AND NOT EXISTS (
+      SELECT 1 FROM notification_log nl
+      WHERE nl.expiry_lot_id = el.id AND nl.notification_date = $today
+  )
+```
+
+`alert_days_before = 0` reduces the window to a single day (`date($today, '+0 days') = $today`), satisfying the "due only on expiry day" requirement. `expiry_date < today` is naturally excluded by the lower bound.
+
+**Idempotency**:
+
+A deterministic id (`{expiry_lot_id}|{notification_date}`) is used for the `notification_log` row, with `INSERT OR IGNORE`. The repository fetches and returns the row (existing or freshly inserted), so the service can return the same stable id and `shown_at` across repeated calls for the same lot+date.
+
+**Lot-existence semantics**:
+
+`mark_notification_shown` checks `expiry_lots` for the id but does NOT require the lot to be `active`. Archived/resolved lots still exist in the table and may legitimately need their `notification_log` row written (e.g. catching up after coming back online). Active-only enforcement lives in the candidate query.
+
+**Date validation**:
+
+A strict `YYYY-MM-DD` parser rejects malformed dates at the service layer with a `Validation` error. Empty strings and whitespace are treated as "use today" to keep the command ergonomic.
+
+**Logs**: No product SKU, description, scan string, or notes content is logged. `tracing` calls in the new modules are plain messages, never payload data.
+
+### Slice 7 new tests (25 total)
+
+**Repository** (`db/repositories/notification_log.rs` — 9 new tests):
+
+| Test | Covers |
+| ---- | ------ |
+| `list_includes_lot_with_today_expiry` | Happy path with active lot, today expiry, location joined |
+| `list_includes_lot_within_alert_window` | Lot expiring in 5 days w/ alert_days=14 is in window |
+| `list_excludes_lot_outside_alert_window` | Lot expiring in 60 days w/ alert_days=14 is out of window |
+| `list_excludes_expired_lots` | Yesterday and 30-days-ago lots excluded even with long alert windows |
+| `list_excludes_resolved_and_archived_lots` | Non-active lots excluded even when today-expiry matches |
+| `list_alert_days_zero_only_includes_today_expiry` | alert_days=0 produces a single-day window |
+| `list_excludes_lot_already_in_notification_log_today` | After upsert the lot is filtered out for today |
+| `list_includes_lot_logged_on_different_date` | A log row for yesterday does not block today's candidate |
+| `upsert_notification_log_is_idempotent` | Same id, first shown_at preserved, exactly one row |
+
+**Service** (`services/notifications.rs` — 16 new tests):
+
+| Test | Covers |
+| ---- | ------ |
+| `list_due_returns_active_lot_in_window` | Happy path including location name + notification_date |
+| `list_due_accepts_explicit_today` | Explicit date and None produce equivalent results; blank string treated as None |
+| `list_due_rejects_malformed_date` | Validation error for malformed inputs |
+| `list_due_excludes_expired_lots` | Yesterday-expiry lots not surfaced |
+| `list_due_excludes_non_active_lots` | resolved/archived excluded |
+| `list_due_excludes_lot_already_marked_for_today` | End-to-end dedup via the service-layer flow |
+| `list_due_with_alert_days_zero_only_today` | alert_days=0 only matches today |
+| `list_due_window_within_alert_days_includes_lot` | 5 days out, alert_days=14 → included |
+| `list_due_window_outside_alert_days_excludes_lot` | 10 days out, alert_days=7 → excluded |
+| `mark_shown_records_log` | Log row inserted with correct fields |
+| `mark_shown_defaults_to_today` | `None` date resolves to today UTC |
+| `mark_shown_is_idempotent` | Repeated calls return the same row (id + shown_at) |
+| `mark_shown_unknown_lot_returns_not_found` | Unknown lot id → `DomainError::NotFound` |
+| `mark_shown_rejects_malformed_date` | Malformed date → Validation error |
+| `mark_shown_allows_different_date_after_dedup` | Distinct dates produce distinct log rows |
+| `mark_shown_works_for_archived_or_resolved_lot` | Non-active lots can still have their log row written |
+
+### Slice 7 files changed
+
+| File | Change |
+| ---- | ------ |
+| `src-tauri/src/dto/notifications.rs` | New: DTOs for due notification candidates + `notification_log` rows + `mark_notification_shown` input |
+| `src-tauri/src/dto/mod.rs` | `pub mod notifications;` |
+| `src-tauri/src/db/repositories/notification_log.rs` | New: due-notification SQL query, `notification_log` read + idempotent upsert, 9 tests |
+| `src-tauri/src/db/repositories/mod.rs` | `pub mod notification_log;` |
+| `src-tauri/src/services/notifications.rs` | New: date validation, lot-existence check, default-to-today, 16 tests |
+| `src-tauri/src/services/mod.rs` | `pub mod notifications;` |
+| `src-tauri/src/commands/notifications.rs` | New: `list_due_notifications` + `mark_notification_shown` Tauri commands |
+| `src-tauri/src/commands/mod.rs` | `pub mod notifications;` |
+| `src-tauri/src/lib.rs` | Registered both new commands in `tauri::generate_handler!` |
+| `openspec/.../tasks.md` | Checked off 3 backend tasks in Section 9 + Section 14 alert-window/dedup regression tests + Section 15 daily notification dedup verification |
+| `openspec/.../apply-progress.md` | Appended this Slice 7 section |
+
+### Slice 7 deferred issues
+
+- **Tauri permission plugin**: no permission request flow is wired. The frontend must wire `tauri_plugin_notification::request_permission()` (or future equivalent) before calling `list_due_notifications` to actually display OS notifications. Slice 1 already initialized the plugin; Slice 7 stops short of any permission flow.
+- **Periodic polling**: no startup or interval trigger exists in the backend. The frontend will need to call `list_due_notifications` and decide whether to display an OS notification. Slice 7 only exposes the IPC surface.
+- **OS notification stop after expiry**: the backend already excludes expired lots from the candidate list (`expiry_date < today` is filtered out by the alert-window lower bound). The actual OS-side "stop showing" decision still depends on the frontend to make no further notification calls.
+- **Dashboard**: untouched per scope. Keeping expired lots prominent in the dashboard after the notification period ends is a dashboard concern and is not implemented in this slice.
+
+### Slice 7 verification evidence
+
+```bash
+# Cargo check
+cd src-tauri && cargo check --lib --tests 2>&1 | tail -2
+# → "Finished `dev` profile" ✅
+#   (no errors; 20 pre-existing dead_code warnings from earlier slices)
+
+# Cargo clippy
+cd src-tauri && cargo clippy --lib --tests 2>&1 | grep "^error"
+# → (no output = clean) ✅
+#   No new warnings introduced; the only `unused variable` warnings for `today` in the new service tests have been removed.
+
+# Focused repository tests (TDD RED-GREEN)
+cd src-tauri && cargo test --lib notification_log 2>&1 | tail -3
+# → "ok. 11 passed; 0 failed"  (9 new + 2 pre-existing migration tests)
+
+# Focused service tests
+cd src-tauri && cargo test --lib services::notifications 2>&1 | tail -3
+# → "ok. 16 passed; 0 failed"
+
+# Full Rust suite
+cd src-tauri && cargo test --lib 2>&1 | tail -3
+# → "ok. 155 passed; 0 failed; 0 ignored" ✅
+#   was 130 before Slice 7; +25 new tests (9 repository + 16 service)
+```
+
+### Slice 7 TDD evidence
+
+- **RED phase (repository)**: temporarily replaced the alert-window WHERE clause with `1=0`; `cargo test --lib notification_log` returned `test result: FAILED. 6 passed; 5 failed; 0 ignored` — 5 behavior-level failures that asserted non-empty candidate sets (`list_includes_lot_with_today_expiry`, `list_includes_lot_within_alert_window`, `list_alert_days_zero_only_includes_today_expiry`, `list_excludes_lot_already_in_notification_log_today`, `list_includes_lot_logged_on_different_date`). Negative-case tests correctly continued passing.
+- **GREEN phase (repository)**: restored the correct WHERE clause; `cargo test --lib notification_log` returned `ok. 11 passed; 0 failed`.
+- **Service layer**: behavior tests are interleaved with implementation. The strict TDD pre-implementation RED was not captured separately for the service because the new SQL composition lives in the repository (covered above) and the service layer is a thin orchestration of `lots_repo::get_expiry_lot` + date validation + `repo::upsert_notification_log`. The triangulation tests (`mark_shown_unknown_lot_returns_not_found`, `mark_shown_rejects_malformed_date`, `mark_shown_is_idempotent`, `mark_shown_allows_different_date_after_dedup`, `mark_shown_works_for_archived_or_resolved_lot`) exercise the service-specific branches.
+
+### Slice 7 next recommended action
+
+**Slice 7b — Local notifications (frontend + triggers)**: Wire the notification permission flow in Svelte, invoke `list_due_notifications` on app startup + periodically while open, and call `mark_notification_shown` once per shown notification. Optionally add a UI affordance to manually trigger the next notification scan.

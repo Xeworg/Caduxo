@@ -4,6 +4,7 @@
 
 pub mod dashboard;
 pub mod expiry_lots;
+pub mod notification_log;
 pub mod products;
 pub mod settings;
 pub mod stores;
