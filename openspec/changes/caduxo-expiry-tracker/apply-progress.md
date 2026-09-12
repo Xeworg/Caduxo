@@ -354,3 +354,56 @@ npx tsc --noEmit
 ### Slice 4 next recommended action
 
 **Slice 4 UI — Product catalog frontend**: Build the Svelte product list, form, and detail views (with barcode list and expiry lot placeholders) on top of the new backend commands. Optionally fold lot creation (`create_expiry_lot` + `Block lot creation until store exists`) into the same slice so the product detail screen can land together.
+
+---
+
+## Slice 4b — Product catalog (frontend UI)
+
+### Status: COMPLETE ✅
+
+Slice 4b delivers the Svelte frontend on top of the Slice 4 backend. The three remaining UI tasks in Section 4 are now checked. No backend Rust changes were made; only frontend files, navigation wiring, and the spec artifacts were touched. Lot CRUD is still out of scope and the lot-store precondition remains intentionally unchecked.
+
+### Slice 4b completed tasks
+
+| Task | Status |
+| ---- | ------ |
+| Build product list UI | ✅ |
+| Build product form UI | ✅ |
+| Build product detail UI with barcode list and expiry lots | ✅ |
+
+### Slice 4b implementation notes
+
+- Added `src/lib/products.ts` — thin TypeScript wrapper for all 12 product/category/barcode Tauri commands, mirroring the conventions in `src/lib/stores.ts`: one async function per command, camelCase JS arguments, exported response/input types.
+- Added `src/components/ProductForm.svelte` — handles both create and edit modes, validates required SKU/description locally, prefills `default_alert_days_before` from `suggested_product_alert_days`, includes an inline "+ New category" flow that calls `create_category` and auto-selects the new category. Edit mode exposes the `is_active` checkbox.
+- Added `src/components/ProductDetailPage.svelte` — loads the full detail bundle (`get_product`), renders SKU/description/category/unit/alert-days/notes, lists barcodes with primary badges, exposes an add-barcode form (with optional type and `is_primary` toggle), and provides an explicit Archive action with a confirmation prompt. Expiry lots render as a clearly labelled placeholder section.
+- Added `src/components/ProductCatalogPage.svelte` — top-level catalog page with a simple view machine (`list | create | edit | detail`). Debounced (200 ms) search input calls `search_products`; an empty query lists all products so the first-load view is never empty. Shows category, primary barcode, and an Archived badge on inactive rows.
+- Wired the new page into `src/App.svelte` as a `products` nav tab; existing dashboard and stores tabs are untouched.
+- No backend changes; command shapes are taken verbatim from `src-tauri/src/commands/products.rs` and registered in `lib.rs` from Slice 4.
+- No sensitive product/SKU/barcode/notes content is logged; errors propagate as user-facing strings via the existing `CommandError` path.
+
+### Slice 4b compatibility notes
+
+- All components use Svelte 5 legacy syntax (`let`, `$:`, `bind:value`, `class:`, `on:`) consistent with `src/components/StoresPage.svelte`. No runes mode used.
+- `tsconfig.json` already covers `src/**/*.svelte`; the new files participate in `tsc --noEmit` automatically.
+
+### Slice 4b files changed
+
+| File | Change |
+| ---- | ------ |
+| `src/lib/products.ts` | New: API wrapper for 12 product/category/barcode commands |
+| `src/components/ProductForm.svelte` | New: create/edit form with inline category creation |
+| `src/components/ProductDetailPage.svelte` | New: detail view with barcodes + expiry lots placeholder |
+| `src/components/ProductCatalogPage.svelte` | New: list/create/edit/detail page with debounced search |
+| `src/App.svelte` | Added `products` nav tab and `ProductCatalogPage` route |
+| `openspec/.../tasks.md` | Checked off the 3 Section 4 UI tasks; left backend tasks as they were |
+| `openspec/.../apply-progress.md` | Appended this Slice 4b section |
+
+### Slice 4b deferred issues
+
+- Lot CRUD remains out of scope; the detail page shows an expiry-lots placeholder.
+- The lot-store precondition (`Block expiry lot creation until at least one store exists`) stays intentionally unchecked because lot creation is not implemented yet. The `has_store` precondition command from Slice 3 is still the right hook for that guard when lot creation lands.
+- No frontend test harness exists yet, so no UI tests were added; the matching Slice 1 task remains unchecked by design.
+
+### Slice 4b next recommended action
+
+**Slice 5 — Expiry lots (backend + UI)**: Implement `create_expiry_lot` and the partial-resolution flow, enforce the store precondition via `has_store`, and build the lot form + resolve-quantity UI so the product detail placeholder becomes real data.

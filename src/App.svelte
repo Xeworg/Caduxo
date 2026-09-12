@@ -1,7 +1,8 @@
 <script lang="ts">
   import StoresPage from "./components/StoresPage.svelte";
+  import ProductCatalogPage from "./components/ProductCatalogPage.svelte";
 
-  type Tab = "dashboard" | "stores";
+  type Tab = "dashboard" | "stores" | "products";
   let activeTab: Tab = "stores";
 </script>
 
@@ -22,6 +23,13 @@
       on:click={() => (activeTab = "stores")}
     >
       Stores
+    </button>
+    <button
+      class="nav-btn"
+      class:active={activeTab === "products"}
+      on:click={() => (activeTab = "products")}
+    >
+      Products
     </button>
   </nav>
 
@@ -61,6 +69,8 @@
 
   {:else if activeTab === "stores"}
     <StoresPage />
+  {:else if activeTab === "products"}
+    <ProductCatalogPage />
   {/if}
 </div>
 

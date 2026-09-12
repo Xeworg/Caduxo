@@ -42,9 +42,9 @@
 - [x] Implement barcode add/remove/list commands. <!-- sdd-owner: implementation -->
 - [x] Enforce barcode uniqueness across products. <!-- sdd-owner: implementation -->
 - [x] Implement product search by description, SKU, and barcode. <!-- sdd-owner: implementation -->
-- [ ] Build product list UI.
-- [ ] Build product form UI.
-- [ ] Build product detail UI with barcode list and expiry lots.
+- [x] Build product list UI. <!-- sdd-owner: implementation -->
+- [x] Build product form UI. <!-- sdd-owner: implementation -->
+- [x] Build product detail UI with barcode list and expiry lots. <!-- sdd-owner: implementation -->
 
 ## 5. Stores and internal locations
 
