@@ -1012,3 +1012,114 @@ cd src-tauri && cargo test --lib 2>&1 | tail -3
 ### Slice 7 next recommended action
 
 **Slice 7b — Local notifications (frontend + triggers)**: Wire the notification permission flow in Svelte, invoke `list_due_notifications` on app startup + periodically while open, and call `mark_notification_shown` once per shown notification. Optionally add a UI affordance to manually trigger the next notification scan.
+
+---
+
+## Slice 7b — Local notifications (frontend + triggers)
+
+### Status: COMPLETE ✅
+
+Slice 7b delivers the Svelte frontend wiring for local notifications: TypeScript API wrapper, permission/request flow via `@tauri-apps/plugin-notification`, startup notification check, and periodic polling with safe cleanup. Expired lot prominence on the dashboard is confirmed already satisfied by existing CSS and urgency cards. No backend Rust changes were made.
+
+### Slice 7b completed tasks (Section 9)
+
+| Task | Status |
+| ---- | ------ |
+| Add notification permission/request flow | ✅ |
+| Trigger notification check on app startup | ✅ |
+| Trigger periodic notification check while app is open | ✅ |
+| Keep expired lots prominent on dashboard after notification period ends | ✅ (existing dashboard behavior confirmed sufficient) |
+
+### Slice 7b NOT implemented (deferred to later slices)
+
+| Task | Status |
+| ---- | ------ |
+| Add baseline frontend test harness | ⏭ Deferred per Slice 1 |
+| CSV import/export | ⏭ Slice 10 |
+| Reports and PDF | ⏭ Slice 11 |
+| Backup/restore | ⏭ Slice 12 |
+
+### Slice 7b implementation notes
+
+**`src/lib/notifications.ts`** — Frontend TypeScript wrapper for Slice 7 backend commands plus Tauri plugin integration:
+
+- `DueNotificationLot` / `MarkNotificationShownInput` DTOs — mirror Rust DTOs in `src-tauri/src/dto/notifications.rs`.
+- `listDueNotifications(today?)` / `markNotificationShown(input)` — thin invoke wrappers, one async function per Rust command.
+- `isNotificationPermissionGranted()` — checks current OS permission via `isPermissionGranted`.
+- `requestNotificationPermission()` — calls `requestPermission`; returns the permission string (`granted` or `denied`).
+- `checkAndShowDueNotifications()` — full orchestration:
+  1. Check permission; request if not granted; abort if denied.
+  2. Call `listDueNotifications` to get due candidates.
+  3. For each candidate: `sendNotification` then `markNotificationShown`. Mark-as-shown is called **only after** the OS notification attempt succeeds, so failed deliveries remain candidates for the next periodic check.
+  4. Fire-and-forget: errors are swallowed silently. The periodic interval will retry on the next tick.
+- `startPeriodicNotificationCheck(intervalMs?)` — runs `checkAndShowDueNotifications` once immediately (covers startup) then schedules it on a `setInterval`. Returns a stable cleanup function (`() => clearInterval`) safe for `onDestroy`.
+- `NOTIFICATION_CHECK_INTERVAL_MS = 15 * 60 * 1000` — 15-minute default interval.
+- No product SKU, barcode, description, or notes are logged. `sendNotification` body includes product description because it is user-facing and intentionally shown to the user.
+
+**`src/App.svelte`** — Two-line notification wiring:
+
+```svelte
+<script lang="ts">
+  import { onDestroy } from "svelte";
+  import { startPeriodicNotificationCheck } from "./lib/notifications.js";
+  const stopPeriodicCheck = startPeriodicNotificationCheck();
+  onDestroy(() => stopPeriodicCheck());
+</script>
+```
+
+- `startPeriodicNotificationCheck` is called once at module evaluation time (app startup), which triggers the immediate check-and-notify flow.
+- The returned cleanup is registered with `onDestroy` to prevent memory leaks on navigation or app close.
+- Permission request happens inside `checkAndShowDueNotifications` on the first invocation.
+
+**Expired lots prominence verification**:
+
+- `DashboardPage.svelte` already renders expired rows with `class:row-expired` → CSS background `#fff5f5` (soft red), stronger hover `#ffe4e4`.
+- A dedicated "Expired" urgency card shows the count regardless of the active filter preset.
+- The "Expired" quick-filter preset is available as a one-click view for all expired lots.
+- These visual treatments are independent of the notification system: expired lots remain prominent even after the OS notification period ends (after expiry date, `list_due_notifications` stops returning them, but the dashboard still shows them as expired).
+- No backend or UI changes were needed; the task is satisfied by the existing dashboard implementation from Slice 6a.
+
+### Slice 7b compatibility notes
+
+- `@tauri-apps/plugin-notification ^2.0.0` was already in `package.json` from project initialization; no new npm deps added.
+- `tauri-plugin-notification = "2"` was already in `src-tauri/Cargo.toml`; `lib.rs` already called `.plugin(tauri_plugin_notification::init())` in the builder chain.
+- `src-tauri/capabilities/default.json` grants `notification:default`, which is required by Tauri v2 for `isPermissionGranted`, `requestPermission`, and `sendNotification` to work at runtime.
+- All new TypeScript uses the same conventions as `lib/stores.ts`, `lib/products.ts`, and `lib/expiry_lots.ts`: named imports from `@tauri-apps/api/core`, invoke wrappers, exported DTO interfaces.
+- `tsconfig.json` covers all new files; `tsc --noEmit` is clean.
+
+### Slice 7b files changed
+
+| File | Change |
+| ---- | ------ |
+| `src/lib/notifications.ts` | New: API wrappers, permission helpers, `checkAndShowDueNotifications`, `startPeriodicNotificationCheck` |
+| `src/App.svelte` | Added `onDestroy`, imported `startPeriodicNotificationCheck`, started periodic check with cleanup |
+| `src-tauri/capabilities/default.json` | Added `notification:default` permission for Tauri v2 runtime notification APIs |
+| `openspec/.../tasks.md` | Checked off 4 Section 9 tasks; fixed malformed task ownership markers from Slice 7 |
+| `openspec/.../apply-progress.md` | Appended this Slice 7b section |
+
+### Slice 7b deferred issues
+
+- **Manual notification trigger**: not implemented. The app auto-checks on startup and every 15 minutes. A future UI affordance (e.g. "Check notifications now" button) can call `checkAndShowDueNotifications()` directly without the periodic wrapper.
+- **Frontend test harness**: still deferred per Slice 1; no UI tests added in this slice.
+- **Notification sound/urgency level**: `sendNotification` uses the OS default. Tauri 2 notification plugin does not expose per-notification sound or urgency overrides in the current API.
+
+### Slice 7b verification evidence
+
+```bash
+# TypeScript check
+npx tsc --noEmit 2>&1
+# → (no output = clean) ✅
+
+# Frontend build
+npm run build 2>&1 | tail -3
+# → "✓ built in 710ms" ✅
+#   (pre-existing Vite warning about expiry_lots.ts dynamic+static import is unrelated to this slice)
+
+# Rust check (no backend changes in this slice)
+cd src-tauri && cargo check 2>&1 | tail -2
+# → "Finished `dev` profile" ✅  (20 pre-existing warnings unchanged)
+```
+
+### Slice 7b next recommended action
+
+**Slice 10 — CSV import/export**: Implement CSV file selection, header detection, column mapping UI, import preview with conflict strategies, and CSV export for products and report rows.

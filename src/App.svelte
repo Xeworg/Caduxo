@@ -1,10 +1,17 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import StoresPage from "./components/StoresPage.svelte";
   import ProductCatalogPage from "./components/ProductCatalogPage.svelte";
   import DashboardPage from "./components/DashboardPage.svelte";
+  import { startPeriodicNotificationCheck } from "./lib/notifications.js";
 
   type Tab = "dashboard" | "stores" | "products";
   let activeTab: Tab = "stores";
+
+  // Slice 7b: start notification permission check and periodic polling.
+  // The cleanup function is stable and safe to call from onDestroy.
+  const stopPeriodicCheck = startPeriodicNotificationCheck();
+  onDestroy(() => stopPeriodicCheck());
 </script>
 
 <div class="app-shell">
