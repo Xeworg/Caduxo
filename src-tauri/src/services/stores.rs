@@ -369,6 +369,119 @@ mod tests {
         Ok(())
     }
 
+    /// Full first-run setup flow regression test.
+    ///
+    /// Exercises the complete onboarding sequence:
+    /// 1. Fresh DB → is_first_run = true, has_store = false
+    /// 2. First store created → is_first_run = false, has_store = true
+    /// 3. Settings remain empty (no auto-selection on first run)
+    #[tokio::test]
+    async fn first_run_setup_end_to_end() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::dto::stores::SettingsUpdate;
+        use crate::services::settings::{get_settings, update_settings};
+
+        let pool = fresh_test_pool().await?;
+
+        // Step 1: fresh database is first run
+        assert!(is_first_run(&pool).await?, "fresh DB should be first run");
+        assert!(!has_store(&pool).await?, "fresh DB has no store");
+
+        // Settings are empty on fresh DB
+        let settings = get_settings(&pool).await?;
+        assert!(
+            settings.last_selected_store_id.is_none(),
+            "fresh DB settings should have no selected store"
+        );
+
+        // Step 2: creating the first store ends the first-run state
+        let store = create_store(
+            &pool,
+            StoreCreate {
+                name: "My First Shop".into(),
+                code: Some("SHOP-001".into()),
+                notes: None,
+            },
+        )
+        .await?;
+
+        assert!(
+            !is_first_run(&pool).await?,
+            "first run ends after store creation"
+        );
+        assert!(has_store(&pool).await?, "store now exists");
+
+        // Step 3: settings are still empty (no auto-selection)
+        let settings = get_settings(&pool).await?;
+        assert!(
+            settings.last_selected_store_id.is_none(),
+            "settings should not auto-select store on first run"
+        );
+
+        // Step 4: manually selecting the store updates settings
+        update_settings(
+            &pool,
+            SettingsUpdate {
+                last_selected_store_id: Some(store.id.clone()),
+            },
+        )
+        .await?;
+
+        let settings = get_settings(&pool).await?;
+        assert_eq!(
+            settings.last_selected_store_id,
+            Some(store.id),
+            "settings should persist the selected store"
+        );
+
+        Ok(())
+    }
+
+    /// Regression: has_store only counts active stores.
+    /// Archiving the only store makes has_store return false and is_first_run true.
+    /// This is intentional — active-only counting prevents blocked lot creation
+    /// on what the user considers an "empty" store state.
+    #[tokio::test]
+    async fn archived_store_no_longer_satisfies_has_store() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let pool = fresh_test_pool().await?;
+
+        let store = create_store(
+            &pool,
+            StoreCreate {
+                name: "Archived Shop".into(),
+                code: None,
+                notes: None,
+            },
+        )
+        .await?;
+
+        assert!(has_store(&pool).await?, "active store satisfies has_store");
+
+        update_store(
+            &pool,
+            StoreUpdate {
+                id: store.id,
+                name: "Archived Shop".into(),
+                code: None,
+                notes: None,
+                is_active: false,
+            },
+        )
+        .await?;
+
+        // Archived store does NOT satisfy has_store (only active stores count)
+        assert!(
+            !has_store(&pool).await?,
+            "archived store should not satisfy has_store"
+        );
+        // is_first_run also returns true because no active stores remain
+        assert!(
+            is_first_run(&pool).await?,
+            "no active stores → is_first_run is true again"
+        );
+        Ok(())
+    }
+
     #[tokio::test]
     async fn has_store_returns_correct_value() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;

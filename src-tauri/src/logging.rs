@@ -90,3 +90,68 @@ pub fn init(log_dir: Option<&Path>, app_version: &str, is_dev: bool) {
         "Caduxo logging initialized"
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_log_dir_creates_logs_subdirectory() {
+        let temp_dir = tempfile::TempDir::new().expect("temp dir");
+        let app_data = temp_dir.path();
+
+        let result = resolve_log_dir(app_data);
+        assert!(
+            result.is_some(),
+            "resolve_log_dir should return Some for a valid app_data path"
+        );
+
+        let log_dir = result.expect("log_dir is Some");
+        assert_eq!(
+            log_dir,
+            app_data.join("logs"),
+            "log_dir should be app_data/logs"
+        );
+
+        // Verify the directory was actually created on disk
+        assert!(
+            log_dir.is_dir(),
+            "logs directory should be created on the filesystem"
+        );
+    }
+
+    #[test]
+    fn resolve_log_dir_idempotent_when_already_exists() {
+        let temp_dir = tempfile::TempDir::new().expect("temp dir");
+        let app_data = temp_dir.path();
+
+        // First call creates it
+        let first = resolve_log_dir(app_data).expect("first call succeeds");
+        assert!(first.is_dir());
+
+        // Second call also succeeds (idempotent)
+        let second = resolve_log_dir(app_data).expect("second call succeeds");
+        assert_eq!(first, second, "second call should return the same path");
+    }
+
+    #[test]
+    fn resolve_log_dir_nested_path() {
+        let temp_dir = tempfile::TempDir::new().expect("temp dir");
+        // Simulate nested app data: ~/.local/share/Caduxo
+        let nested = temp_dir.path().join("subdir").join("nested");
+
+        let result = resolve_log_dir(&nested);
+        assert!(
+            result.is_some(),
+            "resolve_log_dir should work with nested paths"
+        );
+
+        let log_dir = result.expect("log_dir is Some");
+        assert_eq!(
+            log_dir,
+            nested.join("logs"),
+            "log_dir should be nested/logs"
+        );
+        assert!(log_dir.is_dir(), "nested logs directory should be created");
+    }
+}

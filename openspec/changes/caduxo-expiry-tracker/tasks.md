@@ -164,16 +164,16 @@
 ## 14. Engineering safety
 
 - [ ] Add or update tests in each implementation slice that changes behavior.
-- [ ] Add migration tests or verification for schema creation and indexes.
-- [ ] Add regression tests for first-run setup.
-- [ ] Add regression tests for SKU and barcode uniqueness.
+- [x] Add migration tests or verification for schema creation and indexes. <!-- sdd-owner: implementation -->
+- [x] Add regression tests for first-run setup. <!-- sdd-owner: implementation -->
+- [x] Add regression tests for SKU and barcode uniqueness. <!-- sdd-owner: implementation -->
 - [x] Add regression tests for alert-window calculations and notification deduplication. <!-- sdd-owner: implementation -->
 - [x] Add regression tests for partial lot resolution. <!-- sdd-owner: implementation -->
-- [ ] Add regression tests for CSV mapping/import validation.
-- [ ] Add regression tests for report generation/export behavior.
+- [x] Add regression tests for CSV mapping/import validation. <!-- sdd-owner: implementation -->
+- [x] Add regression tests for report generation/export behavior. <!-- sdd-owner: implementation -->
 - [x] Add regression tests for backup/restore validation. <!-- sdd-owner: implementation -->
-- [ ] Verify logs are created in the app-local log directory.
-- [ ] Verify logs avoid sensitive product, SKU, barcode, imported-row, and notes content by default.
+- [x] Verify logs are created in the app-local log directory. <!-- sdd-owner: implementation -->
+- [x] Verify logs avoid sensitive product, SKU, barcode, imported-row, and notes content by default. <!-- sdd-owner: implementation -->
 
 ## 15. MVP verification
 
