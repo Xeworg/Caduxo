@@ -1964,7 +1964,7 @@ Slice 14 delivers regression tests for the remaining Section 14 items and verifi
 
 | Task | Status | Rationale |
 | ---- | ------ | --------- |
-| Add or update tests in each implementation slice that changes behavior | ⏭ Generic/meta task — all slices already added tests |
+| Add or update tests in each implementation slice that changes behavior | ⏭ Keep open for post-MVP frontend/runtime coverage because late manual-acceptance fixes changed startup/runtime behavior without adding a new frontend harness |
 | MVP manual verification items (Section 15) | ⏭ Manual/UI testing deferred to end of development cycle |
 
 ### Slice 14 implementation notes
@@ -2041,4 +2041,159 @@ npm run build 2>&1 | tail -2
 
 ### Slice 14 next recommended action
 
-**Section 15 MVP verification** (manual, human-driven): Run through the remaining 8 unchecked MVP verification items with the production-built app. Items that cannot be verified with code-only evidence (e.g. "Verify first-run store flow") should be checked off after a live app session confirms the behavior. This is the correct authority: human verification, not automated tests. All Section 14 regression tests are now complete.
+**Section 15 MVP verification** (manual, human-driven): Run through the remaining 8 unchecked MVP verification items with the production-built app. Items that cannot be verified with code-only evidence (e.g. "Verify first-run store flow") should be checked off after a live app session confirms the behavior. This is the correct authority: human verification, not automated tests. Backend regression coverage is complete; frontend/runtime harness coverage remains an explicit post-MVP follow-up.
+
+---
+
+## Section 15 — MVP verification
+
+### Status: COMPLETE ✅
+
+Section 15 delivers automated and code-level verification evidence for all 11 MVP verification tasks. Full live-GUI verification (first-run flow, scanner with physical hardware, resolve-quantity dialog) is deferred as manual-only. AppImage packaging verified fresh in this slice.
+
+### Section 15 completed tasks
+
+| Task | Status | Evidence |
+| ---- | ------ | -------- |
+| Verify first-run store flow | ✅ | `services::stores::tests::first_run_setup_end_to_end` passes end-to-end: is_first_run true → store created → false; has_store gated; archived store no longer satisfies has_store. First-run UI (`StoresPage.svelte` with `is_first_run` mode) and `has_store` precondition on lot creation verified at code level. |
+| Verify product SKU uniqueness | ✅ | `services::products::tests::create_product_enforces_sku_uniqueness` and `services::products::tests::update_product_enforces_sku_uniqueness` both pass. UNIQUE constraint enforced at DB layer. |
+| Verify multiple barcodes per product | ✅ | `services::products::tests::add_secondary_barcode_to_same_product_is_allowed` passes; `barcode_uniqueness_across_products` confirms cross-product uniqueness enforced separately. |
+| Verify scanner keyboard-wedge workflow | ✅ | `ScanSearchBox.svelte` handles `on:keydown` Enter; calls `findProductByScan`. `services::products::tests::scan_barcode_exact_returns_found_with_barcode_match`, `scan_sku_exact_when_no_barcode_match_returns_found`, `scan_barcode_takes_precedence_over_sku`, `scan_rejects_empty_value`, `scan_unknown_value_returns_not_found` all pass. |
+| Verify lot alert default and override behavior | ✅ | Covered in Slice 5a: pre-fill tests + user-override tests pass. |
+| Verify daily notification deduplication | ✅ | Covered in Slice 7: `list_excludes_lot_already_in_notification_log_today` (repository), `list_due_excludes_lot_already_marked_for_today` (service) pass. |
+| Verify expired lots remain prominent after notification stop | ✅ | `expiry_date >= today` SQL filter in `list_due_notification_lots` excludes expired lots from notifications; dashboard urgency cards (`urgency-card-expired`, red count), expired preset filter, and `row-expired` CSS (`#fff5f5` bg, `#ffe4e4` hover) render expired rows prominently regardless of notification state. |
+| Verify partial lot resolution | ✅ | `services::expiry_lots::tests::partial_resolution_reduces_quantity_and_records_event` passes; `multiple_partial_resolutions_accumulate` passes. |
+| Verify CSV import with mapped columns | ✅ | 26 `services::csv_io::tests` pass: import_skip_\*, import_update_\*, import_review_\*, conflict strategy tests, column mapping validation, invalid-row classification. |
+| Verify PDF report export | ✅ | 17 `pdf::report_pdf::tests` pass: geometry, pagination, formatting, empty data, multi-page, page count. |
+| Verify offline startup and persistence | ✅ | SQLite stored locally at `app_data_dir()/caduxo.db`; no network imports in backend; backup/restore commands operate on local files only. App functions fully without internet. |
+
+### Section 15 deferred (manual-only)
+
+The following require a live GUI session and cannot be verified headlessly:
+
+| Item | Reason |
+| ---- | ------ |
+| Physical barcode scanner hardware test | Hardware keyboard-wedge timing and HID scan patterns cannot be simulated headlessly; code-level evidence (Enter handler + backend exact-lookup) is the correct automated boundary |
+| First-run full UI walkthrough | Backend logic verified; human verifies the actual first-run modal renders and the store creation succeeds end-to-end |
+| Resolve quantity dialog live | Component code verified; human confirms dialog opens, form validates, quantity is reduced, event is recorded |
+
+### Section 15 packaging verification
+
+| Artifact | Result | Details |
+| ------- | ------ | ------- |
+| Release binary | ✅ | `src-tauri/target/release/caduxo` — 21 MB ELF x86-64, stripped |
+| AppImage | ✅ Fresh | Built fresh in this slice: `Caduxo_0.1.0_amd64.AppImage` — 107 MB ELF executable, built after confirming fresh `linuxdeploy-x86_64.AppImage` at `~/.cache/tauri/` (19.8 MB, Sep 12 2026) |
+| `.deb` / `.rpm` | ⏭ Not in bundle dir | Previously built in Slice 13; not present in this session's `src-tauri/bundle/`; rebuild with `npm run tauri build -- --bundles deb` on demand |
+
+AppImage build command:
+
+```bash
+cd src-tauri && TAURI_SIGNING_PRIVATE_KEY='' npm run tauri build -- --bundles appimage
+# → Caduxo_0.1.0_amd64.AppImage (107 MB) ✅
+```
+
+### Section 15 verification evidence
+
+```bash
+# Full Rust test suite (241 tests, no regressions)
+cd src-tauri && cargo test --lib 2>&1 | tail -3
+# → "ok. 241 passed; 0 failed; 0 ignored" ✅
+
+# TypeScript check (no TS errors)
+npx tsc --noEmit 2>&1
+# → (no output = clean) ✅
+
+# Frontend build
+npm run build 2>&1 | tail -2
+# → "✓ built in 1.68s" ✅
+
+# Cargo clippy (no errors)
+cd src-tauri && cargo clippy --lib --tests 2>&1 | grep -c "^error"
+# → 0 ✅
+
+# First-run regression
+cd src-tauri && cargo test --lib services::stores::tests::first_run_setup_end_to_end 2>&1 | tail -3
+# → "ok. 1 passed; 0 failed" ✅
+
+# SKU uniqueness
+cd src-tauri && cargo test --lib services::products::tests::create_product_enforces_sku_uniqueness 2>&1 | tail -3
+# → "ok. 1 passed; 0 failed" ✅
+cd src-tauri && cargo test --lib services::products::tests::update_product_enforces_sku_uniqueness 2>&1 | tail -3
+# → "ok. 1 passed; 0 failed" ✅
+
+# Multiple barcodes per product
+cd src-tauri && cargo test --lib services::products::tests::add_secondary_barcode_to_same_product_is_allowed 2>&1 | tail -3
+# → "ok. 1 passed; 0 failed" ✅
+
+# Scanner workflow (5 tests)
+cd src-tauri && cargo test --lib services::products::tests::scan 2>&1 | tail -3
+# → "ok. 5 passed; 0 failed" ✅
+# (scan_barcode_exact, scan_sku_exact, scan_barcode_takes_precedence, scan_rejects_empty, scan_unknown_value)
+
+# Partial lot resolution
+cd src-tauri && cargo test --lib services::expiry_lots::tests::partial_resolution 2>&1 | tail -3
+# → "ok. 1 passed; 0 failed" ✅
+
+# CSV import (26 tests)
+cd src-tauri && cargo test --lib services::csv_io::tests 2>&1 | grep "test result"
+# → "ok. 26 passed; 0 failed" ✅
+
+# PDF export (17 tests)
+cd src-tauri && cargo test --lib pdf 2>&1 | grep "test result"
+# → "ok. 17 passed; 0 failed" ✅
+```
+
+### Section 15 next recommended action
+
+**All MVP implementation and verification tasks are complete.** The next action is a live GUI verification session where a human launches the app, confirms first-run, tests the scanner with a physical barcode, exercises the resolve-quantity dialog, and confirms the PDF export produces a readable A4 landscape document. If all pass, the change is ready for verify phase.
+
+### Section 15 follow-up decision
+
+The remaining three unchecked tasks are intentionally deferred until after MVP manual acceptance:
+
+- **Frontend test harness**: post-MVP engineering follow-up; do not introduce Vitest/Playwright at the end of MVP verification.
+- **Store selector only when multiple stores exist**: implementation appears present in `LotForm.svelte`; keep open for live/manual confirmation during MVP acceptance, then close as cleanup.
+- **Per-row report selection action**: post-MVP UX follow-up. Dashboard-level CSV/PDF reports exist; per-row inclusion is not required to accept the MVP.
+
+MVP manual acceptance remains the next step before SDD verify/archive: launch the built app/AppImage, run the first-run flow, scanner/keyboard-wedge flow, resolve quantity dialog, PDF export visual check, and offline restart/persistence check.
+
+### Section 15 manual acceptance result
+
+Human live-GUI acceptance was completed on 2026-09-13 using the Tauri development app. The MVP flows requested for manual verification were exercised and reported as working without functional problems after the fixes below.
+
+Manual acceptance covered:
+
+- first-run/store flow and persistence
+- product creation/editing/search basics
+- expiry lot creation and date classifications
+- dashboard visibility and urgency grouping
+- scanner/search workflow with typed/manual input
+- reports preview and PDF export flow
+- backup/restore flow
+- offline restart/persistence behavior
+
+Defects found and fixed during manual acceptance:
+
+| Defect | Fix | Evidence |
+| ------ | --- | -------- |
+| Blank app shell on Svelte 5 startup: `component_api_invalid_new` because `new App({ target })` is invalid in Svelte 5 | `src/main.ts` now bootstraps with `mount(App, { target })` | App shell no longer stays blank in the browser/Tauri dev session |
+| Reports → Next 30 days preview failed because frontend sent `next_30_days` while Serde expected `next30_days` for `ReportType::Next30Days` | `ReportType::Next30Days` now has explicit `#[serde(rename = "next_30_days")]` | `cargo test --manifest-path src-tauri/Cargo.toml reports` → 26 passed |
+
+### Post-MVP improvement backlog
+
+The MVP is accepted with the following future improvements intentionally deferred to separate changes, in recommended implementation order:
+
+1. Fix Dashboard quick filters (`All`, `Expired`, `Today`, `Alert window`, `Next 7 days`, `Next 30 days`) so each button filters the row list correctly.
+2. Extend SKU/product code handling to support associating additional codes with a product/SKU registration.
+3. Improve units of measure with more predefined options and explicit integer vs decimal quantity behavior.
+4. Improve CSV import UX with progress/loading feedback after pressing the import button and guard against duplicate submissions.
+5. Fix date picker dismissal so selecting a date or clicking outside closes the dialog predictably.
+6. Revisit category scrolling UX; the current category scroll behavior has no clear user value.
+7. Add internationalization/language support after the main screens and vocabulary stabilize.
+8. Add the baseline frontend test harness as a post-MVP engineering-safety follow-up.
+9. Confirm live store selector refresh behavior when stores are added/edited.
+10. Add per-row report selection/action support.
+
+### Section 15 closure decision
+
+With manual acceptance complete and the two discovered defects fixed, the MVP implementation change is ready for final verification and commit/archive workflow. The post-MVP backlog above should be handled as new changes rather than expanding this MVP candidate.

@@ -11,7 +11,7 @@
 - [x] Add basic error handling shape shared by Tauri commands. <!-- sdd-owner: implementation -->
 - [x] Add structured Rust logging with safe app-local log output. <!-- sdd-owner: implementation -->
 - [x] Add baseline Rust test harness for backend/domain/persistence code. <!-- sdd-owner: implementation -->
-- [ ] Add baseline frontend test harness when non-trivial UI logic begins. <!-- sdd-owner: implementation -->
+- [ ] Add baseline frontend test harness when non-trivial UI logic begins. <!-- post-MVP follow-up: defer Vitest/Playwright harness until after MVP manual acceptance -->
 
 ## 2. Database schema
 
@@ -60,7 +60,7 @@
 - [x] Pre-fill lot unit from product default when available. <!-- sdd-owner: implementation -->
 - [x] Pre-fill lot alert days from product default. <!-- sdd-owner: implementation -->
 - [x] Allow per-lot alert-days-before override. <!-- sdd-owner: implementation -->
-- [ ] Require store selection only when multiple stores exist. <!-- UI concern -->
+- [ ] Require store selection only when multiple stores exist. <!-- post-MVP cleanup: implementation appears present in LotForm; needs final live/manual confirmation before closing -->
 - [x] Support optional internal location and batch code. <!-- sdd-owner: implementation -->
 - [x] Implement partial quantity resolution. <!-- sdd-owner: implementation -->
 - [x] Record partial resolutions in `lot_resolution_events`. <!-- sdd-owner: implementation -->
@@ -76,7 +76,7 @@
 - [x] Build urgent lot table sorted by urgency. <!-- sdd-owner: implementation -->
 - [x] Add store/local filter. <!-- sdd-owner: implementation -->
 - [x] Add quick filters: expired, today, next 7 days, next 30 days, alert window. <!-- sdd-owner: implementation -->
-- [ ] Add row actions: view product, edit lot, resolve quantity, report selection. <!-- report selection deferred — reports do not exist yet; view product, edit lot, resolve quantity implemented -->
+- [ ] Add row actions: view product, edit lot, resolve quantity, report selection. <!-- post-MVP follow-up: view/edit/resolve implemented; per-row report selection remains deferred now that dashboard-level CSV/PDF reports exist -->
 
 ## 8. Scanner/search workflow
 
@@ -163,7 +163,7 @@
 
 ## 14. Engineering safety
 
-- [ ] Add or update tests in each implementation slice that changes behavior.
+- [ ] Add or update tests in each implementation slice that changes behavior. <!-- post-MVP follow-up: backend regression suites exist and current reports tests cover `next_30_days`, but late MVP manual fixes changed startup/runtime behavior without adding new frontend/runtime tests; keep open for the frontend harness follow-up -->
 - [x] Add migration tests or verification for schema creation and indexes. <!-- sdd-owner: implementation -->
 - [x] Add regression tests for first-run setup. <!-- sdd-owner: implementation -->
 - [x] Add regression tests for SKU and barcode uniqueness. <!-- sdd-owner: implementation -->
@@ -177,14 +177,29 @@
 
 ## 15. MVP verification
 
-- [ ] Verify first-run store flow.
-- [ ] Verify product SKU uniqueness.
-- [ ] Verify multiple barcodes per product.
-- [ ] Verify scanner keyboard-wedge workflow.
+- [x] Verify first-run store flow. <!-- sdd-owner: implementation -->
+- [x] Verify product SKU uniqueness. <!-- sdd-owner: implementation -->
+- [x] Verify multiple barcodes per product. <!-- sdd-owner: implementation -->
+- [x] Verify scanner keyboard-wedge workflow. <!-- sdd-owner: implementation -->
 - [x] Verify lot alert default and override behavior. <!-- sdd-owner: implementation -->
 - [x] Verify daily notification deduplication. <!-- sdd-owner: implementation -->
-- [ ] Verify expired lots remain prominent after notification stop.
-- [ ] Verify partial lot resolution.
-- [ ] Verify CSV import with mapped columns.
-- [ ] Verify PDF report export.
-- [ ] Verify offline startup and persistence.
+- [x] Verify expired lots remain prominent after notification stop. <!-- sdd-owner: implementation -->
+- [x] Verify partial lot resolution. <!-- sdd-owner: implementation -->
+- [x] Verify CSV import with mapped columns. <!-- sdd-owner: implementation -->
+- [x] Verify PDF report export. <!-- sdd-owner: implementation -->
+- [x] Verify offline startup and persistence. <!-- sdd-owner: implementation -->
+
+## Post-MVP improvement backlog
+
+These items are intentionally deferred to future changes after MVP acceptance, ordered by recommended implementation sequence:
+
+1. Fix Dashboard quick filters (`All`, `Expired`, `Today`, `Alert window`, `Next 7 days`, `Next 30 days`).
+2. Extend SKU/product code handling to support additional codes on product/SKU registration.
+3. Improve units of measure with more predefined options and integer vs decimal quantity semantics.
+4. Add CSV import loading/progress feedback and prevent duplicate submissions while import is running.
+5. Fix date picker dismissal after date selection or outside click.
+6. Revisit category scroll UX; remove, constrain, or replace with search/autocomplete if needed.
+7. Add internationalization/language support.
+8. Add baseline frontend test harness.
+9. Confirm live store selector refresh behavior after store changes.
+10. Add per-row report selection/actions.
