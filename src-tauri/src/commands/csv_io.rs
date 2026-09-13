@@ -1,13 +1,16 @@
-//! Tauri commands for CSV import/export (Slice 10a).
+//! Tauri commands for CSV import/export.
 //!
-//! Backend-only slice: implements preview, export-products, and export-report.
-//! Import commit and conflict strategies are deferred to Slice 10b.
+//! Slice 10a: backend preview and exports only.
+//! Slice 10b: import commit with conflict strategies (skip, update, review).
 
 use std::path::PathBuf;
 
 use tauri::State;
 
-use crate::dto::csv_io::{CsvExportResult, CsvPreviewInput, CsvPreviewResponse, ReportExportInput};
+use crate::dto::csv_io::{
+    CsvExportResult, CsvImportInput, CsvImportResult, CsvPreviewInput, CsvPreviewResponse,
+    ReportExportInput,
+};
 use crate::error::{AppError, CommandError};
 use crate::services::csv_io as service;
 use crate::state::AppState;
@@ -32,6 +35,20 @@ pub async fn preview_product_csv(
     input: CsvPreviewInput,
 ) -> Result<CsvPreviewResponse, CommandError> {
     service::preview_product_csv(&state.pool, input)
+        .await
+        .map_err(AppError::into)
+}
+
+/// Commits a product CSV import using the provided column mapping and conflict
+/// strategy. Creates new products (and their barcodes), updates existing products
+/// when the strategy is `Update`, or returns conflict rows for review without
+/// making any database changes when the strategy is `Review`.
+#[tauri::command]
+pub async fn import_product_csv(
+    state: State<'_, AppState>,
+    input: CsvImportInput,
+) -> Result<CsvImportResult, CommandError> {
+    service::import_product_csv(&state.pool, input)
         .await
         .map_err(AppError::into)
 }

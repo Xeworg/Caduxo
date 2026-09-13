@@ -69,9 +69,10 @@ pub fn run() {
             // Local notifications (Slice 7 — backend only)
             commands::notifications::list_due_notifications,
             commands::notifications::mark_notification_shown,
-            // CSV import/export (Slice 10a — preview + exports only)
+            // CSV import/export (Slice 10a: preview + exports; Slice 10b: import commit)
             commands::csv_io::read_csv_text,
             commands::csv_io::preview_product_csv,
+            commands::csv_io::import_product_csv,
             commands::csv_io::export_products_csv,
             commands::csv_io::export_report_csv,
         ])

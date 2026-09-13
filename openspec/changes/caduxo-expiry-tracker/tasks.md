@@ -99,13 +99,13 @@
 
 ## 10. CSV import/export
 
-- [ ] Implement CSV file selection flow.
-- [ ] Detect CSV headers.
-- [ ] Build column mapping UI for SKU, description, UPC/barcode.
-- [ ] Validate required mapped fields.
-- [ ] Implement import preview with invalid rows and duplicate warnings.
-- [ ] Implement conflict strategies: skip, update, review.
-- [ ] Import products and barcodes.
+- [x] Implement CSV file selection flow. <!-- sdd-owner: implementation -->
+- [x] Detect CSV headers. <!-- sdd-owner: implementation -->
+- [x] Build column mapping UI for SKU, description, UPC/barcode. <!-- sdd-owner: implementation -->
+- [x] Validate required mapped fields. <!-- sdd-owner: implementation -->
+- [x] Implement import preview with invalid rows and duplicate warnings. <!-- sdd-owner: implementation -->
+- [x] Implement conflict strategies: skip, update, review. <!-- sdd-owner: implementation -->
+- [x] Import products and barcodes. <!-- sdd-owner: implementation -->
 - [x] Export products CSV. <!-- sdd-owner: implementation -->
 - [x] Export report rows CSV. <!-- sdd-owner: implementation -->
 
@@ -125,12 +125,12 @@
 - [x] Add DashboardPage export button. <!-- sdd-owner: implementation -->
 - [x] Add backend tests for preview validation/classification and exports. <!-- sdd-owner: implementation -->
 
-### 10b. CSV import commit, conflict strategies, mapping modal (deferred to Slice 10b)
+### 10b. CSV import commit, conflict strategies, mapping modal (Slice 10b)
 
-- [ ] Build column mapping UI for SKU, description, UPC/barcode.
-- [ ] Implement import preview UI surfacing invalid rows and duplicate warnings.
-- [ ] Implement conflict strategies: skip, update, review.
-- [ ] Import products and barcodes (commit).
+- [x] Build column mapping UI for SKU, description, UPC/barcode. <!-- sdd-owner: implementation -->
+- [x] Implement import preview UI surfacing invalid rows and duplicate warnings. <!-- sdd-owner: implementation -->
+- [x] Implement conflict strategies: skip, update, review. <!-- sdd-owner: implementation -->
+- [x] Import products and barcodes (commit). <!-- sdd-owner: implementation -->
 
 ## 11. Reports and PDF
 

@@ -3,9 +3,10 @@
   import StoresPage from "./components/StoresPage.svelte";
   import ProductCatalogPage from "./components/ProductCatalogPage.svelte";
   import DashboardPage from "./components/DashboardPage.svelte";
+  import CsvImportPage from "./components/CsvImportPage.svelte";
   import { startPeriodicNotificationCheck } from "./lib/notifications.js";
 
-  type Tab = "dashboard" | "stores" | "products";
+  type Tab = "dashboard" | "stores" | "products" | "import";
   let activeTab: Tab = "stores";
 
   // Slice 7b: start notification permission check and periodic polling.
@@ -39,6 +40,13 @@
     >
       Products
     </button>
+    <button
+      class="nav-btn"
+      class:active={activeTab === "import"}
+      on:click={() => (activeTab = "import")}
+    >
+      Import
+    </button>
   </nav>
 
   <!-- Views -->
@@ -48,6 +56,8 @@
     <StoresPage />
   {:else if activeTab === "products"}
     <ProductCatalogPage />
+  {:else if activeTab === "import"}
+    <CsvImportPage />
   {/if}
 </div>
 

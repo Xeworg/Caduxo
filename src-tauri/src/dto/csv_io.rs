@@ -151,3 +151,77 @@ pub struct CsvExportResult {
     /// Number of bytes written to disk.
     pub bytes_written: u64,
 }
+
+// ============================================================
+// Import
+// ============================================================
+
+/// How to handle rows whose SKU or barcode already exists in the database.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConflictStrategy {
+    /// Skip all rows that collide with an existing SKU or barcode.
+    Skip,
+    /// Update existing products and add barcodes to existing products.
+    Update,
+    /// Return the list of conflicting rows for manual review without
+    /// modifying any data.
+    Review,
+}
+
+/// Input for `import_product_csv`.
+#[derive(Debug, Deserialize)]
+pub struct CsvImportInput {
+    /// Raw CSV text including the header row.
+    pub content: String,
+    /// Column mapping (already validated in preview).
+    pub mapping: CsvColumnMapping,
+    /// How to handle SKU/barcode conflicts.
+    pub strategy: ConflictStrategy,
+}
+
+/// Outcome of a single imported row.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum CsvImportRowOutcome {
+    /// Row was successfully created as a new product.
+    Created { product_id: String, sku: String },
+    /// Row was skipped because the SKU or barcode already exists.
+    Skipped { reason: String },
+    /// Row was updated (product fields changed, barcodes added).
+    Updated { product_id: String, sku: String },
+    /// Row was skipped because it was invalid.
+    Invalid { reason: String },
+}
+
+/// Summary of a single imported row (minimal, for the result table).
+#[derive(Debug, Clone, Serialize)]
+pub struct CsvImportRowResult {
+    /// 1-based row index in the source CSV (excluding the header row).
+    pub row_index: usize,
+    /// Parsed SKU (or empty when missing).
+    pub sku: String,
+    /// Parsed description (or empty when missing).
+    pub description: String,
+    /// Parsed barcode (or empty when missing).
+    pub barcode: String,
+    /// Outcome.
+    pub outcome: CsvImportRowOutcome,
+}
+
+/// Result returned by `import_product_csv`.
+#[derive(Debug, Serialize)]
+pub struct CsvImportResult {
+    /// Total data rows processed.
+    pub total_rows: usize,
+    /// Rows successfully created.
+    pub created: usize,
+    /// Rows skipped (duplicate or invalid).
+    pub skipped: usize,
+    /// Rows updated.
+    pub updated: usize,
+    /// Rows that could not be committed (validation errors).
+    pub invalid: usize,
+    /// Detailed per-row outcomes (all rows, ordered by row_index).
+    pub rows: Vec<CsvImportRowResult>,
+}

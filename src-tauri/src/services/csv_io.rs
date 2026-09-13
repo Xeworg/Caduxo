@@ -20,7 +20,8 @@ use std::path::{Path, PathBuf};
 use crate::db::DbPool;
 use crate::domain::validation::{validate_barcode, validate_description, validate_sku};
 use crate::dto::csv_io::{
-    CsvColumnMapping, CsvExportResult, CsvPreviewInput, CsvPreviewResponse, CsvPreviewRow,
+    ConflictStrategy, CsvColumnMapping, CsvExportResult, CsvImportInput, CsvImportResult,
+    CsvImportRowOutcome, CsvImportRowResult, CsvPreviewInput, CsvPreviewResponse, CsvPreviewRow,
     CsvPreviewRowStatus, ReportExportInput,
 };
 use crate::dto::dashboard::DashboardFilters;
@@ -640,6 +641,342 @@ pub fn read_csv_text(path: &Path) -> Result<String, AppError> {
 }
 
 // ============================================================
+// Import commit
+// ============================================================
+
+/// Imports products and barcodes from a CSV using the given mapping and
+/// conflict strategy. Commits changes to the database.
+///
+/// - `Skip` — only creates products for rows where SKU and barcode are new.
+///   Duplicate-SKU rows and duplicate-barcode rows are recorded as `Skipped`.
+/// - `Update` — creates new products for non-conflicting rows; for rows where
+///   the SKU exists, updates the product fields; for rows where the barcode
+///   exists on a different product, the barcode is skipped (silently).
+/// - `Review` — returns all rows with their outcomes but makes no database
+///   changes. The caller can inspect the list and re-invoke with a resolved
+///   strategy.
+pub async fn import_product_csv(
+    pool: &DbPool,
+    input: CsvImportInput,
+) -> Result<CsvImportResult, AppError> {
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .flexible(true)
+        .from_reader(input.content.as_bytes());
+
+    let headers = reader
+        .headers()
+        .map_err(|e| {
+            AppError::Domain(DomainError::Validation {
+                message: format!("Failed to read CSV header row: {e}"),
+            })
+        })?
+        .clone();
+
+    let mapping = resolve_mapping(&headers, Some(input.mapping));
+
+    if mapping.sku.is_none() {
+        return Err(AppError::Domain(DomainError::Validation {
+            message: "SKU column not mapped. Cannot import.".to_string(),
+        }));
+    }
+    if mapping.description.is_none() {
+        return Err(AppError::Domain(DomainError::Validation {
+            message: "Description column not mapped. Cannot import.".to_string(),
+        }));
+    }
+
+    // Counters are updated by matching &outcome below — no is_review branch needed.
+
+    let mut rows: Vec<CsvImportRowResult> = Vec::new();
+    let mut created: usize = 0;
+    let mut skipped: usize = 0;
+    let mut updated: usize = 0;
+    let mut invalid: usize = 0;
+
+    for (idx, record_result) in reader.records().enumerate() {
+        let record = record_result.map_err(|e| {
+            AppError::Domain(DomainError::Validation {
+                message: format!("Failed to read CSV row {}: {e}", idx + 2),
+            })
+        })?;
+
+        let row_index = idx + 1; // 1-based, excluding header
+
+        let sku = mapping
+            .sku
+            .and_then(|i| record.get(i))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let description = mapping
+            .description
+            .and_then(|i| record.get(i))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let barcode = mapping
+            .barcode
+            .and_then(|i| record.get(i))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let category_name = mapping
+            .category
+            .and_then(|i| record.get(i))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let default_unit = mapping
+            .default_unit
+            .and_then(|i| record.get(i))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let notes = mapping
+            .notes
+            .and_then(|i| record.get(i))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let default_alert_days_before = mapping
+            .default_alert_days_before
+            .and_then(|i| record.get(i))
+            .and_then(|s| {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    return None;
+                }
+                trimmed.parse::<i32>().ok()
+            });
+
+        // Resolve category name to id (no-op on empty/None).
+        let category_id = resolve_category_name(pool, category_name.as_deref()).await?;
+
+        let outcome = import_row(
+            pool,
+            &sku,
+            &description,
+            barcode.as_deref(),
+            category_id.as_deref(),
+            default_unit.as_deref(),
+            default_alert_days_before,
+            notes.as_deref(),
+            input.strategy,
+        )
+        .await?;
+
+        match &outcome {
+            CsvImportRowOutcome::Created { .. } => created += 1,
+            CsvImportRowOutcome::Skipped { .. } => skipped += 1,
+            CsvImportRowOutcome::Updated { .. } => updated += 1,
+            CsvImportRowOutcome::Invalid { .. } => invalid += 1,
+        }
+
+        rows.push(CsvImportRowResult {
+            row_index,
+            sku: sku.unwrap_or_default(),
+            description: description.unwrap_or_default(),
+            barcode: barcode.unwrap_or_default(),
+            outcome,
+        });
+    }
+
+    let total_rows = rows.len();
+    Ok(CsvImportResult {
+        total_rows,
+        created,
+        skipped,
+        updated,
+        invalid,
+        rows,
+    })
+}
+
+/// Imports a single CSV row. Returns the outcome and count deltas.
+async fn import_row(
+    pool: &DbPool,
+    sku: &Option<String>,
+    description: &Option<String>,
+    barcode: Option<&str>,
+    category_id: Option<&str>,
+    default_unit: Option<&str>,
+    default_alert_days_before: Option<i32>,
+    notes: Option<&str>,
+    strategy: ConflictStrategy,
+) -> Result<CsvImportRowOutcome, AppError> {
+    use crate::db::repositories::products as products_repo;
+    use crate::domain::validation::{validate_barcode, validate_description, validate_sku};
+    use crate::dto::products::{ProductBarcodeCreate, ProductCreate, ProductUpdate};
+
+    // 1. Required field validation.
+    let sku = match sku {
+        Some(s) if !s.trim().is_empty() => s.clone(),
+        _ => {
+            return Ok(CsvImportRowOutcome::Invalid {
+                reason: "SKU is required".to_string(),
+            });
+        }
+    };
+    let description = match description {
+        Some(d) if !d.trim().is_empty() => d.clone(),
+        _ => {
+            return Ok(CsvImportRowOutcome::Invalid {
+                reason: "Description is required".to_string(),
+            });
+        }
+    };
+
+    // 2. Domain validation.
+    if let Err(msg) = validate_sku(&sku) {
+        return Ok(CsvImportRowOutcome::Invalid { reason: msg });
+    }
+    if let Err(msg) = validate_description(&description) {
+        return Ok(CsvImportRowOutcome::Invalid { reason: msg });
+    }
+    if let Some(b) = barcode {
+        if let Err(msg) = validate_barcode(b) {
+            return Ok(CsvImportRowOutcome::Invalid { reason: msg });
+        }
+    }
+    if let Some(days) = default_alert_days_before {
+        if !(0..=3650).contains(&days) {
+            return Ok(CsvImportRowOutcome::Invalid {
+                reason: "Alert days must be between 0 and 3650".to_string(),
+            });
+        }
+    }
+
+    let resolved_alert_days = default_alert_days_before.unwrap_or(30);
+
+    // 3. Check if SKU exists.
+    let existing_by_sku = products_repo::find_by_sku_exact(pool, &sku).await?;
+
+    match (existing_by_sku, strategy) {
+        // ── Skip strategy ──────────────────────────────────────────
+        (Some(_existing), ConflictStrategy::Skip) => Ok(CsvImportRowOutcome::Skipped {
+            reason: format!("SKU '{}' already exists", sku),
+        }),
+
+        // ── Update strategy ────────────────────────────────────────
+        (Some(existing), ConflictStrategy::Update) => {
+            let update_input = ProductUpdate {
+                id: existing.id.clone(),
+                sku: existing.sku.clone(),
+                description: description.clone(),
+                category_id: category_id.map(String::from),
+                default_unit: default_unit.map(String::from),
+                default_alert_days_before: resolved_alert_days,
+                notes: notes.map(String::from),
+                is_active: true,
+            };
+            products_repo::update_product(pool, &update_input).await?;
+
+            // Try to add barcode; silently skip UNIQUE violations.
+            if let Some(b) = barcode {
+                let barcode_create = ProductBarcodeCreate {
+                    product_id: existing.id.clone(),
+                    barcode: b.to_string(),
+                    barcode_type: None,
+                    is_primary: false,
+                };
+                if let Err(sqlx_err) = products_repo::insert_barcode(pool, &barcode_create).await {
+                    if let sqlx::Error::Database(ref db_err) = sqlx_err {
+                        if !db_err.is_unique_violation() {
+                            return Err(AppError::from(sqlx_err));
+                        }
+                    } else {
+                        return Err(AppError::from(sqlx_err));
+                    }
+                }
+            }
+
+            Ok(CsvImportRowOutcome::Updated {
+                product_id: existing.id,
+                sku,
+            })
+        }
+
+        // ── Review strategy ────────────────────────────────────────
+        (Some(_), ConflictStrategy::Review) => Ok(CsvImportRowOutcome::Skipped {
+            reason: "SKU conflict requires manual resolution".to_string(),
+        }),
+
+        // ── SKU does not exist ─────────────────────────────────────
+        (None, _) => {
+            // Check barcode collision when the SKU is new.
+            if let Some(b) = barcode {
+                let existing_by_bc = products_repo::find_by_barcode_exact(pool, b).await?;
+                if existing_by_bc.is_some() {
+                    let reason = match strategy {
+                        ConflictStrategy::Skip => {
+                            format!("Barcode '{}' belongs to another product", b)
+                        }
+                        ConflictStrategy::Update => {
+                            format!("Barcode '{}' belongs to another product", b)
+                        }
+                        ConflictStrategy::Review => {
+                            "Barcode conflict requires manual resolution".to_string()
+                        }
+                    };
+                    return Ok(CsvImportRowOutcome::Skipped { reason });
+                }
+            }
+
+            // Create the product.
+            let create_input = ProductCreate {
+                sku: sku.clone(),
+                description,
+                category_id: category_id.map(String::from),
+                default_unit: default_unit.map(String::from),
+                default_alert_days_before: resolved_alert_days,
+                notes: notes.map(String::from),
+            };
+            let product = products_repo::insert_product(pool, &create_input).await?;
+
+            // Attach the barcode if present; silently skip UNIQUE violations.
+            if let Some(b) = barcode {
+                let barcode_create = ProductBarcodeCreate {
+                    product_id: product.id.clone(),
+                    barcode: b.to_string(),
+                    barcode_type: None,
+                    is_primary: true,
+                };
+                if let Err(sqlx_err) = products_repo::insert_barcode(pool, &barcode_create).await {
+                    if let sqlx::Error::Database(ref db_err) = sqlx_err {
+                        if !db_err.is_unique_violation() {
+                            return Err(AppError::from(sqlx_err));
+                        }
+                    } else {
+                        return Err(AppError::from(sqlx_err));
+                    }
+                }
+            }
+
+            Ok(CsvImportRowOutcome::Created {
+                product_id: product.id,
+                sku,
+            })
+        }
+    }
+}
+
+/// Looks up a category by name and returns its id, or `None` if no such
+/// category exists. Category names are matched case-insensitively.
+async fn resolve_category_name(
+    pool: &DbPool,
+    name: Option<&str>,
+) -> Result<Option<String>, AppError> {
+    use crate::db::repositories::products as products_repo;
+
+    let name = match name {
+        Some(n) if !n.trim().is_empty() => n.trim(),
+        _ => return Ok(None),
+    };
+
+    // Case-insensitive lookup: SQLite LIKE is case-insensitive for ASCII.
+    let categories = products_repo::list_all_categories(pool).await?;
+    Ok(categories
+        .into_iter()
+        .find(|c| c.name.to_lowercase() == name.to_lowercase())
+        .map(|c| c.id))
+}
+
+// ============================================================
 // Tests
 // ============================================================
 
@@ -653,7 +990,7 @@ mod tests {
 
     use crate::db::migrations::fresh_test_pool;
     use crate::dto::dashboard::DashboardPreset;
-    use crate::dto::products::{ProductBarcodeCreate, ProductCreate};
+    use crate::dto::products::{ProductBarcodeCreate, ProductCreate, ProductSearchQuery};
     use crate::services::products as products_service;
 
     // ------------------------------------------------------------
@@ -1120,5 +1457,375 @@ mod tests {
         assert_eq!(format_quantity(4.0), "4");
         assert_eq!(format_quantity(4.5), "4.5");
         assert_eq!(format_quantity(0.125), "0.125");
+    }
+
+    // ------------------------------------------------------------
+    // Import — skip strategy
+    // ------------------------------------------------------------
+
+    #[tokio::test]
+    async fn import_skip_creates_new_products() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let csv_content =
+            "sku,description,barcode\nSKU-NEW-1,New milk,1234567890\nSKU-NEW-2,New bread,\n";
+
+        let result = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Skip,
+            },
+        )
+        .await?;
+
+        assert_eq!(result.total_rows, 2);
+        assert_eq!(result.created, 2);
+        assert_eq!(result.skipped, 0);
+        assert_eq!(result.updated, 0);
+        assert_eq!(result.invalid, 0);
+
+        for row in &result.rows {
+            assert!(matches!(
+                &row.outcome,
+                CsvImportRowOutcome::Created { sku, .. } if !sku.is_empty()
+            ));
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn import_skip_skips_existing_sku() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        products_service::create_product(
+            &pool,
+            ProductCreate {
+                sku: "EXIST-SKU".into(),
+                description: "Existing product".into(),
+                category_id: None,
+                default_unit: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+
+        let csv_content = "sku,description\nEXIST-SKU,New desc\nSKU-FRESH,Fresh product\n";
+        let result = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Skip,
+            },
+        )
+        .await?;
+
+        assert_eq!(result.total_rows, 2);
+        assert_eq!(result.created, 1);
+        assert_eq!(result.skipped, 1);
+
+        let skipped_row = result.rows.iter().find(|r| r.sku == "EXIST-SKU").unwrap();
+        match &skipped_row.outcome {
+            CsvImportRowOutcome::Skipped { reason } => {
+                assert!(reason.contains("EXIST-SKU"));
+            }
+            other => panic!("expected Skipped, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn import_skip_skips_barcode_owned_by_another_product(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let p = products_service::create_product(
+            &pool,
+            ProductCreate {
+                sku: "BC-OWNER".into(),
+                description: "Barcode owner".into(),
+                category_id: None,
+                default_unit: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+        products_service::add_barcode(
+            &pool,
+            ProductBarcodeCreate {
+                product_id: p.id.clone(),
+                barcode: "7500000000001".into(),
+                barcode_type: None,
+                is_primary: true,
+            },
+        )
+        .await?;
+
+        let csv_content = "sku,description,barcode\nSKU-FRESH,Fresh product,7500000000001\n";
+        let result = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Skip,
+            },
+        )
+        .await?;
+
+        assert_eq!(result.total_rows, 1);
+        assert_eq!(result.skipped, 1);
+        assert_eq!(result.created, 0);
+
+        let row = &result.rows[0];
+        match &row.outcome {
+            CsvImportRowOutcome::Skipped { reason } => {
+                assert!(reason.contains("another product"));
+            }
+            other => panic!("expected Skipped, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    // ------------------------------------------------------------
+    // Import — update strategy
+    // ------------------------------------------------------------
+
+    #[tokio::test]
+    async fn import_update_updates_existing_product() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let existing = products_service::create_product(
+            &pool,
+            ProductCreate {
+                sku: "UPDATE-ME".into(),
+                description: "Old description".into(),
+                category_id: None,
+                default_unit: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+
+        let csv_content = "sku,description\nUPDATE-ME,Updated description\n";
+        let result = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Update,
+            },
+        )
+        .await?;
+
+        assert_eq!(result.total_rows, 1);
+        assert_eq!(result.updated, 1);
+        assert_eq!(result.created, 0);
+
+        let row = &result.rows[0];
+        match &row.outcome {
+            CsvImportRowOutcome::Updated { sku, product_id } => {
+                assert_eq!(sku, "UPDATE-ME");
+                assert_eq!(product_id, &existing.id);
+            }
+            other => panic!("expected Updated, got {other:?}"),
+        }
+
+        let updated = products_service::get_product(&pool, existing.id.clone()).await?;
+        assert_eq!(updated.product.description, "Updated description");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn import_update_creates_new_products() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let csv_content = "sku,description\nNEW-A,New A\nNEW-B,New B\n";
+        let result = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Update,
+            },
+        )
+        .await?;
+
+        assert_eq!(result.total_rows, 2);
+        assert_eq!(result.created, 2);
+        assert_eq!(result.updated, 0);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn import_update_adds_barcode_to_existing_product(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let existing = products_service::create_product(
+            &pool,
+            ProductCreate {
+                sku: "BC-TARGET".into(),
+                description: "Barcode target".into(),
+                category_id: None,
+                default_unit: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+
+        let csv_content = "sku,description,barcode\nBC-TARGET,Barcode target,9900001234567\n";
+        let result = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Update,
+            },
+        )
+        .await?;
+
+        assert_eq!(result.updated, 1);
+        assert_eq!(result.created, 0);
+
+        let barcodes = products_service::list_barcodes(&pool, existing.id.clone()).await?;
+        assert!(barcodes.iter().any(|b| b.barcode == "9900001234567"));
+        Ok(())
+    }
+
+    // ------------------------------------------------------------
+    // Import — review strategy
+    // ------------------------------------------------------------
+
+    #[tokio::test]
+    async fn import_review_returns_conflicts_without_changes(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        products_service::create_product(
+            &pool,
+            ProductCreate {
+                sku: "REVIEW-SKU".into(),
+                description: "Existing".into(),
+                category_id: None,
+                default_unit: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+
+        let csv_content = "sku,description\nREVIEW-SKU,Conflicting\n";
+        let result = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Review,
+            },
+        )
+        .await?;
+
+        assert_eq!(result.total_rows, 1);
+        assert_eq!(result.skipped, 1);
+        assert_eq!(result.created, 0);
+        assert_eq!(result.updated, 0);
+
+        let row = &result.rows[0];
+        match &row.outcome {
+            CsvImportRowOutcome::Skipped { reason } => {
+                assert!(reason.contains("manual resolution"));
+            }
+            other => panic!("expected Skipped, got {other:?}"),
+        }
+
+        let found = products_service::search_products(
+            &pool,
+            ProductSearchQuery {
+                query: "REVIEW-SKU".into(),
+            },
+        )
+        .await?;
+        assert!(!found.is_empty(), "product should still exist");
+        assert_eq!(found[0].description, "Existing");
+        Ok(())
+    }
+
+    // ------------------------------------------------------------
+    // Import — validation
+    // ------------------------------------------------------------
+
+    #[tokio::test]
+    async fn import_rejects_missing_sku() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let csv_content = "sku,description\n,No SKU\n";
+        let result = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Skip,
+            },
+        )
+        .await?;
+
+        assert_eq!(result.total_rows, 1);
+        assert_eq!(result.invalid, 1);
+
+        let row = &result.rows[0];
+        match &row.outcome {
+            CsvImportRowOutcome::Invalid { reason } => {
+                assert!(reason.contains("SKU"));
+            }
+            other => panic!("expected Invalid, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn import_rejects_missing_description() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let csv_content = "sku,description\nSKU-OK,\n";
+        let result = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Skip,
+            },
+        )
+        .await?;
+
+        assert_eq!(result.total_rows, 1);
+        assert_eq!(result.invalid, 1);
+
+        let row = &result.rows[0];
+        match &row.outcome {
+            CsvImportRowOutcome::Invalid { reason } => {
+                assert!(reason.contains("Description"));
+            }
+            other => panic!("expected Invalid, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn import_requires_sku_and_description_columns() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let pool = fresh_test_pool().await?;
+        let csv_content = "name\nJust a name\n";
+        let err = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Skip,
+            },
+        )
+        .await
+        .expect_err("missing SKU/description columns must fail");
+        assert!(matches!(
+            err,
+            AppError::Domain(crate::error::DomainError::Validation { .. })
+        ));
+        Ok(())
     }
 }

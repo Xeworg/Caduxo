@@ -1,16 +1,8 @@
 /**
- * TypeScript API wrapper for CSV import/export commands (Slice 10a).
+ * TypeScript API wrapper for CSV import/export commands.
  *
- * - `previewProductCsv` — backend preview only (no commit).
- * - `exportProductsCsv` — writes the canonical products CSV to a
- *   user-selected destination.
- * - `exportReportCsv` — writes the current dashboard report to a
- *   user-selected destination.
- * - `pickCsvFile` / `pickCsvSavePath` — Tauri dialog helpers for
- *   opening an existing CSV and choosing a save destination.
- *
- * Slice 10a ships preview + exports only. Import commit, conflict
- * strategies, and the mapping modal are deferred to Slice 10b.
+ * Slice 10a: preview + exports.
+ * Slice 10b: import commit with conflict strategies and column mapping UI.
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -18,6 +10,11 @@ import {
  open as openDialog,
  save as saveDialog,
 } from "@tauri-apps/plugin-dialog";
+
+// ─── Conflict strategy ───────────────────────────────────────────────
+
+/** How to handle rows whose SKU or barcode already exists. */
+export type ConflictStrategy = "skip" | "update" | "review";
 
 // ─── DTOs (mirror Rust DTOs in src-tauri/src/dto/csv_io.rs) ────────────
 
@@ -94,6 +91,41 @@ export interface CsvExportResult {
  bytes_written: number;
 }
 
+// ─── Import DTOs ──────────────────────────────────────────────────────
+
+/** Input for the import commit command. */
+export interface CsvImportInput {
+ content: string;
+ mapping: CsvColumnMapping;
+ strategy: ConflictStrategy;
+}
+
+/** Per-row import outcome. */
+export type CsvImportRowOutcome =
+ | { action: "created"; product_id: string; sku: string }
+ | { action: "skipped"; reason: string }
+ | { action: "updated"; product_id: string; sku: string }
+ | { action: "invalid"; reason: string };
+
+/** Summary of a single imported row. */
+export interface CsvImportRowResult {
+ row_index: number;
+ sku: string;
+ description: string;
+ barcode: string;
+ outcome: CsvImportRowOutcome;
+}
+
+/** Result returned by `importProductCsv`. */
+export interface CsvImportResult {
+ total_rows: number;
+ created: number;
+ skipped: number;
+ updated: number;
+ invalid: number;
+ rows: CsvImportRowResult[];
+}
+
 /** Mirror of Rust `DashboardPreset` (snake_case). */
 export type DashboardPreset =
  | "expired"
@@ -104,6 +136,17 @@ export type DashboardPreset =
  | "all";
 
 // ─── Backend command wrappers ───────────────────────────────────────────
+
+/**
+ * Commits a product CSV import using the provided column mapping and conflict
+ * strategy. Creates new products, updates existing products (when strategy is
+ * `update`), or returns conflict rows for review (when strategy is `review`).
+ */
+export async function importProductCsv(
+ input: CsvImportInput,
+): Promise<CsvImportResult> {
+ return invoke<CsvImportResult>("import_product_csv", { input });
+}
 
 /**
  * Backend preview for a product CSV. Detects headers, validates the column

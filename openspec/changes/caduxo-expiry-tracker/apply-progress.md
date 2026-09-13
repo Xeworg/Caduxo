@@ -1257,3 +1257,121 @@ npm run build 2>&1 | tail -3
 ### Slice 10a next recommended action
 
 **Slice 10b — CSV import commit, conflict strategies, mapping modal**: Add the frontend preview panel that calls `previewProductCsv`, build the column mapping UI (auto-detect with per-column override), implement conflict strategies (skip / update / review), wire the commit command, and surface invalid rows + duplicate warnings in the catalog UI.
+
+---
+
+## Slice 10b — CSV import commit, conflict strategies, mapping modal
+
+### Status: COMPLETE ✅
+
+Slice 10b delivers the full CSV import commit flow: column mapping modal, import preview UI with conflict warnings, conflict strategy selection, and the import commit command. No PDF, backup/restore, or unrelated deferred work was done.
+
+### Slice 10b completed tasks (Section 10)
+
+| Task | Status |
+| ---- | ------ |
+| Implement CSV file selection flow | ✅ |
+| Detect CSV headers | ✅ (backend in 10a; UI wired in 10b) |
+| Build column mapping UI for SKU, description, UPC/barcode | ✅ |
+| Validate required mapped fields | ✅ (ColumnMapper disables Apply until SKU + description mapped) |
+| Implement import preview with invalid rows and duplicate warnings | ✅ |
+| Implement conflict strategies: skip, update, review | ✅ |
+| Import products and barcodes (commit) | ✅ |
+
+### Slice 10b completed tasks (Section 10b)
+
+| Task | Status |
+| ---- | ------ |
+| Build column mapping UI for SKU, description, UPC/barcode | ✅ |
+| Implement import preview UI surfacing invalid rows and duplicate warnings | ✅ |
+| Implement conflict strategies: skip, update, review | ✅ |
+| Import products and barcodes (commit) | ✅ |
+
+### Slice 10b implementation notes
+
+**Backend architecture**:
+
+- `dto/csv_io.rs` — Added `ConflictStrategy` enum (`Skip`, `Update`, `Review`), `CsvImportInput`, `CsvImportRowOutcome` (tagged union), `CsvImportRowResult`, and `CsvImportResult`.
+- `services/csv_io.rs` — Added `import_product_csv` (full commit path) and `import_row` (per-row processor). `import_row` handles validation → SKU collision check → barcode collision check → create/update. Category names are resolved via `resolve_category_name` (case-insensitive lookup against active categories). UNIQUE constraint violations on barcode insert are caught and silently skipped (not surfaced as errors).
+- `commands/csv_io.rs` — Added `import_product_csv` Tauri command, registered in `lib.rs`.
+
+**Conflict strategies**:
+
+- `Skip` — creates products only for new SKUs; skips duplicate-SKU rows and barcode-owned-by-others rows.
+- `Update` — creates new products for non-conflicting rows; updates existing product fields for duplicate-SKU rows; silently attaches barcodes to existing products when free.
+- `Review` — returns all rows with `Skipped { reason: "manual resolution" }` outcomes but makes NO database changes. Caller re-invokes with `Skip` or `Update`.
+
+**Category resolution** — optional `category` column values are looked up by name (case-insensitive) against active categories. No category is created automatically; unmapped or unknown categories result in `category_id = NULL`.
+
+**Frontend architecture**:
+
+- `src/lib/csv.ts` — Added `ConflictStrategy`, `CsvImportInput`, `CsvImportResult`, `CsvImportRowResult`, `CsvImportRowOutcome` types; added `importProductCsv` command wrapper.
+- `src/components/ColumnMapper.svelte` — Modal with a table of fields vs column dropdowns. Required fields (SKU, description) show red styling when unmapped. The Apply button is disabled until both required fields are mapped. Users can remap columns from the preview stage.
+- `src/components/CsvImportPage.svelte` — Three-stage page: (1) Select file, (2) Map columns → preview, (3) Choose strategy → commit → result. Stage machine uses Svelte's reactive `$:` declarations for derived counts. Summary cards show valid rows, duplicate counts, missing counts with color-coded badges. Import button is disabled when there are zero valid rows.
+- `src/App.svelte` — Added `import` tab to navigation and `CsvImportPage` route.
+
+### Slice 10b new tests (10 new tests)
+
+| Test | Covers |
+| ---- | ------ |
+| `import_skip_creates_new_products` | Happy path: 2 rows → 2 created |
+| `import_skip_skips_existing_sku` | Duplicate SKU → Skipped outcome |
+| `import_skip_skips_barcode_owned_by_another_product` | Barcode collision → Skipped outcome |
+| `import_update_updates_existing_product` | Duplicate SKU + Update → Updated outcome; DB state verified |
+| `import_update_creates_new_products` | Update strategy creates new rows when SKU is free |
+| `import_update_adds_barcode_to_existing_product` | Update attaches barcode to existing product |
+| `import_review_returns_conflicts_without_changes` | Review → Skipped outcomes; DB unchanged |
+| `import_rejects_missing_sku` | Empty SKU → Invalid outcome |
+| `import_rejects_missing_description` | Empty description → Invalid outcome |
+| `import_requires_sku_and_description_columns` | Column detection failure → Validation error |
+
+### Slice 10b files changed
+
+| File | Change |
+| -----|-------- |
+| `src-tauri/src/dto/csv_io.rs` | Added import DTOs: ConflictStrategy, CsvImportInput, CsvImportRowOutcome, CsvImportRowResult, CsvImportResult |
+| `src-tauri/src/services/csv_io.rs` | Added import_product_csv service + import_row helper + 10 service tests |
+| `src-tauri/src/commands/csv_io.rs` | Added import_product_csv Tauri command |
+| `src-tauri/src/lib.rs` | Registered import_product_csv command |
+| `src/lib/csv.ts` | Added import types, importProductCsv wrapper |
+| `src/components/ColumnMapper.svelte` | New: column mapping modal |
+| `src/components/CsvImportPage.svelte` | New: 3-stage import flow page |
+| `src/App.svelte` | Added `import` nav tab + CsvImportPage route |
+| `openspec/.../tasks.md` | Checked off all 7 Section 10 tasks and all 4 Section 10b tasks |
+| `openspec/.../apply-progress.md` | Appended Slice 10b section |
+
+### Slice 10b deferred issues
+
+- **No PDF, reports, backup/restore** — out of scope per the change spec.
+- **Frontend test harness** — still deferred per Slice 1.
+- **Multiple-barcode rows** — each CSV row supports one barcode; multi-barcode values (semicolon-separated) are not split automatically.
+- **Category auto-create** — unknown category names result in `category_id = NULL` rather than creating a new category. The UI could offer to create missing categories in a future slice.
+
+### Slice 10b verification evidence
+
+```bash
+# Cargo check
+cd src-tauri && cargo check 2>&1 | tail -1
+# → finished with expected scaffold dead_code warnings; no errors ✅
+
+# Cargo clippy (no errors)
+cd src-tauri && cargo clippy 2>&1 | grep "^error"
+# → (no output = clean) ✅
+
+# Rust tests
+cd src-tauri && cargo test 2>&1 | grep "test result"
+# → "ok. 181 passed; 0 failed; 0 ignored" ✅
+#   26 csv_io tests (16 pre-existing + 10 new import tests)
+
+# TypeScript check
+npx tsc --noEmit 2>&1
+# → (no output = clean) ✅
+
+# Frontend build
+npm run build 2>&1 | tail -2
+# → "✓ built in 1.58s" ✅
+```
+
+### Slice 10b next recommended action
+
+**Slice 11 — Reports and PDF**: Implement the report data query commands (in-alert-window, expired, next-30-days), custom filters, report preview UI, and Rust PDF export using `printpdf`.
