@@ -6,6 +6,7 @@ mod domain;
 mod dto;
 mod error;
 mod logging;
+mod pdf;
 mod services;
 mod state;
 
@@ -75,6 +76,10 @@ pub fn run() {
             commands::csv_io::import_product_csv,
             commands::csv_io::export_products_csv,
             commands::csv_io::export_report_csv,
+            // Reports (Slice 11a — backend report data + custom filters;
+            // Slice 11b — preview UI + PDF export)
+            commands::reports::preview_report,
+            commands::reports::export_report_pdf,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

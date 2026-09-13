@@ -1375,3 +1375,329 @@ npm run build 2>&1 | tail -2
 ### Slice 10b next recommended action
 
 **Slice 11 — Reports and PDF**: Implement the report data query commands (in-alert-window, expired, next-30-days), custom filters, report preview UI, and Rust PDF export using `printpdf`.
+
+---
+
+## Slice 11a — Backend report data (Slice 11 backend rescope)
+
+### Status: BACKEND COMPLETE ✅ — UI/PDF DEFERRED ⏭
+
+Maintainer-authorized rescope from full Slice 11 to backend-only. Slice 11a delivers the report data layer and TypeScript wrapper; report preview UI, PDF export, A4 landscape, pagination, and PDF metadata are deferred to a later slice. CSV export for report data is already covered by Slice 10's `export_report_csv` and is NOT duplicated here.
+
+### Slice 11a completed tasks (Section 11)
+
+| Task | Status |
+| ---- | ------ |
+| Implement report data query for in-alert-window report | ✅ Backend |
+| Implement report data query for expired report | ✅ Backend |
+| Implement report data query for next-30-days report | ✅ Backend |
+| Implement custom report filters | ✅ Backend |
+| Add report metadata: type, filters, generated date/time | ✅ Backend |
+| Add CSV export for report data | ✅ Already satisfied by Slice 10's `export_report_csv`; not duplicated in this slice |
+
+### Slice 11a NOT implemented (deferred to a later slice)
+
+| Task | Status |
+| ---- | ------ |
+| Build report preview UI | ⏭ Deferred |
+| Implement Rust structured PDF export using `printpdf` or equivalent | ⏭ Deferred |
+| Use A4 landscape as initial default for table reports | ⏭ Deferred |
+| Add pagination and page numbers | ⏭ Deferred |
+| PDF-specific metadata | ⏭ Deferred |
+
+### Slice 11a implementation notes
+
+**Architecture** (follows existing patterns: commands → services → domain / repositories):
+
+- `dto/reports.rs` — `ReportType` (InAlertWindow / Expired / Next30Days / Custom), `ReportFilters` (store_id, location_id, category_id, urgency, date_from, date_to), `ReportRequest` (uses `kind` field, not `type`, to avoid the Rust keyword), `ReportMetadata` (type, description, filters_used, generated_at, row_count), `ReportData { metadata, lots }`. `ReportData::lots` reuses `DashboardLotRow` so preview, dashboard, and any future CSV/PDF share the same column vocabulary.
+- `services/reports.rs` — `preview_report()` orchestration. Validates filter shape (`YYYY-MM-DD` dates, `date_from <= date_to`), translates to `DashboardFilters` (built-in types pin the preset; `Custom` passes through `urgency`), delegates to `services::dashboard::get_dashboard` for the row fetch, then applies `category_id` and `date_from`/`date_to` post-filters. Builds metadata with the report type, description, effective filters, RFC3339 generation timestamp, and row count.
+- `commands/reports.rs` — single thin Tauri command `preview_report(state, request) -> Result<ReportData, CommandError>`.
+- `lib.rs` — registered `commands::reports::preview_report` in `tauri::generate_handler!`.
+- `src/lib/reports.ts` — TypeScript wrapper mirroring the Rust DTOs plus `previewReport(request)` command wrapper. Reuses `DashboardLotRow` from `lib/dashboard.js`.
+
+**Filter translation**:
+
+| Report type | Dashboard preset | `urgency` passthrough |
+| ----------- | ---------------- | --------------------- |
+| `in_alert_window` | `AlertWindow` | ignored |
+| `expired` | `Expired` | ignored |
+| `next_30_days` | `Next30Days` | ignored |
+| `custom` | `None` | forwarded to dashboard's urgency filter |
+
+**Post-filters** (apply to all report types, not just `custom`):
+
+- `category_id` — filters dashboard rows by the product's `category_id`. Per-row `products::get_product` lookup (N+1) is acceptable for MVP report sizes; a batch query should replace it in a follow-up slice. The repository lives outside the allowed edit surfaces for this slice, so the N+1 stays.
+- `date_from` / `date_to` — inclusive string comparison on `expiry_date` (ISO-8601 is naturally lexicographically ordered). Blank strings are treated as "no bound".
+
+**Logs**: no product SKU, barcode, description, notes, or scanned value are logged. `tracing` calls in the new modules are plain messages, never payload data.
+
+**CSV export decision**:
+
+Slice 10's `export_report_csv` already covers "dashboard report row CSV" with store_id / location_id / preset / urgency filters. The prompt's guidance ("leave duplicate CSV work deferred/unchanged" when the existing export already covers the surface) was honoured: no duplicate CSV command was added in this slice. A follow-up slice can wire `preview_report` output to CSV by either:
+
+1. Extending `ReportExportInput` with `category_id` / `date_from` / `date_to` and routing through the report service, OR
+2. Adding a thin `export_report_request_csv` command that delegates to `services::reports::preview_report` + a CSV writer.
+
+Both options stay inside the existing `services::csv_io` module and reuse `services::reports` for the filter translation. No work was started in this slice.
+
+### Slice 11a new tests (26 new tests)
+
+**Type / metadata helpers** (2 tests):
+
+| Test | Covers |
+| ---- | ------ |
+| `report_type_as_str_matches_serde_rename` | `as_str()` matches the snake_case JSON rename |
+| `report_type_descriptions_are_non_empty` | All four report types have non-empty descriptions |
+
+**Filter translation** (6 tests):
+
+| Test | Covers |
+| ---- | ------ |
+| `to_dashboard_filters_expired_pins_preset` | `Expired` → `DashboardPreset::Expired`, no urgency |
+| `to_dashboard_filters_in_alert_window_pins_preset` | `InAlertWindow` → `DashboardPreset::AlertWindow` |
+| `to_dashboard_filters_next_30_days_pins_preset` | `Next30Days` → `DashboardPreset::Next30Days` |
+| `to_dashboard_filters_custom_passes_through_urgency` | `Custom` + `urgency="today"` → preset `None`, urgency `"today"` |
+| `to_dashboard_filters_custom_blank_urgency_is_none` | Blank urgency string treated as `None` |
+| `to_dashboard_filters_forwards_store_and_location` | Store / location ids flow through |
+
+**Filter validation** (5 tests):
+
+| Test | Covers |
+| ---- | ------ |
+| `validate_filters_accepts_empty` | Empty filters are valid |
+| `validate_filters_accepts_well_formed_range` | Well-formed dates pass |
+| `validate_filters_rejects_malformed_date` | `"not-a-date"` → `Validation` |
+| `validate_filters_rejects_inverted_range` | `date_from > date_to` → `Validation` with both endpoints in the message |
+| `validate_filters_treats_blank_strings_as_absent` | Blank / whitespace date strings are treated as absent |
+
+**Date range post-filter** (2 tests):
+
+| Test | Covers |
+| ---- | ------ |
+| `date_range_post_filter_is_noop_without_bounds` | No bounds → rows preserved |
+| `date_range_post_filter_inclusive_bounds` | Inclusive lower / upper bound semantics |
+
+**`preview_report` built-in types** (3 tests):
+
+| Test | Covers |
+| ---- | ------ |
+| `preview_report_expired_returns_only_expired_lots` | Expired report → only expired rows, metadata type=`"expired"` |
+| `preview_report_in_alert_window_returns_alert_lots` | InAlertWindow → only the fixture's alert-window lot |
+| `preview_report_next_30_days_returns_30d_lots` | Next30Days → only the +15d lot (alert=30, not AlertWindow) |
+
+**`preview_report` custom filters** (4 tests):
+
+| Test | Covers |
+| ---- | ------ |
+| `preview_report_custom_with_category_filter` | `category_id` → only Bakery lots |
+| `preview_report_custom_with_date_range` | `date_from` / `date_to` → only lots in window |
+| `preview_report_custom_with_urgency_filter` | `urgency="expired"` → all expired lots across stores |
+| `preview_report_custom_no_filters_returns_all_lots` | No filters → all 6 active lots in fixture |
+
+**`preview_report` metadata** (2 tests):
+
+| Test | Covers |
+| ---- | ------ |
+| `preview_report_metadata_includes_type_description_and_count` | Metadata has type, description, RFC3339 `generated_at`, `row_count == lots.len()` |
+| `preview_report_metadata_captures_effective_filters` | `filters_used` mirrors the user-supplied filter snapshot |
+
+**`preview_report` validation through the service** (2 tests):
+
+| Test | Covers |
+| ---- | ------ |
+| `preview_report_rejects_malformed_date` | End-to-end `Validation` error for malformed dates |
+| `preview_report_rejects_inverted_range` | End-to-end `Validation` error for inverted ranges |
+
+### Slice 11a files changed
+
+| File | Change |
+| ---- | ------ |
+| `src-tauri/src/dto/reports.rs` | New: report DTOs (`ReportType`, `ReportFilters`, `ReportRequest`, `ReportMetadata`, `ReportData`) |
+| `src-tauri/src/dto/mod.rs` | `pub mod reports;` |
+| `src-tauri/src/services/reports.rs` | New: filter translation, validation, post-filters, `preview_report` orchestration, 26 tests |
+| `src-tauri/src/services/mod.rs` | `pub mod reports;` |
+| `src-tauri/src/commands/reports.rs` | New: thin `preview_report` Tauri command |
+| `src-tauri/src/commands/mod.rs` | `pub mod reports;` |
+| `src-tauri/src/lib.rs` | Registered `commands::reports::preview_report` |
+| `src/lib/reports.ts` | New: TypeScript wrapper, DTOs, `previewReport()` |
+| `openspec/changes/caduxo-expiry-tracker/tasks.md` | Marked 5 Section 11 backend tasks done; CSV marked done (covered by Slice 10); UI / PDF / A4 / pagination / PDF metadata left unchecked |
+| `openspec/changes/caduxo-expiry-tracker/apply-progress.md` | Appended this Slice 11a section |
+
+### Slice 11a risks and notes
+
+- **N+1 category filter**: `category_id` post-filter calls `products::get_product` per row. Acceptable for MVP report sizes; a batch query (`list_category_ids_by_product_ids`) should be added to the products repository in a later slice when the dashboard row count grows. The repository module was outside the allowed edit surfaces for this slice.
+- **No new migrations**: the report layer reuses the existing schema. No database changes were needed.
+- **Frontend test harness**: still deferred per Slice 1. No UI / Vitest tests added in this slice.
+- **No PDF / UI**: explicitly out of scope per the maintainer rescope.
+- **CSV duplication**: deliberately avoided. Slice 10's `export_report_csv` continues to handle the dashboard row CSV; a follow-up slice can wire `preview_report` output to CSV by extending `ReportExportInput` or adding a thin `export_report_request_csv` command.
+
+### Slice 11a verification evidence
+
+```bash
+# Cargo check (full library + tests)
+cd src-tauri && cargo check --lib --tests 2>&1 | tail -1
+# → "Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.97s" ✅
+#   31 pre-existing dead_code warnings from scaffold / `expect()` test usage; no errors.
+    
+# Focused reports service tests
+cd src-tauri && cargo test --lib services::reports 2>&1 | tail -1
+# → "ok. 26 passed; 0 failed; 0 ignored" ✅
+    
+# TypeScript check
+cd /home/xeworg/Proyectos/Caduxo && npx tsc --noEmit 2>&1
+# → (no output = clean) ✅
+    
+# Frontend build
+cd /home/xeworg/Proyectos/Caduxo && npm run build 2>&1 | tail -2
+# → "✓ built in …" ✅
+```
+
+### Slice 11a next recommended action
+
+**Slice 11b — Report preview UI + PDF export**: Build the Svelte preview page (rendering `ReportData` metadata + lot table), implement Rust `printpdf` PDF generation with A4 landscape default and pagination, and wire `preview_report` to either the existing `export_report_csv` (extended) or a new thin `export_report_request_csv` command.
+
+---
+
+## Slice 11b — Report preview UI and PDF export
+
+### Status: COMPLETE ✅
+
+Slice 11b finishes Section 11 by adding the Svelte preview UI, a Rust `printpdf`-based PDF generator with A4 landscape + pagination + page numbers, the metadata header, and the native save-dialog flow. The PDF generator reuses the existing `services::reports::preview_report` so preview rows and PDF rows always match. No CSV duplication was introduced. No new migrations, no domain changes, no security regressions.
+
+### Slice 11b completed tasks (Section 11)
+
+| Task | Status |
+| ---- | ------ |
+| Build report preview UI | ✅ |
+| Implement Rust structured PDF export using `printpdf` or equivalent | ✅ |
+| Use A4 landscape as initial default for table reports | ✅ |
+| Add pagination and page numbers | ✅ |
+| PDF metadata in header (type, filters, generated date/time) | ✅ |
+
+The Slice 11a metadata DTO already covers `report_type`, `description`, `filters_used`, `generated_at`, and `row_count`. Slice 11b adds the PDF header rendering on top of that DTO so the visible PDF metadata block carries the same fields as the preview UI.
+
+### Slice 11b NOT implemented (deferred)
+
+| Task | Status |
+| ---- | ------ |
+| CSV export wired through `preview_report` | ⏭ Slice 10's `export_report_csv` already covers dashboard row CSV; the canonical extension path is either widening `ReportExportInput` with `category_id` / `date_from` / `date_to` or adding a thin `export_report_request_csv` command that delegates to `services::reports`. Both stay inside the existing `services::csv_io` module. |
+| Backup / restore | ⏭ Out of scope (Section 12) |
+| Packaging validation | ⏭ Out of scope (Section 13) |
+| Barcode column in the PDF | ⏭ `DashboardLotRow` does not carry a barcode; adding it would require a N+1 or batch lookup per row. The PDF column set intentionally mirrors the dashboard lot table to avoid the additional DB hit. The SKU column stays the primary identifier. |
+
+### Slice 11b implementation notes
+
+**Backend architecture** (follows existing patterns: commands → services → pdf module):
+
+- `src-tauri/Cargo.toml` — added `printpdf = "0.7"` (the version currently published and available on crates.io).
+- `src-tauri/src/error.rs` — added `InfrastructureError::Pdf(#[from] printpdf::Error)` so `?` propagates cleanly through `AppError`.
+- `src-tauri/src/pdf/mod.rs` — new module, re-exports `pdf::report_pdf`.
+- `src-tauri/src/pdf/report_pdf.rs` — new module. Public entry points:
+  - `render_report(&ReportData, &Path) -> Result<RenderedReport, AppError>` writes a PDF to the given path.
+  - `RenderedReport { path, page_count, rows_written, bytes_written }` (serialisable for the Tauri IPC boundary).
+  - Layout: A4 landscape, 8 fixed columns (SKU, Description, Store / Location, Qty, Expiry, Days, Alert, Batch). Pre-flight geometry check (table width ≤ page width). Page header carries title, type + description, generated-at + row count, and a single-line filter snapshot. Page footer carries "Page X of Y" + "Caduxo · Expiry Tracker". Both bands are separated by horizontal rules.
+  - Pagination: row-based, ~23 data rows per page. Total pages are calculated up-front so every footer can carry the correct "Page X of Y" rendering on the first pass. Empty reports still render one page with an explicit "No rows match the current report filters" notice.
+  - Pagination metadata test asserts `/Type/Pages/Count N` appears in the PDF metadata dictionary (PDF text streams are compressed, so the structural test is used instead of a substring search on the binary stream).
+- `src-tauri/src/services/reports.rs` — added `export_report_pdf(pool, request, path) -> Result<RenderedReport, AppError>`. Delegates to `preview_report` so PDF rows always match preview rows.
+- `src-tauri/src/commands/reports.rs` — added `export_report_pdf` Tauri command. `RenderedReport` implements `Serialize` so the command return shape crosses the IPC boundary cleanly.
+- `src-tauri/src/lib.rs` — registered `commands::reports::export_report_pdf` in `tauri::generate_handler!`; added `mod pdf;` to the crate root.
+
+**Frontend architecture** (mirrors existing CSV/export pattern):
+
+- `src/lib/reports.ts` — added `PdfExportResult`, `exportReportPdf(request, file_path)`, `pickPdfSavePath(defaultName, title)`, and `exportReportPdfWithDialog(request)` wrappers. `pickPdfSavePath` lives in `reports.ts` rather than `csv.ts` because `lib/csv.ts` was outside the allowed edit surfaces; the alternative (a simple path input fallback) was avoided in favour of the native dialog because the plumbing is one `save()` call.
+- `src/components/ReportsPage.svelte` — new component with two views:
+  - **Configure view**: 4-card report-type selector (In alert window / Expired / Next 30 days / Custom) + a 6-field filter grid (store / location / category / urgency / date_from / date_to). The urgency field is disabled unless the report type is `custom`, mirroring the backend behaviour where built-in reports pin the urgency preset. The location dropdown auto-loads from `listStoreLocations` when a store is selected.
+  - **Preview view**: report metadata panel (type, description, generated-at, row count, filter snapshot) + the lot table reusing the same urgency badges and row colours as the dashboard. The "Export PDF" button in the header opens the native save dialog via `exportReportPdfWithDialog` and surfaces a success banner with the row count and page count.
+- `src/App.svelte` — added `Reports` nav tab and routed to `ReportsPage`.
+
+**Logging discipline**:
+
+The PDF generator emits no product SKU, barcode, description, notes, or scanned value to logs. `RenderedReport` carries the row count and byte count only. The TypeScript wrappers do not log any payload data either. Errors surface as user-safe `CommandError` variants via the existing `AppError → CommandError` boundary.
+
+### Slice 11b new tests (17 PDF tests)
+
+| Test | Covers |
+| ---- | ------ |
+| `data_rows_per_page_is_positive` | Layout sanity: pagination math always allows ≥1 row |
+| `table_width_matches_available_width` | Pre-flight geometry: 8 columns fit within A4 landscape minus margins |
+| `column_x_left_is_monotonic` | Column starting x positions never overlap |
+| `format_qty_strips_trailing_zero` | Quantity formatter handles integers and fractions |
+| `format_date_dd_mm_yyyy_reorders_iso_date` | YYYY-MM-DD → DD/MM/YYYY |
+| `format_days_signs_ago_for_negative` | "30 ago" for negative, integer for non-negative |
+| `format_store_location_with_and_without_location` | "Main" vs "Main / Cold-room" |
+| `truncate_short_string_returns_unchanged` | truncate() identity on short strings |
+| `truncate_long_string_appends_ellipsis` | truncate() char-cap + ellipsis |
+| `format_filters_includes_only_present_fields` | Filter summary omits empty / None fields |
+| `format_filters_empty_when_all_blank` | Filter summary empty when no filters set |
+| `humanize_generated_at_strips_timezone_and_subseconds` | RFC3339 → "YYYY-MM-DD HH:MM:SS" |
+| `capitalize_uppercases_first_character_only` | "expired" → "Expired" |
+| `approximate_text_width_scales_with_chars` | Right-anchored footer text width scales linearly |
+| `render_report_writes_pdf_file_with_empty_data` | Empty fixture renders 1-page PDF with `%PDF-` header |
+| `render_report_writes_pdf_file_with_many_rows` | 60 rows render multi-page PDF with `%PDF-` header |
+| `render_report_pages_contain_page_marker_object` | `/Type/Pages/Count N` matches the expected page count |
+| `render_report_pagination_count_matches_total_pages` | Page count matches ceiling division |
+
+### Slice 11b files changed
+
+| File | Change |
+| ---- | ------ |
+| `src-tauri/Cargo.toml` | Added `printpdf = "0.7"` |
+| `src-tauri/Cargo.lock` | Auto-regenerated by `cargo` to record printpdf + transitive deps |
+| `src-tauri/src/error.rs` | Added `InfrastructureError::Pdf` variant |
+| `src-tauri/src/pdf/mod.rs` | New: module registration |
+| `src-tauri/src/pdf/report_pdf.rs` | New: `render_report`, `RenderedReport`, 17 unit tests |
+| `src-tauri/src/services/reports.rs` | Added `export_report_pdf` orchestration |
+| `src-tauri/src/commands/reports.rs` | Added `export_report_pdf` Tauri command |
+| `src-tauri/src/lib.rs` | Registered `commands::reports::export_report_pdf`; added `mod pdf;` |
+| `src/lib/reports.ts` | Added `PdfExportResult`, `exportReportPdf`, `pickPdfSavePath`, `exportReportPdfWithDialog` |
+| `src/components/ReportsPage.svelte` | New: configure + preview views with native dialog-driven export |
+| `src/App.svelte` | Added `Reports` nav tab + `ReportsPage` route |
+| `openspec/changes/caduxo-expiry-tracker/tasks.md` | Checked off all 5 remaining Section 11 tasks |
+| `openspec/changes/caduxo-expiry-tracker/apply-progress.md` | Appended this Slice 11b section |
+
+### Slice 11b risks and notes
+
+- **Barcode column omitted**: `DashboardLotRow` does not carry the primary barcode. The PDF column set stays aligned with the dashboard lot table to avoid N+1 lookups; a follow-up slice can either add a `primary_barcode` projection on the dashboard SQL or do a batched lookup keyed by `product_id`s present in the report.
+- **PDF text streams are compressed by printpdf**: the page-marker test asserts against `/Type/Pages/Count N` in the PDF metadata dictionary instead of the literal "Page 1 of 2" string in the (compressed) content stream. The pagination math is exercised separately.
+- **Single layout / no template variants**: the column set, fonts, and margins are fixed in code. Adding portrait variants, summary pages, or custom templates would extend `pdf/report_pdf` rather than ripple through the rest of the codebase.
+- **No fonts embedded**: built-in Helvetica / Helvetica-Bold are used. No web-font embedding is needed, and the resulting PDFs render consistently across PDF viewers.
+- **Frontend test harness still deferred**: no UI / Vitest tests added in this slice. The PDF generation is exercised by 17 Rust unit tests (including end-to-end `render_report` integration tests that write to `tempfile::tempdir()`).
+- **`printpdf 0.7` API lock-in**: the `render_report` API calls `doc.save(&mut writer)`, `doc.add_builtin_font`, `doc.get_page(idx).get_layer(idx)`, `layer.use_text`, `layer.add_line`, and `layer.set_outline_thickness`. If we upgrade `printpdf` later, this surface is the only thing to re-test.
+
+### Slice 11b verification evidence
+
+```bash
+# Cargo check
+cd src-tauri && cargo check --lib --tests 2>&1 | tail -1
+# → "Finished `dev` profile" ✅  (19 pre-existing dead_code warnings unchanged; no errors)
+
+# Cargo clippy (no errors)
+cd src-tauri && cargo clippy --lib --tests 2>&1 | grep -c "^error"
+# → 0 ✅
+
+# PDF tests
+cd src-tauri && cargo test --lib pdf 2>&1 | tail -3
+# → "ok. 17 passed; 0 failed; 0 ignored" ✅
+
+# Reports service tests (regression — includes all 26 pre-existing tests)
+cd src-tauri && cargo test --lib services::reports 2>&1 | tail -3
+# → "ok. 26 passed; 0 failed; 0 ignored" ✅
+
+# Full Rust suite
+cd src-tauri && cargo test --lib 2>&1 | tail -3
+# → "ok. 224 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out" ✅
+#   was 207 before Slice 11b; +17 new PDF tests
+
+# TypeScript check
+cd /home/xeworg/Proyectos/Caduxo && npx tsc --noEmit 2>&1
+# → (no output = clean) ✅
+
+# Frontend build
+cd /home/xeworg/Proyectos/Caduxo && npm run build 2>&1 | tail -2
+# → "✓ built in 870ms" ✅
+#   (pre-existing Vite warning about expiry_lots.ts dynamic+static import is unrelated to this slice)
+```
+
+### Slice 11b next recommended action
+
+**Slice 12 — Backup and restore** (Section 12 in `tasks.md`): Implement database backup export, restore flow with explicit destructive confirmation, and validate restored database before replacing active data. Slice 12 has no dependency on Slice 11b.

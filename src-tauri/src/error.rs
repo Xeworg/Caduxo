@@ -34,6 +34,9 @@ pub enum InfrastructureError {
     #[error("CSV error: {0}")]
     Csv(#[from] csv::Error),
 
+    #[error("PDF error: {0}")]
+    Pdf(#[from] printpdf::Error),
+
     #[error("serialization error")]
     Serialization(#[from] serde_json::Error),
 

@@ -8,5 +8,6 @@ pub mod dashboard;
 pub mod expiry_lots;
 pub mod notifications;
 pub mod products;
+pub mod reports;
 pub mod scanner;
 pub mod stores;

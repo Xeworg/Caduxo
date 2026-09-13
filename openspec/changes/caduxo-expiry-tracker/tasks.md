@@ -134,16 +134,16 @@
 
 ## 11. Reports and PDF
 
-- [ ] Implement report data query for in-alert-window report.
-- [ ] Implement report data query for expired report.
-- [ ] Implement report data query for next-30-days report.
-- [ ] Implement custom report filters.
-- [ ] Build report preview UI.
-- [ ] Implement Rust structured PDF export using `printpdf` or equivalent.
-- [ ] Use A4 landscape as initial default for table reports.
-- [ ] Add pagination and page numbers.
-- [ ] Add report metadata: type, filters, generated date/time.
-- [ ] Add CSV export for report data.
+- [x] Implement report data query for in-alert-window report. <!-- sdd-owner: implementation — Slice 11a -->
+- [x] Implement report data query for expired report. <!-- sdd-owner: implementation — Slice 11a -->
+- [x] Implement report data query for next-30-days report. <!-- sdd-owner: implementation — Slice 11a -->
+- [x] Implement custom report filters. <!-- sdd-owner: implementation — Slice 11a -->
+- [x] Build report preview UI. <!-- sdd-owner: implementation — Slice 11b -->
+- [x] Implement Rust structured PDF export using `printpdf` or equivalent. <!-- sdd-owner: implementation — Slice 11b -->
+- [x] Use A4 landscape as initial default for table reports. <!-- sdd-owner: implementation — Slice 11b -->
+- [x] Add pagination and page numbers. <!-- sdd-owner: implementation — Slice 11b -->
+- [x] Add report metadata: type, filters, generated date/time. <!-- sdd-owner: implementation — Slice 11a (preview DTO) and Slice 11b (PDF header) -->
+- [x] Add CSV export for report data. <!-- sdd-owner: implementation — satisfied by Slice 10's `export_report_csv` for dashboard row CSV; Slice 11a does NOT add a duplicate export to keep review bounded. A follow-up slice can wire `preview_report` output to CSV by either extending `ReportExportInput` or adding a thin `export_report_request_csv` command that delegates to the report service. -->
 
 ## 12. Backup and restore
 
