@@ -30,7 +30,8 @@ pub async fn list_due_notifications(
     state: State<'_, AppState>,
     today: Option<String>,
 ) -> Result<Vec<DueNotificationLot>, CommandError> {
-    service::list_due_notifications(&state.pool, today)
+    let pool = state.pool().await;
+    service::list_due_notifications(&pool, today)
         .await
         .map_err(AppError::into)
 }
@@ -44,7 +45,8 @@ pub async fn mark_notification_shown(
     state: State<'_, AppState>,
     input: MarkNotificationShownInput,
 ) -> Result<NotificationLogResponse, CommandError> {
-    service::mark_notification_shown(&state.pool, input)
+    let pool = state.pool().await;
+    service::mark_notification_shown(&pool, input)
         .await
         .map_err(AppError::into)
 }

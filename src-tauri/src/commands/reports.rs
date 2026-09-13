@@ -32,7 +32,8 @@ pub async fn preview_report(
     state: State<'_, AppState>,
     request: ReportRequest,
 ) -> Result<ReportData, CommandError> {
-    service::preview_report(&state.pool, request)
+    let pool = state.pool().await;
+    service::preview_report(&pool, request)
         .await
         .map_err(AppError::into)
 }
@@ -50,7 +51,8 @@ pub async fn export_report_pdf(
     file_path: String,
 ) -> Result<crate::pdf::report_pdf::RenderedReport, CommandError> {
     let path = PathBuf::from(&file_path);
-    service::export_report_pdf(&state.pool, request, path)
+    let pool = state.pool().await;
+    service::export_report_pdf(&pool, request, path)
         .await
         .map_err(AppError::into)
 }

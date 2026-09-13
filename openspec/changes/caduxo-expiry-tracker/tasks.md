@@ -147,10 +147,10 @@
 
 ## 12. Backup and restore
 
-- [ ] Implement database backup export.
-- [ ] Implement restore flow with explicit destructive confirmation.
-- [ ] Validate restored database before replacing active data where practical.
-- [ ] Document backup/restore behavior in the app.
+- [x] Implement database backup export. <!-- sdd-owner: implementation -->
+- [x] Implement restore flow with explicit destructive confirmation. <!-- sdd-owner: implementation -->
+- [x] Validate restored database before replacing active data where practical. <!-- sdd-owner: implementation -->
+- [x] Document backup/restore behavior in the app. <!-- sdd-owner: implementation -->
 
 ## 13. Packaging validation
 
@@ -171,7 +171,7 @@
 - [x] Add regression tests for partial lot resolution. <!-- sdd-owner: implementation -->
 - [ ] Add regression tests for CSV mapping/import validation.
 - [ ] Add regression tests for report generation/export behavior.
-- [ ] Add regression tests for backup/restore validation.
+- [x] Add regression tests for backup/restore validation. <!-- sdd-owner: implementation -->
 - [ ] Verify logs are created in the app-local log directory.
 - [ ] Verify logs avoid sensitive product, SKU, barcode, imported-row, and notes content by default.
 

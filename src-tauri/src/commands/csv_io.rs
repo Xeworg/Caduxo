@@ -34,7 +34,8 @@ pub async fn preview_product_csv(
     state: State<'_, AppState>,
     input: CsvPreviewInput,
 ) -> Result<CsvPreviewResponse, CommandError> {
-    service::preview_product_csv(&state.pool, input)
+    let pool = state.pool().await;
+    service::preview_product_csv(&pool, input)
         .await
         .map_err(AppError::into)
 }
@@ -48,7 +49,8 @@ pub async fn import_product_csv(
     state: State<'_, AppState>,
     input: CsvImportInput,
 ) -> Result<CsvImportResult, CommandError> {
-    service::import_product_csv(&state.pool, input)
+    let pool = state.pool().await;
+    service::import_product_csv(&pool, input)
         .await
         .map_err(AppError::into)
 }
@@ -62,7 +64,8 @@ pub async fn export_products_csv(
     path: String,
 ) -> Result<CsvExportResult, CommandError> {
     let p = PathBuf::from(&path);
-    service::export_products_csv(&state.pool, &p)
+    let pool = state.pool().await;
+    service::export_products_csv(&pool, &p)
         .await
         .map_err(AppError::into)
 }
@@ -75,7 +78,8 @@ pub async fn export_report_csv(
     state: State<'_, AppState>,
     input: ReportExportInput,
 ) -> Result<CsvExportResult, CommandError> {
-    service::export_report_csv(&state.pool, input)
+    let pool = state.pool().await;
+    service::export_report_csv(&pool, input)
         .await
         .map_err(AppError::into)
 }

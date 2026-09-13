@@ -1698,6 +1698,157 @@ cd /home/xeworg/Proyectos/Caduxo && npm run build 2>&1 | tail -2
 #   (pre-existing Vite warning about expiry_lots.ts dynamic+static import is unrelated to this slice)
 ```
 
-### Slice 11b next recommended action
+    ### Slice 11b next recommended action
 
-**Slice 12 — Backup and restore** (Section 12 in `tasks.md`): Implement database backup export, restore flow with explicit destructive confirmation, and validate restored database before replacing active data. Slice 12 has no dependency on Slice 11b.
+    **Slice 12 — Backup and restore** (Section 12 in `tasks.md`): Implement database backup export, restore flow with explicit destructive confirmation, and validate restored database before replacing active data. Slice 12 has no dependency on Slice 11b.
+
+    ---
+
+    ## Slice 12 — Backup and restore
+
+    ### Status: COMPLETE ✅
+
+    Slice 12 delivers the full backup and restore pipeline: Rust service with SQLite `VACUUM INTO` backup export, bounded validation (header check, schema verification, integrity check), destructive restore with confirmation gate, and a Svelte UI page with export, validation, and restore dialogs. Logging avoids all product/SKU/barcode/notes content.
+
+    ### Slice 12 completed tasks (Section 12)
+
+    | Task | Status |
+    | ---- | ------ |
+    | Implement database backup export | ✅ |
+    | Implement restore flow with explicit destructive confirmation | ✅ |
+    | Validate restored database before replacing active data where practical | ✅ |
+    | Document backup/restore behavior in the app | ✅ |
+
+    ### Slice 12 completed tasks (Section 14)
+
+    | Task | Status |
+    | ---- | ------ |
+    | Add regression tests for backup/restore validation | ✅ |
+
+    ### Slice 12 NOT implemented (deferred)
+
+    - Packaging validation (Section 13) — out of scope
+    - Frontend test harness — deferred per Slice 1
+    - No other sections modified
+
+    ### Slice 12 implementation notes
+
+    **State architecture change — pool replacement on restore**:
+
+    `AppState.pool` was changed from `Arc<DbPool>` to `Arc<Mutex<DbPool>>` so the pool can be replaced atomically after a restore. Every command module was updated to use `state.pool().await` instead of `&state.pool` to acquire a locked reference before calling services. The `AppState` constructor and `async_init` in `lib.rs` were updated to reflect this change. The `pool_path()` helper returns the database file path for backup/restore commands.
+
+    **Backend architecture** (follows existing patterns: commands → services → file I/O):
+
+    - `dto/backup_restore.rs` — `BackupResult`, `RestoreInput`, `RestoreValidation`, `RestoreResult` DTOs.
+    - `services/backup_restore.rs` — Three public functions:
+      - `export_backup`: uses SQLite `VACUUM INTO` to create a consistent snapshot at a user-chosen path, including committed WAL contents that a raw main-file copy could miss.
+      - `validate_backup`: opens the backup file read-only, runs header check, schema table verification, bounded `PRAGMA integrity_check(100)`, and version compatibility. Returns a `RestoreValidation` with per-check descriptions.
+      - `restore_backup`: validates → closes pool → renames current DB to `.db.bak.old` → removes stale SQLite sidecars (`.db-wal` / `.db-shm`) → copies backup → opens new pool → replaces `AppState.pool` via `Arc<Mutex<DbPool>>`.
+    - `commands/backup_restore.rs` — Thin Tauri adapters: `export_backup`, `validate_backup`, `restore_backup`.
+    - `lib.rs` — Registered all three commands; added `DB_FILE_NAME = "caduxo.db"` constant and passes `db_path` to `AppState::new`.
+
+    **Validation design**:
+
+    The validation is bounded to avoid blocking on very large backup files:
+    1. Header check: reads 16 bytes from the file and compares to SQLite magic bytes `"SQLite format 3\0"`.
+    2. Schema check: opens read-only, checks all 8 required tables exist via `sqlite_master` query.
+    3. Integrity check: `PRAGMA integrity_check(100)` — limits to first 100 pages.
+    4. Version check: `SELECT MAX(version) FROM _sqlx_migrations` must return ≥ 1.
+
+    **Restore safety**:
+    - User must set `confirmed = true` in `RestoreInput` (explicit destructive gate).
+    - Current database is renamed to `.db.bak.old` before replacement (not deleted).
+    - After restore, the frontend reloads the page to reflect the new data.
+
+    **Cargo dependency**: Added `rusqlite = "0.32"` for the `read_schema_version_from_path` helper (blocking read of a file path without needing an async pool).
+
+    **Frontend architecture**:
+
+    - `src/lib/backup_restore.ts` — TypeScript wrappers: `exportBackupWithDialog`, `validateBackupWithDialog`, `restoreBackup`.
+    - `src/components/BackupRestorePage.svelte` — Three-section page: Export, Restore (with validation summary + confirmation dialog), and Help. Uses the native file picker (`save`/`open` from `@tauri-apps/plugin-dialog`). After a successful restore, calls `window.location.reload()` so the frontend reflects the restored data.
+    - `src/App.svelte` — Added `backup` tab to navigation and routed to `BackupRestorePage`.
+
+    **Logging discipline**:
+
+    No product data, SKU, barcode, description, or notes are logged. Only structural events are logged: backup export path, bytes, schema version; restore pool close/reopen; validation checks. Errors surface via `CommandError` with a sanitized user message.
+
+    ### Slice 12 new tests (12 new tests)
+
+    | Test | Covers |
+    | ---- | ------ |
+    | `export_backup_writes_file_and_returns_result` | Copy created, bytes > 0, correct schema version |
+    | `validate_backup_accepts_valid_database` | Valid SQLite + all tables + compatible version → `can_restore = true` |
+    | `validate_backup_rejects_non_sqlite_file` | Invalid header → `is_valid_sqlite = false`, `can_restore = false` |
+    | `validate_backup_rejects_missing_file` | File not found → `can_restore = false` |
+    | `restore_requires_confirmation` | `confirmed = false` → `BusinessRule` error |
+    | `validate_backup_rejects_missing_required_tables` | Valid SQLite but missing tables → `can_restore = false` |
+    | `read_schema_version_from_path_returns_version` | Version 2 from fixture DB |
+    | `read_schema_version_from_path_returns_zero_for_empty_db` | Version 0 when `_sqlx_migrations` absent |
+    | `check_sqlite_header_accepts_valid_magic_bytes` | SQLite header correctly detected |
+    | `check_sqlite_header_rejects_invalid_magic_bytes` | Non-SQLite content rejected |
+    | `export_backup_includes_committed_wal_rows` | Backup export uses a consistent SQLite snapshot instead of missing committed WAL rows |
+    | `remove_sqlite_sidecars_removes_wal_and_shm_files` | Restore cleanup removes stale WAL/SHM sidecars before opening the restored DB |
+
+    ### Slice 12 files changed
+
+    | File | Change |
+    | -----|--------|
+    | `src-tauri/src/dto/backup_restore.rs` | New: DTOs for backup/restore |
+    | `src-tauri/src/dto/mod.rs` | `pub mod backup_restore;` |
+    | `src-tauri/src/services/backup_restore.rs` | New: service + 12 tests |
+    | `src-tauri/src/services/mod.rs` | `pub mod backup_restore;` |
+    | `src-tauri/src/commands/backup_restore.rs` | New: thin Tauri commands |
+    | `src-tauri/src/commands/mod.rs` | `pub mod backup_restore;` |
+    | `src-tauri/src/error.rs` | Added `InfrastructureError::BackupValidation` and `BackupIo` variants |
+    | `src-tauri/src/state.rs` | `pool: Arc<Mutex<DbPool>>` + `db_path: PathBuf` + `pool()` helper + `pool_path()` |
+    | `src-tauri/src/lib.rs` | `DB_FILE_NAME` constant; pass `db_path` to `AppState::new`; registered 3 backup commands |
+    | `src-tauri/src/commands/stores.rs` | Updated all `&state.pool` → `state.pool().await` |
+    | `src-tauri/src/commands/products.rs` | Updated all `&state.pool` → `state.pool().await` |
+    | `src-tauri/src/commands/expiry_lots.rs` | Updated all `&state.pool` → `state.pool().await` |
+    | `src-tauri/src/commands/dashboard.rs` | Updated `&state.pool` → `state.pool().await` |
+    | `src-tauri/src/commands/notifications.rs` | Updated all `&state.pool` → `state.pool().await` |
+    | `src-tauri/src/commands/csv_io.rs` | Updated all `&state.pool` → `state.pool().await` |
+    | `src-tauri/src/commands/reports.rs` | Updated all `&state.pool` → `state.pool().await` |
+    | `src-tauri/Cargo.toml` | Added `rusqlite = "0.32"` |
+    | `src/lib/backup_restore.ts` | New: TypeScript wrappers + DTOs |
+    | `src/components/BackupRestorePage.svelte` | New: Backup/restore UI page |
+    | `src/App.svelte` | Added `backup` nav tab + routing |
+    | `openspec/.../tasks.md` | Checked 4 Section 12 tasks + 1 Section 14 task |
+    | `openspec/.../apply-progress.md` | Appended this Slice 12 section |
+
+    ### Slice 12 risks and notes
+
+    - **Pool replacement**: All commands now use `state.pool().await` to acquire the Mutex guard. This introduces a thin lock acquisition on every command. The lock is non-contended in normal operation (single-threaded Tauri event loop). On restore, the pool is briefly replaced — concurrent commands during restore may see the old or new pool depending on timing. This is acceptable for MVP.
+    - **`PRAGMA integrity_check(100)` limit**: Large databases (> 100 pages) may have errors beyond the first 100 pages. The limit is a pragmatic trade-off to avoid blocking the validation for long periods. A full check can be added in a future iteration if needed.
+    - **No WAL truncate on restore**: After restore, the restored backup may use WAL mode if the original backup was in WAL mode. `PRAGMA journal_mode` settings are preserved from the backup. This is intentional — WAL mode on the active database is fine for normal operation.
+    - **No migration run on restore**: The restore copies a complete database file including its migration state. No migrations are re-run because the backup already contains the full schema. This is correct — restoring a backup should give an identical copy of the database at backup time.
+    - **`rusqlite` dependency**: Added for blocking file reads in `read_schema_version_from_path`. This avoids the overhead of opening a full async sqlx pool for a simple read-only query. The dependency is tiny (~200 KB).
+
+    ### Slice 12 verification evidence
+
+    ```bash
+    # Rust check (no new errors)
+    cd src-tauri && cargo check --lib 2>&1 | tail -2
+    # → finished with 20 pre-existing scaffold warnings; no errors ✅
+
+    # Clippy (no errors)
+    cd src-tauri && cargo clippy --lib --tests 2>&1 | grep "^error"
+    # → (no output = clean) ✅
+
+    # Rust tests (236 total, 12 new backup/restore tests)
+    cd src-tauri && cargo test --lib 2>&1 | tail -3
+    # → "ok. 236 passed; 0 failed; 0 ignored" ✅
+    #   Backup/restore service tests include WAL snapshot export and stale sidecar cleanup coverage.
+
+    # TypeScript check
+    npx tsc --noEmit 2>&1
+    # → (no output = clean) ✅
+
+    # Frontend build
+    npm run build 2>&1 | tail -2
+    # → "✓ built in 837ms" ✅
+    ```
+
+    ### Slice 12 next recommended action
+
+    **Slice 13 — Packaging validation**: Validate development and production builds on Linux, check Tauri/WebKitGTK assumptions, and document user-level install options. This completes the MVP delivery.

@@ -12,10 +12,14 @@ mod state;
 
 use std::sync::Arc;
 use tauri::Manager;
+use tokio::sync::Mutex;
 
 use crate::db::{open_pool, run_migrations};
 use crate::logging::resolve_log_dir;
 use crate::state::AppState;
+
+/// Database file name within the app data directory.
+const DB_FILE_NAME: &str = "caduxo.db";
 
 /// Runs the Tauri application.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -80,6 +84,10 @@ pub fn run() {
             // Slice 11b — preview UI + PDF export)
             commands::reports::preview_report,
             commands::reports::export_report_pdf,
+            // Backup and restore (Slice 12)
+            commands::backup_restore::export_backup,
+            commands::backup_restore::validate_backup,
+            commands::backup_restore::restore_backup,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -103,7 +111,9 @@ async fn async_init(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> 
     tracing::info!(data_dir = %app_data.display(), "App data directory resolved");
 
     // 3. Initialize the database pool.
-    let pool = open_pool(&app_data).await?;
+    let db_path = app_data.join(DB_FILE_NAME);
+    tracing::info!(db_path = %db_path.display(), "Opening database");
+    let pool = open_pool(&db_path).await?;
     tracing::info!("Database pool initialized");
 
     // 4. Run migrations.
@@ -111,7 +121,8 @@ async fn async_init(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> 
     tracing::info!("Migrations applied");
 
     // 5. Register application state with Tauri.
-    app.manage(AppState::new(Arc::new(pool)));
+    // The pool is wrapped in Arc<Mutex<>> so it can be replaced atomically on restore.
+    app.manage(AppState::new(Arc::new(Mutex::new(pool)), db_path));
     tracing::info!("Caduxo application started successfully");
     Ok(())
 }

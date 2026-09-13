@@ -42,6 +42,12 @@ pub enum InfrastructureError {
 
     #[error("failed to resolve app data directory")]
     AppDataPath,
+
+    #[error("backup validation failed: {0}")]
+    BackupValidation(String),
+
+    #[error("backup/restore I/O error: {0}")]
+    BackupIo(String),
 }
 
 /// All internal errors bubble up through this enum.

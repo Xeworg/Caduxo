@@ -22,7 +22,8 @@ pub async fn list_dashboard_lots(
     state: State<'_, AppState>,
     filters: DashboardFilters,
 ) -> Result<DashboardResponse, CommandError> {
-    service::get_dashboard(&state.pool, filters)
+    let pool = state.pool().await;
+    service::get_dashboard(&pool, filters)
         .await
         .map_err(AppError::into)
 }

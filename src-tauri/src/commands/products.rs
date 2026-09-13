@@ -22,7 +22,8 @@ use crate::state::AppState;
 pub async fn list_categories(
     state: State<'_, AppState>,
 ) -> Result<Vec<CategoryResponse>, CommandError> {
-    service::list_categories(&state.pool)
+    let pool = state.pool().await;
+    service::list_categories(&pool)
         .await
         .map_err(AppError::into)
 }
@@ -33,7 +34,8 @@ pub async fn create_category(
     state: State<'_, AppState>,
     input: CategoryCreate,
 ) -> Result<CategoryResponse, CommandError> {
-    service::create_category(&state.pool, input)
+    let pool = state.pool().await;
+    service::create_category(&pool, input)
         .await
         .map_err(AppError::into)
 }
@@ -44,7 +46,8 @@ pub async fn update_category(
     state: State<'_, AppState>,
     input: CategoryUpdate,
 ) -> Result<CategoryResponse, CommandError> {
-    service::update_category(&state.pool, input)
+    let pool = state.pool().await;
+    service::update_category(&pool, input)
         .await
         .map_err(AppError::into)
 }
@@ -59,7 +62,8 @@ pub async fn create_product(
     state: State<'_, AppState>,
     input: ProductCreate,
 ) -> Result<ProductResponse, CommandError> {
-    service::create_product(&state.pool, input)
+    let pool = state.pool().await;
+    service::create_product(&pool, input)
         .await
         .map_err(AppError::into)
 }
@@ -70,7 +74,8 @@ pub async fn update_product(
     state: State<'_, AppState>,
     input: ProductUpdate,
 ) -> Result<ProductResponse, CommandError> {
-    service::update_product(&state.pool, input)
+    let pool = state.pool().await;
+    service::update_product(&pool, input)
         .await
         .map_err(AppError::into)
 }
@@ -78,7 +83,8 @@ pub async fn update_product(
 /// Soft-archives a product.
 #[tauri::command]
 pub async fn archive_product(state: State<'_, AppState>, id: String) -> Result<(), CommandError> {
-    service::archive_product(&state.pool, id)
+    let pool = state.pool().await;
+    service::archive_product(&pool, id)
         .await
         .map_err(AppError::into)
 }
@@ -89,7 +95,8 @@ pub async fn get_product(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<ProductDetailResponse, CommandError> {
-    service::get_product(&state.pool, id)
+    let pool = state.pool().await;
+    service::get_product(&pool, id)
         .await
         .map_err(AppError::into)
 }
@@ -100,7 +107,8 @@ pub async fn search_products(
     state: State<'_, AppState>,
     query: ProductSearchQuery,
 ) -> Result<Vec<ProductSearchResult>, CommandError> {
-    service::search_products(&state.pool, query)
+    let pool = state.pool().await;
+    service::search_products(&pool, query)
         .await
         .map_err(AppError::into)
 }
@@ -116,7 +124,8 @@ pub async fn find_product_by_scan(
     state: State<'_, AppState>,
     scanned_value: String,
 ) -> Result<ScanSearchResult, CommandError> {
-    service::find_product_by_scan(&state.pool, &scanned_value)
+    let pool = state.pool().await;
+    service::find_product_by_scan(&pool, &scanned_value)
         .await
         .map_err(AppError::into)
 }
@@ -137,7 +146,8 @@ pub async fn add_product_barcode(
     state: State<'_, AppState>,
     input: ProductBarcodeCreate,
 ) -> Result<ProductBarcodeResponse, CommandError> {
-    service::add_barcode(&state.pool, input)
+    let pool = state.pool().await;
+    service::add_barcode(&pool, input)
         .await
         .map_err(AppError::into)
 }
@@ -148,7 +158,8 @@ pub async fn list_product_barcodes(
     state: State<'_, AppState>,
     product_id: String,
 ) -> Result<Vec<ProductBarcodeResponse>, CommandError> {
-    service::list_barcodes(&state.pool, product_id)
+    let pool = state.pool().await;
+    service::list_barcodes(&pool, product_id)
         .await
         .map_err(AppError::into)
 }
@@ -159,7 +170,8 @@ pub async fn remove_product_barcode(
     state: State<'_, AppState>,
     input: ProductBarcodeRemoveInput,
 ) -> Result<(), CommandError> {
-    service::remove_barcode(&state.pool, input)
+    let pool = state.pool().await;
+    service::remove_barcode(&pool, input)
         .await
         .map_err(AppError::into)
 }

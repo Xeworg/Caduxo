@@ -14,7 +14,8 @@ use crate::state::AppState;
 /// Returns true if this is a first-run (no active stores exist).
 #[tauri::command]
 pub async fn is_first_run(state: State<'_, AppState>) -> Result<bool, CommandError> {
-    store_service::is_first_run(&state.pool)
+    let pool = state.pool().await;
+    store_service::is_first_run(&pool)
         .await
         .map_err(AppError::into)
 }
@@ -22,7 +23,8 @@ pub async fn is_first_run(state: State<'_, AppState>) -> Result<bool, CommandErr
 /// Returns all active stores.
 #[tauri::command]
 pub async fn list_stores(state: State<'_, AppState>) -> Result<Vec<StoreResponse>, CommandError> {
-    store_service::list_stores(&state.pool)
+    let pool = state.pool().await;
+    store_service::list_stores(&pool)
         .await
         .map_err(AppError::into)
 }
@@ -33,7 +35,8 @@ pub async fn create_store(
     state: State<'_, AppState>,
     input: StoreCreate,
 ) -> Result<StoreResponse, CommandError> {
-    store_service::create_store(&state.pool, input)
+    let pool = state.pool().await;
+    store_service::create_store(&pool, input)
         .await
         .map_err(AppError::into)
 }
@@ -44,7 +47,8 @@ pub async fn update_store(
     state: State<'_, AppState>,
     input: StoreUpdate,
 ) -> Result<StoreResponse, CommandError> {
-    store_service::update_store(&state.pool, input)
+    let pool = state.pool().await;
+    store_service::update_store(&pool, input)
         .await
         .map_err(AppError::into)
 }
@@ -55,7 +59,8 @@ pub async fn list_store_locations(
     state: State<'_, AppState>,
     store_id: String,
 ) -> Result<Vec<StoreLocationResponse>, CommandError> {
-    store_service::list_locations(&state.pool, &store_id)
+    let pool = state.pool().await;
+    store_service::list_locations(&pool, &store_id)
         .await
         .map_err(AppError::into)
 }
@@ -66,7 +71,8 @@ pub async fn create_store_location(
     state: State<'_, AppState>,
     input: StoreLocationCreate,
 ) -> Result<StoreLocationResponse, CommandError> {
-    store_service::create_location(&state.pool, input)
+    let pool = state.pool().await;
+    store_service::create_location(&pool, input)
         .await
         .map_err(AppError::into)
 }
@@ -77,7 +83,8 @@ pub async fn update_store_location(
     state: State<'_, AppState>,
     input: StoreLocationUpdate,
 ) -> Result<StoreLocationResponse, CommandError> {
-    store_service::update_location(&state.pool, input)
+    let pool = state.pool().await;
+    store_service::update_location(&pool, input)
         .await
         .map_err(AppError::into)
 }
@@ -85,7 +92,8 @@ pub async fn update_store_location(
 /// Returns the current application settings.
 #[tauri::command]
 pub async fn get_settings(state: State<'_, AppState>) -> Result<SettingsResponse, CommandError> {
-    settings_service::get_settings(&state.pool)
+    let pool = state.pool().await;
+    settings_service::get_settings(&pool)
         .await
         .map_err(AppError::into)
 }
@@ -96,7 +104,8 @@ pub async fn update_settings(
     state: State<'_, AppState>,
     input: SettingsUpdate,
 ) -> Result<SettingsResponse, CommandError> {
-    settings_service::update_settings(&state.pool, input)
+    let pool = state.pool().await;
+    settings_service::update_settings(&pool, input)
         .await
         .map_err(AppError::into)
 }
@@ -104,7 +113,8 @@ pub async fn update_settings(
 /// Returns true if at least one active store exists (used as a precondition check).
 #[tauri::command]
 pub async fn has_store(state: State<'_, AppState>) -> Result<bool, CommandError> {
-    store_service::has_store(&state.pool)
+    let pool = state.pool().await;
+    store_service::has_store(&pool)
         .await
         .map_err(AppError::into)
 }
