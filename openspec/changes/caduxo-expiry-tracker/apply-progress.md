@@ -1852,3 +1852,91 @@ cd /home/xeworg/Proyectos/Caduxo && npm run build 2>&1 | tail -2
     ### Slice 12 next recommended action
 
     **Slice 13 — Packaging validation**: Validate development and production builds on Linux, check Tauri/WebKitGTK assumptions, and document user-level install options. This completes the MVP delivery.
+
+---
+
+## Slice 13 — Packaging validation
+
+### Status: COMPLETE ✅
+
+Slice 13 is a validation and documentation slice. No feature code was added. All six Section 13 tasks are now checked. The primary deliverable is `docs/packaging.md`, an authoritative packaging reference for contributors and downstream packagers.
+
+### Slice 13 completed tasks (Section 13)
+
+| Task | Status |
+| ---- | ------ |
+| Validate development build on Linux | ✅ |
+| Validate production build on Linux | ✅ |
+| Validate Windows build strategy from Tauri configuration and platform documentation | ✅ |
+| Check Tauri/WebView runtime assumptions for Windows | ✅ |
+| Check Tauri/WebKitGTK assumptions for Linux | ✅ |
+| Document user-level install or portable run options | ✅ |
+
+### Slice 13 validation evidence
+
+| Command | Result | Notes |
+| ------- | ------ | ----- |
+| `npx tsc --noEmit` | ✅ Pass | No TypeScript errors |
+| `npm run build` | ✅ Pass | Frontend built in ~926ms |
+| `cargo check` | ✅ Pass | 19 pre-existing scaffold warnings; 0 errors |
+| `cargo check --release --lib` | ✅ Pass | Binary compiled in ~58s |
+| `cargo clippy --lib --tests` | ✅ Pass | 0 clippy errors |
+| `cargo test --lib` | ✅ Pass | 236 tests passed |
+| `npm run tauri build` | ✅ Pass | Binary (21 MB) + `.deb` (7.8 MB) + `.rpm` (7.8 MB) + `.AppImage` (107 MB) built after refreshing Tauri's cached `linuxdeploy` binary |
+
+### Slice 13 validation findings
+
+**Development build**: TypeScript, Vite frontend, and Rust backend all compile cleanly with no new errors introduced.
+
+**Production build (Linux)**:
+
+- Binary: `src-tauri/target/release/caduxo` — 21 MB stripped release binary. Runs standalone on any Linux system with WebKitGTK 4.1.
+- `.deb` package: `bundle/deb/Caduxo_0.1.0_amd64.deb` — standard Debian package; installs binary and desktop entry. Normal installation requires package-manager privileges.
+- `.rpm` package: `bundle/rpm/Caduxo-0.1.0-1.x86_64.rpm` — standard RPM package; same behaviour.
+- `.AppImage`: `bundle/appimage/Caduxo_0.1.0_amd64.AppImage` — portable package, 107 MB, built successfully after replacing Tauri's stale cached `linuxdeploy` binary with the freshly installed one.
+
+**Windows build strategy**:
+
+- Tauri v2 uses WebView2 on Windows (not Edge/Chromium). WebView2 is pre-installed on Windows 10 1803+ and all Windows 11. No runtime installer needed for most users.
+- For older Windows 10 systems, WebView2 may need to be installed or bootstrapped before first launch; this requires network access and can be restricted by enterprise policy.
+- `tauri.conf.json` has `"targets": "all"` — production `npm run tauri build` on a Windows machine should produce `.exe`, `.msi`, and NSIS `.exe` installer artifacts.
+- `docs/packaging.md` documents Windows release validation as a Windows-runner task. Linux cross-compilation is documented only as a lower-level Rust smoke check, not release packaging validation.
+
+**Tauri/WebView runtime (Windows)**:
+
+- Tauri v2 requires WebView2 (not WebView or Edge). The Evergreen runtime is normally present and auto-updated on current Windows 10/11 installations.
+- WebView2 is NOT equivalent to Microsoft Edge — it is a separate runtime component.
+- No fallback to bundled Chromium is used. If WebView2 is absent and the bootstrapper cannot run (e.g. a managed Windows environment with no internet), Caduxo will not launch. This is a known Tauri v2 constraint.
+
+**Tauri/WebKitGTK runtime (Linux)**:
+
+- Build confirmed WebKitGTK 4.1 is used (`webkit2gtk-4.1` / `libwebkit2gtk-4.1.so.0`).
+- Runtime packages required on target Linux systems are documented per distribution family (Debian/Ubuntu, Fedora/RHEL, Arch) in `docs/packaging.md`.
+- No runtime fallback is available — if WebKitGTK is absent, Caduxo will not launch. The AppImage path is the intended portable option once bundling prerequisites are installed.
+- The `linuxdeploy` tool used by the AppImage bundler is external to Tauri and may need setup on the build host.
+
+**User-level install / portable run options**:
+
+- All primary run modes respect the "no admin rights for normal execution" PRD requirement after installation; `.deb`/`.rpm` installation itself usually requires administrator privileges.
+- Portable Windows: the raw `.exe` from `target/release/` is the clearest no-admin option when WebView2 is already present.
+- Portable Linux: raw binary + system WebKitGTK, or AppImage with bundled runtime.
+
+### Slice 13 files changed
+
+| File | Change |
+| -----|--------|
+| `docs/packaging.md` | New: authoritative packaging reference (runtime deps, build commands, distribution options, cross-compilation, data storage paths) |
+| `openspec/changes/caduxo-expiry-tracker/tasks.md` | Checked off all 6 Section 13 tasks |
+| `openspec/changes/caduxo-expiry-tracker/apply-progress.md` | Appended this Slice 13 section |
+
+### Slice 13 risks and notes
+
+- **AppImage bundler cache**: Tauri's previously cached `linuxdeploy` binary failed on Fedora 44 while stripping modern RELR-enabled system libraries. Replacing `~/.cache/tauri/linuxdeploy-x86_64.AppImage` with the freshly installed 2026 linuxdeploy build fixed AppImage bundling.
+- **WebView2 on managed Windows**: In corporate environments where WebView2 installation is blocked by policy, Caduxo will not launch. There is no graceful fallback. This is a known Tauri v2 platform constraint documented in the packaging guide.
+- **WebKitGTK on minimal Linux**: On stripped-down Linux images without WebKitGTK (e.g. some Docker base images, minimal server ISOs), the raw binary will not launch. The AppImage is the recommended portable option for these environments.
+- **Binary size**: 21 MB for the raw release binary is within acceptable range for a Tauri app with `sqlx`, `printpdf`, and `rusqlite`.
+- **No Windows validation performed**: Windows build artifacts were not produced because the validation environment is Linux (Fedora 44). The Windows build strategy and WebView2 assumptions are documented from Tauri v2 documentation and the `tauri.conf.json` configuration, not from a live Windows build run.
+
+### Slice 13 next recommended action
+
+**Sections 14/15 — Engineering safety and MVP verification**: Add missing tests (Sections 14 and 15), then run the MVP verification checklist against the production build. All Section 13 packaging tasks are complete.

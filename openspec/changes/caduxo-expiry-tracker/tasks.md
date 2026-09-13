@@ -154,12 +154,12 @@
 
 ## 13. Packaging validation
 
-- [ ] Validate development build on Linux.
-- [ ] Validate production build on Linux.
-- [ ] Validate Windows build strategy.
-- [ ] Check Tauri/WebView runtime assumptions for Windows.
-- [ ] Check Tauri/WebKitGTK assumptions for Linux.
-- [ ] Document user-level install or portable run options.
+- [x] Validate development build on Linux. <!-- sdd-owner: implementation -->
+- [x] Validate production build on Linux. <!-- sdd-owner: implementation -->
+- [x] Validate Windows build strategy from Tauri configuration and platform documentation. <!-- sdd-owner: implementation -->
+- [x] Check Tauri/WebView runtime assumptions for Windows. <!-- sdd-owner: implementation -->
+- [x] Check Tauri/WebKitGTK assumptions for Linux. <!-- sdd-owner: implementation -->
+- [x] Document user-level install or portable run options. <!-- sdd-owner: implementation -->
 
 ## 14. Engineering safety
 
