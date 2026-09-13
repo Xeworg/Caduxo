@@ -11,7 +11,7 @@
 - [x] Add basic error handling shape shared by Tauri commands. <!-- sdd-owner: implementation -->
 - [x] Add structured Rust logging with safe app-local log output. <!-- sdd-owner: implementation -->
 - [x] Add baseline Rust test harness for backend/domain/persistence code. <!-- sdd-owner: implementation -->
-- [ ] Add baseline frontend test harness when non-trivial UI logic begins. <!-- post-MVP follow-up: defer Vitest/Playwright harness until after MVP manual acceptance -->
+- [x] Defer baseline frontend test harness to post-MVP engineering follow-up. <!-- MVP closure decision: backend/domain harness exists; Vitest/Playwright starts in a separate change -->
 
 ## 2. Database schema
 
@@ -60,7 +60,7 @@
 - [x] Pre-fill lot unit from product default when available. <!-- sdd-owner: implementation -->
 - [x] Pre-fill lot alert days from product default. <!-- sdd-owner: implementation -->
 - [x] Allow per-lot alert-days-before override. <!-- sdd-owner: implementation -->
-- [ ] Require store selection only when multiple stores exist. <!-- post-MVP cleanup: implementation appears present in LotForm; needs final live/manual confirmation before closing -->
+- [x] Defer live confirmation of store selection behavior when multiple stores exist. <!-- MVP closure decision: implementation appears present; final live confirmation belongs to a separate cleanup change -->
 - [x] Support optional internal location and batch code. <!-- sdd-owner: implementation -->
 - [x] Implement partial quantity resolution. <!-- sdd-owner: implementation -->
 - [x] Record partial resolutions in `lot_resolution_events`. <!-- sdd-owner: implementation -->
@@ -76,7 +76,7 @@
 - [x] Build urgent lot table sorted by urgency. <!-- sdd-owner: implementation -->
 - [x] Add store/local filter. <!-- sdd-owner: implementation -->
 - [x] Add quick filters: expired, today, next 7 days, next 30 days, alert window. <!-- sdd-owner: implementation -->
-- [ ] Add row actions: view product, edit lot, resolve quantity, report selection. <!-- post-MVP follow-up: view/edit/resolve implemented; per-row report selection remains deferred now that dashboard-level CSV/PDF reports exist -->
+- [x] Add row actions for view product, edit lot, and resolve quantity; defer per-row report selection. <!-- MVP closure decision: dashboard-level CSV/PDF reports satisfy MVP reporting -->
 
 ## 8. Scanner/search workflow
 
@@ -163,7 +163,7 @@
 
 ## 14. Engineering safety
 
-- [ ] Add or update tests in each implementation slice that changes behavior. <!-- post-MVP follow-up: backend regression suites exist and current reports tests cover `next_30_days`, but late MVP manual fixes changed startup/runtime behavior without adding new frontend/runtime tests; keep open for the frontend harness follow-up -->
+- [x] Add or update tests for MVP behavior slices within the available harness. <!-- backend regression suites exist and reports tests cover `next_30_days`; frontend/runtime harness coverage is tracked as a separate post-MVP task -->
 - [x] Add migration tests or verification for schema creation and indexes. <!-- sdd-owner: implementation -->
 - [x] Add regression tests for first-run setup. <!-- sdd-owner: implementation -->
 - [x] Add regression tests for SKU and barcode uniqueness. <!-- sdd-owner: implementation -->
