@@ -70,19 +70,22 @@ fn classify_to_string_with_alert(
     }
 }
 
-/// Returns `true` when the row's urgency matches the given preset filter.
-/// `All` preset returns `true` for all rows.
-fn matches_preset(urgency: &str, preset: Option<DashboardPreset>) -> bool {
+/// Filters an enriched row by the given preset using per-row day counts.
+/// This function MUST NOT read `row.urgency` — it filters purely by
+/// `days_remaining` and `alert_days_before` so that changing the urgency
+/// classifier does not change which rows each filter button returns.
+fn matches_preset(row: &DashboardLotRow, preset: Option<DashboardPreset>) -> bool {
     match preset {
         None | Some(DashboardPreset::All) => true,
-        Some(DashboardPreset::Expired) => urgency == "expired",
-        Some(DashboardPreset::Today) => urgency == "today",
-        Some(DashboardPreset::AlertWindow) => urgency == "alert_window",
-        Some(DashboardPreset::Next7Days) => {
-            // "next 7 days" includes today and Next30Days rows where days_remaining <= 7.
-            urgency == "today" || urgency == "next_30_days"
+        Some(DashboardPreset::Expired) => row.days_remaining < 0,
+        Some(DashboardPreset::Today) => row.days_remaining == 0,
+        Some(DashboardPreset::AlertWindow) => {
+            row.days_remaining >= 0
+                && row.alert_days_before > 0
+                && row.days_remaining <= row.alert_days_before as i64
         }
-        Some(DashboardPreset::Next30Days) => urgency == "next_30_days",
+        Some(DashboardPreset::Next7Days) => row.days_remaining >= 0 && row.days_remaining <= 7,
+        Some(DashboardPreset::Next30Days) => row.days_remaining >= 0 && row.days_remaining <= 30,
     }
 }
 
@@ -129,7 +132,7 @@ pub async fn get_dashboard(
 
     let filtered: Vec<DashboardLotRow> = enriched
         .into_iter()
-        .filter(|row| matches_preset(&row.urgency, preset))
+        .filter(|row| matches_preset(row, preset))
         .collect();
 
     // 5. Sort: most urgent first, then by expiry_date ASC within group.
@@ -199,6 +202,29 @@ mod tests {
         }
     }
 
+    /// Builds a row for matcher tests. urgency is intentionally empty so the
+    /// matcher cannot accidentally read it — it must use days_remaining.
+    fn make_predicate_row(days_remaining: i64, alert_days_before: i32) -> DashboardLotRow {
+        DashboardLotRow {
+            lot_id: "lot-test".into(),
+            product_id: "prod-test".into(),
+            sku: "TEST".into(),
+            description: "Test".into(),
+            store_id: "store-1".into(),
+            store_name: "Store One".into(),
+            location_id: None,
+            location_name: None,
+            quantity: 1.0,
+            unit: "pcs".into(),
+            expiry_date: "2099-01-01".into(), // irrelevant — matcher ignores it
+            alert_days_before,
+            batch_code: None,
+            status: "active".into(),
+            urgency: String::new(), // matcher MUST NOT read this
+            days_remaining,
+        }
+    }
+
     // ─── enrich_row ────────────────────────────────────────────────────────────
 
     #[test]
@@ -247,60 +273,183 @@ mod tests {
 
     #[test]
     fn matches_preset_none_returns_true() {
-        assert!(matches_preset("expired", None));
-        assert!(matches_preset("today", None));
-        assert!(matches_preset("alert_window", None));
-        assert!(matches_preset("next_30_days", None));
-        assert!(matches_preset("future", None));
+        // All presets are overridden by None — returns true regardless of row.
+        for days in [-3, 0, 5, 25, 31] {
+            let row = make_predicate_row(days, 30);
+            assert!(matches_preset(&row, None), "None should match days={days}");
+        }
     }
 
     #[test]
     fn matches_preset_all_returns_true() {
-        assert!(matches_preset("expired", Some(DashboardPreset::All)));
-        assert!(matches_preset("today", Some(DashboardPreset::All)));
-        assert!(matches_preset("future", Some(DashboardPreset::All)));
+        for days in [-3, 0, 5, 25, 31] {
+            let row = make_predicate_row(days, 30);
+            assert!(
+                matches_preset(&row, Some(DashboardPreset::All)),
+                "All should match days={days}"
+            );
+        }
     }
 
     #[test]
     fn matches_preset_expired() {
-        assert!(matches_preset("expired", Some(DashboardPreset::Expired)));
-        assert!(!matches_preset("today", Some(DashboardPreset::Expired)));
-        assert!(!matches_preset(
-            "next_30_days",
-            Some(DashboardPreset::Expired)
-        ));
+        // days_remaining < 0
+        let expired = make_predicate_row(-1, 30);
+        let today_row = make_predicate_row(0, 30);
+        let future_row = make_predicate_row(5, 30);
+        assert!(matches_preset(&expired, Some(DashboardPreset::Expired)));
+        assert!(!matches_preset(&today_row, Some(DashboardPreset::Expired)));
+        assert!(!matches_preset(&future_row, Some(DashboardPreset::Expired)));
     }
 
     #[test]
     fn matches_preset_today() {
-        assert!(!matches_preset("expired", Some(DashboardPreset::Today)));
-        assert!(matches_preset("today", Some(DashboardPreset::Today)));
-        assert!(!matches_preset(
-            "alert_window",
-            Some(DashboardPreset::Today)
-        ));
+        // days_remaining == 0
+        let expired = make_predicate_row(-1, 30);
+        let today_row = make_predicate_row(0, 30);
+        let future_row = make_predicate_row(1, 30);
+        assert!(!matches_preset(&expired, Some(DashboardPreset::Today)));
+        assert!(matches_preset(&today_row, Some(DashboardPreset::Today)));
+        assert!(!matches_preset(&future_row, Some(DashboardPreset::Today)));
     }
+
+    // ─── AlertWindow matcher tests ──────────────────────────────────────────
+
+    #[test]
+    fn matches_preset_alert_window_includes_today() {
+        // today rows DO appear in Alert window when alert_days_before > 0
+        let row = make_predicate_row(0, 14);
+        assert!(matches_preset(&row, Some(DashboardPreset::AlertWindow)));
+    }
+
+    #[test]
+    fn matches_preset_alert_window_excludes_expired() {
+        // expired rows are excluded
+        let row = make_predicate_row(-1, 14);
+        assert!(!matches_preset(&row, Some(DashboardPreset::AlertWindow)));
+    }
+
+    #[test]
+    fn matches_preset_alert_window_excludes_outside_window() {
+        // rows outside [0, alert_days_before] are excluded
+        let row = make_predicate_row(30, 14);
+        assert!(!matches_preset(&row, Some(DashboardPreset::AlertWindow)));
+    }
+
+    #[test]
+    fn matches_preset_alert_window_excludes_zero_alert() {
+        // rows with no configured window (alert_days_before <= 0) are excluded
+        let row = make_predicate_row(5, 0);
+        assert!(!matches_preset(&row, Some(DashboardPreset::AlertWindow)));
+    }
+
+    #[test]
+    fn matches_preset_alert_window_includes_high_alert() {
+        // The user-reproducible bug: lot expiring in 25 days with alert=30
+        // should appear in Alert window. Previously classified as next_30_days
+        // and missed by the alert_window matcher.
+        let row = make_predicate_row(25, 30);
+        assert!(matches_preset(&row, Some(DashboardPreset::AlertWindow)));
+    }
+
+    // ─── Next7Days matcher tests ───────────────────────────────────────────
 
     #[test]
     fn matches_preset_next7days() {
-        // next_7_days includes "today" and "next_30_days" rows.
-        assert!(!matches_preset("expired", Some(DashboardPreset::Next7Days)));
-        assert!(matches_preset("today", Some(DashboardPreset::Next7Days)));
-        assert!(matches_preset(
-            "next_30_days",
+        // 0 <= days_remaining <= 7 — independent of urgency bucket
+        let today_row = make_predicate_row(0, 30);
+        let seven_row = make_predicate_row(7, 30);
+        let eight_row = make_predicate_row(8, 30);
+        let expired_row = make_predicate_row(-1, 30);
+        assert!(matches_preset(&today_row, Some(DashboardPreset::Next7Days)));
+        assert!(matches_preset(&seven_row, Some(DashboardPreset::Next7Days)));
+        assert!(!matches_preset(
+            &eight_row,
             Some(DashboardPreset::Next7Days)
         ));
-        assert!(!matches_preset("future", Some(DashboardPreset::Next7Days)));
+        assert!(!matches_preset(
+            &expired_row,
+            Some(DashboardPreset::Next7Days)
+        ));
     }
 
     #[test]
+    fn matches_preset_next_7_days_includes_seven() {
+        // upper-bound inclusive anchor
+        let row = make_predicate_row(7, 30);
+        assert!(matches_preset(&row, Some(DashboardPreset::Next7Days)));
+    }
+
+    #[test]
+    fn matches_preset_next_7_days_excludes_8_to_30() {
+        let eight = make_predicate_row(8, 30);
+        let twenty_five = make_predicate_row(25, 30);
+        assert!(!matches_preset(&eight, Some(DashboardPreset::Next7Days)));
+        assert!(!matches_preset(
+            &twenty_five,
+            Some(DashboardPreset::Next7Days)
+        ));
+    }
+
+    // ─── Next30Days matcher tests ───────────────────────────────────────────
+
+    #[test]
     fn matches_preset_next30days() {
-        assert!(!matches_preset("today", Some(DashboardPreset::Next30Days)));
+        // 0 <= days_remaining <= 30 — includes alert_window-classified lots
+        let today_row = make_predicate_row(0, 30);
+        let alert_bucket_row = make_predicate_row(20, 14); // classifies as alert_window
+        let thirty_row = make_predicate_row(30, 30);
+        let thirty_one_row = make_predicate_row(31, 30);
         assert!(matches_preset(
-            "next_30_days",
+            &today_row,
             Some(DashboardPreset::Next30Days)
         ));
-        assert!(!matches_preset("future", Some(DashboardPreset::Next30Days)));
+        assert!(matches_preset(
+            &alert_bucket_row,
+            Some(DashboardPreset::Next30Days)
+        ));
+        assert!(matches_preset(
+            &thirty_row,
+            Some(DashboardPreset::Next30Days)
+        ));
+        assert!(!matches_preset(
+            &thirty_one_row,
+            Some(DashboardPreset::Next30Days)
+        ));
+    }
+
+    #[test]
+    fn matches_preset_next_30_days_includes_alert_bucket() {
+        // alert-window-classified lot (alert_days_before < 30) is included
+        let row = make_predicate_row(20, 14);
+        assert!(matches_preset(&row, Some(DashboardPreset::Next30Days)));
+    }
+
+    #[test]
+    fn matches_preset_next_30_days_includes_thirty() {
+        // upper-bound inclusive anchor
+        let row = make_predicate_row(30, 30);
+        assert!(matches_preset(&row, Some(DashboardPreset::Next30Days)));
+    }
+
+    #[test]
+    fn matches_preset_next_30_days_excludes_31_plus() {
+        let row = make_predicate_row(31, 30);
+        assert!(!matches_preset(&row, Some(DashboardPreset::Next30Days)));
+    }
+
+    // ─── Negative days_remaining falls out of all ranges ────────────────────
+
+    #[test]
+    fn matches_preset_negative_falls_out_of_non_expired_ranges() {
+        let row = make_predicate_row(-3, 30);
+        assert!(!matches_preset(&row, Some(DashboardPreset::Today)));
+        assert!(!matches_preset(&row, Some(DashboardPreset::AlertWindow)));
+        assert!(!matches_preset(&row, Some(DashboardPreset::Next7Days)));
+        assert!(!matches_preset(&row, Some(DashboardPreset::Next30Days)));
+        // Expired and All still match it
+        assert!(matches_preset(&row, Some(DashboardPreset::Expired)));
+        assert!(matches_preset(&row, Some(DashboardPreset::All)));
     }
 
     // ─── urgency_rank ───────────────────────────────────────────────────────────

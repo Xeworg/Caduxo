@@ -118,8 +118,11 @@
     loading = false;
   });
 
-  // Reload dashboard when store or preset changes
+  // Reload dashboard when store, location, or quick-filter preset changes.
   $: if (!loading) {
+    selectedStoreId;
+    selectedLocationId;
+    activePreset;
     loadDashboard();
   }
 

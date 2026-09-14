@@ -28,8 +28,10 @@ pub enum DashboardPreset {
     /// Lots in their alert window (not expired, not today).
     AlertWindow,
     /// Lots expiring in the next 7 calendar days.
+    #[serde(rename = "next_7_days")]
     Next7Days,
     /// Lots expiring in the next 30 calendar days (alert window already covered by AlertWindow).
+    #[serde(rename = "next_30_days")]
     Next30Days,
     /// All active lots — no filter.
     All,
