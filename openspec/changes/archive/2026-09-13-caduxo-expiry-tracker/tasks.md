@@ -194,7 +194,7 @@
 These items are intentionally deferred to future changes after MVP acceptance, ordered by recommended implementation sequence:
 
 1. Fix Dashboard quick filters (`All`, `Expired`, `Today`, `Alert window`, `Next 7 days`, `Next 30 days`).
-2. Extend SKU/product code handling to support additional codes on product/SKU registration.
+2. ~~Extend SKU/product code handling to support additional codes on product/SKU registration.~~ **Done by `caduxo-create-product-upc` (archived 2026-09-13).** The create-product form now exposes a UPC/barcode field, the dashboard scanner quick-create seeds that field, and the silent helper is retired. Canonical spec at `openspec/specs/caduxo-expiry-tracker/spec.md` gained the requirements `UPC attach during product creation`, `non-blocking barcode attach on create`, `typed barcode attach wrapper for create flow`, `scanner quick-create seeds UPC field`, and `silent barcode helper retired once nothing calls it`.
 3. Improve units of measure with more predefined options and integer vs decimal quantity semantics.
 4. Add CSV import loading/progress feedback and prevent duplicate submissions while import is running.
 5. Fix date picker dismissal after date selection or outside click.

@@ -4,7 +4,7 @@
         updateProduct,
         createCategory,
         suggestedProductAlertDays,
-        addProductBarcodeIfNew,
+        addProductBarcodeOnCreate,
         type CategoryResponse,
         type ProductResponse,
       } from "../lib/products.js";
@@ -24,15 +24,10 @@
       export let onCategoryCreated: (category: CategoryResponse) => void;
 
       /**
-       * Optional SKU pre-fill for scan/keyboard quick-create.
-       * Applied only in create mode on first mount.
+       * Optional UPC/barcode pre-fill for the scan quick-create path.
+       * Seeds the Barcode value input on first create-mount.
        */
-      export let prefillSku: string | undefined = undefined;
-      /**
-       * Optional barcode to attach to the product after successful creation.
-       * Applied only in create mode; silently ignored if the barcode is already attached.
-       */
-      export let prefillBarcode: string | undefined = undefined;
+      export let prefillUpc: string | undefined = undefined;
 
   // ── Local state ────────────────────────────────────────────────────────────
 
@@ -46,6 +41,12 @@
 
   let submitting = false;
   let errorMsg = "";
+
+  // Barcodes subsection state (create mode only).
+  let upcValue = "";
+  let upcType = "";
+  let upcIsPrimary = false;
+  let barcodeNotice = ""; // empty = no notice
 
   // Local category mirror so inline creates show up without parent round-trip.
   let localCategories: CategoryResponse[] = [];
@@ -69,14 +70,13 @@
     isActive = initial.is_active;
   }
 
-  // Pre-fill alert days from the backend suggestion on first create mount.
-  // Pre-fill SKU from the optional prefillSku prop.
+  // Pre-fill alert days and optional UPC from the backend on first create mount.
   let suggestedFetched = false;
   $: if (mode === "create" && !suggestedFetched) {
     suggestedFetched = true;
-    // Apply SKU pre-fill if provided.
-    if (prefillSku !== undefined) {
-      sku = prefillSku;
+    // Seed UPC/barcode field from the optional prefillUpc prop.
+    if (prefillUpc !== undefined) {
+      upcValue = prefillUpc;
     }
     suggestedProductAlertDays()
       .then((d) => {
@@ -142,26 +142,40 @@
         default_alert_days_before: defaultAlertDays,
         notes: notes.trim() || null,
       };
-          let saved: ProductResponse;
-          if (mode === "edit" && initial) {
-            saved = await updateProduct({
-              ...payload,
-              id: initial.id,
-              is_active: isActive,
-            });
-          } else {
-            saved = await createProduct(payload);
-            // Attach the scanned barcode to the newly created product if provided.
-            if (prefillBarcode !== undefined) {
-              await addProductBarcodeIfNew({
-                product_id: saved.id,
-                barcode: prefillBarcode,
-                barcode_type: null,
-                is_primary: true,
-              });
-            }
-          }
-          onSaved(saved);
+              let saved: ProductResponse;
+              if (mode === "edit" && initial) {
+                saved = await updateProduct({
+                  ...payload,
+                  id: initial.id,
+                  is_active: isActive,
+                });
+              } else {
+                saved = await createProduct(payload);
+                // Attempt to attach the UPC/barcode if the field is non-empty.
+                const trimmed = upcValue.trim();
+                if (trimmed !== "") {
+                  const result = await addProductBarcodeOnCreate({
+                    product_id: saved.id,
+                    barcode: trimmed,
+                    barcode_type: upcType.trim() || null,
+                    is_primary: upcIsPrimary,
+                  });
+                  if (!result.ok) {
+                    switch (result.kind) {
+                      case "duplicate_other":
+                        barcodeNotice = `Barcode "${trimmed}" already belongs to another product and was not attached.`;
+                        break;
+                      case "duplicate_same":
+                        barcodeNotice = result.message || `Barcode "${trimmed}" is already attached to this product.`;
+                        break;
+                      case "other":
+                        barcodeNotice = result.message;
+                        break;
+                    }
+                  }
+                }
+              }
+              onSaved(saved);
     } catch (e: unknown) {
       errorMsg = String(e);
     } finally {
@@ -223,52 +237,93 @@
     {/if}
   </div>
 
-  {#if addingCategory}
-    <div class="inline-category">
-      <label>
-        New category name
-        <input
-          type="text"
-          bind:value={newCategoryName}
-          placeholder="e.g. Dairy"
-          disabled={creatingCategory}
-        />
-      </label>
-      {#if categoryError}
-        <div class="alert alert-error inline-error" role="alert">
-          {categoryError}
+      {#if addingCategory}
+        <div class="inline-category">
+          <label>
+            New category name
+            <input
+              type="text"
+              bind:value={newCategoryName}
+              placeholder="e.g. Dairy"
+              disabled={creatingCategory}
+            />
+          </label>
+          {#if categoryError}
+            <div class="alert alert-error inline-error" role="alert">
+              {categoryError}
+            </div>
+          {/if}
+          <div class="form-actions">
+            <button
+              type="button"
+              class="btn-primary btn-small"
+              disabled={creatingCategory}
+              on:click={submitInlineCategory}
+            >
+              {creatingCategory ? "Creating…" : "Add category"}
+            </button>
+            <button
+              type="button"
+              class="btn-secondary btn-small"
+              disabled={creatingCategory}
+              on:click={resetInlineCategory}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
+      {:else}
+        <button
+          type="button"
+          class="btn-link"
+          on:click={() => (addingCategory = true)}
+        >
+          + New category
+        </button>
       {/if}
-      <div class="form-actions">
-        <button
-          type="button"
-          class="btn-primary btn-small"
-          disabled={creatingCategory}
-          on:click={submitInlineCategory}
-        >
-          {creatingCategory ? "Creating…" : "Add category"}
-        </button>
-        <button
-          type="button"
-          class="btn-secondary btn-small"
-          disabled={creatingCategory}
-          on:click={resetInlineCategory}
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  {:else}
-    <button
-      type="button"
-      class="btn-link"
-      on:click={() => (addingCategory = true)}
-    >
-      + New category
-    </button>
-  {/if}
 
-  <div class="grid-2">
+      {#if mode === "create"}
+        <section class="barcode-subsection">
+          <div class="subsection-header"><h4>Barcodes</h4></div>
+          <div class="grid-2">
+            <label>
+              Barcode value
+              <input
+                type="text"
+                bind:value={upcValue}
+                placeholder="e.g. 7501234567890"
+                autocomplete="off"
+              />
+            </label>
+            <label>
+              Type (optional)
+              <input
+                type="text"
+                bind:value={upcType}
+                placeholder="e.g. EAN13, UPC"
+                list="barcode-types-create"
+              />
+              <datalist id="barcode-types-create">
+                <option value="EAN13"></option>
+                <option value="EAN8"></option>
+                <option value="UPC"></option>
+                <option value="CODE128"></option>
+                <option value="CODE39"></option>
+                <option value="QR"></option>
+              </datalist>
+            </label>
+          </div>
+          <label class="checkbox-label">
+            <input type="checkbox" bind:checked={upcIsPrimary} />
+            Set as primary
+          </label>
+          {#if barcodeNotice}
+            <div class="alert alert-info inline-error" role="status">{barcodeNotice}</div>
+          {/if}
+        </section>
+      {/if}
+
+      <div class="grid-2">
     <label>
       Default unit
       <input
@@ -349,6 +404,12 @@
     background: #fee2e2;
     color: #991b1b;
     border: 1px solid #fca5a5;
+  }
+
+  .alert-info {
+    background: #fefce8;
+    color: #854d0e;
+    border: 1px solid #fde047;
   }
 
   .inline-error {
@@ -516,5 +577,27 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+
+  /* Barcodes subsection (create mode only) */
+  .barcode-subsection {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+  }
+
+  .subsection-header {
+    margin: 0;
+  }
+
+  .subsection-header h4 {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #374151;
   }
 </style>
