@@ -28,8 +28,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let rt = tokio::runtime::Handle::current();
-            rt.block_on(async_init(app)).map_err(|e| {
+            tauri::async_runtime::block_on(async_init(app)).map_err(|e| {
                 tracing::error!(error = %e, "Setup failed");
                 e
             })

@@ -31,6 +31,7 @@ pub enum ReportType {
     /// Lots whose expiry date is strictly in the past.
     Expired,
     /// Lots expiring within the next 30 calendar days.
+    #[serde(rename = "next_30_days")]
     Next30Days,
     /// Ad-hoc report driven entirely by `ReportFilters`.
     Custom,

@@ -96,8 +96,7 @@
   // ─── Quick-create modal ─────────────────────────────────────────────────────
 
   let showQuickCreate = false;
-  let quickCreateScannedValue = "";   // pre-fill SKU
-  let quickCreateBarcodeValue = "";  // attach to product after save
+  let quickCreateScannedValue = "";   // pre-fill UPC field in quick-create
   let categories: CategoryResponse[] = [];
 
   // ─── Resolve types ──────────────────────────────────────────────────────────
@@ -220,8 +219,6 @@
 
       function handleScanNotFound(scannedValue: string) {
         quickCreateScannedValue = scannedValue;
-        // The barcode pre-fill is the same value when not found.
-        quickCreateBarcodeValue = scannedValue;
         showQuickCreate = true;
       }
 
@@ -688,15 +685,14 @@
           </div>
           <p class="scan-hint">
             No product matched <strong>{quickCreateScannedValue}</strong>.
-            Create it now — the scanned value has been pre-filled.
+            Create it now — the scanned value has been pre-filled into the Barcode field. Type a SKU and submit.
           </p>
           {#await listCategories() then cats}
             <ProductForm
               mode="create"
               initial={null}
               categories={cats}
-              prefillSku={quickCreateScannedValue}
-              prefillBarcode={quickCreateBarcodeValue}
+              prefillUpc={quickCreateScannedValue}
               onSaved={onQuickCreateSaved}
               onCancel={() => (showQuickCreate = false)}
               onCategoryCreated={(c) => { categories = [...categories, c]; }}

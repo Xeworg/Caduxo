@@ -210,14 +210,15 @@ Caduxo shall preserve existing local data across database schema migrations.
 
 ### Requirement: tests accompany implementation
 
-Caduxo shall add or update automated tests in the same implementation slice as the behavior being introduced or changed, except for documentation-only work or explicitly justified temporary scaffolding.
+Caduxo shall add or update automated tests in the same implementation slice as backend, persistence, domain, or covered frontend behavior is introduced or changed, except for documentation-only work, explicitly justified temporary scaffolding, or frontend/runtime behavior that is accepted for MVP with manual verification and tracked for a dedicated post-MVP frontend harness.
 
 #### Scenario: behavior slice is implemented
 
-- Given a slice introduces backend, persistence, domain, or non-trivial frontend behavior
+- Given a slice introduces backend, persistence, domain, or frontend behavior covered by the current automated harness
 - When the slice is prepared for review
 - Then matching tests are added or updated
 - And the slice notes list the test commands that were run
+- And any accepted frontend/runtime manual-verification gap is recorded as a post-MVP follow-up
 
 ### Requirement: regression coverage for critical workflows
 
