@@ -68,6 +68,13 @@ pub enum CsvPreviewRowStatus {
     MissingRequired { field: String },
     /// A value failed validation (e.g. negative alert days, malformed barcode).
     Invalid { reason: String },
+    /// The `default_unit` value in the CSV row does not match any catalog unit.
+    /// This is non-blocking (warn-and-continue); the row can still be imported.
+    /// The frontend renders a per-row badge with up to 3 suggested keys.
+    UnknownUnit {
+        raw_value: String,
+        suggested_keys: Vec<String>,
+    },
 }
 
 /// A single preview row. `raw` mirrors the original cell text per header so

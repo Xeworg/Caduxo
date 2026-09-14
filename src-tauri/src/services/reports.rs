@@ -331,6 +331,7 @@ mod tests {
                 description: "Product A".into(),
                 category_id: Some(dairy.id.clone()),
                 default_unit: Some("L".into()),
+                default_unit_id: None,
                 default_alert_days_before: 14,
                 notes: None,
             },
@@ -345,6 +346,7 @@ mod tests {
                 description: "Product B".into(),
                 category_id: Some(dairy.id.clone()),
                 default_unit: Some("kg".into()),
+                default_unit_id: None,
                 default_alert_days_before: 30,
                 notes: None,
             },
@@ -359,6 +361,7 @@ mod tests {
                 description: "Product C".into(),
                 category_id: Some(bakery.id.clone()),
                 default_unit: Some("pcs".into()),
+                default_unit_id: None,
                 default_alert_days_before: 14,
                 notes: None,
             },
@@ -678,6 +681,8 @@ mod tests {
             status: "active".into(),
             urgency: String::new(),
             days_remaining: 0,
+            default_unit_id: None,
+            unit_type: None,
         }
     }
 

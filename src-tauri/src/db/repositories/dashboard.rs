@@ -6,6 +6,7 @@
 use sqlx::SqlitePool;
 
 use crate::dto::dashboard::{DashboardFilters, DashboardLotRow};
+// sqlx needs this in scope to find UnitKind's Decode impl.
 
 /// Fetches active expiry lots with enriched context (product, store, location).
 ///
@@ -38,7 +39,9 @@ pub async fn list_dashboard_lots(
             el.batch_code,
             el.status,
             ''                AS urgency,
-            0                 AS days_remaining
+            0                 AS days_remaining,
+            p.default_unit_id,
+            p.unit_type
         FROM expiry_lots AS el
         JOIN products    AS p  ON p.id = el.product_id
         JOIN stores      AS s  ON s.id = el.store_id

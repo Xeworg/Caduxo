@@ -25,9 +25,15 @@
     getExpiryLot,
     type ExpiryLotResponse,
   } from "../lib/expiry_lots.js";
-  import { exportReportWithDialog } from "../lib/csv.js";
+      import { exportReportWithDialog } from "../lib/csv.js";
+      import {
+        listUnitDefinitions,
+        type UnitDefinitionResponse,
+      } from "../lib/unit_definitions.js";
   import ScanSearchBox from "./ScanSearchBox.svelte";
   import ProductForm from "./ProductForm.svelte";
+  import UnitReviewBanner from "./UnitReviewBanner.svelte";
+  import UnitReviewPage from "./UnitReviewPage.svelte";
 
   // ─── State ──────────────────────────────────────────────────────────────────
 
@@ -54,6 +60,9 @@
   let selectedLocationId: string | null = null;
   let activePreset: DashboardPreset = "all";
 
+  /** Unit catalog for display-name resolution. */
+  let unitCatalog: UnitDefinitionResponse[] = [];
+
   // Quick filter presets mapping
   const PRESET_LABELS: Record<DashboardPreset, string> = {
     all: "All",
@@ -75,6 +84,7 @@
   // ─── Modal states ───────────────────────────────────────────────────────────
 
   let showProductDetail = false;
+  let showUnitReview = false;
   let detailProduct: ProductDetailResponse | null = null;
   let detailLoading = false;
 
@@ -114,7 +124,7 @@
 
   onMount(async () => {
     categories = await listCategories().catch(() => []);
-    await Promise.all([loadStores(), loadDashboard()]);
+    await Promise.all([loadStores(), loadDashboard(), loadUnitCatalog()]);
     loading = false;
   });
 
@@ -164,13 +174,34 @@
       const data: DashboardResponse = await listDashboardLots(filters);
       counts = data.counts;
       lots = data.lots;
-      errorMsg = "";
-    } catch (e) {
-      errorMsg = String(e);
-    }
-  }
+          errorMsg = "";
+        } catch (e) {
+          errorMsg = String(e);
+        }
+      }
 
-      function clearStoreFilter() {
+      async function loadUnitCatalog() {
+        try {
+          unitCatalog = await listUnitDefinitions();
+        } catch {
+          // Non-fatal: unit catalog is a convenience display feature.
+        }
+      }
+
+      /**
+       * Returns the effective unit display name for a lot row.
+       * When the product has a catalog link (default_unit_id), uses the catalog
+       * display_name; otherwise falls back to the raw lot.unit text.
+       */
+      function getUnitDisplayName(lot: DashboardLotRow): string {
+        if (lot.default_unit_id && lot.default_unit_id !== "") {
+          const match = unitCatalog.find((u) => u.id === lot.default_unit_id);
+          if (match) return match.display_name;
+        }
+        return lot.unit;
+      }
+
+          function clearStoreFilter() {
         selectedStoreId = null;
         selectedLocationId = null;
         locations = [];
@@ -390,16 +421,31 @@
           </div>
         </div>
 
-    <!-- Always-visible scan/search input -->
-    <div class="scan-row">
-      <ScanSearchBox
-        placeholder="Scan barcode or type SKU, then press Enter…"
-        onFound={handleScanFound}
-        onNotFound={handleScanNotFound}
-      />
-    </div>
+        <!-- Always-visible scan/search input -->
+        <div class="scan-row">
+          <ScanSearchBox
+            placeholder="Scan barcode or type SKU, then press Enter…"
+            onFound={handleScanFound}
+            onNotFound={handleScanNotFound}
+          />
+        </div>
 
-    <!-- Store / location filter -->
+        <!-- Unit audit banner (appears when unrecognized units exist) -->
+        {#if !showUnitReview}
+          <UnitReviewBanner
+            onReview={() => {
+              showUnitReview = true;
+            }}
+          />
+        {:else}
+          <UnitReviewPage onDone={() => {
+            showUnitReview = false;
+            // Refresh the dashboard to pick up any unit-link changes.
+            loadDashboard();
+          }} />
+        {/if}
+
+        <!-- Store / location filter -->
     <div class="filter-row">
       <label>
         Store:
@@ -505,7 +551,7 @@
                   <span class="loc-name">/ {lot.location_name}</span>
                 {/if}
               </td>
-              <td class="cell-qty">{lot.quantity} {lot.unit}</td>
+              <td class="cell-qty">{lot.quantity} {getUnitDisplayName(lot)}</td>
               <td class="cell-date">{formatDate(lot.expiry_date)}</td>
               <td class="cell-days" class:days-negative={lot.days_remaining < 0}>
                 {lot.days_remaining >= 0 ? lot.days_remaining : `+${Math.abs(lot.days_remaining)} ago`}

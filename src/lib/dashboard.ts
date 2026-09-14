@@ -4,6 +4,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import type { UnitKind } from "./products.js";
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -56,6 +57,10 @@ export interface DashboardLotRow {
  urgency: string;
  /** Days remaining until expiry (negative for expired lots). */
  days_remaining: number;
+ /** FK into `unit_definitions`; present when the product has a catalog link. */
+ default_unit_id: string | null;
+ /** Kind from the linked unit; drives LotForm quantity input rules. */
+ unit_type: UnitKind | null;
 }
 
 /** Full dashboard response bundle. */

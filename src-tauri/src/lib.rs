@@ -87,6 +87,14 @@ pub fn run() {
             commands::backup_restore::export_backup,
             commands::backup_restore::validate_backup,
             commands::backup_restore::restore_backup,
+            // Unit definitions catalog (caduxo-measurement-unit-options)
+            commands::unit_definitions::list_unit_definitions,
+            commands::unit_definitions::create_unit_definition,
+            commands::unit_definitions::rename_unit_definition,
+            commands::unit_definitions::list_unrecognized_units,
+            commands::unit_definitions::unit_audit_banner_state,
+            commands::unit_definitions::dismiss_unit_audit_banner,
+            commands::unit_definitions::apply_unit_review_action,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -8,6 +8,47 @@ use crate::dto::products::{
     CategoryCreate, CategoryResponse, CategoryUpdate, ProductBarcodeCreate, ProductBarcodeResponse,
     ProductCreate, ProductResponse, ProductSearchQuery, ProductSearchResult, ProductUpdate,
 };
+use crate::dto::unit_definitions::UnitKind;
+
+/// Intermediate row type for product queries that need the raw `unit_type` TEXT
+/// column before converting to `UnitKind`.
+#[derive(Debug, sqlx::FromRow)]
+struct RawProductRow {
+    id: String,
+    sku: String,
+    description: String,
+    category_id: Option<String>,
+    default_unit: Option<String>,
+    default_unit_id: Option<String>,
+    unit_type: Option<String>, // SQLite TEXT column
+    default_alert_days_before: i32,
+    notes: Option<String>,
+    is_active: bool,
+    created_at: String,
+    updated_at: String,
+}
+
+impl RawProductRow {
+    fn into_response(self) -> ProductResponse {
+        ProductResponse {
+            id: self.id,
+            sku: self.sku,
+            description: self.description,
+            category_id: self.category_id,
+            default_unit: self.default_unit,
+            default_unit_id: self.default_unit_id,
+            unit_type: self.unit_type.map(|k| match k.as_str() {
+                "integer" => UnitKind::Integer,
+                _ => UnitKind::Decimal,
+            }),
+            default_alert_days_before: self.default_alert_days_before,
+            notes: self.notes,
+            is_active: self.is_active,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
+}
 
 // ============================================================
 // Categories
@@ -122,9 +163,15 @@ pub async fn update_category(
 // ============================================================
 
 /// Inserts a new active product.
+///
+/// The caller (product service) is responsible for resolving `default_unit_id`
+/// and `unit_type` from either the provided `default_unit_id` or `default_unit` text.
+/// This function writes the resolved values directly.
 pub async fn insert_product(
     pool: &SqlitePool,
     input: &ProductCreate,
+    default_unit_id: Option<String>,
+    unit_type: Option<String>,
 ) -> Result<ProductResponse, sqlx::Error> {
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
@@ -133,10 +180,11 @@ pub async fn insert_product(
         r#"
         INSERT INTO products (
             id, sku, description, category_id, default_unit,
+            default_unit_id, unit_type,
             default_alert_days_before, notes, is_active,
             created_at, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, $10, $11)
         "#,
     )
     .bind(&id)
@@ -144,6 +192,8 @@ pub async fn insert_product(
     .bind(&input.description)
     .bind(&input.category_id)
     .bind(&input.default_unit)
+    .bind(default_unit_id)
+    .bind(unit_type)
     .bind(input.default_alert_days_before)
     .bind(&input.notes)
     .bind(&now)
@@ -151,28 +201,23 @@ pub async fn insert_product(
     .execute(pool)
     .await?;
 
-    Ok(ProductResponse {
-        id,
-        sku: input.sku.clone(),
-        description: input.description.clone(),
-        category_id: input.category_id.clone(),
-        default_unit: input.default_unit.clone(),
-        default_alert_days_before: input.default_alert_days_before,
-        notes: input.notes.clone(),
-        is_active: true,
-        created_at: now.clone(),
-        updated_at: now,
-    })
+    // Fetch back the full response with resolved catalog data.
+    get_product(pool, &id)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)
 }
 
-/// Fetches a single product by id (active or archived).
+/// Fetches a single product by id (active or archived), including the
+/// joined catalog columns `default_unit_id` and `unit_type`.
 pub async fn get_product(
     pool: &SqlitePool,
     id: &str,
 ) -> Result<Option<ProductResponse>, sqlx::Error> {
-    sqlx::query_as::<_, ProductResponse>(
+    // Use a plain query + map to handle UnitKind conversion manually.
+    let row: Option<RawProductRow> = sqlx::query_as(
         r#"
         SELECT id, sku, description, category_id, default_unit,
+               default_unit_id, unit_type,
                default_alert_days_before, notes, is_active,
                created_at, updated_at
         FROM products
@@ -181,7 +226,9 @@ pub async fn get_product(
     )
     .bind(id)
     .fetch_optional(pool)
-    .await
+    .await?;
+
+    Ok(row.map(|r| r.into_response()))
 }
 
 /// Updates a product by id and returns the refreshed row, or `None` if the
@@ -189,6 +236,8 @@ pub async fn get_product(
 pub async fn update_product(
     pool: &SqlitePool,
     input: &ProductUpdate,
+    default_unit_id: Option<String>,
+    unit_type: Option<String>,
 ) -> Result<Option<ProductResponse>, sqlx::Error> {
     let now = Utc::now().to_rfc3339();
 
@@ -196,15 +245,18 @@ pub async fn update_product(
         r#"
         UPDATE products
         SET sku = $1, description = $2, category_id = $3, default_unit = $4,
-            default_alert_days_before = $5, notes = $6, is_active = $7,
-            updated_at = $8
-        WHERE id = $9
+            default_unit_id = $5, unit_type = $6,
+            default_alert_days_before = $7, notes = $8, is_active = $9,
+            updated_at = $10
+        WHERE id = $11
         "#,
     )
     .bind(&input.sku)
     .bind(&input.description)
     .bind(&input.category_id)
     .bind(&input.default_unit)
+    .bind(default_unit_id)
+    .bind(unit_type)
     .bind(input.default_alert_days_before)
     .bind(&input.notes)
     .bind(i32::from(input.is_active))
@@ -425,9 +477,10 @@ pub async fn product_has_active_lots(
 pub async fn list_all_products_for_export(
     pool: &SqlitePool,
 ) -> Result<Vec<ProductResponse>, sqlx::Error> {
-    sqlx::query_as::<_, ProductResponse>(
+    let rows: Vec<RawProductRow> = sqlx::query_as(
         r#"
         SELECT id, sku, description, category_id, default_unit,
+               default_unit_id, unit_type,
                default_alert_days_before, notes, is_active,
                created_at, updated_at
         FROM products
@@ -435,5 +488,6 @@ pub async fn list_all_products_for_export(
         "#,
     )
     .fetch_all(pool)
-    .await
+    .await?;
+    Ok(rows.into_iter().map(|r| r.into_response()).collect())
 }

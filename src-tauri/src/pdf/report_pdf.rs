@@ -579,6 +579,8 @@ mod tests {
             status: "active".to_string(),
             urgency: "expired".to_string(),
             days_remaining,
+            default_unit_id: None,
+            unit_type: None,
         }
     }
 

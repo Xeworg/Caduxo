@@ -7,7 +7,14 @@
         addProductBarcodeOnCreate,
         type CategoryResponse,
         type ProductResponse,
+        type UnitKind,
       } from "../lib/products.js";
+      import {
+        listUnitDefinitions,
+        createUnitDefinition,
+        type UnitDefinitionResponse,
+      } from "../lib/unit_definitions.js";
+      import { onMount } from "svelte";
 
       // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -35,6 +42,7 @@
   let description = "";
   let categoryId: string = "";
   let defaultUnit = "";
+  let defaultUnitId = ""; // FK into unit_definitions; empty = no catalog link
   let defaultAlertDays = 30;
   let notes = "";
   let isActive = true;
@@ -58,6 +66,22 @@
   let creatingCategory = false;
   let categoryError = "";
 
+  // ── Unit catalog ───────────────────────────────────────────────────────────
+  /** Cached unit list for the datalist. */
+  let unitList: UnitDefinitionResponse[] = [];
+  /** Controls visibility of the inline unit creation sub-form. */
+  let showInlineUnitForm = false;
+  /** Key for the new unit (auto-derived from display name). */
+  let newUnitKey = "";
+  /** Display name for the new unit. */
+  let newUnitDisplayName = "";
+  /** Kind for the new unit (radio selection). */
+  let newUnitKind: UnitKind = "integer";
+  /** Error message for inline unit creation. */
+  let unitError = "";
+  /** In-progress flag for inline unit creation. */
+  let creatingUnit = false;
+
   // ── Init ───────────────────────────────────────────────────────────────────
 
   $: if (mode === "edit" && initial) {
@@ -65,6 +89,7 @@
     description = initial.description;
     categoryId = initial.category_id ?? "";
     defaultUnit = initial.default_unit ?? "";
+    defaultUnitId = initial.default_unit_id ?? "";
     defaultAlertDays = initial.default_alert_days_before;
     notes = initial.notes ?? "";
     isActive = initial.is_active;
@@ -85,9 +110,18 @@
       .catch(() => {
         // Keep the local default of 30.
       });
-  }
+      }
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
+      // ── Unit catalog lifecycle ────────────────────────────────────────────────
+      onMount(async () => {
+        try {
+          unitList = await listUnitDefinitions();
+        } catch {
+          // Non-fatal: unit list is a convenience feature.
+        }
+      });
+
+      // ── Helpers ────────────────────────────────────────────────────────────────
 
   function resetInlineCategory() {
     addingCategory = false;
@@ -118,6 +152,79 @@
     }
   }
 
+  // ── Unit helpers ───────────────────────────────────────────────────────────
+
+  /** Slugifies display_name into a valid unit key (lowercase, alphanumeric, hyphen/underscore). */
+  function slugify(name: string): string {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 16);
+  }
+
+  function resetInlineUnit() {
+    showInlineUnitForm = false;
+    newUnitKey = "";
+    newUnitDisplayName = "";
+    unitError = "";
+  }
+
+  /** Handles inline unit creation from the ProductForm sub-form. */
+  async function submitInlineUnit() {
+    const key = newUnitKey.trim();
+    const displayName = newUnitDisplayName.trim();
+
+    if (!key) {
+      unitError = "Key is required";
+      return;
+    }
+    if (!displayName) {
+      unitError = "Display name is required";
+      return;
+    }
+    if (!/^[a-z0-9_-]{1,16}$/.test(key)) {
+      unitError = "Key must be 1-16 lowercase letters, digits, hyphens or underscores";
+      return;
+    }
+    // Check for duplicate (case-insensitive).
+    const dupe = unitList.find(
+      (u) => u.key === key || u.key === key.toLowerCase(),
+    );
+    if (dupe) {
+      unitError = `Key "${key}" already exists as "${dupe.display_name}". Select it from the list instead.`;
+      return;
+    }
+
+    creatingUnit = true;
+    unitError = "";
+    try {
+      const created = await createUnitDefinition({
+    key,
+    display_name: displayName,
+    kind: newUnitKind,
+      });
+      // Add to local list and select it.
+      unitList = [...unitList, created].sort((a, b) =>
+    a.display_name.localeCompare(b.display_name),
+      );
+      defaultUnitId = created.id;
+      defaultUnit = created.display_name;
+      resetInlineUnit();
+    } catch (e: unknown) {
+      const msg = String(e);
+      // Recoverable DuplicateField error.
+      if (/duplicate|already exists|unique/i.test(msg)) {
+    unitError = `Key "${key}" already exists. Please choose a different key.`;
+      } else {
+    unitError = msg;
+      }
+    } finally {
+      creatingUnit = false;
+    }
+  }
+
   async function submit() {
     errorMsg = "";
     if (!sku.trim()) {
@@ -139,6 +246,7 @@
         description: description.trim(),
         category_id: categoryId || null,
         default_unit: defaultUnit.trim() || null,
+        default_unit_id: defaultUnitId || null,
         default_alert_days_before: defaultAlertDays,
         notes: notes.trim() || null,
       };
@@ -323,17 +431,130 @@
         </section>
       {/if}
 
-      <div class="grid-2">
-    <label>
-      Default unit
-      <input
-        type="text"
-        bind:value={defaultUnit}
-        placeholder="e.g. kg, L, unit"
-      />
-    </label>
+          <div class="grid-2">
+        <label>
+          Default unit
+          <div class="unit-input-row">
+            <input
+              type="text"
+              bind:value={defaultUnit}
+              list="unit-definitions-list"
+              placeholder="e.g. kg, L, piece"
+              on:input={() => {
+                // When the user edits the text, clear the FK so the backend
+                // resolves the text fresh on save.
+                defaultUnitId = "";
+                showInlineUnitForm = false;
+              }}
+              on:blur={() => {
+                // Auto-create: if the typed value matches no known unit, show the inline form.
+                const v = defaultUnit.trim().toLowerCase();
+                if (
+                  v &&
+                  !unitList.some(
+                    (u) =>
+                      u.key === v ||
+                      u.display_name.toLowerCase() === v,
+                  )
+                ) {
+                  showInlineUnitForm = true;
+                  newUnitDisplayName = defaultUnit.trim();
+                  newUnitKey = slugify(defaultUnit.trim());
+                  newUnitKind = "integer";
+                  unitError = "";
+                }
+              }}
+            />
+            <datalist id="unit-definitions-list">
+              {#each unitList as unit (unit.id)}
+                <option value={unit.display_name} data-id={unit.id}></option>
+              {/each}
+            </datalist>
+            <button
+              type="button"
+              class="btn-link unit-add-btn"
+              title="Create a new unit"
+              on:click={() => {
+                showInlineUnitForm = !showInlineUnitForm;
+                if (showInlineUnitForm && defaultUnit.trim()) {
+                  newUnitDisplayName = defaultUnit.trim();
+                  newUnitKey = slugify(defaultUnit.trim());
+                }
+                unitError = "";
+              }}
+            >
+              + New unit
+            </button>
+          </div>
+          {#if unitError}
+            <span class="field-error">{unitError}</span>
+          {/if}
+        </label>
 
-    <label>
+        {#if showInlineUnitForm}
+          <div class="inline-unit-form">
+            <div class="inline-unit-header">
+              <span class="inline-unit-hint">Create custom unit</span>
+              <button
+                type="button"
+                class="inline-unit-close"
+                aria-label="Close custom unit form"
+                title="Close"
+                disabled={creatingUnit}
+                on:click={resetInlineUnit}
+              >
+                ×
+              </button>
+            </div>
+            <div class="inline-unit-fields">
+              <label class="small-label">
+                Key
+                <input
+                  type="text"
+                  bind:value={newUnitKey}
+                  placeholder="e.g. my-unit"
+                  maxlength="16"
+                />
+              </label>
+              <label class="small-label">
+                Display name
+                <input
+                  type="text"
+                  bind:value={newUnitDisplayName}
+                  placeholder="e.g. My Unit"
+                />
+              </label>
+              <div class="kind-radios">
+                <label class="radio-label">
+                  <input
+                    type="radio"
+                    bind:group={newUnitKind}
+                    value={"integer"}
+                  />
+                  Integer
+                </label>
+                <label class="radio-label">
+                  <input
+                    type="radio"
+                    bind:group={newUnitKind}
+                    value={"decimal"}
+                  />
+                  Decimal
+                </label>
+              </div>
+              <button
+                type="button"
+                class="btn-primary btn-sm"
+                disabled={creatingUnit}
+                on:click={submitInlineUnit}
+              >
+                {creatingUnit ? "Creating…" : "Add unit"}
+              </button>
+            </div>
+          </div>
+        {/if}
+
+        <label>
       Alert days before *
       <input
         type="number"
@@ -599,5 +820,100 @@
     font-size: 0.9rem;
     font-weight: 600;
     color: #374151;
+  }
+
+  .unit-input-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .unit-input-row input[type="text"] {
+    flex: 1;
+  }
+
+  .unit-add-btn {
+    font-size: 0.8rem;
+    white-space: nowrap;
+    color: #3b82f6;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .unit-add-btn:hover {
+    text-decoration: underline;
+  }
+
+  .inline-unit-form {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 8px;
+    padding: 10px;
+    margin-top: 6px;
+  }
+
+  .inline-unit-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .inline-unit-hint {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #0369a1;
+  }
+
+  .inline-unit-close {
+    border: none;
+    background: transparent;
+    color: #0369a1;
+    cursor: pointer;
+    font-size: 1.2rem;
+    line-height: 1;
+    padding: 0 4px;
+  }
+
+  .inline-unit-close:hover:not(:disabled) {
+    color: #0f172a;
+  }
+
+  .inline-unit-close:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .inline-unit-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .small-label {
+    font-size: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .kind-radios {
+    display: flex;
+    gap: 12px;
+  }
+
+  .radio-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.85rem;
+  }
+
+  .btn-sm {
+    padding: 4px 10px;
+    font-size: 0.8rem;
   }
 </style>

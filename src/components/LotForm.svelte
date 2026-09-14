@@ -23,9 +23,16 @@
     export let lot: ExpiryLotResponse | null = null;
     /** Required when mode === "create". */
     export let productId: string = "";
-    /** Pre-filled defaults from the product (may be blank). */
-    export let defaultUnit: string = "";
-    export let defaultAlertDays: number = 30;
+        /** Pre-filled defaults from the product (may be blank). */
+        export let defaultUnit: string = "";
+        export let defaultAlertDays: number = 30;
+        /**
+         * Unit kind from the product's catalog link. Drives quantity input rules:
+         * - "integer": quantity must be whole numbers (min=1, step=1)
+         * - "decimal": fractional quantities allowed (min=0.01, step=0.01)
+         * When null (legacy/uncatalogued), defaults to decimal rules.
+         */
+        export let productUnitKind: "integer" | "decimal" | null = null;
     /** Called after a successful save. */
     export let onSaved: (lot: ExpiryLotResponse) => void;
     /** Called when the user cancels. */
@@ -200,28 +207,37 @@
             </label>
         {/if}
 
-        <div class="grid-2">
-            <label>
-                Quantity *
-                <input
-                    type="number"
-                    bind:value={quantity}
-                    min="0.01"
-                    step="0.01"
-                    required
-                />
-            </label>
+            <div class="grid-2">
+                <label>
+                    Quantity *
+                    <input
+                        type="number"
+                        bind:value={quantity}
+                        min={productUnitKind === "integer" ? 1 : 0.01}
+                        step={productUnitKind === "integer" ? 1 : 0.01}
+                        required
+                    />
+                </label>
 
-            <label>
-                Unit
-                <input
-                    type="text"
-                    bind:value={unit}
-                    placeholder="e.g. kg, L, pcs"
-                    autocomplete="off"
-                />
-            </label>
-        </div>
+                {#if productUnitKind === null}
+                    <!-- Product has no catalog link: show editable unit text input. -->
+                    <label>
+                        Unit
+                        <input
+                            type="text"
+                            bind:value={unit}
+                            placeholder="e.g. kg, L, pcs"
+                            autocomplete="off"
+                        />
+                    </label>
+                {:else}
+                    <!-- Product has a catalog link: show read-only display name. -->
+                    <label>
+                        Unit
+                        <span class="unit-chip">{unit}</span>
+                    </label>
+                {/if}
+            </div>
 
         <div class="grid-2">
             <label>
@@ -404,5 +420,16 @@
         font-size: 0.85rem;
         color: #374151;
         margin: 0;
+    }
+
+    .unit-chip {
+        display: inline-flex;
+        align-items: center;
+        background: #e5e7eb;
+        border-radius: 4px;
+        padding: 4px 10px;
+        font-size: 0.9rem;
+        color: #374151;
+        font-weight: 500;
     }
 </style>

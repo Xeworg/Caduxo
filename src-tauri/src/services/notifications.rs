@@ -165,6 +165,7 @@ mod tests {
                 description: "Test Product".into(),
                 category_id: None,
                 default_unit: Some("pcs".into()),
+                default_unit_id: None,
                 default_alert_days_before: 7,
                 notes: None,
             },

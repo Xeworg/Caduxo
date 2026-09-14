@@ -7,8 +7,8 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import {
- open as openDialog,
- save as saveDialog,
+   open as openDialog,
+   save as saveDialog,
 } from "@tauri-apps/plugin-dialog";
 
 // ─── Conflict strategy ───────────────────────────────────────────────
@@ -20,120 +20,125 @@ export type ConflictStrategy = "skip" | "update" | "review";
 
 /** Optional column index override. Missing fields fall back to auto-detect. */
 export interface CsvColumnMapping {
- sku?: number | null;
- description?: number | null;
- barcode?: number | null;
- category?: number | null;
- default_unit?: number | null;
- default_alert_days_before?: number | null;
- notes?: number | null;
+   sku?: number | null;
+   description?: number | null;
+   barcode?: number | null;
+   category?: number | null;
+   default_unit?: number | null;
+   default_alert_days_before?: number | null;
+   notes?: number | null;
 }
 
 export interface CsvPreviewInput {
- /** Raw CSV text including the header row. */
- content: string;
- /** Optional explicit column mapping. */
- mapping?: CsvColumnMapping | null;
+   /** Raw CSV text including the header row. */
+   content: string;
+   /** Optional explicit column mapping. */
+   mapping?: CsvColumnMapping | null;
 }
 
 /** Per-row classification produced by `previewProductCsv`. */
 export type CsvPreviewRowStatus =
- | { kind: "ok" }
- | {
-    kind: "duplicate_sku";
-    existing_product_id: string;
-    existing_sku: string;
-   }
- | {
-    kind: "duplicate_barcode";
-    existing_product_id: string;
-    existing_barcode: string;
-   }
- | { kind: "missing_required"; field: string }
- | { kind: "invalid"; reason: string };
+   | { kind: "ok" }
+   | {
+        kind: "duplicate_sku";
+        existing_product_id: string;
+        existing_sku: string;
+     }
+   | {
+        kind: "duplicate_barcode";
+        existing_product_id: string;
+        existing_barcode: string;
+     }
+   | { kind: "missing_required"; field: string }
+   | { kind: "invalid"; reason: string }
+   | {
+        kind: "unknown_unit";
+        raw_value: string;
+        suggested_keys: string[];
+     };
 
 export interface CsvPreviewRow {
- row_index: number;
- raw: string[];
- sku?: string | null;
- description?: string | null;
- barcode?: string | null;
- category?: string | null;
- default_unit?: string | null;
- default_alert_days_before?: number | null;
- notes?: string | null;
- status: CsvPreviewRowStatus;
+   row_index: number;
+   raw: string[];
+   sku?: string | null;
+   description?: string | null;
+   barcode?: string | null;
+   category?: string | null;
+   default_unit?: string | null;
+   default_alert_days_before?: number | null;
+   notes?: string | null;
+   status: CsvPreviewRowStatus;
 }
 
 export interface CsvPreviewResponse {
- headers: string[];
- mapping_used: CsvColumnMapping;
- total_rows: number;
- valid_rows: number;
- invalid_rows: number;
- duplicate_sku_count: number;
- duplicate_barcode_count: number;
- missing_required_count: number;
- rows: CsvPreviewRow[];
+   headers: string[];
+   mapping_used: CsvColumnMapping;
+   total_rows: number;
+   valid_rows: number;
+   invalid_rows: number;
+   duplicate_sku_count: number;
+   duplicate_barcode_count: number;
+   missing_required_count: number;
+   rows: CsvPreviewRow[];
 }
 
 export interface ReportExportInput {
- store_id?: string | null;
- location_id?: string | null;
- preset?: DashboardPreset | null;
- urgency?: string | null;
- path: string;
+   store_id?: string | null;
+   location_id?: string | null;
+   preset?: DashboardPreset | null;
+   urgency?: string | null;
+   path: string;
 }
 
 export interface CsvExportResult {
- path: string;
- rows_written: number;
- bytes_written: number;
+   path: string;
+   rows_written: number;
+   bytes_written: number;
 }
 
 // ─── Import DTOs ──────────────────────────────────────────────────────
 
 /** Input for the import commit command. */
 export interface CsvImportInput {
- content: string;
- mapping: CsvColumnMapping;
- strategy: ConflictStrategy;
+   content: string;
+   mapping: CsvColumnMapping;
+   strategy: ConflictStrategy;
 }
 
 /** Per-row import outcome. */
 export type CsvImportRowOutcome =
- | { action: "created"; product_id: string; sku: string }
- | { action: "skipped"; reason: string }
- | { action: "updated"; product_id: string; sku: string }
- | { action: "invalid"; reason: string };
+   | { action: "created"; product_id: string; sku: string }
+   | { action: "skipped"; reason: string }
+   | { action: "updated"; product_id: string; sku: string }
+   | { action: "invalid"; reason: string };
 
 /** Summary of a single imported row. */
 export interface CsvImportRowResult {
- row_index: number;
- sku: string;
- description: string;
- barcode: string;
- outcome: CsvImportRowOutcome;
+   row_index: number;
+   sku: string;
+   description: string;
+   barcode: string;
+   outcome: CsvImportRowOutcome;
 }
 
 /** Result returned by `importProductCsv`. */
 export interface CsvImportResult {
- total_rows: number;
- created: number;
- skipped: number;
- updated: number;
- invalid: number;
- rows: CsvImportRowResult[];
+   total_rows: number;
+   created: number;
+   skipped: number;
+   updated: number;
+   invalid: number;
+   rows: CsvImportRowResult[];
 }
 
 /** Mirror of Rust `DashboardPreset` (snake_case). */
 export type DashboardPreset =
- | "expired"
- | "today"
- | "alert_window"
- | "next_7_days"
- | "next_30_days"
- | "all";
+   | "expired"
+   | "today"
+   | "alert_window"
+   | "next_7_days"
+   | "next_30_days"
+   | "all";
 
 // ─── Backend command wrappers ───────────────────────────────────────────
 
@@ -143,9 +148,9 @@ export type DashboardPreset =
  * `update`), or returns conflict rows for review (when strategy is `review`).
  */
 export async function importProductCsv(
- input: CsvImportInput,
+   input: CsvImportInput,
 ): Promise<CsvImportResult> {
- return invoke<CsvImportResult>("import_product_csv", { input });
+   return invoke<CsvImportResult>("import_product_csv", { input });
 }
 
 /**
@@ -156,9 +161,9 @@ export async function importProductCsv(
  * Does NOT modify the database — preview only.
  */
 export async function previewProductCsv(
- input: CsvPreviewInput,
+   input: CsvPreviewInput,
 ): Promise<CsvPreviewResponse> {
- return invoke<CsvPreviewResponse>("preview_product_csv", { input });
+   return invoke<CsvPreviewResponse>("preview_product_csv", { input });
 }
 
 /**
@@ -167,9 +172,9 @@ export async function previewProductCsv(
  * the destination.
  */
 export async function exportProductsCsv(
- path: string,
+   path: string,
 ): Promise<CsvExportResult> {
- return invoke<CsvExportResult>("export_products_csv", { path });
+   return invoke<CsvExportResult>("export_products_csv", { path });
 }
 
 /**
@@ -178,22 +183,22 @@ export async function exportProductsCsv(
  * dashboard view (urgency classification, sorting, counts).
  */
 export async function exportReportCsv(
- input: ReportExportInput,
+   input: ReportExportInput,
 ): Promise<CsvExportResult> {
- return invoke<CsvExportResult>("export_report_csv", { input });
+   return invoke<CsvExportResult>("export_report_csv", { input });
 }
 
 /** Reads a UTF-8 CSV file from disk and returns its contents. */
 export async function readCsvText(path: string): Promise<string> {
- return invoke<string>("read_csv_text", { path });
+   return invoke<string>("read_csv_text", { path });
 }
 
 // ─── Tauri dialog helpers ──────────────────────────────────────────────
 
 /** Default file filters for product CSV files. */
 const CSV_FILTERS = [
- { name: "CSV files", extensions: ["csv"] },
- { name: "All files", extensions: ["*"] },
+   { name: "CSV files", extensions: ["csv"] },
+   { name: "All files", extensions: ["*"] },
 ];
 
 /**
@@ -201,14 +206,14 @@ const CSV_FILTERS = [
  * file path, or `null` when the user cancels.
  */
 export async function pickCsvFile(): Promise<string | null> {
- const selected = await openDialog({
-  multiple: false,
-  directory: false,
-  filters: CSV_FILTERS,
-  title: "Select a CSV file",
- });
- if (selected === null) return null;
- return Array.isArray(selected) ? (selected[0] ?? null) : selected;
+   const selected = await openDialog({
+      multiple: false,
+      directory: false,
+      filters: CSV_FILTERS,
+      title: "Select a CSV file",
+   });
+   if (selected === null) return null;
+   return Array.isArray(selected) ? (selected[0] ?? null) : selected;
 }
 
 /**
@@ -217,15 +222,15 @@ export async function pickCsvFile(): Promise<string | null> {
  * filename (without extension) and adds a `.csv` extension automatically.
  */
 export async function pickCsvSavePath(
- defaultName: string,
- title: string = "Save CSV file",
+   defaultName: string,
+   title: string = "Save CSV file",
 ): Promise<string | null> {
- const path = await saveDialog({
-  defaultPath: `${defaultName}.csv`,
-  filters: CSV_FILTERS,
-  title,
- });
- return path ?? null;
+   const path = await saveDialog({
+      defaultPath: `${defaultName}.csv`,
+      filters: CSV_FILTERS,
+      title,
+   });
+   return path ?? null;
 }
 
 // ─── High-level flows ──────────────────────────────────────────────────
@@ -240,14 +245,14 @@ export async function pickCsvSavePath(
  * modifies the database.
  */
 export async function importProductCsvPreview(): Promise<{
- path: string;
- preview: CsvPreviewResponse;
+   path: string;
+   preview: CsvPreviewResponse;
 } | null> {
- const path = await pickCsvFile();
- if (!path) return null;
- const content = await readCsvText(path);
- const preview = await previewProductCsv({ content });
- return { path, preview };
+   const path = await pickCsvFile();
+   if (!path) return null;
+   const content = await readCsvText(path);
+   const preview = await previewProductCsv({ content });
+   return { path, preview };
 }
 
 /**
@@ -258,9 +263,9 @@ export async function importProductCsvPreview(): Promise<{
  * Returns `null` when the user cancels.
  */
 export async function exportProductsWithDialog(): Promise<CsvExportResult | null> {
- const path = await pickCsvSavePath("caduxo-products");
- if (!path) return null;
- return exportProductsCsv(path);
+   const path = await pickCsvSavePath("caduxo-products");
+   if (!path) return null;
+   return exportProductsCsv(path);
 }
 
 /**
@@ -272,9 +277,9 @@ export async function exportProductsWithDialog(): Promise<CsvExportResult | null
  * Returns `null` when the user cancels.
  */
 export async function exportReportWithDialog(
- filters: Omit<ReportExportInput, "path">,
+   filters: Omit<ReportExportInput, "path">,
 ): Promise<CsvExportResult | null> {
- const path = await pickCsvSavePath("caduxo-report");
- if (!path) return null;
- return exportReportCsv({ ...filters, path });
+   const path = await pickCsvSavePath("caduxo-report");
+   if (!path) return null;
+   return exportReportCsv({ ...filters, path });
 }

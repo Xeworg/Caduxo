@@ -9,6 +9,7 @@ use chrono::NaiveDate;
 use crate::db::repositories::expiry_lots as repo;
 use crate::db::repositories::products as product_repo;
 use crate::db::repositories::stores as store_repo;
+use crate::db::repositories::unit_definitions as unit_repo;
 use crate::db::DbPool;
 use crate::domain::lot_resolution::{
     compute_remaining_quantity, is_fully_resolved, is_valid_quantity,
@@ -59,13 +60,31 @@ fn validate_expiry_date(date: &str) -> Result<(), DomainError> {
         })
 }
 
-/// Returns the effective unit for a lot, preferring user-supplied overrides
-/// and falling back to the product default when the user input is blank/None.
-fn resolve_unit(user_unit: Option<&str>, product_default: Option<&str>) -> String {
-    match user_unit {
-        Some(u) if !u.trim().is_empty() => u.trim().to_string(),
-        _ => product_default.unwrap_or("pcs").to_string(),
+/// Resolves the product's default unit from the catalog.
+/// Priority: (1) product.default_unit_id → joined display_name from unit_definitions;
+/// (2) product.default_unit raw text if no catalog link; (3) "Unidades" preset fallback.
+async fn resolve_product_default_unit(
+    pool: &DbPool,
+    product: &crate::dto::products::ProductResponse,
+) -> String {
+    if let Some(ref unit_id) = product.default_unit_id {
+        if let Ok(Some(unit)) = unit_repo::find_by_id(pool, unit_id).await {
+            return unit.display_name;
+        }
     }
+    // No catalog link: fall back to raw text or the "Unidades" preset.
+    if let Some(raw) = product.default_unit.as_deref() {
+        if !raw.trim().is_empty() {
+            return raw.trim().to_string();
+        }
+    }
+    // Fallback to "Unidades" preset (key: "ud-units").
+    unit_repo::find_by_id(pool, "ud-units")
+        .await
+        .ok()
+        .flatten()
+        .map(|u| u.display_name)
+        .unwrap_or_else(|| "Unidades".to_string())
 }
 
 /// Returns the effective alert days for a lot, preferring user-supplied overrides
@@ -109,8 +128,11 @@ pub async fn create_expiry_lot(
             id: input.product_id.clone(),
         })?;
 
-    // ── Resolve unit and alert days with product defaults as fallback. ───────
-    let unit = resolve_unit(input.unit.as_deref(), product.default_unit.as_deref());
+    // ── Resolve unit: user-supplied wins; otherwise resolve via catalog. ──────
+    let unit = match input.unit.as_deref() {
+        Some(u) if !u.trim().is_empty() => u.trim().to_string(),
+        _ => resolve_product_default_unit(pool, &product).await,
+    };
     let alert_days_before =
         resolve_alert_days(input.alert_days_before, product.default_alert_days_before);
 
@@ -343,6 +365,7 @@ mod tests {
                 description: "Test Product".into(),
                 category_id: None,
                 default_unit: Some("kg".into()),
+                default_unit_id: None,
                 default_alert_days_before: 14,
                 notes: None,
             },
@@ -463,8 +486,8 @@ mod tests {
         .await?;
 
         assert_eq!(
-            lot.unit, "kg",
-            "unit should be pre-filled from product default"
+            lot.unit, "Kilogramo",
+            "unit should be pre-filled from product default via catalog display_name"
         );
         Ok(())
     }

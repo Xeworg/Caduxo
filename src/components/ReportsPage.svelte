@@ -10,6 +10,10 @@
     type ReportType,
   } from "../lib/reports.js";
   import {
+    listUnitDefinitions,
+    type UnitDefinitionResponse,
+  } from "../lib/unit_definitions.js";
+  import {
     listCategories,
     type CategoryResponse,
   } from "../lib/products.js";
@@ -42,6 +46,9 @@
   let exporting = false;
   let errorMsg = "";
   let successMsg = "";
+
+  /** Unit catalog for display-name resolution. */
+  let unitCatalog: UnitDefinitionResponse[] = [];
 
   // ─── Report type options ─────────────────────────────────────────────────
 
@@ -87,10 +94,19 @@
       ]);
       stores = storeList;
       categories = categoryList;
+      unitCatalog = await listUnitDefinitions().catch(() => []);
     } catch (e: unknown) {
       errorMsg = String(e);
     }
   });
+
+  function getUnitDisplayName(lot: ReportData["lots"][number]): string {
+    if (lot.default_unit_id && lot.default_unit_id !== "") {
+      const match = unitCatalog.find((u) => u.id === lot.default_unit_id);
+      if (match) return match.display_name;
+    }
+    return lot.unit;
+  }
 
   $: if (storeId) {
     loadLocations(storeId);
@@ -425,7 +441,7 @@
                     <span class="loc-name">/ {lot.location_name}</span>
                   {/if}
                 </td>
-                <td class="cell-qty">{formatQty(lot.quantity)} {lot.unit}</td>
+                <td class="cell-qty">{formatQty(lot.quantity)} {getUnitDisplayName(lot)}</td>
                 <td class="cell-date">{formatDate(lot.expiry_date)}</td>
                 <td class="cell-days">{formatDays(lot.days_remaining)}</td>
                 <td>

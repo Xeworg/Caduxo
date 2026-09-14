@@ -153,7 +153,15 @@ pub async fn create_product(
     validate_description(&input.description).map_err(|m| DomainError::Validation { message: m })?;
     validate_alert_days(input.default_alert_days_before)?;
 
-    repo::insert_product(pool, &input)
+    // Resolve catalog unit: prefer explicit FK, then text via find_by_key, else none.
+    let (default_unit_id, unit_type) = resolve_unit_fields(
+        pool,
+        input.default_unit_id.as_deref(),
+        input.default_unit.as_deref(),
+    )
+    .await?;
+
+    repo::insert_product(pool, &input, default_unit_id, unit_type)
         .await
         .map_err(|e| product_unique_error(e, &input.sku))
 }
@@ -167,7 +175,15 @@ pub async fn update_product(
     validate_description(&input.description).map_err(|m| DomainError::Validation { message: m })?;
     validate_alert_days(input.default_alert_days_before)?;
 
-    let row = repo::update_product(pool, &input)
+    // Resolve catalog unit: prefer explicit FK, then text via find_by_key, else none.
+    let (default_unit_id, unit_type) = resolve_unit_fields(
+        pool,
+        input.default_unit_id.as_deref(),
+        input.default_unit.as_deref(),
+    )
+    .await?;
+
+    let row = repo::update_product(pool, &input, default_unit_id, unit_type)
         .await
         .map_err(|e| product_unique_error(e, &input.sku))?
         .ok_or(DomainError::NotFound {
@@ -175,6 +191,58 @@ pub async fn update_product(
             id: input.id,
         })?;
     Ok(row)
+}
+
+/// Resolves `default_unit_id` and `unit_type` from the provided inputs.
+///
+/// Priority:
+/// 1. If `explicit_unit_id` is Some, look it up in the catalog and use its kind.
+/// 2. Else if `default_unit_text` is Some, do a case-insensitive `find_by_key` lookup.
+///    On hit: use the catalog id and kind. On miss: leave both None (text stays in `default_unit`).
+/// 3. Else (no unit info): both None.
+async fn resolve_unit_fields(
+    pool: &DbPool,
+    explicit_unit_id: Option<&str>,
+    default_unit_text: Option<&str>,
+) -> Result<(Option<String>, Option<String>), AppError> {
+    use crate::db::repositories::unit_definitions as units_repo;
+    use crate::dto::unit_definitions::UnitKind;
+
+    // Path 1: explicit unit_id.
+    if let Some(id) = explicit_unit_id {
+        let unit = units_repo::find_by_id(pool, id)
+            .await
+            .map_err(AppError::from)?
+            .ok_or(DomainError::NotFound {
+                resource: "unit_definition",
+                id: id.to_string(),
+            })?;
+        let kind_str = match unit.kind {
+            UnitKind::Integer => "integer",
+            UnitKind::Decimal => "decimal",
+        };
+        return Ok((Some(unit.id), Some(kind_str.to_string())));
+    }
+
+    // Path 2: text-based lookup.
+    if let Some(text) = default_unit_text {
+        let trimmed = text.trim();
+        if !trimmed.is_empty() {
+            if let Some(unit) = units_repo::find_by_key(pool, trimmed)
+                .await
+                .map_err(AppError::from)?
+            {
+                let kind_str = match unit.kind {
+                    UnitKind::Integer => "integer",
+                    UnitKind::Decimal => "decimal",
+                };
+                return Ok((Some(unit.id), Some(kind_str.to_string())));
+            }
+        }
+    }
+
+    // Path 3: no unit info.
+    Ok((None, None))
 }
 
 /// Soft-archives a product. Returns `NotFound` if the id does not exist.
@@ -485,6 +553,7 @@ mod tests {
             description: "Whole Milk 1L".into(),
             category_id: None,
             default_unit: Some("L".into()),
+            default_unit_id: None,
             default_alert_days_before: suggested_alert_days(),
             notes: None,
         }
@@ -597,6 +666,7 @@ mod tests {
                 description: "Updated description".into(),
                 category_id: None,
                 default_unit: Some("kg".into()),
+                default_unit_id: None,
                 default_alert_days_before: 14,
                 notes: Some("note".into()),
                 is_active: true,
@@ -623,6 +693,7 @@ mod tests {
                 description: "desc".into(),
                 category_id: None,
                 default_unit: None,
+                default_unit_id: None,
                 default_alert_days_before: 30,
                 notes: None,
                 is_active: true,
@@ -651,6 +722,7 @@ mod tests {
                 description: "d".into(),
                 category_id: None,
                 default_unit: None,
+                default_unit_id: None,
                 default_alert_days_before: 30,
                 notes: None,
                 is_active: true,
@@ -902,6 +974,7 @@ mod tests {
                 description: "Whole Milk 1L".into(),
                 category_id: None,
                 default_unit: Some("L".into()),
+                default_unit_id: None,
                 default_alert_days_before: 30,
                 notes: None,
             },
@@ -914,6 +987,7 @@ mod tests {
                 description: "Sourdough Bread".into(),
                 category_id: None,
                 default_unit: None,
+                default_unit_id: None,
                 default_alert_days_before: 14,
                 notes: None,
             },

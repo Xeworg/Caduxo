@@ -258,7 +258,7 @@ Report columns:
 | SKU | Yes | Internal product identifier, unique locally |
 | UPC / barcode | No | Scanner-friendly identifier; multiple values allowed |
 | Category | No | User-defined or predefined |
-| Default unit | No | Example: units, kg, g, L, ml, boxes |
+| Default unit | No | Chosen from the unit catalog — see capability spec |
 | Default alert days before | No | Used to pre-fill new expiry lots |
 | Notes | No | Free text |
 
@@ -270,7 +270,7 @@ Report columns:
 | Store/local | Yes | Selected when creating the lot |
 | Internal location | No | Optional shelf, fridge, warehouse, etc. |
 | Quantity | Yes | Number greater than zero |
-| Unit | Yes | Pre-filled from product default when available |
+| Unit | Yes | Pre-filled from product default when available; resolves through `default_unit_id` |
 | Expiry date | Yes | Main tracking field |
 | Alert days before | Yes | Pre-filled from product/global default, editable per lot |
 | Batch / lot code | No | Useful for repeated products |
@@ -527,7 +527,9 @@ Product catalog. SKU is mandatory because one product can have multiple UPC/barc
 | sku | TEXT | Yes | Unique internal identifier |
 | description | TEXT | Yes | Product name/description |
 | category | TEXT | No | Optional category |
-| default_unit | TEXT | No | Example: units, box, kg, g, L, ml |
+| default_unit | TEXT | No | Example: units, box, kg, g, L, ml | (legacy echo; prefer `default_unit_id` when set) |
+| default_unit_id | TEXT | No | FK to `unit_definitions.id`; preferred link |
+| unit_type | TEXT | No | `integer` or `decimal`; derived from the linked catalog unit |
 | default_alert_days_before | INTEGER | No | Default used when creating expiry lots |
 | notes | TEXT | No | Free text |
 | is_active | INTEGER | Yes | 1 active, 0 inactive |

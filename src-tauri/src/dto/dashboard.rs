@@ -4,6 +4,8 @@
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
+use super::unit_definitions::UnitKind;
+
 /// Optional filters for the dashboard lot query.
 #[derive(Debug, Default, Deserialize)]
 pub struct DashboardFilters {
@@ -65,6 +67,10 @@ pub struct DashboardLotRow {
     pub location_name: Option<String>,
     pub quantity: f64,
     pub unit: String,
+    /// FK into `unit_definitions`; present when the product has a catalog link.
+    pub default_unit_id: Option<String>,
+    /// Kind from the linked unit; drives LotForm quantity input rules.
+    pub unit_type: Option<UnitKind>,
     pub expiry_date: String,
     pub alert_days_before: i32,
     pub batch_code: Option<String>,

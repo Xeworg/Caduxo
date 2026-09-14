@@ -99,6 +99,7 @@
     if (status.kind === "duplicate_barcode") return { label: "Dup BC", cls: "badge-warn" };
     if (status.kind === "missing_required") return { label: "Missing", cls: "badge-error" };
     if (status.kind === "invalid") return { label: "Invalid", cls: "badge-error" };
+    if (status.kind === "unknown_unit") return { label: "Unknown unit", cls: "badge-warn" };
     return { label: "?", cls: "badge-error" };
   }
 
@@ -296,6 +297,8 @@
                       Missing: {row.status.field}
                     {:else if row.status.kind === "invalid"}
                       {row.status.reason}
+                    {:else if row.status.kind === "unknown_unit"}
+                      Not in catalog — suggested: {row.status.suggested_keys.join(", ") || "(none, will be created on first review)"}
                     {:else}
                       Ready to import
                     {/if}

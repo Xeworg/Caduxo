@@ -199,6 +199,8 @@ mod tests {
             status: "active".into(),
             urgency: String::new(), // will be set by enrich_row
             days_remaining: 0,
+            default_unit_id: None,
+            unit_type: None,
         }
     }
 
@@ -222,6 +224,8 @@ mod tests {
             status: "active".into(),
             urgency: String::new(), // matcher MUST NOT read this
             days_remaining,
+            default_unit_id: None,
+            unit_type: None,
         }
     }
 

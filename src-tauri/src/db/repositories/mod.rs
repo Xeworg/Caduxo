@@ -8,3 +8,4 @@ pub mod notification_log;
 pub mod products;
 pub mod settings;
 pub mod stores;
+pub mod unit_definitions;

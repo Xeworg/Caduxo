@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
+use super::unit_definitions::UnitKind;
+
 // ============================================================
 // Categories
 // ============================================================
@@ -36,12 +38,18 @@ pub struct CategoryResponse {
 // ============================================================
 
 /// Input for creating a product. SKU must be unique across the database.
+///
+/// Either `default_unit_id` (catalog FK) or `default_unit` (raw legacy text) may be
+/// provided. The service layer resolves whichever is supplied into the FK + `unit_type` pair.
 #[derive(Debug, Deserialize)]
 pub struct ProductCreate {
     pub sku: String,
     pub description: String,
     pub category_id: Option<String>,
+    /// Raw legacy text for the default unit. Kept as a back-compat echo.
     pub default_unit: Option<String>,
+    /// Optional catalog FK. Takes precedence over `default_unit` text.
+    pub default_unit_id: Option<String>,
     pub default_alert_days_before: i32,
     pub notes: Option<String>,
 }
@@ -53,7 +61,10 @@ pub struct ProductUpdate {
     pub sku: String,
     pub description: String,
     pub category_id: Option<String>,
+    /// Raw legacy text for the default unit. Clears catalog link when set to None/empty.
     pub default_unit: Option<String>,
+    /// Optional catalog FK. Takes precedence over `default_unit` text.
+    pub default_unit_id: Option<String>,
     pub default_alert_days_before: i32,
     pub notes: Option<String>,
     pub is_active: bool,
@@ -66,7 +77,13 @@ pub struct ProductResponse {
     pub sku: String,
     pub description: String,
     pub category_id: Option<String>,
+    /// Echoes the catalog `display_name` when `default_unit_id` is set; raw legacy
+    /// text otherwise. Always preserved for compatibility.
     pub default_unit: Option<String>,
+    /// Catalog FK. `None` when the product has no catalog link.
+    pub default_unit_id: Option<String>,
+    /// Unit kind from the catalog, or `None` for legacy products.
+    pub unit_type: Option<UnitKind>,
     pub default_alert_days_before: i32,
     pub notes: Option<String>,
     pub is_active: bool,

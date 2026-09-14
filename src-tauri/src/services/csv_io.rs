@@ -220,6 +220,7 @@ pub async fn preview_product_csv(
                 &sku,
                 &description,
                 &barcode,
+                &default_unit,
                 default_alert_days_before,
             )
             .await;
@@ -230,6 +231,8 @@ pub async fn preview_product_csv(
             CsvPreviewRowStatus::DuplicateBarcode { .. } => duplicate_barcode_count += 1,
             CsvPreviewRowStatus::MissingRequired { .. } => missing_required_count += 1,
             CsvPreviewRowStatus::Invalid { .. } => {}
+            // UnknownUnit is non-blocking (warn-and-continue); still counts as valid.
+            CsvPreviewRowStatus::UnknownUnit { .. } => valid_rows += 1,
         }
 
         // Update sku/barcode to the values used for classification so the UI
@@ -279,6 +282,7 @@ async fn classify_row(
     sku: &Option<String>,
     description: &Option<String>,
     barcode: &Option<String>,
+    default_unit: &Option<String>,
     default_alert_days_before: Option<i32>,
 ) -> (
     CsvPreviewRowStatus,
@@ -429,6 +433,37 @@ async fn classify_row(
                     Some(e.to_string()),
                 );
             }
+        }
+    }
+
+    // 5. Unit catalog check — non-blocking warn for unknown units.
+    // Only applies when a unit value is present in the CSV row.
+    if let Some(raw_unit) = default_unit.as_deref() {
+        let unit_key = raw_unit.trim().to_lowercase();
+        if crate::db::repositories::unit_definitions::find_by_key(pool, &unit_key)
+            .await
+            .ok()
+            .flatten()
+            .is_none()
+        {
+            // Unit not found in catalog — suggest up to 3 similar keys.
+            let suggested: Vec<String> =
+                crate::db::repositories::unit_definitions::suggest_similar(pool, &unit_key, 3)
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|r| r.key)
+                    .collect();
+            return (
+                CsvPreviewRowStatus::UnknownUnit {
+                    raw_value: raw_unit.to_string(),
+                    suggested_keys: suggested,
+                },
+                Some(sku),
+                barcode.clone(),
+                None,
+                None,
+            );
         }
     }
 
@@ -860,11 +895,12 @@ async fn import_row(
                 description: description.clone(),
                 category_id: category_id.map(String::from),
                 default_unit: default_unit.map(String::from),
+                default_unit_id: None,
                 default_alert_days_before: resolved_alert_days,
                 notes: notes.map(String::from),
                 is_active: true,
             };
-            products_repo::update_product(pool, &update_input).await?;
+            products_repo::update_product(pool, &update_input, None, None).await?;
 
             // Try to add barcode; silently skip UNIQUE violations.
             if let Some(b) = barcode {
@@ -918,15 +954,19 @@ async fn import_row(
             }
 
             // Create the product.
+            // CSV import preserves `default_unit` text; `default_unit_id` and
+            // `unit_type` are not set here so unrecognized units surface in the
+            // audit banner.
             let create_input = ProductCreate {
                 sku: sku.clone(),
                 description,
                 category_id: category_id.map(String::from),
                 default_unit: default_unit.map(String::from),
+                default_unit_id: None,
                 default_alert_days_before: resolved_alert_days,
                 notes: notes.map(String::from),
             };
-            let product = products_repo::insert_product(pool, &create_input).await?;
+            let product = products_repo::insert_product(pool, &create_input, None, None).await?;
 
             // Attach the barcode if present; silently skip UNIQUE violations.
             if let Some(b) = barcode {
@@ -1101,6 +1141,7 @@ mod tests {
                 description: "Existing".into(),
                 category_id: None,
                 default_unit: None,
+                default_unit_id: None,
                 default_alert_days_before: 30,
                 notes: None,
             },
@@ -1145,6 +1186,7 @@ mod tests {
                 description: "Barcode owner".into(),
                 category_id: None,
                 default_unit: None,
+                default_unit_id: None,
                 default_alert_days_before: 30,
                 notes: None,
             },
@@ -1254,6 +1296,113 @@ mod tests {
     }
 
     // ------------------------------------------------------------
+    // Preview — unit catalog awareness (Section E)
+    // ------------------------------------------------------------
+
+    /// RED: preview must flag unknown unit values with suggested keys.
+    #[tokio::test]
+    async fn preview_flags_unknown_unit_with_suggestions() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let pool = fresh_test_pool().await?;
+        // "litro" is not in the preset catalog but suggests "L" (Litro) via
+        // lexicographic prefix match: 'L' comes before 'litro' in ORDER BY key.
+        let csv_content = "sku,description,default_unit\nSKU-UKN,Unknown Unit,litro\n";
+        let resp = preview_product_csv(
+            &pool,
+            CsvPreviewInput {
+                content: csv_content.to_string(),
+                mapping: None,
+            },
+        )
+        .await?;
+
+        assert_eq!(resp.total_rows, 1);
+        let row = &resp.rows[0];
+        match &row.status {
+            CsvPreviewRowStatus::UnknownUnit {
+                raw_value,
+                suggested_keys,
+            } => {
+                assert_eq!(raw_value, "litro");
+                // "L" is the closest suggestion (lexicographic prefix match).
+                assert!(
+                    suggested_keys.iter().any(|k| k == "L"),
+                    "expected 'L' in suggestions, got {suggested_keys:?}"
+                );
+                // The row is still classified as valid (non-blocking).
+                assert_eq!(resp.valid_rows, 1);
+            }
+            other => panic!("expected UnknownUnit, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    /// RED: a row with an unknown unit must still count as valid (warn-and-continue).
+    #[tokio::test]
+    async fn preview_does_not_block_unknown_unit() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let csv_content =
+            "sku,description,default_unit\nSKU-OK,Good product,kg\nSKU-UKN,Bad unit,nonexistent\n";
+        let resp = preview_product_csv(
+            &pool,
+            CsvPreviewInput {
+                content: csv_content.to_string(),
+                mapping: None,
+            },
+        )
+        .await?;
+
+        assert_eq!(resp.total_rows, 2);
+        // "kg" is a preset — valid row.
+        assert_eq!(resp.valid_rows, 2, "unknown_unit is non-blocking");
+        assert_eq!(resp.invalid_rows, 0);
+        assert_eq!(resp.missing_required_count, 0);
+        assert_eq!(resp.duplicate_sku_count, 0);
+        Ok(())
+    }
+
+    /// RED: import of an unknown-unit row creates a product with text preserved
+    /// and no catalog link; the product surfaces in the audit banner.
+    #[tokio::test]
+    async fn import_unknown_unit_creates_product_with_text_only(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let csv_content = "sku,description,default_unit\nSKU-UKN,Custom unit product,misunit\n";
+
+        let import_resp = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Skip,
+            },
+        )
+        .await?;
+
+        assert_eq!(import_resp.total_rows, 1);
+        assert_eq!(import_resp.created, 1);
+        assert_eq!(import_resp.invalid, 0);
+
+        // Verify the product was created with text preserved but no catalog link.
+        let product_id = match &import_resp.rows[0].outcome {
+            CsvImportRowOutcome::Created { product_id, .. } => product_id.clone(),
+            other => panic!("expected Created, got {other:?}"),
+        };
+        let product_detail = crate::services::products::get_product(&pool, product_id).await?;
+        let product = &product_detail.product;
+        assert_eq!(
+            product.default_unit.as_deref(),
+            Some("misunit"),
+            "unknown unit text must be preserved"
+        );
+        assert!(
+            product.default_unit_id.is_none(),
+            "unknown unit must not get a catalog FK"
+        );
+        Ok(())
+    }
+
+    // ------------------------------------------------------------
     // Export products
     // ------------------------------------------------------------
 
@@ -1280,6 +1429,7 @@ mod tests {
                 description: "Exported Product".into(),
                 category_id: Some(cat_id.clone()),
                 default_unit: Some("L".into()),
+                default_unit_id: None,
                 default_alert_days_before: 30,
                 notes: Some("note text".into()),
             },
@@ -1362,6 +1512,7 @@ mod tests {
                 description: "Export Lot".into(),
                 category_id: None,
                 default_unit: Some("kg".into()),
+                default_unit_id: None,
                 default_alert_days_before: 7,
                 notes: None,
             },
@@ -1504,6 +1655,7 @@ mod tests {
                 description: "Existing product".into(),
                 category_id: None,
                 default_unit: None,
+                default_unit_id: None,
                 default_alert_days_before: 30,
                 notes: None,
             },
@@ -1546,6 +1698,7 @@ mod tests {
                 description: "Barcode owner".into(),
                 category_id: None,
                 default_unit: None,
+                default_unit_id: None,
                 default_alert_days_before: 30,
                 notes: None,
             },
@@ -1601,6 +1754,7 @@ mod tests {
                 description: "Old description".into(),
                 category_id: None,
                 default_unit: None,
+                default_unit_id: None,
                 default_alert_days_before: 30,
                 notes: None,
             },
@@ -1667,6 +1821,7 @@ mod tests {
                 description: "Barcode target".into(),
                 category_id: None,
                 default_unit: None,
+                default_unit_id: None,
                 default_alert_days_before: 30,
                 notes: None,
             },
@@ -1707,6 +1862,7 @@ mod tests {
                 description: "Existing".into(),
                 category_id: None,
                 default_unit: None,
+                default_unit_id: None,
                 default_alert_days_before: 30,
                 notes: None,
             },

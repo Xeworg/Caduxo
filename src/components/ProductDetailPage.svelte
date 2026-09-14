@@ -379,6 +379,7 @@
                         productId={product.id}
                         defaultUnit={product.default_unit ?? ""}
                         defaultAlertDays={product.default_alert_days_before}
+                        productUnitKind={product.unit_type ?? "decimal"}
                         onSaved={onLotSaved}
                         onCancel={() => {
                             showLotForm = false;
