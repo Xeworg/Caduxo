@@ -1,0 +1,87 @@
+# Tasks: caduxo-custom-date-picker
+
+> Mechanical defect fix + new feature in one slice. The defect is non-negotiable (`grep -R 'type="date"' src/` must return zero matches); the feature is the Calendar tab that reuses the same `CalendarMonth` primitive. No backend changes. Manual smoke is the verify gate because the project ships no frontend test harness (`openspec/config.yaml > sdd.strictTdd: false`) and the canonical spec permits manual verification for frontend/runtime behavior.
+
+## Review Workload Forecast
+
+| Field | Value |
+|-------|-------|
+| Estimated changed lines | ~850–1,100 (LOC delta for the slice, per `design.md > File changes`) |
+| 400-line budget risk | Low — the user explicitly approved raising this change's review budget to **3,000 changed lines** (see `proposal.md > Review workload decision` and `design.md > Architecture decision`). Estimate sits well below that override. |
+| Chained PRs recommended | No — single-slice delivery per the user's "picker + Calendar tab together" decision; the shared `CalendarMonth` primitive keeps the diff structurally reviewable even at ~1,000 LOC. |
+| Suggested split | Single PR. |
+| Delivery strategy | `ask-on-risk` (locked from session preflight). No risk-triggered pause is needed for this slice because the LOC estimate fits inside the user-approved 3,000-line budget. |
+| Chain strategy | `stacked-to-main` — direct merge to main is acceptable for this solo-review change. |
+
+Decision needed before apply: No
+Chained PRs recommended: No
+Chain strategy: stacked-to-main
+400-line budget risk: Low
+
+## Implementation work units
+
+The order below matches `design.md > Rollout > tasks 1–12`. Tasks 1–3 are the new components (primitive first, then its two consumers). Tasks 4–6 are mechanical host adoptions. Tasks 7–8 are spec/PRD alignment. Tasks 9–12 are apply-owned verification. Every checkbox carries the implementation ownership marker; parent lifecycle gates are grouped separately at the end.
+
+### Discovery and prep
+
+- [x] Confirm the universe of native date inputs the slice must sweep. Run `grep -RIn 'type="date"' src/` from `/home/xeworg/Proyectos/Caduxo` and confirm exactly the four hits recorded in `design.md`: `LotForm.svelte:246`, `ReportsPage.svelte:370`, `ReportsPage.svelte:379`, plus the orphan CSS selector `LotForm.svelte:343` (`label input[type="date"]`). Any additional hit outside these four is a scope expansion and must be raised with the parent before implementation starts. <!-- sdd-owner: implementation -->
+
+- [x] Initialize `openspec/changes/caduxo-custom-date-picker/apply-progress.md` with the four-file scope above, the per-component LOC estimate table from `design.md > File changes`, and the M1–M20 smoke checklist from `design.md > Tests > Manual smoke` as an unfilled template. This file is the apply-phase evidence ledger; it must exist before any component lands so evidence can be appended as work progresses. <!-- sdd-owner: implementation -->
+
+### Primitive — `src/components/CalendarMonth.svelte`
+
+- [x] Create `src/components/CalendarMonth.svelte` as a presentational month grid + year picker. Implement the `LABELS = { weekdays, months }` constant at the top of the file (single future-i18n extraction point). Implement the `buildMonthGrid(year, month)` pure helper that returns 42 cells with leading/trailing blanks encoded as `{ iso: "", day: 0 }`. Props match `design.md > Component design > CalendarMonth > Props` (`viewYear`, `viewMonth`, `selectedDate`, `todayDate`, `dayBadges`, `minDate`, `maxDate`, `ariaLabel`); events match `design.md > Component design > CalendarMonth > Events` (`daySelect`, `monthChange`, `viewYearChange`, `viewMonthChange`). Visual states match the CSS class table (`day-today`, `day-selected`, `day-disabled`, `day-badge`, `day-outside`, `day-weekend`). Year picker is a 12-year decade grid with `‹ decade` / `decade ›` chevrons, year chips outside `[1900, 2100]` disabled, swapping the header in place (no nested portal). Implement the keyboard handler table (`ArrowLeft/Right/Up/Down`, `PageUp/PageDown`, `Shift+PageUp/PageDown`, `Enter` → `daySelect`, `Escape` → re-dispatch as `escape` event) on the grid container via `on:keydown`; clamp every move to `[minDate, maxDate]`. Footer is `<slot name="footer" />` only — the component owns no `Today` button itself. Component does not mutate its own `viewYear` / `viewMonth` on chevron clicks (parent owns navigation state). No `<input type="date">` rendered anywhere. <!-- sdd-owner: implementation -->
+
+### Composite picker — `src/components/DatePicker.svelte`
+
+- [x] Create `src/components/DatePicker.svelte` composed around `<CalendarMonth>`. Props match `design.md > Component design > DatePicker > Props` (`value`, `clearable`, `minDate`, `maxDate`, `ariaLabel`, `id`, `placeholder`, `name`, `todayDate`). The trigger is a single `<input type="text">` (not `type="date"`) with an adjacent `<button class="dp-icon" aria-label="Open calendar">📅</button>`; focusing the input OR clicking the icon both call `openPopover()`. Implement the `parseIsoDate(input, minDate, maxDate)` helper returning `{ ok: true, iso } | { ok: false, reason: "shape" | "calendar" | "range" }`. The `value` prop is bound two-way via Svelte's `export let value` + a setter that only updates `value` when validation accepts the change; `displayText` is the local string the input renders and is **never** silently rewritten while text is invalid. On every `input` event re-validate; on `blur`, if empty + `clearable` commit `""`, if valid commit the parsed ISO, if invalid leave `value` at the last good value and set `isInvalid = true` (red border + helper text — copy per `design.md > Manual-input validation rules`). Popover positioning uses fixed coordinates from `triggerEl.getBoundingClientRect()` with prefer-below + flip-up math (`placeBelow = spaceBelow >= popHeight + 8 || spaceBelow >= spaceAbove`) and horizontal clamp `Math.max(8, min(rect.left, vw - popWidth - 8))`; reposition on `isOpen = true`, `viewYear`/`viewMonth` change, debounced `resize` and `scroll`. Outside-click handler attached to `document` while open; Esc closes without committing a calendar selection AND without rewriting typed text. `×` clear button is rendered only when `clearable === true && value !== ""`; clicking clears and closes. `Today` shortcut is rendered into `<CalendarMonth>`'s footer slot and disabled when `todayDate` is outside `[minDate, maxDate]`. No `<input type="date">` rendered anywhere in the trigger. <!-- sdd-owner: implementation -->
+
+### Page — `src/components/CalendarPage.svelte`
+
+- [x] Create `src/components/CalendarPage.svelte` as a self-contained page-level component (no props). On `onMount` call `listDashboardLots({ store_id: null, location_id: null, preset: null, urgency: null })` from `src/lib/dashboard.ts` exactly once; bucket the returned active rows into `dayBadges: Record<string, number>` by `expiry_date` (reduce). Initialise `viewYear` / `viewMonth` from `new Date().getFullYear()` / `getMonth() + 1`; `selectedDate = todayIso()`; `todayDate = todayIso()`. Render `<CalendarMonth dayBadges={dayBadges} selectedDate={selectedDate} todayDate={todayDate} viewYear={viewYear} viewMonth={viewMonth} on:daySelect={(e) => (selectedDate = e.detail)} on:monthChange={(e) => { viewYear = e.detail.year; viewMonth = e.detail.month; }} on:viewYearChange={(e) => (viewYear = e.detail)}>`. Day-detail panel computes `dayRows = lots.filter(l => l.expiry_date === selectedDate)` reactively; columns are Product, Quantity, Unit, Store, Location, Days remaining, Status; empty day shows `No expirations on YYYY-MM-DD`. Lot row click opens the existing lot edit overlay reusing the same pattern as `DashboardPage.svelte::showLotDetail` (modal hosting `<LotForm>`); do not invent a new modal primitive. Refresh button next to the month label triggers `loadLots()` again; no auto-refresh in v1; no month-nav refetch. No `<input type="date">` rendered anywhere. <!-- sdd-owner: implementation -->
+
+### Host adoption — `src/components/LotForm.svelte`
+
+- [x] Replace the native expiry-date input at `src/components/LotForm.svelte` lines 244–249 (the `<label>Expiry date *<input type="date" bind:value={expiryDate} required /></label>` block) with `<DatePicker bind:value={expiryDate} clearable={false} ariaLabel="Expiry date" id="lot-expiry" name="expiry_date" placeholder="YYYY-MM-DD" todayDate={todayIso()} />`. Do not remove the `required` semantics — they stay in the JS guard at lines 119–121 (`if (!expiryDate) errorMsg = "Expiry date is required"; return;`), which is the source of truth. Remove the orphan `label input[type="date"],` CSS selector at line 343 (no longer matches any DOM element after this change). Confirm that `grep -RIn 'type="date"' src/components/LotForm.svelte` returns zero matches. <!-- sdd-owner: implementation -->
+
+### Host adoptions — `src/components/ReportsPage.svelte`
+
+- [x] Replace the `Date from` native input at `src/components/ReportsPage.svelte` lines 367–373 with `<DatePicker bind:value={dateFrom} ariaLabel="Date from" placeholder="YYYY-MM-DD" clearable={true} todayDate={todayIso()} />`. The existing `.filter-field input` selector (no `type="date"` qualifier) continues to apply because the trigger renders `<input type="text">`. Confirm `grep -RIn 'type="date"' src/components/ReportsPage.svelte` returns zero matches for the `Date from` field after the swap. <!-- sdd-owner: implementation -->
+
+- [x] Replace the `Date to` native input at `src/components/ReportsPage.svelte` lines 376–382 with `<DatePicker bind:value={dateTo} ariaLabel="Date to" placeholder="YYYY-MM-DD" clearable={true} todayDate={todayIso()} />`. The existing `dateFrom.trim() || null` / `dateTo.trim() || null` chain in `ReportsPage.buildFilters()` continues to translate empty picker output to `null` filters unchanged. Confirm `grep -RIn 'type="date"' src/components/ReportsPage.svelte` returns zero matches overall after both swaps. <!-- sdd-owner: implementation -->
+
+### Nav wiring — `src/App.svelte`
+
+- [x] Wire the Calendar nav entry in `src/App.svelte`. Change `type Tab = "dashboard" | "stores" | "products" | "reports" | "import" | "backup";` (line 11) to add `"calendar"` between `"products"` and `"reports"`. Add `import CalendarPage from "./components/CalendarPage.svelte";` to the existing import block at the top of the file. Add a `<button class="nav-btn" class:active={activeTab === "calendar"} on:click={() => (activeTab = "calendar")}>Calendar</button>` between the existing Products and Reports buttons in the nav (lines 39–48). Add `{:else if activeTab === "calendar"} <CalendarPage />` to the view switch (after the existing `{:else if activeTab === "products"}` arm at line 73). Initial `activeTab` stays `"stores"`; Calendar is opt-in like Reports. Final nav order: Dashboard / Stores / Products / **Calendar** / Reports / Import / Backup, matching `design.md > Confirmed scope boundaries > D14`. <!-- sdd-owner: implementation -->
+
+### Spec / canonical alignment
+
+- [x] Apply the spec delta to the canonical spec at `openspec/specs/caduxo-expiry-tracker/spec.md` (NOT the change-scoped copy at `openspec/changes/caduxo-custom-date-picker/specs/caduxo-expiry-tracker/spec.md`). Four edits per `design.md > Spec delta`: (1) append `## Capability: Date input` with one requirement covering in-house picker, ISO `YYYY-MM-DD` in/out, year range 1900–2100, selection-closes-popover, manual input without silent rewrite, `clearable` contract, and keyboard ergonomics (Tab / Esc / Enter + arrows + PageUp/Down + Shift+PageUp/Down); (2) append `## Capability: Calendar` with one requirement covering current-month open + today-highlighted + today-selected, per-day dot badges, day-detail panel, lot-row click opens the existing edit flow, and `list_dashboard_lots` data source with no month-nav refetch; (3) edit `## Capability: Expiry lots > ### Requirement: lot registration` to add the one-line pointer `The expiry date field uses the Date input picker with clearable={false}.` after the field list; (4) edit `## Capability: Reports > ### Requirement: report filters` to add the one-line pointer `The date range fields use the Date input picker (clearable, optional).` after the filter list. Append the four `#### Scenario:` blocks from `design.md > Custom date picker` and the six `#### Scenario:` blocks from `design.md > Calendar tab` under their respective requirements. <!-- sdd-owner: implementation -->
+
+- [x] Cross-reference check the spec delta for drift. Confirm `openspec/specs/caduxo-expiry-tracker/spec.md` contains exactly: one `## Capability: Date input` section, one `## Capability: Calendar` section, the two one-line pointer sentences under their respective existing requirements, and that no `type="date"` mention leaks into the canonical spec text (other than the historical note that the native wrapper was superseded). Run `grep -nE 'type="date"' openspec/specs/caduxo-expiry-tracker/spec.md` and confirm the result. <!-- sdd-owner: implementation -->
+
+### Documentation alignment
+
+- [x] Align `docs/prd.md` per `proposal.md > Scope F`. Add a short Calendar tab subsection under the existing navigation/feature surface describing the new top-level Calendar entry (current month + today highlighted/selected, dot badges per day, day-detail panel listing lots + products). Update any existing PRD references to the picker so they describe the in-house custom date picker rather than a native HTML date input (search for `expiry date` / `expiryDate` / `<input type="date">` mentions in `docs/prd.md` and align wording). Keep the change minimal — the PRD is product-level, not implementation-level; do not rewrite sections that already describe expiry lot behaviour correctly. <!-- sdd-owner: implementation -->
+
+### Apply-owned verification
+
+- [x] Run `npx svelte-check --workspace . --threshold error` from `/home/xeworg/Proyectos/Caduxo`. The command exits 0. Record the exact exit code and any output that mentions `DatePicker`, `CalendarMonth`, `CalendarPage`, `App.svelte`, `LotForm`, or `ReportsPage` into `openspec/changes/caduxo-custom-date-picker/apply-progress.md` under a "svelte-check" section. Zero new errors is the gate; any new error is a blocker for the next task and must be fixed before `npm run build` runs. <!-- sdd-owner: implementation -->
+
+- [x] Run `npm run build` from `/home/xeworg/Proyectos/Caduxo`. The command exits 0. Record the exit code and any Vite warnings that mention the new components into `apply-progress.md` under a "vite build" section. <!-- sdd-owner: implementation -->
+
+- [x] Record manual smoke evidence for flows **M1 through M20** from `design.md > Tests > Manual smoke` into `apply-progress.md`. Each M-row gets a short note (Linux/WebKitGTK pass/fail, observed behaviour matching the design's "Expected" column). M17 is the mechanical defect-fix gate: `grep -R 'type="date"' src/` returns zero matches — paste the actual command output into the apply-progress file as the canonical evidence. M20 is the OS-level defect confirmation: on Linux/WebKitGTK, opening the picker does NOT trigger the GTK native picker. M19 covers Feb 29 in a non-leap year (e.g., nav from March 2026 → Feb 2026 → cell counts correct at 28). Mark a flow as "deferred" if the environment does not support it (e.g., M20 on a Windows-only run) and record which environment actually exercised it. <!-- sdd-owner: implementation -->
+
+- [x] Verify the backend baseline is unchanged. Run `cargo test --manifest-path src-tauri/Cargo.toml --lib` from `/home/xeworg/Proyectos/Caduxo`. Confirm the result matches the archived baseline from `archive/2026-09-14-caduxo-measurement-unit-options/apply-progress.md`: **276 passed + 2 pre-existing failures** (`services::reports::tests::preview_report_in_alert_window_returns_alert_lots`, `services::reports::tests::preview_report_next_30_days_returns_30d_lots`). This slice touches zero Rust files; any deviation is a regression and must be triaged before archive. Paste the actual pass/fail summary line into `apply-progress.md` under a "cargo test --lib baseline" section. <!-- sdd-owner: implementation -->
+
+- [x] Write the verify report at `openspec/changes/caduxo-custom-date-picker/verify-report.md` summarising: the four grep results (one per host site, plus the global `grep -R 'type="date"' src/`), the svelte-check exit code, the vite build exit code, the M1–M20 smoke outcomes, and the cargo test baseline confirmation. Cross-link to the apply-progress evidence ledger. The verify report is the parent gate's input; it must reference every checklist item above with the concrete evidence (command + exit code + observed output excerpt). <!-- sdd-owner: implementation -->
+
+## Parent lifecycle gates
+
+These are post-apply actions owned by the parent orchestrator, not by the implementation phase. They are grouped here so the parent knows the bounded-review and archive path is waiting once `apply-progress.md` is complete.
+
+- Parent gate: Start or reuse a bounded review for this slice once the verify report is written. <!-- sdd-owner: parent -->
+
+- Parent gate: Run the dual review (judgment day) and at most two scoped fix/re-judgment rounds per `gentle-ai-judgment-day`. <!-- sdd-owner: parent -->
+
+- Parent gate: Archive the change to `openspec/changes/archive/` after a clean review and capture `archive-report.md` next to `apply-progress.md` and `verify-report.md`. <!-- sdd-owner: parent -->

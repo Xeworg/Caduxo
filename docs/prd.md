@@ -164,6 +164,10 @@ The main screen should be an operational dashboard focused on what the user need
   - Mark resolved.
   - Print/report selection.
 
+### Calendar tab
+
+A **Calendar** tab appears in the main navigation between Products and Reports. It opens at the current month with today highlighted and selected, and shows a per-day calendar grid. Each day that has one or more expiring lots displays a dot badge under the day number. Clicking a day reveals a detail panel listing all lots expiring on that date, with columns for product, quantity, unit, store, location, days remaining, and status. Clicking a lot row opens the lot detail/edit overlay. The Calendar tab sources its data from the same dashboard lot list and performs no additional backend calls during month navigation in v1.
+
 ### SKU/UPC and scanner workflow
 
 - User can place the cursor in a scan/search field and scan a UPC.

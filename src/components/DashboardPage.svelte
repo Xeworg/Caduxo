@@ -323,6 +323,8 @@
       status: detail.status,
       urgency: "",
       days_remaining: 0,
+      default_unit_id: null,
+      unit_type: null,
     };
     resolveLot = row;
     resolveQty = 0;

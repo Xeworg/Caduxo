@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import DatePicker from "./DatePicker.svelte";
   import {
     previewReport,
     exportReportPdfWithDialog,
@@ -34,6 +35,11 @@
   let locationId: string | null = null;
   let categoryId: string | null = null;
   let urgency: string = "";
+  function todayIso(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
   let dateFrom: string = "";
   let dateTo: string = "";
 
@@ -366,19 +372,23 @@
 
         <label class="filter-field">
           <span>Date from</span>
-          <input
-            type="date"
+          <DatePicker
             bind:value={dateFrom}
+            ariaLabel="Date from"
             placeholder="YYYY-MM-DD"
+            clearable={true}
+            todayDate={todayIso()}
           />
         </label>
 
         <label class="filter-field">
           <span>Date to</span>
-          <input
-            type="date"
+          <DatePicker
             bind:value={dateTo}
+            ariaLabel="Date to"
             placeholder="YYYY-MM-DD"
+            clearable={true}
+            todayDate={todayIso()}
           />
         </label>
       </div>
@@ -589,8 +599,7 @@
     color: #9ca3af;
   }
 
-  .filter-field select,
-  .filter-field input {
+  .filter-field select {
     padding: 7px 10px;
     border: 1px solid #d1d5db;
     border-radius: 6px;
@@ -600,8 +609,7 @@
     color: #1e293b;
   }
 
-  .filter-field select:focus,
-  .filter-field input:focus {
+  .filter-field select:focus {
     outline: none;
     border-color: #2563eb;
     box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
