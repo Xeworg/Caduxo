@@ -62,23 +62,25 @@
   function buildMonthGrid(
     year: number,
     month: number,
-  ): { iso: string; day: number; isOutside: boolean }[] {
-    const cells: { iso: string; day: number; isOutside: boolean }[] = [];
+  ): { idx: number; iso: string; day: number; isOutside: boolean }[] {
+    const cells: { idx: number; iso: string; day: number; isOutside: boolean }[] = [];
     const firstDow = new Date(year, month - 1, 1).getDay(); // 0=Sun
     const totalDays = daysInMonth(year, month);
 
-    // Leading blanks
-    for (let i = 0; i < firstDow; i++) {
-      cells.push({ iso: "", day: 0, isOutside: true });
+    // Each cell carries a stable, position-unique `idx` so the keyed-each has
+    // a distinct key even for the blank cells (which all share iso=""+day=0).
+    let idx = 0;
+    function pushBlank() {
+      cells.push({ idx: idx++, iso: "", day: 0, isOutside: true });
     }
+    // Leading blanks
+    for (let i = 0; i < firstDow; i++) pushBlank();
     // Actual days
     for (let d = 1; d <= totalDays; d++) {
-      cells.push({ iso: isoDate(year, month, d), day: d, isOutside: false });
+      cells.push({ idx: idx++, iso: isoDate(year, month, d), day: d, isOutside: false });
     }
     // Trailing blanks to reach 42 cells
-    while (cells.length < 42) {
-      cells.push({ iso: "", day: 0, isOutside: true });
-    }
+    while (cells.length < 42) pushBlank();
     return cells;
   }
 
@@ -423,7 +425,7 @@
     tabindex="0"
     on:keydown={onKeydown}
   >
-    {#each grid as cell (cell.iso + cell.day)}
+    {#each grid as cell (cell.idx)}
       {#if cell.iso && !cell.isOutside}
         {@const isToday = cell.iso === todayDate}
         {@const isSelected = cell.iso === selectedDate}

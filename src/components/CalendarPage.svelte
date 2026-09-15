@@ -298,6 +298,10 @@ const watchdog = window.setTimeout(() => {
     viewMonth = e.detail.month;
   }
 
+  function onViewYearChange(e: CustomEvent<number>) {
+    viewYear = e.detail;
+  }
+
   function onDaySelect(e: CustomEvent<string>) {
     selectedDate = e.detail;
   }
@@ -435,6 +439,7 @@ function onLotCancel() {
           ariaLabel="Expiry calendar"
           on:daySelect={onDaySelect}
           on:monthChange={onMonthChange}
+          on:viewYearChange={onViewYearChange}
         />
       </div>
 
