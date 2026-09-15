@@ -95,9 +95,13 @@
             return cat ? { id, name: cat.name } : { id, name: `?${id.slice(0, 4)}` };
         });
 
-    /** Whether the query has at least one matching category in results. */
-    $: hasMatch = results.some(
-        (c) => c.name.toLowerCase().includes(query.toLowerCase()),
+    /**
+     * Whether the query exactly matches an existing category name.
+     * Partial matches should still offer inline create: typing "Bate" while
+     * "Bateria" exists must allow creating the distinct "Bate" category.
+     */
+    $: hasExactMatch = results.some(
+        (c) => c.name.trim().toLowerCase() === query.trim().toLowerCase(),
     );
 
     // ─── Popover open / close ───────────────────────────────────────────────────
@@ -306,7 +310,7 @@
     function totalItems(): number {
         let n = includeUncategorized ? 1 : 0;
         n += results.length;
-        if (!hasMatch && query.trim()) n += 1; // create row
+        if (!hasExactMatch && query.trim()) n += 1; // create row
         return n;
     }
 
@@ -329,7 +333,7 @@
         if (resultIdx >= 0 && resultIdx < results.length) {
             toggle(results[resultIdx].id);
             closePopover();
-        } else if (resultIdx === results.length && !hasMatch && query.trim()) {
+        } else if (resultIdx === results.length && !hasExactMatch && query.trim()) {
             submitInlineCreate();
         }
     }
@@ -527,7 +531,7 @@
                 {/each}
 
                 <!-- Inline create row -->
-                {#if query.trim() && !hasMatch}
+                {#if query.trim() && !hasExactMatch}
                     {@const createIdx = (includeUncategorized ? 1 : 0) + results.length}
                     <!-- svelte-ignore a11y-click-events-have-key-events -->
                     <div
