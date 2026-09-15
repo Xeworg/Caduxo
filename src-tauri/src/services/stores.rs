@@ -29,11 +29,13 @@ pub async fn list_stores(pool: &DbPool) -> Result<Vec<StoreResponse>, AppError> 
 }
 
 /// Lists all stores (active and inactive).
+#[allow(dead_code)]
 pub async fn list_all_stores(pool: &DbPool) -> Result<Vec<StoreResponse>, AppError> {
     repo::list_all_stores(pool).await.map_err(AppError::from)
 }
 
 /// Gets a single store by id.
+#[allow(dead_code)]
 pub async fn get_store(pool: &DbPool, id: &str) -> Result<Option<StoreResponse>, AppError> {
     repo::get_store(pool, id).await.map_err(AppError::from)
 }
@@ -89,6 +91,7 @@ pub async fn list_locations(
 }
 
 /// Lists all locations (active and inactive) for a given store.
+#[allow(dead_code)]
 pub async fn list_all_locations(
     pool: &DbPool,
     store_id: &str,

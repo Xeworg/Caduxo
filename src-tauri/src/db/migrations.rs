@@ -18,7 +18,7 @@ use super::pool::{pool_options, sqlite_options, DbPool};
 /// All application migrations in order.
 ///
 /// Each entry is `(version, description, SQL)`.
-const MIGRATIONS: &[(i64, &str, &str)] = &[
+pub(crate) const MIGRATIONS: &[(i64, &str, &str)] = &[
     // V1 — smoke-test: create a marker table. This confirms the DB and
     // migrations subsystem are working before any real schema is added.
     (
@@ -246,6 +246,132 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
               AND default_unit_id IS NULL;
             "#,
     ),
+    // V4 — product_categories junction table.
+    //
+    // Many-to-many relation: a product may belong to zero, one, or many categories.
+    // The junction is the canonical runtime source of truth for category membership.
+    // The legacy `products.category_id` column is preserved verbatim as ignored data;
+    // no runtime path reads or writes it after V4 applies (design §2.2).
+    //
+    // Case-fold deduplication: for groups of categories that differ only in case,
+    // the oldest (by created_at ASC, id ASC) wins as canonical. All junction rows
+    // and legacy column values referencing a younger duplicate are remapped to the
+    // canonical id. Duplicate categories are archived (is_active = 0) rather than
+    // hard-deleted so junction row history is preserved.
+    (
+        4,
+        "add_product_categories_v4",
+        r#"
+                -- ── Junction table ───────────────────────────────────────────────
+                CREATE TABLE IF NOT EXISTS product_categories (
+                    product_id  TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+                    category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
+                    created_at  TEXT NOT NULL,
+                    PRIMARY KEY (product_id, category_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_product_categories_category
+                    ON product_categories(category_id);
+
+                CREATE INDEX IF NOT EXISTS idx_product_categories_product
+                    ON product_categories(product_id);
+
+                -- ── Idempotent back-fill from legacy FK ───────────────────────────
+                -- Copy products.category_id into the junction. Re-running is a no-op
+                -- (NOT EXISTS guards against duplicates even if the composite PK is
+                -- somehow bypassed during development).
+                INSERT INTO product_categories (product_id, category_id, created_at)
+                SELECT p.id, p.category_id, p.created_at
+                FROM products p
+                WHERE p.category_id IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM product_categories pc
+                      WHERE pc.product_id = p.id AND pc.category_id = p.category_id
+                  );
+
+                -- ── Case-fold deduplication ────────────────────────────────────────
+                -- For groups of categories that differ only in case, keep the oldest
+                -- (created_at ASC, id ASC) as canonical, archive the rest, and
+                -- remap all junction rows and legacy column references.
+                -- Uses subqueries only to maximise SQLite compatibility.
+
+                -- Remap product_categories: any row pointing to a non-canonical category
+                -- (one that shares a name-key with an older, active category) is redirected.
+                UPDATE product_categories
+                SET category_id = (
+                    SELECT older.id
+                    FROM categories newer
+                    JOIN categories older ON lower(older.name) = lower(newer.name)
+                    WHERE newer.id = product_categories.category_id
+                      AND older.is_active = 1
+                    ORDER BY older.created_at ASC, older.id ASC
+                    LIMIT 1
+                )
+                WHERE EXISTS (
+                    SELECT 1 FROM categories older2
+                    WHERE lower(older2.name) = lower(
+                        (SELECT name FROM categories WHERE id = product_categories.category_id)
+                    )
+                      AND older2.is_active = 1
+                      AND older2.id != product_categories.category_id
+                      AND (
+                          older2.created_at < (
+                              SELECT created_at FROM categories WHERE id = product_categories.category_id
+                          )
+                          OR (
+                              older2.created_at = (
+                                  SELECT created_at FROM categories WHERE id = product_categories.category_id
+                              )
+                              AND older2.id < product_categories.category_id
+                          )
+                      )
+                );
+
+                -- Remap legacy products.category_id the same way.
+                UPDATE products
+                SET category_id = (
+                    SELECT older.id
+                    FROM categories newer
+                    JOIN categories older ON lower(older.name) = lower(newer.name)
+                    WHERE newer.id = products.category_id
+                      AND older.is_active = 1
+                    ORDER BY older.created_at ASC, older.id ASC
+                    LIMIT 1
+                )
+                WHERE EXISTS (
+                    SELECT 1 FROM categories older2
+                    WHERE lower(older2.name) = lower(
+                        (SELECT name FROM categories WHERE id = products.category_id)
+                    )
+                      AND older2.is_active = 1
+                      AND older2.id != products.category_id
+                      AND (
+                          older2.created_at < (
+                              SELECT created_at FROM categories WHERE id = products.category_id
+                          )
+                          OR (
+                              older2.created_at = (
+                                  SELECT created_at FROM categories WHERE id = products.category_id
+                              )
+                              AND older2.id < products.category_id
+                          )
+                      )
+                );
+
+                -- Archive (soft-delete) the younger duplicate categories.
+                -- Canonical = lowest id per case-insensitive name group (since id is
+                -- ordered by creation time). Archive everything else.
+                UPDATE categories
+                SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+                WHERE is_active = 1
+                  AND EXISTS (
+                      SELECT 1 FROM categories older
+                      WHERE lower(older.name) = lower(categories.name)
+                        AND older.id < categories.id
+                        AND older.is_active = 1
+                  );
+                "#,
+    ),
 ];
 
 /// Returns a `Migrator` built from the inline `MIGRATIONS` constant.
@@ -293,6 +419,7 @@ pub async fn run_migrations(pool: &DbPool) -> Result<(), sqlx::Error> {
 }
 
 /// Returns the count of applied migrations in the tracking table.
+#[allow(dead_code)]
 pub async fn applied_count(pool: &DbPool) -> Result<u32, sqlx::Error> {
     let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM _sqlx_migrations")
         .fetch_one(pool)
@@ -362,12 +489,12 @@ mod tests {
 
     // -------------------------------------------------------------------
     // Test: all migrations apply cleanly on a fresh in-memory database.
-    // V3 adds the unit_definitions table + product catalog linkage.
+    // V4 adds the product_categories junction table + case-fold deduplication.
     // -------------------------------------------------------------------
     #[tokio::test]
     async fn v2_schema_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
-        assert_eq!(applied_count(&pool).await.unwrap(), 3);
+        assert_eq!(applied_count(&pool).await.unwrap(), 4);
     }
 
     // -------------------------------------------------------------------
@@ -863,8 +990,8 @@ mod tests {
         let pool = fresh_test_pool().await.unwrap();
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            3,
-            "V3 should bring applied count to 3"
+            4,
+            "V4 now brings applied count to 4"
         );
     }
 
@@ -879,11 +1006,288 @@ mod tests {
         let second_count = applied_count(&pool).await.unwrap();
         assert_eq!(
             first_count, second_count,
-            "re-running V3 migrations should add no new rows"
+            "re-running migrations should add no new rows"
         );
     }
 
-    // -------------------------------------------------------------------
+    // ====================================================================
+    // V4 — product_categories migration tests
+    // ====================================================================
+
+    /// Builds a V3-only migrator (for seeding V3-only data before running V4).
+    fn v3_only_migrator() -> sqlx::migrate::Migrator {
+        use sqlx::migrate::{Migration, MigrationType};
+        use std::borrow::Cow;
+        let v3_migrations: Vec<Migration> = MIGRATIONS
+            .iter()
+            .filter(|(v, _, _)| *v <= 3)
+            .map(|(version, description, sql)| {
+                Migration::new(
+                    *version,
+                    Cow::Owned(description.to_string()),
+                    MigrationType::Simple,
+                    Cow::Owned(sql.to_string()),
+                    false,
+                )
+            })
+            .collect();
+        sqlx::migrate::Migrator {
+            migrations: Cow::Owned(v3_migrations),
+            ignore_missing: false,
+            locking: true,
+            no_tx: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn v4_applies_on_fresh_db() {
+        let pool = fresh_test_pool().await.unwrap();
+        assert_eq!(applied_count(&pool).await.unwrap(), 4);
+        assert!(table_exists(&pool, "product_categories").await);
+        assert!(index_exists(&pool, "idx_product_categories_category").await);
+        assert!(index_exists(&pool, "idx_product_categories_product").await);
+    }
+
+    #[tokio::test]
+    async fn v4_migration_is_idempotent() {
+        let pool = fresh_test_pool().await.unwrap();
+        let first_count = applied_count(&pool).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+        let second_count = applied_count(&pool).await.unwrap();
+        assert_eq!(first_count, second_count);
+    }
+
+    #[tokio::test]
+    async fn v4_backfill_copies_legacy_category_id_into_junction() {
+        let now_ts = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let pid = std::process::id();
+        let rand: u16 = rand::random();
+        let db_path = std::path::PathBuf::from(format!("/tmp/caduxo_v4bf_{pid}_{rand}.db"));
+        let _ = std::fs::remove_file(&db_path);
+        let pool = super::open_pool(&db_path).await.unwrap();
+        v3_only_migrator().run(&pool).await.unwrap();
+
+        sqlx::query("INSERT INTO categories (id, name, is_active, created_at, updated_at) VALUES ('cat-dairy', 'Dairy', 1, $1, $2)")
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+        sqlx::query("INSERT INTO products (id, sku, description, category_id, default_alert_days_before, is_active, created_at, updated_at) VALUES ('prod-dairy', 'SKU-D', 'Dairy product', 'cat-dairy', 30, 1, $1, $2)")
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+
+        run_migrations(&pool).await.unwrap();
+
+        let count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM product_categories WHERE product_id = 'prod-dairy'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(count.0, 1);
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[tokio::test]
+    async fn v4_backfill_is_idempotent() {
+        let now_ts = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let pid = std::process::id();
+        let rand: u16 = rand::random();
+        let db_path = std::path::PathBuf::from(format!("/tmp/caduxo_v4idem_{pid}_{rand}.db"));
+        let _ = std::fs::remove_file(&db_path);
+        let pool = super::open_pool(&db_path).await.unwrap();
+        v3_only_migrator().run(&pool).await.unwrap();
+
+        sqlx::query("INSERT INTO categories (id, name, is_active, created_at, updated_at) VALUES ('cat-x', 'X', 1, $1, $2)")
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+        sqlx::query("INSERT INTO products (id, sku, description, category_id, default_alert_days_before, is_active, created_at, updated_at) VALUES ('prod-x', 'SKU-X', 'X prod', 'cat-x', 30, 1, $1, $2)")
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+
+        run_migrations(&pool).await.unwrap();
+        let first: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM product_categories WHERE product_id = 'prod-x'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        run_migrations(&pool).await.unwrap();
+        let second: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM product_categories WHERE product_id = 'prod-x'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(first.0, 1);
+        assert_eq!(first.0, second.0);
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[tokio::test]
+    async fn v4_backfill_skips_null_category_id() {
+        let now_ts = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let pid = std::process::id();
+        let rand: u16 = rand::random();
+        let db_path = std::path::PathBuf::from(format!("/tmp/caduxo_v4null_{pid}_{rand}.db"));
+        let _ = std::fs::remove_file(&db_path);
+        let pool = super::open_pool(&db_path).await.unwrap();
+        v3_only_migrator().run(&pool).await.unwrap();
+
+        sqlx::query("INSERT INTO products (id, sku, description, category_id, default_alert_days_before, is_active, created_at, updated_at) VALUES ('prod-null', 'SKU-NULL', 'No cat', NULL, 30, 1, $1, $2)")
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+
+        run_migrations(&pool).await.unwrap();
+        let count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM product_categories WHERE product_id = 'prod-null'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(count.0, 0);
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[tokio::test]
+    async fn v4_case_fold_dedup_keeps_oldest() {
+        let now_ts = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let pid = std::process::id();
+        let rand: u16 = rand::random();
+        let db_path = std::path::PathBuf::from(format!("/tmp/caduxo_v4dedup_{pid}_{rand}.db"));
+        let _ = std::fs::remove_file(&db_path);
+        let pool = super::open_pool(&db_path).await.unwrap();
+        v3_only_migrator().run(&pool).await.unwrap();
+
+        sqlx::query("INSERT INTO categories (id, name, is_active, created_at, updated_at) VALUES ('cat-dairy', 'Dairy', 1, $1, $2)")
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+        sqlx::query("INSERT INTO categories (id, name, is_active, created_at, updated_at) VALUES ('cat-dairy2', 'dairy', 1, $1, $2)")
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+        sqlx::query("INSERT INTO products (id, sku, description, category_id, default_alert_days_before, is_active, created_at, updated_at) VALUES ('prod-dd', 'SKU-DD', 'DD', 'cat-dairy2', 30, 1, $1, $2)")
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+
+        run_migrations(&pool).await.unwrap();
+
+        let dairy_active: (i32,) =
+            sqlx::query_as("SELECT is_active FROM categories WHERE id = 'cat-dairy'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(dairy_active.0, 1);
+
+        let dup_active: (i32,) =
+            sqlx::query_as("SELECT is_active FROM categories WHERE id = 'cat-dairy2'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(dup_active.0, 0);
+
+        let junc_count: (i64,) =
+                sqlx::query_as("SELECT COUNT(*) FROM product_categories WHERE product_id = 'prod-dd' AND category_id = 'cat-dairy'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+        assert_eq!(junc_count.0, 1);
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[tokio::test]
+    async fn v4_case_fold_dedup_remaps_legacy_column() {
+        let now_ts = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let pid = std::process::id();
+        let rand: u16 = rand::random();
+        let db_path = std::path::PathBuf::from(format!("/tmp/caduxo_v4remap_{pid}_{rand}.db"));
+        let _ = std::fs::remove_file(&db_path);
+        let pool = super::open_pool(&db_path).await.unwrap();
+        v3_only_migrator().run(&pool).await.unwrap();
+
+        sqlx::query("INSERT INTO categories (id, name, is_active, created_at, updated_at) VALUES ('cat-bak', 'Bakery', 1, $1, $2)")
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+        sqlx::query("INSERT INTO categories (id, name, is_active, created_at, updated_at) VALUES ('cat-bak2', 'BAKERY', 1, $1, $2)")
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+        sqlx::query("INSERT INTO products (id, sku, description, category_id, default_alert_days_before, is_active, created_at, updated_at) VALUES ('prod-bak', 'SKU-BAK', 'Bak', 'cat-bak2', 30, 1, $1, $2)")
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+
+        run_migrations(&pool).await.unwrap();
+
+        let legacy: (Option<String>,) =
+            sqlx::query_as("SELECT category_id FROM products WHERE id = 'prod-bak'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(legacy.0.as_deref(), Some("cat-bak"));
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[tokio::test]
+    async fn v4_legacy_column_intact_for_non_duplicate_categories() {
+        let now_ts = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let pid = std::process::id();
+        let rand: u16 = rand::random();
+        let db_path = std::path::PathBuf::from(format!("/tmp/caduxo_v4legacy_{pid}_{rand}.db"));
+        let _ = std::fs::remove_file(&db_path);
+        let pool = super::open_pool(&db_path).await.unwrap();
+        v3_only_migrator().run(&pool).await.unwrap();
+
+        sqlx::query("INSERT INTO categories (id, name, is_active, created_at, updated_at) VALUES ('cat-prod', 'Produce', 1, $1, $2)")
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+        sqlx::query("INSERT INTO products (id, sku, description, category_id, default_alert_days_before, is_active, created_at, updated_at) VALUES ('prod-prod', 'SKU-PROD', 'Produce product', 'cat-prod', 30, 1, $1, $2)")
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+
+        run_migrations(&pool).await.unwrap();
+
+        let legacy: (Option<String>,) =
+            sqlx::query_as("SELECT category_id FROM products WHERE id = 'prod-prod'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(legacy.0.as_deref(), Some("cat-prod"));
+        let _ = std::fs::remove_file(&db_path);
+    }
+
     // Test: all required indexes exist after migration.
     // -------------------------------------------------------------------
     #[tokio::test]

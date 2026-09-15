@@ -36,7 +36,8 @@ export interface ProductResponse {
  id: string;
  sku: string;
  description: string;
- category_id: string | null;
+ /** Resolved from the `product_categories` junction table (V4). Zero or more ids. */
+ category_ids: string[];
  default_unit: string | null;
  /** FK into `unit_definitions`; drives catalog-based unit display. */
  default_unit_id: string | null;
@@ -52,7 +53,8 @@ export interface ProductResponse {
 export interface ProductCreate {
  sku: string;
  description: string;
- category_id?: string | null;
+ /** Multi-category assignment via the `product_categories` junction table (V4). */
+ category_ids?: string[] | null;
  default_unit?: string | null;
  /** Optional explicit catalog link. Takes precedence over `default_unit` text. */
  default_unit_id?: string | null;
@@ -64,7 +66,8 @@ export interface ProductUpdate {
  id: string;
  sku: string;
  description: string;
- category_id?: string | null;
+ /** Multi-category assignment via the `product_categories` junction table (V4). */
+ category_ids?: string[] | null;
  default_unit?: string | null;
  /** Optional explicit catalog link. Takes precedence over `default_unit` text. */
  default_unit_id?: string | null;
@@ -76,7 +79,8 @@ export interface ProductUpdate {
 export interface ProductDetailResponse {
  product: ProductResponse;
  barcodes: ProductBarcodeResponse[];
- category: CategoryResponse | null;
+ /** Full `CategoryResponse` objects for each category this product belongs to (V4). */
+ categories: CategoryResponse[];
 }
 
 // ─── Product barcodes ───────────────────────────────────────────────────────
@@ -111,7 +115,8 @@ export interface ProductSearchResult {
  id: string;
  sku: string;
  description: string;
- category_id: string | null;
+ /** Category ids from the `product_categories` junction table (V4). */
+ category_ids: string[];
  primary_barcode: string | null;
  is_active: boolean;
 }

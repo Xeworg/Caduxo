@@ -7,6 +7,8 @@
     type ProductResponse,
     type ProductSearchResult,
   } from "../lib/products.js";
+  import { UNCATEGORIZED_SENTINEL } from "../lib/categories.js";
+  import CategoryPicker from "./inputs/CategoryPicker.svelte";
   import { exportProductsWithDialog } from "../lib/csv.js";
   import ProductForm from "./ProductForm.svelte";
   import ProductDetailPage from "./ProductDetailPage.svelte";
@@ -22,6 +24,7 @@
   let selectedProduct: ProductResponse | null = null;
   let selectedProductId: string | null = null;
 
+  let categoryIds: string[] = [];
   let categories: CategoryResponse[] = [];
 
   let loading = true;
@@ -149,10 +152,23 @@
           errorMsg = String(e);
           setTimeout(() => (errorMsg = ""), 5000);
         } finally {
-          exporting = false;
-        }
-      }
-</script>
+              exporting = false;
+            }
+          }
+
+      /**
+       * Products matching the active search query.
+       * When `categoryIds` is non-empty, further filtered client-side by category.
+       */
+      $: displayedProducts = (() => {
+        if (categoryIds.length === 0) return results;
+        const hasUncat = categoryIds.includes(UNCATEGORIZED_SENTINEL);
+        return results.filter((p: ProductSearchResult) => {
+          if (p.category_ids.length === 0) return hasUncat;
+          return p.category_ids.some((cid: string) => categoryIds.includes(cid));
+        });
+      })();
+    </script>
 
 <div class="page">
       <header class="page-header">
@@ -181,22 +197,30 @@
     <div class="alert alert-success" role="status">{successMsg}</div>
   {/if}
 
-  {#if view === "list"}
-    <!-- ── Search bar ──────────────────────────────────────────────────── -->
-    <div class="search-bar">
-      <input
-        type="text"
-        bind:value={searchQuery}
-        on:input={onSearchInput}
-        placeholder="Search by description, SKU, or barcode…"
-        autocomplete="off"
-      />
-      {#if searchQuery}
-        <button type="button" class="btn-secondary btn-small" on:click={clearSearch}>
-          Clear
-        </button>
-      {/if}
-    </div>
+      {#if view === "list"}
+        <!-- ── Search bar ──────────────────────────────────────────────────── -->
+        <div class="search-bar">
+          <input
+            type="text"
+            bind:value={searchQuery}
+            on:input={onSearchInput}
+            placeholder="Search by description, SKU, or barcode…"
+            autocomplete="off"
+          />
+          {#if searchQuery}
+            <button type="button" class="btn-secondary btn-small" on:click={clearSearch}>
+              Clear
+            </button>
+          {/if}
+          <div class="category-filter">
+            <CategoryPicker
+              bind:value={categoryIds}
+              {categories}
+              includeUncategorized={true}
+              placeholder="Filter by category…"
+            />
+          </div>
+        </div>
 
     {#if loading}
       <p class="loading">Loading products…</p>
@@ -213,13 +237,13 @@
       </div>
     {:else}
       <div class="results-summary">
-        <span>{results.length} {results.length === 1 ? "product" : "products"}</span>
+        <span>{displayedProducts.length} {displayedProducts.length === 1 ? "product" : "products"}</span>
         {#if appliedQuery}
           <span class="results-filter">for "<strong>{appliedQuery}</strong>"</span>
         {/if}
       </div>
       <ul class="product-list">
-        {#each results as product (product.id)}
+        {#each displayedProducts as product (product.id)}
           <li>
             <button
               type="button"
@@ -271,7 +295,7 @@
   {:else if view === "detail" && selectedProductId}
     <section class="panel">
       <ProductDetailPage
-        productId={selectedProductId}
+        productId={selectedProductId!}
         onBack={cancelForm}
         onEdit={handleEditedFromDetail}
         onArchived={handleArchived}

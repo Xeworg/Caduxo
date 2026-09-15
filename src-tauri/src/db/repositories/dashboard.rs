@@ -21,44 +21,38 @@ pub async fn list_dashboard_lots(
 ) -> Result<Vec<DashboardLotRow>, sqlx::Error> {
     // Build the base SELECT with LEFT JOINs for optional location.
     // We always filter to status = 'active' so resolved/archived lots never appear.
-    let rows = sqlx::query_as::<_, DashboardLotRow>(
-        r#"
-        SELECT
-            el.id             AS lot_id,
-            el.product_id,
-            p.sku,
-            p.description,
-            el.store_id,
-            s.name            AS store_name,
-            el.location_id,
-            sl.name           AS location_name,
-            el.quantity,
-            el.unit,
-            el.expiry_date,
-            el.alert_days_before,
-            el.batch_code,
-            el.status,
-            ''                AS urgency,
-            0                 AS days_remaining,
-            p.default_unit_id,
-            p.unit_type
-        FROM expiry_lots AS el
-        JOIN products    AS p  ON p.id = el.product_id
-        JOIN stores      AS s  ON s.id = el.store_id
-        LEFT JOIN store_locations AS sl ON sl.id = el.location_id
-        WHERE el.status = 'active'
-          AND (? IS NULL OR el.store_id = ?)
-          AND (? IS NULL OR el.location_id = ?)
-        ORDER BY el.expiry_date ASC
-        "#,
-    )
-    .bind(&filters.store_id)
-    .bind(&filters.store_id)
-    .bind(&filters.location_id)
-    .bind(&filters.location_id)
-    .fetch_all(pool)
-    .await?;
+    let mut query =
+            "SELECT\n                el.id             AS lot_id,\n                el.product_id,\n                p.sku,\n                p.description,\n                el.store_id,\n                s.name            AS store_name,\n                el.location_id,\n                sl.name           AS location_name,\n                el.quantity,\n                el.unit,\n                el.expiry_date,\n                el.alert_days_before,\n                el.batch_code,\n                el.status,\n                ''                AS urgency,\n                0                 AS days_remaining,\n                p.default_unit_id,\n                p.unit_type\n            FROM expiry_lots AS el\n            JOIN products    AS p  ON p.id = el.product_id\n            JOIN stores      AS s  ON s.id = el.store_id\n            LEFT JOIN store_locations AS sl ON sl.id = el.location_id\n            WHERE el.status = 'active'\n              AND (? IS NULL OR el.store_id = ?)\n              AND (? IS NULL OR el.location_id = ?)\n            "
+            .to_string();
 
+    // Category filter: ANY-of semantics via junction table.
+    // For an empty or None category_ids, no filter is applied.
+    if let Some(ref cat_ids) = filters.category_ids {
+        if !cat_ids.is_empty() {
+            let placeholders: Vec<&str> = cat_ids.iter().map(|_| "?").collect();
+            let in_clause = format!(
+                    "              AND (p.id IN (\n                  SELECT pc.product_id FROM product_categories pc\n                  WHERE pc.category_id IN ({})\n              ))\n            ",
+                    placeholders.join(", ")
+                );
+            query.push_str(&in_clause);
+        }
+    }
+
+    query.push_str("            ORDER BY el.expiry_date ASC\n            ");
+
+    let mut q = sqlx::query_as::<_, DashboardLotRow>(&query)
+        .bind(&filters.store_id)
+        .bind(&filters.store_id)
+        .bind(&filters.location_id)
+        .bind(&filters.location_id);
+
+    if let Some(ref cat_ids) = filters.category_ids {
+        for cid in cat_ids {
+            q = q.bind(cid);
+        }
+    }
+
+    let rows = q.fetch_all(pool).await?;
     Ok(rows)
 }
 
@@ -203,6 +197,7 @@ mod tests {
             location_id: None,
             preset: None,
             urgency: None,
+            category_ids: None,
         };
         let rows = super::list_dashboard_lots(&pool, &filters).await?;
         assert!(
@@ -217,6 +212,7 @@ mod tests {
             location_id: None,
             preset: None,
             urgency: None,
+            category_ids: None,
         };
         let rows_b = super::list_dashboard_lots(&pool, &filters_b).await?;
         assert_eq!(rows_b.len(), 1, "Store B has 1 active lot (today)");
@@ -233,6 +229,7 @@ mod tests {
             location_id: None,
             preset: None,
             urgency: None,
+            category_ids: None,
         };
         let rows = super::list_dashboard_lots(&pool, &filters).await?;
         assert!(

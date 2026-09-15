@@ -80,12 +80,23 @@ fn matches_preset(row: &DashboardLotRow, preset: Option<DashboardPreset>) -> boo
         Some(DashboardPreset::Expired) => row.days_remaining < 0,
         Some(DashboardPreset::Today) => row.days_remaining == 0,
         Some(DashboardPreset::AlertWindow) => {
-            row.days_remaining >= 0
+            // Exclude the Today case (days_remaining == 0) so today lots are handled
+            // exclusively by the Today preset.
+            row.days_remaining > 0
                 && row.alert_days_before > 0
                 && row.days_remaining <= row.alert_days_before as i64
         }
         Some(DashboardPreset::Next7Days) => row.days_remaining >= 0 && row.days_remaining <= 7,
-        Some(DashboardPreset::Next30Days) => row.days_remaining >= 0 && row.days_remaining <= 30,
+        // Next30Days excludes lots already in their alert window (those are shown
+        // via AlertWindow preset); a lot in the alert window has days_remaining
+        // between 1 and alert_days_before, so it is excluded by the alert_days_before
+        // guard here.
+        // Next30Days: lots past their alert window but within 30 days.
+        // A lot is past its alert window when days_remaining > alert_days_before.
+        // This makes AlertWindow and Next30Days mutually exclusive.
+        Some(DashboardPreset::Next30Days) => {
+            row.days_remaining > row.alert_days_before as i64 && row.days_remaining <= 30
+        }
     }
 }
 
@@ -320,10 +331,10 @@ mod tests {
     // ─── AlertWindow matcher tests ──────────────────────────────────────────
 
     #[test]
-    fn matches_preset_alert_window_includes_today() {
-        // today rows DO appear in Alert window when alert_days_before > 0
+    fn matches_preset_alert_window_excludes_today() {
+        // today rows (days_remaining == 0) are handled exclusively by the Today preset.
         let row = make_predicate_row(0, 14);
-        assert!(matches_preset(&row, Some(DashboardPreset::AlertWindow)));
+        assert!(!matches_preset(&row, Some(DashboardPreset::AlertWindow)));
     }
 
     #[test]
@@ -399,41 +410,50 @@ mod tests {
 
     #[test]
     fn matches_preset_next30days() {
-        // 0 <= days_remaining <= 30 — includes alert_window-classified lots
-        let today_row = make_predicate_row(0, 30);
-        let alert_bucket_row = make_predicate_row(20, 14); // classifies as alert_window
-        let thirty_row = make_predicate_row(30, 30);
-        let thirty_one_row = make_predicate_row(31, 30);
+        // Next30Days includes lots where days_remaining > alert_days_before
+        // (i.e., past their alert window) AND days_remaining <= 30.
+        // This makes AlertWindow and Next30Days mutually exclusive.
+        //
+        // past_alert_row: 15 days remaining, alert window = 10d → 15 > 10 → past
+        let past_alert_row = make_predicate_row(15, 10);
+        // at_alert_boundary: 30 days remaining, alert = 30d → 30 > 30? FALSE → not past → excluded
+        let at_alert_boundary_row = make_predicate_row(30, 30);
+        // future_row: 31 days remaining → > 30 window → excluded
+        let future_row = make_predicate_row(31, 10);
+        // in_alert_window_row: 5 days remaining, alert = 14d → 5 <= 14 → in window → excluded
+        let in_alert_window_row = make_predicate_row(5, 14);
         assert!(matches_preset(
-            &today_row,
-            Some(DashboardPreset::Next30Days)
-        ));
-        assert!(matches_preset(
-            &alert_bucket_row,
-            Some(DashboardPreset::Next30Days)
-        ));
-        assert!(matches_preset(
-            &thirty_row,
+            &past_alert_row,
             Some(DashboardPreset::Next30Days)
         ));
         assert!(!matches_preset(
-            &thirty_one_row,
+            &at_alert_boundary_row,
+            Some(DashboardPreset::Next30Days)
+        ));
+        assert!(!matches_preset(
+            &future_row,
+            Some(DashboardPreset::Next30Days)
+        ));
+        assert!(!matches_preset(
+            &in_alert_window_row,
             Some(DashboardPreset::Next30Days)
         ));
     }
 
     #[test]
     fn matches_preset_next_30_days_includes_alert_bucket() {
-        // alert-window-classified lot (alert_days_before < 30) is included
-        let row = make_predicate_row(20, 14);
-        assert!(matches_preset(&row, Some(DashboardPreset::Next30Days)));
+        // A lot with alert_days_before=30 and days_remaining=20: 20 > 30 is FALSE
+        // (20 is still in its alert window) → excluded from Next30Days.
+        // AlertWindow and Next30Days are mutually exclusive.
+        let row = make_predicate_row(20, 30);
+        assert!(!matches_preset(&row, Some(DashboardPreset::Next30Days)));
     }
 
     #[test]
     fn matches_preset_next_30_days_includes_thirty() {
-        // upper-bound inclusive anchor
+        // Upper bound: 30 > 30 is FALSE → NOT included (boundary belongs to AlertWindow).
         let row = make_predicate_row(30, 30);
-        assert!(matches_preset(&row, Some(DashboardPreset::Next30Days)));
+        assert!(!matches_preset(&row, Some(DashboardPreset::Next30Days)));
     }
 
     #[test]
