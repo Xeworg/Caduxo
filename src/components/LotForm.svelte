@@ -1,4 +1,5 @@
 <script lang="ts">
+    import DatePicker from "./DatePicker.svelte";
     import {
         createExpiryLot,
         updateExpiryLot,
@@ -37,6 +38,11 @@
     export let onSaved: (lot: ExpiryLotResponse) => void;
     /** Called when the user cancels. */
     export let onCancel: () => void;
+
+    function todayIso(): string {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    }
 
     // ── Local state ────────────────────────────────────────────────────────────
 
@@ -242,10 +248,14 @@
         <div class="grid-2">
             <label>
                 Expiry date *
-                <input
-                    type="date"
+                <DatePicker
                     bind:value={expiryDate}
-                    required
+                    clearable={false}
+                    ariaLabel="Expiry date"
+                    id="lot-expiry"
+                    name="expiry_date"
+                    placeholder="YYYY-MM-DD"
+                    todayDate={todayIso()}
                 />
             </label>
 
@@ -340,7 +350,6 @@
 
     label input[type="text"],
     label input[type="number"],
-    label input[type="date"],
     label textarea,
     label select {
         padding: 7px 10px;
