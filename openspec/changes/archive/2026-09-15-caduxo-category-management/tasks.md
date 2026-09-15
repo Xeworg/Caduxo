@@ -222,8 +222,8 @@ Chain strategy: stacked-to-main
 
 ## Parent actions (post-apply)
 
-- [ ] Bounded review of the slice per the project's review-workload discipline; confirm the apply-progress ledger captures all verify evidence and that the 2-pre-existing-failure baseline is preserved. <!-- sdd-owner: parent -->
-- [ ] Decision: confirm `Decision needed before apply: No` is honored (single PR, no chained split, no `size:exception`); only escalate if the final diff exceeds the 3,000-line user-typed override. <!-- sdd-owner: parent -->
+- [x] Bounded review of the slice per the project's review-workload discipline; confirm the apply-progress ledger captures all verify evidence and that the 2-pre-existing-failure baseline is preserved. Post-apply regression fixes were independently verified and committed as `83807f8` and `876084f`; user manual smoke confirmed the category picker now works. <!-- sdd-owner: parent -->
+- [x] Decision: confirm `Decision needed before apply: No` is honored (single PR, no chained split, no `size:exception`); final slice remains within the user-typed 3,000-line override. <!-- sdd-owner: parent -->
 
 ## Key Learnings
 

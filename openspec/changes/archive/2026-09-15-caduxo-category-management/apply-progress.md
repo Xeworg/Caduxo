@@ -181,3 +181,29 @@ All implementation-owned tasks complete:
 - The V4 migration uses subquery-based deduplication (no CTEs with window functions) to avoid SQLite CTE compatibility issues with nested subqueries.
 - `matches_preset` was updated to make AlertWindow and Next30Days mutually exclusive, fixing the pre-existing test failures.
 - The `products.category_id` legacy column is preserved in the schema but never read or written by runtime code (per design §2.2 invariant).
+
+## Post-apply regression fixes
+
+After the initial apply ledger, manual smoke found CategoryPicker regressions in product editing and inline category creation. The fixes landed in two commits:
+
+- `83807f8` — `Fix category picker selection regressions`
+  - Fixed CategoryPicker first-click focus/click race.
+  - Removed implicit `<label>` wrappers around composite CategoryPicker hosts in `ProductForm.svelte` and `ReportsPage.svelte`, preventing browser label activation from dispatching synthetic clicks to inner controls and removing chips.
+  - Guarded `ProductForm.svelte` edit-mode reseeding so same-product parent refreshes do not clobber in-flight `categoryIds` edits.
+  - Activated and registered `list_categories_search`, fixed the category search service SQL for sqlx 0.8, and corrected Dashboard/Reports `UNCATEGORIZED_SENTINEL` filtering.
+- `876084f` — `Show create option for partial category matches`
+  - Inline create is hidden only for exact case-insensitive category-name matches, not partial matches. Example: typing `Bate` while `Bateria` exists now offers both `Bateria` and `Create "Bate"`.
+
+Focused verification after the regression fixes:
+
+```text
+cargo check --all-targets: passed, only pre-existing warnings
+cargo test --lib services::categories: 6 passed
+cargo test --lib db::repositories::dashboard: 9 passed
+cargo test --lib services::reports: 26 passed
+cargo test --lib: 312 passed, 0 failed
+cargo build --release --lib: passed, only pre-existing warnings
+npx svelte-check --tsconfig ./tsconfig.json: 0 errors, 2 pre-existing warnings
+```
+
+Manual smoke evidence: user tested the current category picker behavior after the fixes and confirmed it works, including selection retention and creation behavior.
