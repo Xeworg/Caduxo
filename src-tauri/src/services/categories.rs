@@ -1,8 +1,17 @@
 //! Category search service — prefix + substring search with pagination.
 
 use crate::db::DbPool;
-use crate::dto::products::{CategorySearchInput, CategorySearchPage};
+use crate::dto::products::{CategoryResponse, CategorySearchInput, CategorySearchPage};
 use crate::error::AppError;
+
+/// Explicit SELECT for the category row shape used by `CategoryResponse`.
+/// sqlx 0.8 dropped the implicit `as_select()` macro; callers pass the
+/// query string explicitly and bind positional parameters.
+const CATEGORY_SELECT: &str = "SELECT id, name, is_active, created_at, updated_at \
+    FROM categories WHERE is_active = 1 \
+    AND lower(name) LIKE $1 \
+    ORDER BY name ASC \
+    LIMIT $2";
 
 /// Searches active categories with case-insensitive prefix match first
 /// and substring fallback when the prefix match returns zero rows.
@@ -21,7 +30,8 @@ pub async fn search(
             .await
             .map_err(AppError::from)?;
 
-        let items = sqlx::query_as(crate::dto::products::CategoryResponse::as_select())
+        let items: Vec<CategoryResponse> = sqlx::query_as(CATEGORY_SELECT)
+            .bind("%")
             .bind(limit as i64)
             .fetch_all(pool)
             .await
@@ -47,7 +57,7 @@ pub async fn search(
     .map_err(AppError::from)?;
 
     if prefix_count.0 > 0 {
-        let items = sqlx::query_as(crate::dto::products::CategoryResponse::as_select())
+        let items: Vec<CategoryResponse> = sqlx::query_as(CATEGORY_SELECT)
             .bind(&prefix)
             .bind(limit as i64)
             .fetch_all(pool)
@@ -71,7 +81,7 @@ pub async fn search(
     .await
     .map_err(AppError::from)?;
 
-    let items = sqlx::query_as(crate::dto::products::CategoryResponse::as_select())
+    let items: Vec<CategoryResponse> = sqlx::query_as(CATEGORY_SELECT)
         .bind(&substring)
         .bind(limit as i64)
         .fetch_all(pool)

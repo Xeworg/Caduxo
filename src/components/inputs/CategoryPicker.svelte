@@ -69,6 +69,14 @@
     /** Results to display in the popover (may come from onSearch or local filter). */
     let results: CategoryResponse[] = [];
 
+    /**
+     * Race-suppression flag: set by `openPopover` when invoked via the input's
+     * focus event. The next click on the trigger (which fires synchronously
+     * after the focus event) would otherwise toggle the freshly opened popover
+     * shut. `togglePopover` consumes the flag and bails out.
+     */
+    let justOpenedByFocus = false;
+
     /** DOM refs */
     let triggerEl: HTMLDivElement;
     let popoverEl: HTMLDivElement;
@@ -95,7 +103,17 @@
     // ─── Popover open / close ───────────────────────────────────────────────────
 
     async function openPopover() {
+        if (isOpen) {
+            // Idempotent re-open keeps focus state consistent without re-running
+            // the initial fetch (which would clobber an in-flight typing state).
+            await tick();
+            inputEl?.focus();
+            return;
+        }
         isOpen = true;
+        // Mark the open as focus-driven so the click that bubbles from the
+        // input on the same gesture doesn't immediately toggle it shut.
+        justOpenedByFocus = true;
         activeIndex = -1;
         // Reset results: if onSearch, fetch all; otherwise use local categories.
         if (onSearch) {
@@ -120,6 +138,12 @@
     }
 
     function togglePopover() {
+        if (justOpenedByFocus) {
+            // The previous focus event opened the popover; the click that just
+            // fired on the trigger is the same gesture and must not toggle it.
+            justOpenedByFocus = false;
+            return;
+        }
         if (isOpen) closePopover();
         else openPopover();
     }
@@ -350,17 +374,17 @@
     <!-- Chip row + trigger -->
     <div class="cp-field" bind:this={triggerEl}>
 
-        <!-- Selected chips -->
-        {#if selectedChips.length > 0 || hasUncategorized}
-            <div class="cp-chips" role="list" aria-label="Selected categories">
-                {#if hasUncategorized}
-                    <span class="cp-chip cp-chip--uncat" role="listitem">
+<!-- Selected chips -->
+            {#if selectedChips.length > 0 || hasUncategorized}
+                <div class="cp-chips" role="list" aria-label="Selected categories">
+                    {#if hasUncategorized}
+                        <span class="cp-chip cp-chip--uncat" role="listitem">
                         Uncategorized
                         <button
                             type="button"
                             class="cp-chip-remove"
                             aria-label="Remove Uncategorized"
-                            on:click={() => removeChip(UNCATEGORIZED_SENTINEL)}
+                            on:click|stopPropagation={() => removeChip(UNCATEGORIZED_SENTINEL)}
                         >✕</button>
                     </span>
                 {/if}
@@ -371,7 +395,7 @@
                             type="button"
                             class="cp-chip-remove"
                             aria-label="Remove {chip.name}"
-                            on:click={() => removeChip(chip.id)}
+                            on:click|stopPropagation={() => removeChip(chip.id)}
                         >✕</button>
                     </span>
                 {/each}
@@ -380,7 +404,7 @@
                 type="button"
                 class="cp-clear-all"
                 aria-label="Clear all selected categories"
-                on:click={clearAll}
+                on:click|stopPropagation={clearAll}
             >
                 Clear all
             </button>

@@ -6,6 +6,7 @@
 use sqlx::SqlitePool;
 
 use crate::dto::dashboard::{DashboardFilters, DashboardLotRow};
+use crate::dto::products::UNCATEGORIZED_SENTINEL;
 // sqlx needs this in scope to find UnitKind's Decode impl.
 
 /// Fetches active expiry lots with enriched context (product, store, location).
@@ -25,16 +26,50 @@ pub async fn list_dashboard_lots(
             "SELECT\n                el.id             AS lot_id,\n                el.product_id,\n                p.sku,\n                p.description,\n                el.store_id,\n                s.name            AS store_name,\n                el.location_id,\n                sl.name           AS location_name,\n                el.quantity,\n                el.unit,\n                el.expiry_date,\n                el.alert_days_before,\n                el.batch_code,\n                el.status,\n                ''                AS urgency,\n                0                 AS days_remaining,\n                p.default_unit_id,\n                p.unit_type\n            FROM expiry_lots AS el\n            JOIN products    AS p  ON p.id = el.product_id\n            JOIN stores      AS s  ON s.id = el.store_id\n            LEFT JOIN store_locations AS sl ON sl.id = el.location_id\n            WHERE el.status = 'active'\n              AND (? IS NULL OR el.store_id = ?)\n              AND (? IS NULL OR el.location_id = ?)\n            "
             .to_string();
 
-    // Category filter: ANY-of semantics via junction table.
-    // For an empty or None category_ids, no filter is applied.
+    // Category filter with sentinel-aware ANY-of semantics.
+    // - The sentinel (`UNCATEGORIZED_SENTINEL`) is filter-only and means
+    //   "products that have NO active category memberships".
+    // - Real ids use a single `EXISTS` over `product_categories` so we get
+    //   ANY-of without a nested `IN (?, ?, ...)`.
+    // - When both are present we OR them: products matching the real ids OR
+    //   products with no junction rows at all.
+    // - Sentinel-only also matches products with zero junction rows.
     if let Some(ref cat_ids) = filters.category_ids {
         if !cat_ids.is_empty() {
-            let placeholders: Vec<&str> = cat_ids.iter().map(|_| "?").collect();
-            let in_clause = format!(
-                    "              AND (p.id IN (\n                  SELECT pc.product_id FROM product_categories pc\n                  WHERE pc.category_id IN ({})\n              ))\n            ",
-                    placeholders.join(", ")
-                );
-            query.push_str(&in_clause);
+            let real_ids: Vec<&String> = cat_ids
+                .iter()
+                .filter(|id| id.as_str() != UNCATEGORIZED_SENTINEL)
+                .collect();
+            let include_uncategorized = cat_ids.iter().any(|id| id == UNCATEGORIZED_SENTINEL);
+
+            match (real_ids.is_empty(), include_uncategorized) {
+                (true, true) => {
+                    // Only the sentinel: every active lot whose product has
+                    // no junction rows.
+                    query.push_str(
+"              AND NOT EXISTS (\n                  SELECT 1 FROM product_categories pc\n                  WHERE pc.product_id = p.id\n              )\n            ",
+                    );
+                }
+                (false, false) => {
+                    // Only real ids: ANY-of via EXISTS over the junction.
+                    let placeholders: Vec<&str> = real_ids.iter().map(|_| "?").collect();
+                    query.push_str(&format!(
+"              AND EXISTS (\n                  SELECT 1 FROM product_categories pc\n                  WHERE pc.product_id = p.id\n                    AND pc.category_id IN ({})\n              )\n            ",
+placeholders.join(", ")
+                    ));
+                }
+                (false, true) => {
+                    // Real ids + sentinel: ANY-of real ids OR no junction rows.
+                    let placeholders: Vec<&str> = real_ids.iter().map(|_| "?").collect();
+                    query.push_str(&format!(
+"              AND (\n                  EXISTS (\n                      SELECT 1 FROM product_categories pc\n                      WHERE pc.product_id = p.id\n                        AND pc.category_id IN ({})\n                  )\n                  OR NOT EXISTS (\n                      SELECT 1 FROM product_categories pc\n                      WHERE pc.product_id = p.id\n                  )\n              )\n            ",
+placeholders.join(", ")
+                    ));
+                }
+                (true, false) => {
+                    // Empty after filtering out sentinel: treat as no filter.
+                }
+            }
         }
     }
 
@@ -47,8 +82,11 @@ pub async fn list_dashboard_lots(
         .bind(&filters.location_id);
 
     if let Some(ref cat_ids) = filters.category_ids {
+        // Only real ids are bound; sentinel is filter-only.
         for cid in cat_ids {
-            q = q.bind(cid);
+            if cid != UNCATEGORIZED_SENTINEL {
+                q = q.bind(cid);
+            }
         }
     }
 
@@ -64,6 +102,7 @@ mod tests {
 
     use crate::db::migrations::fresh_test_pool;
     use crate::dto::dashboard::DashboardFilters;
+    use crate::dto::products::ProductCreate;
 
     async fn seed_schema(pool: &SqlitePool) -> Result<(String, String), sqlx::Error> {
         let now = Utc::now().to_rfc3339();
@@ -256,7 +295,7 @@ mod tests {
         let store_a = Uuid::new_v4().to_string();
         sqlx::query(
             "INSERT INTO stores (id, name, is_active, created_at, updated_at)
-             VALUES ($1, 'Store X', 1, $2, $3)",
+                 VALUES ($1, 'Store X', 1, $2, $3)",
         )
         .bind(&store_a)
         .bind(&now)
@@ -267,8 +306,8 @@ mod tests {
         let product_id = Uuid::new_v4().to_string();
         sqlx::query(
             "INSERT INTO products (id, sku, description, default_alert_days_before,
-                                  is_active, created_at, updated_at)
-             VALUES ($1, 'RES-001', 'Resolved Product', 7, 1, $2, $3)",
+                                      is_active, created_at, updated_at)
+                 VALUES ($1, 'RES-001', 'Resolved Product', 7, 1, $2, $3)",
         )
         .bind(&product_id)
         .bind(&now)
@@ -279,9 +318,9 @@ mod tests {
         let lot_id = Uuid::new_v4().to_string();
         sqlx::query(
             "INSERT INTO expiry_lots (id, product_id, store_id, quantity, unit,
-                                      expiry_date, alert_days_before, status,
-                                      created_at, updated_at)
-             VALUES ($1, $2, $3, 1.0, 'kg', '2025-12-31', 7, 'resolved', $4, $5)",
+                                          expiry_date, alert_days_before, status,
+                                          created_at, updated_at)
+                 VALUES ($1, $2, $3, 1.0, 'kg', '2025-12-31', 7, 'resolved', $4, $5)",
         )
         .bind(&lot_id)
         .bind(&product_id)
@@ -296,6 +335,201 @@ mod tests {
             rows.iter().all(|r| r.status != "resolved"),
             "resolved lots must not appear in dashboard"
         );
+        Ok(())
+    }
+
+    // ── Category filter (UNCATEGORIZED_SENTINEL handling) ───────────────
+
+    /// Seeds a tiny category-filter fixture:
+    ///   - Dairy category
+    ///   - Bakery category
+    ///   - Tagged product (in Dairy)
+    ///   - Untagged product (no junction rows)
+    ///   - One lot per product
+    async fn seed_category_filter_fixture(
+        pool: &SqlitePool,
+    ) -> Result<(String, String, String, String), Box<dyn std::error::Error>> {
+        use crate::services::products as products_service;
+
+        let now = Utc::now().to_rfc3339();
+        let store_id = Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO stores (id, name, is_active, created_at, updated_at)
+                 VALUES ($1, 'Filter Store', 1, $2, $3)",
+        )
+        .bind(&store_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await?;
+
+        let dairy = products_service::create_category(
+            pool,
+            crate::dto::products::CategoryCreate {
+                name: "Dairy".into(),
+            },
+        )
+        .await?;
+        let bakery = products_service::create_category(
+            pool,
+            crate::dto::products::CategoryCreate {
+                name: "Bakery".into(),
+            },
+        )
+        .await?;
+
+        // Tagged product — in Dairy only.
+        let tagged = products_service::create_product(
+            pool,
+            ProductCreate {
+                sku: "CAT-TAGGED".into(),
+                description: "Tagged product".into(),
+                category_ids: Some(vec![dairy.id.clone()]),
+                default_unit: None,
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+
+        // Untagged product — no junction rows.
+        let untagged = products_service::create_product(
+            pool,
+            ProductCreate {
+                sku: "CAT-UNTAGGED".into(),
+                description: "Untagged product".into(),
+                category_ids: None,
+                default_unit: None,
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+
+        for pid in [&tagged.id, &untagged.id] {
+            let lot_id = Uuid::new_v4().to_string();
+            sqlx::query(
+                "INSERT INTO expiry_lots (id, product_id, store_id, quantity, unit,
+                                              expiry_date, alert_days_before, status,
+                                              created_at, updated_at)
+                     VALUES ($1, $2, $3, 1.0, 'pcs', '2099-12-31', 7, 'active', $4, $5)",
+            )
+            .bind(&lot_id)
+            .bind(pid)
+            .bind(&store_id)
+            .bind(&now)
+            .bind(&now)
+            .execute(pool)
+            .await?;
+        }
+
+        Ok((dairy.id, bakery.id, tagged.id, untagged.id))
+    }
+
+    #[tokio::test]
+    async fn list_filters_by_real_category_returns_only_tagged_lots(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (dairy_id, _bakery_id, tagged_id, _untagged_id) =
+            seed_category_filter_fixture(&pool).await?;
+
+        let filters = DashboardFilters {
+            category_ids: Some(vec![dairy_id.clone()]),
+            ..Default::default()
+        };
+        let rows = super::list_dashboard_lots(&pool, &filters).await?;
+        assert_eq!(rows.len(), 1, "only the tagged lot should match");
+        assert_eq!(rows[0].product_id, tagged_id);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn list_filters_by_uncategorized_sentinel_returns_only_untagged_lots(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (_dairy_id, _bakery_id, _tagged_id, untagged_id) =
+            seed_category_filter_fixture(&pool).await?;
+
+        let filters = DashboardFilters {
+            category_ids: Some(vec![
+                crate::dto::products::UNCATEGORIZED_SENTINEL.to_string()
+            ]),
+            ..Default::default()
+        };
+        let rows = super::list_dashboard_lots(&pool, &filters).await?;
+        assert_eq!(
+            rows.len(),
+            1,
+            "only the untagged lot should match the sentinel"
+        );
+        assert_eq!(rows[0].product_id, untagged_id);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn list_filters_by_real_and_uncategorized_returns_either(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (dairy_id, _bakery_id, tagged_id, untagged_id) =
+            seed_category_filter_fixture(&pool).await?;
+
+        let filters = DashboardFilters {
+            category_ids: Some(vec![
+                dairy_id.clone(),
+                crate::dto::products::UNCATEGORIZED_SENTINEL.to_string(),
+            ]),
+            ..Default::default()
+        };
+        let rows = super::list_dashboard_lots(&pool, &filters).await?;
+        assert_eq!(rows.len(), 2, "tagged + untagged lots should both match");
+        let product_ids: std::collections::HashSet<&str> =
+            rows.iter().map(|r| r.product_id.as_str()).collect();
+        assert!(product_ids.contains(tagged_id.as_str()));
+        assert!(product_ids.contains(untagged_id.as_str()));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn list_does_not_bind_sentinel_as_real_category_id(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (_dairy_id, _bakery_id, _tagged_id, _untagged_id) =
+            seed_category_filter_fixture(&pool).await?;
+
+        // Sentinel-only filter must not raise a sqlx binding error and must
+        // not match any lot whose product has a real category tag.
+        let filters = DashboardFilters {
+            category_ids: Some(vec![
+                crate::dto::products::UNCATEGORIZED_SENTINEL.to_string()
+            ]),
+            ..Default::default()
+        };
+        let rows = super::list_dashboard_lots(&pool, &filters).await?;
+        assert!(
+            rows.iter().all(|r| r.product_id != _tagged_id),
+            "tagged product must not be returned by sentinel-only filter"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn list_any_of_multiple_real_categories_returns_union(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (dairy_id, bakery_id, tagged_id, _untagged_id) =
+            seed_category_filter_fixture(&pool).await?;
+
+        // Both real categories selected — tagged lot belongs to Dairy, so it
+        // should appear even though Bakery has no tagged products.
+        let filters = DashboardFilters {
+            category_ids: Some(vec![dairy_id.clone(), bakery_id.clone()]),
+            ..Default::default()
+        };
+        let rows = super::list_dashboard_lots(&pool, &filters).await?;
+        assert_eq!(rows.len(), 1, "only the Dairy-tagged lot matches");
+        assert_eq!(rows[0].product_id, tagged_id);
         Ok(())
     }
 }

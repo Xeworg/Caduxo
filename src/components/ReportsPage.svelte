@@ -357,7 +357,7 @@
           </select>
         </label>
 
-        <label class="filter-field">
+        <div class="filter-field">
           <span>Category</span>
           <CategoryPicker
             bind:value={categoryIds}
@@ -365,7 +365,7 @@
             includeUncategorized={true}
             placeholder="Filter by category…"
           />
-        </label>
+        </div>
 
         <label class="filter-field" class:disabled={selectedReportType !== "custom"}>
           <span>Urgency</span>

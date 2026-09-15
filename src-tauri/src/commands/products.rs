@@ -4,12 +4,13 @@
 use tauri::State;
 
 use crate::dto::products::{
-    CategoryCreate, CategoryResponse, CategoryUpdate, ProductBarcodeCreate,
-    ProductBarcodeRemoveInput, ProductBarcodeResponse, ProductCreate, ProductDetailResponse,
-    ProductResponse, ProductSearchQuery, ProductSearchResult, ProductUpdate,
+    CategoryCreate, CategoryResponse, CategorySearchInput, CategorySearchPage, CategoryUpdate,
+    ProductBarcodeCreate, ProductBarcodeRemoveInput, ProductBarcodeResponse, ProductCreate,
+    ProductDetailResponse, ProductResponse, ProductSearchQuery, ProductSearchResult, ProductUpdate,
 };
 use crate::dto::scanner::ScanSearchResult;
 use crate::error::{AppError, CommandError};
+use crate::services::categories as categories_service;
 use crate::services::products as service;
 use crate::state::AppState;
 
@@ -48,6 +49,21 @@ pub async fn update_category(
 ) -> Result<CategoryResponse, CommandError> {
     let pool = state.pool().await;
     service::update_category(&pool, input)
+        .await
+        .map_err(AppError::into)
+}
+
+/// Paginated category search (prefix-first, substring fallback).
+///
+/// Backs the CategoryPicker's async search path when `onSearch` is wired up.
+/// Empty query returns every active category, ordered alphabetically.
+#[tauri::command]
+pub async fn list_categories_search(
+    state: State<'_, AppState>,
+    input: CategorySearchInput,
+) -> Result<CategorySearchPage, CommandError> {
+    let pool = state.pool().await;
+    categories_service::search(&pool, input)
         .await
         .map_err(AppError::into)
 }

@@ -72,18 +72,29 @@
   /** In-progress flag for inline unit creation. */
   let creatingUnit = false;
 
-  // ── Init ───────────────────────────────────────────────────────────────────
+// ── Init ───────────────────────────────────────────────────────────────────
 
-  $: if (mode === "edit" && initial) {
-    sku = initial.sku;
-    description = initial.description;
-    categoryIds = initial.category_ids ?? [];
-    defaultUnit = initial.default_unit ?? "";
-    defaultUnitId = initial.default_unit_id ?? "";
-    defaultAlertDays = initial.default_alert_days_before;
-    notes = initial.notes ?? "";
-    isActive = initial.is_active;
-  }
+      /**
+       * Tracks which `initial.id` we've already seeded from. Reseeding only fires
+       * when the product identity changes (initial mount or switching to a
+       * different product); re-renders that re-supply the same `initial` object
+       * leave the in-flight `categoryIds` and other field edits alone.
+       * Without this guard, the CategoryPicker's local selection was being
+       * clobbered by reactive re-evaluation when the parent updated `initial`.
+       */
+      let lastSeededProductId: string | null = null;
+
+      $: if (mode === "edit" && initial && lastSeededProductId !== initial.id) {
+        sku = initial.sku;
+        description = initial.description;
+        categoryIds = initial.category_ids ?? [];
+        defaultUnit = initial.default_unit ?? "";
+        defaultUnitId = initial.default_unit_id ?? "";
+        defaultAlertDays = initial.default_alert_days_before;
+        notes = initial.notes ?? "";
+        isActive = initial.is_active;
+        lastSeededProductId = initial.id;
+      }
 
   // Pre-fill alert days and optional UPC from the backend on first create mount.
   let suggestedFetched = false;
@@ -292,15 +303,15 @@
     />
   </label>
 
-  <label>
-    Category
+  <div class="category-field">
+    <span class="field-label">Category</span>
     <CategoryPicker
       bind:value={categoryIds}
       {categories}
       placeholder="Search or create a category…"
       on:create={handleCategoryCreated}
     />
-  </label>
+  </div>
 
       {#if mode === "create"}
         <section class="barcode-subsection">
@@ -551,12 +562,17 @@
     font-size: 0.8rem;
   }
 
-  label {
+  label,
+  .category-field {
     display: flex;
     flex-direction: column;
     gap: 4px;
     font-size: 0.85rem;
     color: #374151;
+  }
+
+  .field-label {
+    font-weight: 500;
   }
 
   label input[type="text"],
