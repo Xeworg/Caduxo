@@ -4,6 +4,7 @@
 //! logging points, and business error selection. No direct SQL or UI code.
 
 pub mod backup_restore;
+pub mod categories;
 pub mod csv_io;
 pub mod dashboard;
 pub mod expiry_lots;

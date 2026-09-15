@@ -46,6 +46,7 @@ pub fn run() {
             commands::stores::update_settings,
             commands::stores::has_store,
             commands::products::list_categories,
+            commands::products::list_categories_search,
             commands::products::create_category,
             commands::products::update_category,
             commands::products::create_product,

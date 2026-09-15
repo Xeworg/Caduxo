@@ -203,9 +203,12 @@
                 </div>
                 <div class="meta-row">
                     <span class="sku">SKU: {product.sku}</span>
-                    {#if detail.category}
-                        <span class="category-badge">{detail.category.name}</span>
+                    {#if detail.categories.length === 0}
+                        <span class="category-badge category-badge--uncat">Uncategorized</span>
                     {/if}
+                    {#each detail.categories as cat (cat.id)}
+                        <span class="category-badge">{cat.name}</span>
+                    {/each}
                     {#if product.default_unit}
                         <span class="meta">Unit: {product.default_unit}</span>
                     {/if}

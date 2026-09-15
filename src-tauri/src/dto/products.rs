@@ -37,15 +37,24 @@ pub struct CategoryResponse {
 // Products
 // ============================================================
 
+/// Sentinel id used by the frontend picker to represent "products with zero
+/// active category relations". Rendered as an `Uncategorized` pseudo-row.
+/// Never persisted — only emitted by the picker when the user selects it.
+pub const UNCATEGORIZED_SENTINEL: &str = "__uncategorized__";
+
 /// Input for creating a product. SKU must be unique across the database.
 ///
 /// Either `default_unit_id` (catalog FK) or `default_unit` (raw legacy text) may be
 /// provided. The service layer resolves whichever is supplied into the FK + `unit_type` pair.
+/// `category_ids` replaces the legacy `category_id` field; empty `Vec` or `None` both
+/// mean "unassigned".
 #[derive(Debug, Deserialize)]
 pub struct ProductCreate {
     pub sku: String,
     pub description: String,
-    pub category_id: Option<String>,
+    /// Category ids for the new product. Empty `Vec` or `None` means "unassigned".
+    /// The legacy `category_id` field is dropped from the runtime model.
+    pub category_ids: Option<Vec<String>>,
     /// Raw legacy text for the default unit. Kept as a back-compat echo.
     pub default_unit: Option<String>,
     /// Optional catalog FK. Takes precedence over `default_unit` text.
@@ -54,13 +63,16 @@ pub struct ProductCreate {
     pub notes: Option<String>,
 }
 
-/// Input for updating an existing product.
+/// Input for updating an existing product. `category_ids` is the full set
+/// on each update; the service layer performs a delete-all + insert-new
+/// inside a transaction.
 #[derive(Debug, Deserialize)]
 pub struct ProductUpdate {
     pub id: String,
     pub sku: String,
     pub description: String,
-    pub category_id: Option<String>,
+    /// Full set of category ids on each update; empty `Vec` or `None` means "unassigned".
+    pub category_ids: Option<Vec<String>>,
     /// Raw legacy text for the default unit. Clears catalog link when set to None/empty.
     pub default_unit: Option<String>,
     /// Optional catalog FK. Takes precedence over `default_unit` text.
@@ -71,12 +83,15 @@ pub struct ProductUpdate {
 }
 
 /// Response shape for a product.
-#[derive(Debug, Serialize, FromRow)]
+/// `category_ids` is always present and may be empty. The legacy `category_id`
+/// field is dropped from the runtime model; see design §2.2.
+#[derive(Debug, Serialize)]
 pub struct ProductResponse {
     pub id: String,
     pub sku: String,
     pub description: String,
-    pub category_id: Option<String>,
+    /// Category ids from the `product_categories` junction. Always present; may be empty.
+    pub category_ids: Vec<String>,
     /// Echoes the catalog `display_name` when `default_unit_id` is set; raw legacy
     /// text otherwise. Always preserved for compatibility.
     pub default_unit: Option<String>,
@@ -92,12 +107,13 @@ pub struct ProductResponse {
 }
 
 /// Detail bundle returned by `get_product`: product, its barcodes, and the
-/// resolved category (when one is assigned).
+/// resolved categories (zero or more). Replaces the legacy single `category` field.
 #[derive(Debug, Serialize)]
 pub struct ProductDetailResponse {
     pub product: ProductResponse,
     pub barcodes: Vec<ProductBarcodeResponse>,
-    pub category: Option<CategoryResponse>,
+    /// Resolved categories from the junction. Empty when the product is unassigned.
+    pub categories: Vec<CategoryResponse>,
 }
 
 // ============================================================
@@ -141,12 +157,32 @@ pub struct ProductSearchQuery {
 }
 
 /// Search hit shape — minimal fields for scan/search results and listing.
-#[derive(Debug, Clone, Serialize, FromRow)]
+/// `category_ids` replaces the legacy `category_id` field.
+#[derive(Debug, Clone, Serialize)]
 pub struct ProductSearchResult {
     pub id: String,
     pub sku: String,
     pub description: String,
-    pub category_id: Option<String>,
+    pub category_ids: Vec<String>,
     pub primary_barcode: Option<String>,
     pub is_active: bool,
+}
+
+// ============================================================
+// Category search
+// ============================================================
+
+/// Input for the category search command.
+#[derive(Debug, Deserialize)]
+pub struct CategorySearchInput {
+    pub query: String,
+    pub limit: Option<usize>,
+}
+
+/// Page of category search results.
+#[derive(Debug, Serialize)]
+pub struct CategorySearchPage {
+    pub items: Vec<CategoryResponse>,
+    pub total: usize,
+    pub has_more: bool,
 }

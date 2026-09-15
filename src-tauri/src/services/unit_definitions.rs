@@ -385,7 +385,7 @@ mod tests {
             crate::dto::products::ProductCreate {
                 sku: "SKU-BANDEJAS".into(),
                 description: "Test product with custom unit".into(),
-                category_id: None,
+                category_ids: None,
                 default_unit: None,
                 default_unit_id: Some(unit.id.clone()),
                 default_alert_days_before: 30,

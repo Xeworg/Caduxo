@@ -17,6 +17,12 @@ pub struct DashboardFilters {
     pub preset: Option<DashboardPreset>,
     /// Explicit urgency filter (overrides `preset` when set).
     pub urgency: Option<String>,
+    /// Optional category filter with ANY-of semantics. When `Some(non_empty)`,
+    /// returns lots whose product has at least one junction row referencing any
+    /// of the selected ids. May include `UNCATEGORIZED_SENTINEL` to also include
+    /// products with zero active category relations. `None` or empty list means
+    /// no filter.
+    pub category_ids: Option<Vec<String>>,
 }
 
 /// Quick-filter preset that maps to an urgency-based subset.

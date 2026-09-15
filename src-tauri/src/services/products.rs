@@ -112,11 +112,26 @@ pub async fn list_all_categories(pool: &DbPool) -> Result<Vec<CategoryResponse>,
 }
 
 /// Creates a new category after validating the name.
+/// Case-fold guard: rejects names that differ only in case from an existing active category.
 pub async fn create_category(
     pool: &DbPool,
     input: CategoryCreate,
 ) -> Result<CategoryResponse, AppError> {
     validate_name(&input.name).map_err(|m| DomainError::Validation { message: m })?;
+    let normalized = input.name.trim().to_lowercase();
+
+    // Case-fold guard: refuse names that would collide case-insensitively with
+    // an existing active category. The UNIQUE constraint is the safety net for races.
+    if let Some(existing) = repo::find_category_by_name_ci(pool, &normalized).await? {
+        if existing.name.to_lowercase() == normalized {
+            return Err(DomainError::DuplicateField {
+                field: "name",
+                value: input.name.clone(),
+            }
+            .into());
+        }
+    }
+
     repo::insert_category(pool, &input)
         .await
         .map_err(|e| category_unique_error(e, &input.name))
@@ -124,11 +139,26 @@ pub async fn create_category(
 
 /// Updates a category (rename and/or archive). Returns `NotFound` if the
 /// category does not exist.
+/// Case-fold guard: rejects renames that would collide case-insensitively
+/// with another active category (but allows renaming to the same current name).
 pub async fn update_category(
     pool: &DbPool,
     input: CategoryUpdate,
 ) -> Result<CategoryResponse, AppError> {
     validate_name(&input.name).map_err(|m| DomainError::Validation { message: m })?;
+    let normalized = input.name.trim().to_lowercase();
+
+    // Case-fold guard: reject renames that collide with another active category.
+    // Allow renaming to the current name (id match means it's the same row).
+    if let Some(existing) = repo::find_category_by_name_ci(pool, &normalized).await? {
+        if existing.id != input.id && existing.name.to_lowercase() == normalized {
+            return Err(DomainError::DuplicateField {
+                field: "name",
+                value: input.name.clone(),
+            }
+            .into());
+        }
+    }
 
     let row = repo::update_category(pool, &input)
         .await
@@ -258,7 +288,7 @@ pub async fn archive_product(pool: &DbPool, id: String) -> Result<(), AppError> 
     Ok(())
 }
 
-/// Returns the full product detail (product + barcodes + resolved category).
+/// Returns the full product detail (product + barcodes + resolved categories).
 pub async fn get_product(pool: &DbPool, id: String) -> Result<ProductDetailResponse, AppError> {
     let product = repo::get_product(pool, &id)
         .await?
@@ -268,15 +298,28 @@ pub async fn get_product(pool: &DbPool, id: String) -> Result<ProductDetailRespo
         })?;
 
     let barcodes = repo::list_barcodes(pool, &id).await?;
-    let category = match product.category_id.as_deref() {
-        Some(cid) => repo::get_category(pool, cid).await?,
-        None => None,
+
+    // Resolve all category ids to CategoryResponse objects.
+    // For typical small category sets, fetch each id individually.
+    // This is not N+1 for products (see the batched helper for batch reads).
+    let categories = if product.category_ids.is_empty() {
+        Vec::new()
+    } else {
+        let mut cats = Vec::with_capacity(product.category_ids.len());
+        for cid in &product.category_ids {
+            if let Some(row) = repo::get_category(pool, cid).await? {
+                if row.is_active {
+                    cats.push(row);
+                }
+            }
+        }
+        cats
     };
 
     Ok(ProductDetailResponse {
         product,
         barcodes,
-        category,
+        categories,
     })
 }
 
@@ -551,7 +594,7 @@ mod tests {
         ProductCreate {
             sku: sku.into(),
             description: "Whole Milk 1L".into(),
-            category_id: None,
+            category_ids: None,
             default_unit: Some("L".into()),
             default_unit_id: None,
             default_alert_days_before: suggested_alert_days(),
@@ -664,7 +707,7 @@ mod tests {
                 id: p.id.clone(),
                 sku: "SKU-U-NEW".into(),
                 description: "Updated description".into(),
-                category_id: None,
+                category_ids: None,
                 default_unit: Some("kg".into()),
                 default_unit_id: None,
                 default_alert_days_before: 14,
@@ -691,7 +734,7 @@ mod tests {
                 id: b.id.clone(),
                 sku: "SKU-A".into(),
                 description: "desc".into(),
-                category_id: None,
+                category_ids: None,
                 default_unit: None,
                 default_unit_id: None,
                 default_alert_days_before: 30,
@@ -720,7 +763,7 @@ mod tests {
                 id: "nope".into(),
                 sku: "SKU-X".into(),
                 description: "d".into(),
-                category_id: None,
+                category_ids: None,
                 default_unit: None,
                 default_unit_id: None,
                 default_alert_days_before: 30,
@@ -972,7 +1015,7 @@ mod tests {
             ProductCreate {
                 sku: "MILK-1L".into(),
                 description: "Whole Milk 1L".into(),
-                category_id: None,
+                category_ids: None,
                 default_unit: Some("L".into()),
                 default_unit_id: None,
                 default_alert_days_before: 30,
@@ -985,7 +1028,7 @@ mod tests {
             ProductCreate {
                 sku: "BREAD-001".into(),
                 description: "Sourdough Bread".into(),
-                category_id: None,
+                category_ids: None,
                 default_unit: None,
                 default_unit_id: None,
                 default_alert_days_before: 14,

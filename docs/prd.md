@@ -113,7 +113,7 @@ Architecture rules:
 - Delete product.
 - Mark product as consumed, sold, discarded, donated, or archived.
 - Support quantity and unit.
-- Support category.
+- Support multiple categories per product (many-to-many via `product_categories` junction table).
 - Support storage location.
 - Support optional batch/lot code.
 - Support SKU.
@@ -192,7 +192,7 @@ A **Calendar** tab appears in the main navigation between Products and Reports. 
 - Search by product name.
 - Search by SKU.
 - Search by UPC/barcode.
-- Filter by category.
+- Filter by multiple categories (any-of); products with zero active categories appear under an `Uncategorized` sentinel.
 - Filter by store/local.
 - Filter by internal location.
 - Filter by expiry status.
@@ -487,6 +487,7 @@ Caduxo uses a local SQLite database. The model separates catalog data from expir
 stores 1 ── * store_locations
 stores 1 ── * expiry_lots
 store_locations 1 ── * expiry_lots
+products 1 ── * product_categories *── 1 categories
 products 1 ── * product_barcodes
 products 1 ── * expiry_lots
 ```
@@ -530,7 +531,7 @@ Product catalog. SKU is mandatory because one product can have multiple UPC/barc
 | id | TEXT | Yes | UUID primary key |
 | sku | TEXT | Yes | Unique internal identifier |
 | description | TEXT | Yes | Product name/description |
-| category | TEXT | No | Optional category |
+| (multi-category via `product_categories` junction table — see below) | — | — | See `product_categories` table below. |
 | default_unit | TEXT | No | Example: units, box, kg, g, L, ml | (legacy echo; prefer `default_unit_id` when set) |
 | default_unit_id | TEXT | No | FK to `unit_definitions.id`; preferred link |
 | unit_type | TEXT | No | `integer` or `decimal`; derived from the linked catalog unit |
@@ -554,6 +555,18 @@ Multiple UPC/EAN/barcodes per product.
 | created_at | TEXT | Yes | ISO datetime |
 
 Unique rule: `barcode` should be unique across the database.
+
+### `product_categories`
+
+Many-to-many junction between products and categories. Canonical source of truth for category membership at runtime (V4+). The legacy `products.category_id` column is preserved in the schema as ignored legacy data.
+
+| Column | Type | Required | Notes |
+|--------|------|----------|-------|
+| product_id | TEXT | Yes | References `products.id` ON DELETE CASCADE |
+| category_id | TEXT | Yes | References `categories.id` ON DELETE RESTRICT |
+| created_at | TEXT | Yes | ISO datetime |
+
+Composite primary key `(product_id, category_id)` enforces uniqueness. `product_id` ON DELETE CASCADE removes junction rows when a product is deleted. `category_id` ON DELETE RESTRICT prevents hard-delete of categories that are still referenced (archive-first policy).
 
 ### `expiry_lots`
 

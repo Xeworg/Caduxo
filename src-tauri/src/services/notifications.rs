@@ -163,7 +163,7 @@ mod tests {
             ProductCreate {
                 sku: "NOTIF-001".into(),
                 description: "Test Product".into(),
-                category_id: None,
+                category_ids: None,
                 default_unit: Some("pcs".into()),
                 default_unit_id: None,
                 default_alert_days_before: 7,

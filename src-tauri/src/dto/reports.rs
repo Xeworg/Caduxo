@@ -68,17 +68,20 @@ impl ReportType {
 /// Filters supported by reports. Built-in reports honour `store_id` and
 /// `location_id`; `Custom` reports honour every field below.
 ///
-/// `category_id`, `urgency`, `date_from`, and `date_to` are applied as
+/// `category_ids`, `urgency`, `date_from`, and `date_to` are applied as
 /// post-filters on top of the dashboard query, so they can be combined with
 /// any built-in report type without forking the SQL.
+/// `category_ids` replaces the legacy `category_id` field.
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct ReportFilters {
     /// Restrict to a specific store. `None` means every store.
     pub store_id: Option<String>,
     /// Restrict to a specific internal location. `None` means every location.
     pub location_id: Option<String>,
-    /// Restrict to products assigned to the given category. `None` ignores.
-    pub category_id: Option<String>,
+    /// Restrict to products in the given categories (ANY-of semantics). May
+    /// include `UNCATEGORIZED_SENTINEL` to also include products with zero
+    /// active category relations. `None` or empty list means no filter.
+    pub category_ids: Option<Vec<String>>,
     /// Restrict to a specific urgency bucket (snake_case string from the
     /// dashboard preset vocabulary). For `Custom` reports this becomes the
     /// dashboard urgency filter; for built-in reports it is overridden by

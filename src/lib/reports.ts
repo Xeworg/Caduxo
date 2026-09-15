@@ -30,8 +30,9 @@ export interface ReportFilters {
  store_id?: string | null;
  /** Restrict to a specific internal location within the selected store. */
  location_id?: string | null;
- /** Restrict to products assigned to the given category. */
- category_id?: string | null;
+ /** Restrict to products assigned to the given categories (any-of via `product_categories` junction, V4).
+  * May include `UNCATEGORIZED_SENTINEL` from `lib/categories.ts`. */
+ category_ids?: string[] | null;
  /** Restrict to a specific urgency bucket (snake_case string). */
  urgency?: string | null;
  /** Inclusive lower bound on `expiry_date` (YYYY-MM-DD). */

@@ -26,6 +26,8 @@
     type ExpiryLotResponse,
   } from "../lib/expiry_lots.js";
       import { exportReportWithDialog } from "../lib/csv.js";
+      import { UNCATEGORIZED_SENTINEL } from "../lib/categories.js";
+      import CategoryPicker from "./inputs/CategoryPicker.svelte";
       import {
         listUnitDefinitions,
         type UnitDefinitionResponse,
@@ -59,6 +61,7 @@
   let selectedStoreId: string | null = null;
   let selectedLocationId: string | null = null;
   let activePreset: DashboardPreset = "all";
+  let categoryIds: string[] = [];
 
   /** Unit catalog for display-name resolution. */
   let unitCatalog: UnitDefinitionResponse[] = [];
@@ -169,6 +172,7 @@
       store_id: selectedStoreId,
       location_id: selectedLocationId,
       preset: activePreset,
+      category_ids: categoryIds.length > 0 ? categoryIds : null,
     };
     try {
       const data: DashboardResponse = await listDashboardLots(filters);
@@ -447,7 +451,7 @@
           }} />
         {/if}
 
-        <!-- Store / location filter -->
+    <!-- Store / location filter -->
     <div class="filter-row">
       <label>
         Store:
@@ -470,6 +474,13 @@
           </select>
         </label>
       {/if}
+
+      <CategoryPicker
+        bind:value={categoryIds}
+        {categories}
+        includeUncategorized={true}
+        placeholder="Filter by category…"
+      />
     </div>
   </header>
 
@@ -603,7 +614,7 @@
         <dl class="detail-grid">
           <dt>SKU</dt><dd>{detailProduct.product.sku}</dd>
           <dt>Description</dt><dd>{detailProduct.product.description}</dd>
-          <dt>Category</dt><dd>{detailProduct.category?.name ?? "—"}</dd>
+          <dt>Category</dt><dd>{detailProduct.categories.length > 0 ? detailProduct.categories.map(c => c.name).join(", ") : "—"}</dd>
           <dt>Default unit</dt><dd>{detailProduct.product.default_unit ?? "—"}</dd>
           <dt>Alert days</dt><dd>{detailProduct.product.default_alert_days_before}</dd>
           <dt>Status</dt><dd>{detailProduct.product.is_active ? "Active" : "Archived"}</dd>

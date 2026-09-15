@@ -86,6 +86,7 @@ fn preset_for_type(report_type: ReportType) -> Option<DashboardPreset> {
 /// Translates a `ReportRequest` into the dashboard filter shape. Built-in
 /// reports pin the preset; `Custom` reports pass through `urgency` so the
 /// dashboard service can map it back to a preset (or use `All`).
+/// `category_ids` is passed through so the SQL-level filter applies via EXISTS.
 fn to_dashboard_filters(request: &ReportRequest) -> DashboardFilters {
     let filters = request.filters.clone().unwrap_or_default();
     let preset = preset_for_type(request.kind);
@@ -104,6 +105,7 @@ fn to_dashboard_filters(request: &ReportRequest) -> DashboardFilters {
         location_id: filters.location_id,
         preset,
         urgency,
+        category_ids: filters.category_ids,
     }
 }
 
@@ -131,38 +133,9 @@ fn build_metadata(
 // Post-filters
 // ============================================================
 
-/// Filters dashboard rows by an optional category id. Per-row `get_product`
-/// is used to look up the product's `category_id` — an N+1 pattern that's
-/// acceptable for MVP report sizes but should be replaced with a batch query
-/// when the dashboard row count grows.
-///
-/// When `category_id` is `None` or the row's product cannot be found, the
-/// row is preserved (no filtering applied). When `category_id` is `Some(_)`
-/// but the row's product has no category assigned, the row is dropped.
-async fn filter_by_category(
-    pool: &DbPool,
-    rows: Vec<DashboardLotRow>,
-    category_id: Option<&str>,
-) -> Result<Vec<DashboardLotRow>, AppError> {
-    let Some(target) = category_id else {
-        return Ok(rows);
-    };
-    let target = target.trim();
-    if target.is_empty() {
-        return Ok(rows);
-    }
-
-    let mut kept: Vec<DashboardLotRow> = Vec::with_capacity(rows.len());
-    for row in rows {
-        let product = crate::db::repositories::products::get_product(pool, &row.product_id).await?;
-        match product {
-            Some(p) if p.category_id.as_deref() == Some(target) => kept.push(row),
-            Some(_) => { /* category mismatch — drop */ }
-            None => { /* product missing (e.g. archived then deleted) — drop */ }
-        }
-    }
-    Ok(kept)
-}
+/// NOTE: filter_by_category has been removed. Category filtering is now applied
+/// at the SQL level via DashboardFilters.category_ids (ANY-of EXISTS semantics).
+/// See db::repositories::dashboard::list_dashboard_lots for the SQL-level filter.
 
 /// Filters dashboard rows by an inclusive `expiry_date` range. Uses string
 /// comparison because `expiry_date` is stored as ISO-8601 `YYYY-MM-DD`, which
@@ -204,7 +177,7 @@ fn filter_by_date_range(
 ///   1. Validate filters (dates and inverted ranges).
 ///   2. Translate to `DashboardFilters` and fetch rows via the dashboard
 ///      service so urgency, sorting, and counts stay in one place.
-///   3. Apply `category_id` and `date_from`/`date_to` post-filters when set.
+///   3. Apply `date_from`/`date_to` post-filters when set.
 ///   4. Build metadata (type, description, effective filters, generation
 ///      timestamp, row count).
 pub async fn preview_report(pool: &DbPool, request: ReportRequest) -> Result<ReportData, AppError> {
@@ -214,12 +187,8 @@ pub async fn preview_report(pool: &DbPool, request: ReportRequest) -> Result<Rep
     let dashboard_filters = to_dashboard_filters(&request);
     let mut response = crate::services::dashboard::get_dashboard(pool, dashboard_filters).await?;
 
-    // Category and date-range post-filters apply to every report type — they
-    // layer on top of the preset-based urgency filter rather than replacing
-    // it. This lets built-in reports honour store / location / category /
-    // date-range filters without forking the SQL.
-    response.lots =
-        filter_by_category(pool, response.lots, effective.category_id.as_deref()).await?;
+    // Category filter is now SQL-level via DashboardFilters.category_ids (EXISTS).
+    // Only the date-range post-filter remains at this layer.
     response.lots = filter_by_date_range(
         response.lots,
         effective.date_from.as_deref(),
@@ -275,8 +244,8 @@ mod tests {
     /// store A  ── expired lot        (-30 days, product PA, alert=14)
     /// store A  ── today lot          (today,      product PB, alert=14)
     /// store A  ── alert-window lot   (+5 days,    product PB, alert=14)
-    /// store A  ── next-30-days lot   (+15 days,   product PB, alert=30)
-    /// store A  ── future lot         (+90 days,   product PB, alert=30)
+    /// store A  ── next-30-days lot   (+15 days,   product PB, alert=10)  ← past alert, ≤30d
+    /// store A  ── future lot         (+90 days,   product PB, alert=10)
     /// store B  ── expired lot        (-15 days,   product PC, alert=14, different store)
     /// ```
     ///
@@ -329,7 +298,7 @@ mod tests {
             ProductCreate {
                 sku: "PA-001".into(),
                 description: "Product A".into(),
-                category_id: Some(dairy.id.clone()),
+                category_ids: Some(vec![dairy.id.clone()]),
                 default_unit: Some("L".into()),
                 default_unit_id: None,
                 default_alert_days_before: 14,
@@ -344,10 +313,10 @@ mod tests {
             ProductCreate {
                 sku: "PB-001".into(),
                 description: "Product B".into(),
-                category_id: Some(dairy.id.clone()),
+                category_ids: Some(vec![dairy.id.clone()]),
                 default_unit: Some("kg".into()),
                 default_unit_id: None,
-                default_alert_days_before: 30,
+                default_alert_days_before: 10, // intentionally < +15d expiry so lot is past alert window
                 notes: None,
             },
         )
@@ -359,7 +328,7 @@ mod tests {
             ProductCreate {
                 sku: "PC-001".into(),
                 description: "Product C".into(),
-                category_id: Some(bakery.id.clone()),
+                category_ids: Some(vec![bakery.id.clone()]),
                 default_unit: Some("pcs".into()),
                 default_unit_id: None,
                 default_alert_days_before: 14,
@@ -432,11 +401,11 @@ mod tests {
             &product_b.id,
             &store_a.id,
             today + Duration::days(15),
-            30,
+            10,
             4.0,
             "kg",
         )
-        .await; // next-30-days (alert_days=30 → not AlertWindow)
+        .await; // next-30-days (alert_days=10 → past alert window, within 30d)
         insert_lot(
             pool,
             &product_b.id,
@@ -755,8 +724,8 @@ mod tests {
         .expect("preview");
 
         assert_eq!(data.metadata.report_type, "next_30_days");
-        // Fixture: +15d lot is Next30Days (alert=30 → not AlertWindow). The +5d
-        // lot is in its AlertWindow and excluded from Next30Days; +90d is Future.
+        // Fixture: +15d lot is Next30Days (alert=10 → past alert window, within 30d).
+        // The +5d lot is in its AlertWindow (5 <= 14) and excluded; +90d is Future.
         assert_eq!(data.lots.len(), 1, "only the +15d lot should match");
     }
 
@@ -772,7 +741,7 @@ mod tests {
             request_of(
                 ReportType::Custom,
                 Some(ReportFilters {
-                    category_id: Some(fx.bakery_id.clone()),
+                    category_ids: Some(vec![fx.bakery_id.clone()]),
                     ..Default::default()
                 }),
             ),
@@ -905,7 +874,7 @@ mod tests {
                 ReportType::Custom,
                 Some(ReportFilters {
                     store_id: Some(fx.store_a_id.clone()),
-                    category_id: Some(fx.dairy_id.clone()),
+                    category_ids: Some(vec![fx.dairy_id.clone()]),
                     urgency: Some("expired".to_string()),
                     ..Default::default()
                 }),
@@ -919,8 +888,8 @@ mod tests {
             Some(fx.store_a_id.as_str())
         );
         assert_eq!(
-            data.metadata.filters_used.category_id.as_deref(),
-            Some(fx.dairy_id.as_str())
+            data.metadata.filters_used.category_ids.as_deref(),
+            Some(vec![fx.dairy_id.clone()].as_slice())
         );
         assert_eq!(
             data.metadata.filters_used.urgency.as_deref(),

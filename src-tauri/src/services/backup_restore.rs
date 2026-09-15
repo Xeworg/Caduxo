@@ -434,6 +434,33 @@ fn check_schema_and_integrity(path: &Path, required: &[&str]) -> SchemaCheckResu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sqlx::migrate::{Migration, MigrationType};
+    use std::borrow::Cow;
+
+    /// Builds a V3-only migrator from the shared MIGRATIONS constant.
+    /// Mirrors `db::migrations::tests::v3_only_migrator` so this test can live
+    /// in `services::backup_restore::tests` without needing a cross-module import.
+    fn v3_only_migrator() -> sqlx::migrate::Migrator {
+        let v3_migrations: Vec<Migration> = crate::db::migrations::MIGRATIONS
+            .iter()
+            .filter(|(v, _, _)| *v <= 3)
+            .map(|(version, description, sql)| {
+                Migration::new(
+                    *version,
+                    Cow::Owned(description.to_string()),
+                    MigrationType::Simple,
+                    Cow::Owned(sql.to_string()),
+                    false,
+                )
+            })
+            .collect();
+        sqlx::migrate::Migrator {
+            migrations: Cow::Owned(v3_migrations),
+            ignore_missing: false,
+            locking: true,
+            no_tx: false,
+        }
+    }
     use tempfile::tempdir;
 
     /// Creates a minimal valid SQLite database with the Caduxo schema.
@@ -736,5 +763,143 @@ mod tests {
         let path = tmp.path().join("invalid.db");
         std::fs::write(&path, b"not sqlite at all").unwrap();
         assert!(!check_sqlite_header(&path));
+    }
+
+    /// Verifies that V4 applies automatically when a pool is opened on a
+    /// pre-V4 (V3-era) database — simulating the restore path where a backup
+    /// file older than V4 is restored and the migrator picks up the pending
+    /// V4 migration on the reopened pool.
+    ///
+    /// Reproduces the scenario described in design §13.1:
+    /// "restore from a pre-V4 fixture → Pool reopens → V4 applies →
+    ///  junction rows populated from legacy column".
+    #[tokio::test]
+    async fn restore_from_pre_v4_backup_applies_v4_backfill_in_situ() {
+        let tmp = tempdir().unwrap();
+        let pre_v4_db = tmp.path().join("pre_v4_backup.db");
+
+        // ── Step 1: create a V3-era database ──────────────────────────────
+        {
+            let pool = sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(
+                    sqlx::sqlite::SqliteConnectOptions::new()
+                        .filename(&pre_v4_db)
+                        .create_if_missing(true),
+                )
+                .await
+                .unwrap();
+
+            // Use v3_only_migrator to build a proper V3-era schema.
+            // This runs V1 (skeleton), V2 (app_schema), V3 (expiry_lots) migrations
+            // including proper _sqlx_migrations table creation with all required columns.
+            v3_only_migrator().run(&pool).await.unwrap();
+
+            // Seed data: one active category and one product with category_id set.
+            let now = "2024-06-01 00:00:00";
+            sqlx::query(
+                "INSERT INTO categories (id, name, is_active, created_at, updated_at) \
+                     VALUES ($1, $2, $3, $4, $5)",
+            )
+            .bind("cat-dairy-v3")
+            .bind("Dairy")
+            .bind(1)
+            .bind(now)
+            .bind(now)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            sqlx::query(
+                "INSERT INTO products (id, sku, description, category_id, \
+                     default_alert_days_before, is_active, created_at, updated_at) \
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            )
+            .bind("prod-milk-v3")
+            .bind("MILK-1L")
+            .bind("Whole Milk 1L")
+            .bind("cat-dairy-v3")
+            .bind(30)
+            .bind(1)
+            .bind(now)
+            .bind(now)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            pool.close().await;
+        }
+
+        // ── Step 2: open pool + run migrations (simulates restore_backup
+        //    reopening the pool after a pre-V4 backup is restored) ───────
+        let restored_pool = crate::db::open_pool(&pre_v4_db).await.unwrap();
+        crate::db::run_migrations(&restored_pool).await.unwrap();
+
+        // ── Step 3: assert V4 applied ─────────────────────────────────────
+        let applied_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM _sqlx_migrations")
+            .fetch_one(&restored_pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            applied_count, 4,
+            "expected 4 migrations (V1–V4); V4 should have applied automatically"
+        );
+
+        // ── Step 4: assert junction table exists and is populated ──────────
+        let junction_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM product_categories WHERE product_id = 'prod-milk-v3'",
+        )
+        .fetch_one(&restored_pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            junction_count, 1,
+            "expected 1 junction row for prod-milk-v3; V4 back-fill should have copied \
+                 legacy category_id into product_categories"
+        );
+
+        // Verify the junction row references the correct category id.
+        let junction_cat_id: String = sqlx::query_scalar(
+            "SELECT category_id FROM product_categories WHERE product_id = 'prod-milk-v3'",
+        )
+        .fetch_one(&restored_pool)
+        .await
+        .unwrap();
+        assert_eq!(junction_cat_id, "cat-dairy-v3");
+
+        // ── Step 5: assert the legacy column was also remapped to canonical ─
+        let legacy_cat_id: Option<String> =
+            sqlx::query_scalar("SELECT category_id FROM products WHERE id = 'prod-milk-v3'")
+                .fetch_optional(&restored_pool)
+                .await
+                .unwrap();
+        // After V4 remaps the legacy column, it should point to the canonical id.
+        assert_eq!(
+            legacy_cat_id.as_ref(),
+            Some(&"cat-dairy-v3".to_string()),
+            "V4 should have remapped legacy products.category_id to the canonical category id"
+        );
+
+        // ── Step 6: verify the picker-facing service returns correct ids ────
+        // (read via the repository's junction helper)
+        let product_ids: Vec<String> = vec!["prod-milk-v3".to_string()];
+        let pool_for_batch = &restored_pool;
+        let batch_map =
+            crate::db::repositories::products::list_product_category_ids_by_product_ids(
+                pool_for_batch,
+                &product_ids,
+            )
+            .await
+            .unwrap();
+        let resolved_ids = batch_map
+            .get("prod-milk-v3")
+            .expect("junction entry must exist for prod-milk-v3");
+        assert_eq!(
+            resolved_ids.as_slice(),
+            ["cat-dairy-v3"],
+            "picker-facing batch helper should return the category ids from the junction"
+        );
+
+        restored_pool.close().await;
     }
 }

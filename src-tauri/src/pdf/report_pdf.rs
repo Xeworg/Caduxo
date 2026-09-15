@@ -488,8 +488,14 @@ fn format_filters(filters: &ReportFilters) -> String {
     if let Some(l) = filters.location_id.as_deref().filter(|s| !s.is_empty()) {
         parts.push(format!("location={}", truncate(l, 16)));
     }
-    if let Some(c) = filters.category_id.as_deref().filter(|s| !s.is_empty()) {
-        parts.push(format!("category={}", truncate(c, 16)));
+    if let Some(ids) = filters.category_ids.as_ref() {
+        if !ids.is_empty() {
+            if ids.len() == 1 {
+                parts.push(format!("category={}", truncate(&ids[0], 16)));
+            } else {
+                parts.push(format!("categories ({})", ids.len()));
+            }
+        }
     }
     if let Some(u) = filters.urgency.as_deref().filter(|s| !s.is_empty()) {
         parts.push(format!("urgency={u}"));
@@ -551,7 +557,7 @@ mod tests {
             filters_used: ReportFilters {
                 store_id: Some("store-a".to_string()),
                 location_id: None,
-                category_id: Some("dairy".to_string()),
+                category_ids: Some(vec!["dairy".to_string()]),
                 urgency: None,
                 date_from: None,
                 date_to: None,
@@ -660,7 +666,7 @@ mod tests {
         let f = ReportFilters {
             store_id: Some("main".to_string()),
             location_id: Some("".to_string()),
-            category_id: Some("dairy".to_string()),
+            category_ids: Some(vec!["dairy".to_string()]),
             urgency: Some("expired".to_string()),
             date_from: Some("2025-01-01".to_string()),
             date_to: None,

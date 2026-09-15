@@ -535,10 +535,12 @@ pub async fn export_products_csv(pool: &DbPool, path: &Path) -> Result<CsvExport
         let additional_barcodes_joined = additional_barcodes.join(";");
 
         let category_name = product
-            .category_id
-            .as_ref()
-            .and_then(|cid| category_names.get(cid).cloned())
-            .unwrap_or_default();
+            .category_ids
+            .iter()
+            .filter_map(|cid| category_names.get(cid))
+            .map(|s| s.as_str())
+            .collect::<Vec<&str>>()
+            .join(", ");
 
         writer
             .write_record([
@@ -601,6 +603,7 @@ pub async fn export_report_csv(
         location_id: input.location_id,
         preset: input.preset,
         urgency: input.urgency,
+        category_ids: None,
     };
 
     // Reuse the dashboard service so urgency, sorting, and counts stay in sync
@@ -828,7 +831,7 @@ async fn import_row(
     sku: &Option<String>,
     description: &Option<String>,
     barcode: Option<&str>,
-    category_id: Option<&str>,
+    category_name: Option<&str>,
     default_unit: Option<&str>,
     default_alert_days_before: Option<i32>,
     notes: Option<&str>,
@@ -878,7 +881,10 @@ async fn import_row(
 
     let resolved_alert_days = default_alert_days_before.unwrap_or(30);
 
-    // 3. Check if SKU exists.
+    // 3. Resolve category name to id (single-category CSV import).
+    let resolved_cat_id = resolve_category_name(pool, category_name).await?;
+
+    // 4. Check if SKU exists.
     let existing_by_sku = products_repo::find_by_sku_exact(pool, &sku).await?;
 
     match (existing_by_sku, strategy) {
@@ -893,7 +899,7 @@ async fn import_row(
                 id: existing.id.clone(),
                 sku: existing.sku.clone(),
                 description: description.clone(),
-                category_id: category_id.map(String::from),
+                category_ids: resolved_cat_id.map(|id| vec![id]),
                 default_unit: default_unit.map(String::from),
                 default_unit_id: None,
                 default_alert_days_before: resolved_alert_days,
@@ -960,7 +966,7 @@ async fn import_row(
             let create_input = ProductCreate {
                 sku: sku.clone(),
                 description,
-                category_id: category_id.map(String::from),
+                category_ids: resolved_cat_id.map(|id| vec![id]),
                 default_unit: default_unit.map(String::from),
                 default_unit_id: None,
                 default_alert_days_before: resolved_alert_days,
@@ -1139,7 +1145,7 @@ mod tests {
             ProductCreate {
                 sku: "EXIST-001".into(),
                 description: "Existing".into(),
-                category_id: None,
+                category_ids: None,
                 default_unit: None,
                 default_unit_id: None,
                 default_alert_days_before: 30,
@@ -1184,7 +1190,7 @@ mod tests {
             ProductCreate {
                 sku: "BC-OWNER".into(),
                 description: "Barcode owner".into(),
-                category_id: None,
+                category_ids: None,
                 default_unit: None,
                 default_unit_id: None,
                 default_alert_days_before: 30,
@@ -1427,7 +1433,7 @@ mod tests {
             ProductCreate {
                 sku: "EXP-001".into(),
                 description: "Exported Product".into(),
-                category_id: Some(cat_id.clone()),
+                category_ids: Some(vec![cat_id.clone()]),
                 default_unit: Some("L".into()),
                 default_unit_id: None,
                 default_alert_days_before: 30,
@@ -1510,7 +1516,7 @@ mod tests {
             ProductCreate {
                 sku: "EXP-LOT".into(),
                 description: "Export Lot".into(),
-                category_id: None,
+                category_ids: None,
                 default_unit: Some("kg".into()),
                 default_unit_id: None,
                 default_alert_days_before: 7,
@@ -1653,7 +1659,7 @@ mod tests {
             ProductCreate {
                 sku: "EXIST-SKU".into(),
                 description: "Existing product".into(),
-                category_id: None,
+                category_ids: None,
                 default_unit: None,
                 default_unit_id: None,
                 default_alert_days_before: 30,
@@ -1696,7 +1702,7 @@ mod tests {
             ProductCreate {
                 sku: "BC-OWNER".into(),
                 description: "Barcode owner".into(),
-                category_id: None,
+                category_ids: None,
                 default_unit: None,
                 default_unit_id: None,
                 default_alert_days_before: 30,
@@ -1752,7 +1758,7 @@ mod tests {
             ProductCreate {
                 sku: "UPDATE-ME".into(),
                 description: "Old description".into(),
-                category_id: None,
+                category_ids: None,
                 default_unit: None,
                 default_unit_id: None,
                 default_alert_days_before: 30,
@@ -1819,7 +1825,7 @@ mod tests {
             ProductCreate {
                 sku: "BC-TARGET".into(),
                 description: "Barcode target".into(),
-                category_id: None,
+                category_ids: None,
                 default_unit: None,
                 default_unit_id: None,
                 default_alert_days_before: 30,
@@ -1860,7 +1866,7 @@ mod tests {
             ProductCreate {
                 sku: "REVIEW-SKU".into(),
                 description: "Existing".into(),
-                category_id: None,
+                category_ids: None,
                 default_unit: None,
                 default_unit_id: None,
                 default_alert_days_before: 30,

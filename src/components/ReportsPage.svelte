@@ -18,6 +18,8 @@
     listCategories,
     type CategoryResponse,
   } from "../lib/products.js";
+  import { UNCATEGORIZED_SENTINEL } from "../lib/categories.js";
+  import CategoryPicker from "./inputs/CategoryPicker.svelte";
   import {
     listStores,
     listStoreLocations,
@@ -33,7 +35,7 @@
   let selectedReportType: ReportType = "expired";
   let storeId: string | null = null;
   let locationId: string | null = null;
-  let categoryId: string | null = null;
+  let categoryIds: string[] = [];
   let urgency: string = "";
   function todayIso(): string {
     const d = new Date();
@@ -140,7 +142,7 @@
     const filters: ReportFilters = {
       store_id: storeId || null,
       location_id: locationId || null,
-      category_id: categoryId || null,
+      category_ids: categoryIds.length > 0 ? categoryIds : null,
       urgency: selectedReportType === "custom" ? (urgency || null) : null,
       date_from: dateFrom.trim() || null,
       date_to: dateTo.trim() || null,
@@ -148,7 +150,7 @@
     const allEmpty =
       !filters.store_id &&
       !filters.location_id &&
-      !filters.category_id &&
+      !(filters.category_ids && filters.category_ids.length > 0) &&
       !filters.urgency &&
       !filters.date_from &&
       !filters.date_to;
@@ -262,18 +264,25 @@
     return rfc3339;
   }
 
-  function filterSummary(meta: ReportMetadata | null): string {
-    if (!meta) return "";
-    const f = meta.filters_used;
-    const parts: string[] = [];
-    if (f.store_id) parts.push(`store=${f.store_id.slice(0, 8)}…`);
-    if (f.location_id) parts.push(`location=${f.location_id.slice(0, 8)}…`);
-    if (f.category_id) parts.push(`category=${f.category_id.slice(0, 8)}…`);
-    if (f.urgency) parts.push(`urgency=${f.urgency}`);
-    if (f.date_from) parts.push(`from=${f.date_from}`);
-    if (f.date_to) parts.push(`to=${f.date_to}`);
-    return parts.length === 0 ? "(no filters)" : parts.join(" · ");
-  }
+      function filterSummary(meta: ReportMetadata | null): string {
+        if (!meta) return "";
+        const f = meta.filters_used;
+        const parts: string[] = [];
+        if (f.store_id) parts.push(`store=${f.store_id.slice(0, 8)}…`);
+        if (f.location_id) parts.push(`location=${f.location_id.slice(0, 8)}…`);
+        if (f.category_ids && f.category_ids.length > 0) {
+          const n = f.category_ids.length;
+          if (f.category_ids.includes(UNCATEGORIZED_SENTINEL)) {
+            parts.push(`categories=${n} (includes uncategorized)`);
+          } else {
+            parts.push(`categories (${n})`);
+          }
+        }
+        if (f.urgency) parts.push(`urgency=${f.urgency}`);
+        if (f.date_from) parts.push(`from=${f.date_from}`);
+        if (f.date_to) parts.push(`to=${f.date_to}`);
+        return parts.length === 0 ? "(no filters)" : parts.join(" · ");
+      }
 
   function reportTypeLabel(t: ReportType): string {
     return REPORT_TYPES.find((r) => r.value === t)?.label ?? t;
@@ -348,15 +357,15 @@
           </select>
         </label>
 
-        <label class="filter-field">
+        <div class="filter-field">
           <span>Category</span>
-          <select bind:value={categoryId}>
-            <option value={null}>All categories</option>
-            {#each categories as c}
-              <option value={c.id}>{c.name}</option>
-            {/each}
-          </select>
-        </label>
+          <CategoryPicker
+            bind:value={categoryIds}
+            {categories}
+            includeUncategorized={true}
+            placeholder="Filter by category…"
+          />
+        </div>
 
         <label class="filter-field" class:disabled={selectedReportType !== "custom"}>
           <span>Urgency</span>

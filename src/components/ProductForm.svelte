@@ -2,7 +2,6 @@
       import {
         createProduct,
         updateProduct,
-        createCategory,
         suggestedProductAlertDays,
         addProductBarcodeOnCreate,
         type CategoryResponse,
@@ -14,6 +13,7 @@
         createUnitDefinition,
         type UnitDefinitionResponse,
       } from "../lib/unit_definitions.js";
+      import CategoryPicker from "./inputs/CategoryPicker.svelte";
       import { onMount } from "svelte";
 
       // ── Props ──────────────────────────────────────────────────────────────────
@@ -21,13 +21,13 @@
       export let mode: "create" | "edit";
       /** Required for edit mode; ignored in create mode. */
       export let initial: ProductResponse | null = null;
-      /** Master category list from the parent; used to populate the dropdown. */
+      /** Master category list from the parent; used for chip display names. */
       export let categories: CategoryResponse[];
       /** Called after a successful save with the saved product. */
       export let onSaved: (product: ProductResponse) => void;
       /** Called when the user cancels the form. */
       export let onCancel: () => void;
-      /** Called after a successful inline category create. */
+      /** Called after a successful inline category create (from CategoryPicker). */
       export let onCategoryCreated: (category: CategoryResponse) => void;
 
       /**
@@ -40,7 +40,7 @@
 
   let sku = "";
   let description = "";
-  let categoryId: string = "";
+  let categoryIds: string[] = [];
   let defaultUnit = "";
   let defaultUnitId = ""; // FK into unit_definitions; empty = no catalog link
   let defaultAlertDays = 30;
@@ -55,16 +55,6 @@
   let upcType = "";
   let upcIsPrimary = false;
   let barcodeNotice = ""; // empty = no notice
-
-  // Local category mirror so inline creates show up without parent round-trip.
-  let localCategories: CategoryResponse[] = [];
-  $: localCategories = categories;
-
-  // Inline category create
-  let addingCategory = false;
-  let newCategoryName = "";
-  let creatingCategory = false;
-  let categoryError = "";
 
   // ── Unit catalog ───────────────────────────────────────────────────────────
   /** Cached unit list for the datalist. */
@@ -82,18 +72,29 @@
   /** In-progress flag for inline unit creation. */
   let creatingUnit = false;
 
-  // ── Init ───────────────────────────────────────────────────────────────────
+// ── Init ───────────────────────────────────────────────────────────────────
 
-  $: if (mode === "edit" && initial) {
-    sku = initial.sku;
-    description = initial.description;
-    categoryId = initial.category_id ?? "";
-    defaultUnit = initial.default_unit ?? "";
-    defaultUnitId = initial.default_unit_id ?? "";
-    defaultAlertDays = initial.default_alert_days_before;
-    notes = initial.notes ?? "";
-    isActive = initial.is_active;
-  }
+      /**
+       * Tracks which `initial.id` we've already seeded from. Reseeding only fires
+       * when the product identity changes (initial mount or switching to a
+       * different product); re-renders that re-supply the same `initial` object
+       * leave the in-flight `categoryIds` and other field edits alone.
+       * Without this guard, the CategoryPicker's local selection was being
+       * clobbered by reactive re-evaluation when the parent updated `initial`.
+       */
+      let lastSeededProductId: string | null = null;
+
+      $: if (mode === "edit" && initial && lastSeededProductId !== initial.id) {
+        sku = initial.sku;
+        description = initial.description;
+        categoryIds = initial.category_ids ?? [];
+        defaultUnit = initial.default_unit ?? "";
+        defaultUnitId = initial.default_unit_id ?? "";
+        defaultAlertDays = initial.default_alert_days_before;
+        notes = initial.notes ?? "";
+        isActive = initial.is_active;
+        lastSeededProductId = initial.id;
+      }
 
   // Pre-fill alert days and optional UPC from the backend on first create mount.
   let suggestedFetched = false;
@@ -123,34 +124,7 @@
 
       // ── Helpers ────────────────────────────────────────────────────────────────
 
-  function resetInlineCategory() {
-    addingCategory = false;
-    newCategoryName = "";
-    categoryError = "";
-  }
 
-  async function submitInlineCategory() {
-    const name = newCategoryName.trim();
-    if (!name) {
-      categoryError = "Category name is required";
-      return;
-    }
-    creatingCategory = true;
-    categoryError = "";
-    try {
-      const created = await createCategory({ name });
-      localCategories = [...localCategories, created].sort((a, b) =>
-        a.name.localeCompare(b.name),
-      );
-      categoryId = created.id;
-      onCategoryCreated(created);
-      resetInlineCategory();
-    } catch (e: unknown) {
-      categoryError = String(e);
-    } finally {
-      creatingCategory = false;
-    }
-  }
 
   // ── Unit helpers ───────────────────────────────────────────────────────────
 
@@ -225,72 +199,81 @@
     }
   }
 
-  async function submit() {
-    errorMsg = "";
-    if (!sku.trim()) {
-      errorMsg = "SKU is required";
-      return;
-    }
-    if (!description.trim()) {
-      errorMsg = "Description is required";
-      return;
-    }
-    if (defaultAlertDays < 0) {
-      errorMsg = "Alert days cannot be negative";
-      return;
-    }
-    submitting = true;
-    try {
-      const payload = {
-        sku: sku.trim(),
-        description: description.trim(),
-        category_id: categoryId || null,
-        default_unit: defaultUnit.trim() || null,
-        default_unit_id: defaultUnitId || null,
-        default_alert_days_before: defaultAlertDays,
-        notes: notes.trim() || null,
-      };
-              let saved: ProductResponse;
-              if (mode === "edit" && initial) {
-                saved = await updateProduct({
-                  ...payload,
-                  id: initial.id,
-                  is_active: isActive,
-                });
-              } else {
-                saved = await createProduct(payload);
-                // Attempt to attach the UPC/barcode if the field is non-empty.
-                const trimmed = upcValue.trim();
-                if (trimmed !== "") {
-                  const result = await addProductBarcodeOnCreate({
-                    product_id: saved.id,
-                    barcode: trimmed,
-                    barcode_type: upcType.trim() || null,
-                    is_primary: upcIsPrimary,
-                  });
-                  if (!result.ok) {
-                    switch (result.kind) {
-                      case "duplicate_other":
-                        barcodeNotice = `Barcode "${trimmed}" already belongs to another product and was not attached.`;
-                        break;
-                      case "duplicate_same":
-                        barcodeNotice = result.message || `Barcode "${trimmed}" is already attached to this product.`;
-                        break;
-                      case "other":
-                        barcodeNotice = result.message;
-                        break;
-                    }
-                  }
+      async function submit() {
+        errorMsg = "";
+        if (!sku.trim()) {
+          errorMsg = "SKU is required";
+          return;
+        }
+        if (!description.trim()) {
+          errorMsg = "Description is required";
+          return;
+        }
+        if (defaultAlertDays < 0) {
+          errorMsg = "Alert days cannot be negative";
+          return;
+        }
+        submitting = true;
+        try {
+          const payload = {
+            sku: sku.trim(),
+            description: description.trim(),
+            category_ids: categoryIds.length > 0 ? categoryIds : null,
+            default_unit: defaultUnit.trim() || null,
+            default_unit_id: defaultUnitId || null,
+            default_alert_days_before: defaultAlertDays,
+            notes: notes.trim() || null,
+          };
+          let saved: ProductResponse;
+          if (mode === "edit" && initial) {
+            saved = await updateProduct({
+              ...payload,
+              id: initial.id,
+              is_active: isActive,
+            });
+          } else {
+            saved = await createProduct(payload);
+            // Attempt to attach the UPC/barcode if the field is non-empty.
+            const trimmed = upcValue.trim();
+            if (trimmed !== "") {
+              const result = await addProductBarcodeOnCreate({
+                product_id: saved.id,
+                barcode: trimmed,
+                barcode_type: upcType.trim() || null,
+                is_primary: upcIsPrimary,
+              });
+              if (!result.ok) {
+                switch (result.kind) {
+                  case "duplicate_other":
+                    barcodeNotice = `Barcode "${trimmed}" already belongs to another product and was not attached.`;
+                    break;
+                  case "duplicate_same":
+                    barcodeNotice = result.message || `Barcode "${trimmed}" is already attached to this product.`;
+                    break;
+                  case "other":
+                    barcodeNotice = result.message;
+                    break;
                 }
               }
-              onSaved(saved);
-    } catch (e: unknown) {
-      errorMsg = String(e);
-    } finally {
-      submitting = false;
-    }
-  }
-</script>
+            }
+          }
+          onSaved(saved);
+        } catch (e: unknown) {
+          errorMsg = String(e);
+        } finally {
+          submitting = false;
+        }
+      }
+
+      /** Handler for CategoryPicker's on:create event. Propagates new categories
+       *  to the parent so the parent's category list stays in sync. */
+      function handleCategoryCreated(e: CustomEvent<CategoryResponse>) {
+        const created = e.detail;
+        if (!categories.find((c) => c.id === created.id)) {
+          onCategoryCreated(created);
+        }
+      }
+    </script>
 
 <form class="product-form" on:submit|preventDefault={submit}>
   <h3>{mode === "edit" ? "Edit product" : "Create product"}</h3>
@@ -320,75 +303,15 @@
     />
   </label>
 
-  <div class="category-row">
-    <label class="category-field">
-      Category
-      <select bind:value={categoryId}>
-        <option value="">— None —</option>
-      </select>
-    </label>
-    {#if localCategories.length > 0}
-      <ul class="category-pills">
-        {#each localCategories as cat (cat.id)}
-          <li>
-            <button
-              type="button"
-              class="pill"
-              class:selected={categoryId === cat.id}
-              on:click={() => (categoryId = cat.id)}
-            >
-              {cat.name}
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {/if}
+  <div class="category-field">
+    <span class="field-label">Category</span>
+    <CategoryPicker
+      bind:value={categoryIds}
+      {categories}
+      placeholder="Search or create a category…"
+      on:create={handleCategoryCreated}
+    />
   </div>
-
-      {#if addingCategory}
-        <div class="inline-category">
-          <label>
-            New category name
-            <input
-              type="text"
-              bind:value={newCategoryName}
-              placeholder="e.g. Dairy"
-              disabled={creatingCategory}
-            />
-          </label>
-          {#if categoryError}
-            <div class="alert alert-error inline-error" role="alert">
-              {categoryError}
-            </div>
-          {/if}
-          <div class="form-actions">
-            <button
-              type="button"
-              class="btn-primary btn-small"
-              disabled={creatingCategory}
-              on:click={submitInlineCategory}
-            >
-              {creatingCategory ? "Creating…" : "Add category"}
-            </button>
-            <button
-              type="button"
-              class="btn-secondary btn-small"
-              disabled={creatingCategory}
-              on:click={resetInlineCategory}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      {:else}
-        <button
-          type="button"
-          class="btn-link"
-          on:click={() => (addingCategory = true)}
-        >
-          + New category
-        </button>
-      {/if}
 
       {#if mode === "create"}
         <section class="barcode-subsection">
@@ -639,7 +562,8 @@
     font-size: 0.8rem;
   }
 
-  label {
+  label,
+  .category-field {
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -647,10 +571,13 @@
     color: #374151;
   }
 
+  .field-label {
+    font-weight: 500;
+  }
+
   label input[type="text"],
   label input[type="number"],
-  label textarea,
-  label select {
+  label textarea {
     padding: 7px 10px;
     border: 1px solid #d1d5db;
     border-radius: 6px;
@@ -660,8 +587,7 @@
   }
 
   label input:focus,
-  label textarea:focus,
-  label select:focus {
+  label textarea:focus {
     outline: 2px solid #3b82f6;
     border-color: #3b82f6;
   }
@@ -729,11 +655,6 @@
     cursor: not-allowed;
   }
 
-  .btn-small {
-    padding: 5px 12px;
-    font-size: 0.82rem;
-  }
-
   .btn-link {
     align-self: flex-start;
     background: none;
@@ -747,57 +668,6 @@
 
   .btn-link:hover {
     text-decoration: underline;
-  }
-
-  /* Category selector */
-  .category-row {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .category-field {
-    flex: none;
-  }
-
-  .category-pills {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .pill {
-    background: #f3f4f6;
-    color: #374151;
-    border: 1px solid #e5e7eb;
-    border-radius: 999px;
-    padding: 3px 12px;
-    font-size: 0.78rem;
-    cursor: pointer;
-    font-family: inherit;
-  }
-
-  .pill:hover {
-    background: #e5e7eb;
-  }
-
-  .pill.selected {
-    background: #dbeafe;
-    border-color: #3b82f6;
-    color: #1e40af;
-  }
-
-  .inline-category {
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
   }
 
   /* Barcodes subsection (create mode only) */
