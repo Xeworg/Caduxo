@@ -1,8 +1,8 @@
 //! Dashboard service — urgency classification, filtering, and response assembly.
 //!
 //! Pure business logic: no SQL, no Tauri, no Svelte.
-//! Uses `domain::expiry_status` for urgency classification and `domain::alerts`
-//! for day calculations.
+//! Uses `domain::expiry_status` for urgency classification and the `chrono`
+//! crate for date math.
 
 use chrono::NaiveDate;
 
@@ -39,19 +39,6 @@ fn enrich_row(row: DashboardLotRow) -> DashboardLotRow {
         urgency,
         days_remaining,
         ..row
-    }
-}
-
-/// Maps `Urgency` enum to the snake_case string used in DTOs and UI.
-fn classify_to_string(today: NaiveDate, expiry: NaiveDate) -> String {
-    use crate::domain::expiry_status::classify_urgency;
-
-    match classify_urgency(today, expiry) {
-        Urgency::Expired => "expired".to_string(),
-        Urgency::Today => "today".to_string(),
-        Urgency::AlertWindow => "alert_window".to_string(),
-        Urgency::Next30Days => "next_30_days".to_string(),
-        Urgency::Future => "future".to_string(),
     }
 }
 

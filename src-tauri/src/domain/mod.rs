@@ -3,7 +3,6 @@
 //! Domain functions must have no dependencies on Tauri, SQLite, or Svelte.
 //! They are the primary target for fast unit tests.
 
-pub mod alerts;
 pub mod expiry_status;
 pub mod lot_resolution;
 pub mod validation;

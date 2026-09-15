@@ -63,13 +63,6 @@ pub struct StoreLocationResponse {
     pub updated_at: String,
 }
 
-/// Key-value settings entry.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SettingEntry {
-    pub key: String,
-    pub value: String,
-}
-
 /// Application settings snapshot.
 #[derive(Debug, Serialize)]
 pub struct SettingsResponse {

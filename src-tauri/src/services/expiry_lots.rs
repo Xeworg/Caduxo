@@ -374,33 +374,6 @@ mod tests {
         Ok((store.id, product.id))
     }
 
-    /// Helper: creates a store + product + one expiry lot, returning (store_id, product_id, lot).
-    async fn seed_lot(
-        pool: &crate::db::DbPool,
-        expiry_date: &str,
-    ) -> Result<
-        (String, String, crate::dto::expiry_lots::ExpiryLotResponse),
-        Box<dyn std::error::Error>,
-    > {
-        let (store_id, product_id) = seed_product(pool).await?;
-        let lot = svc::create_expiry_lot(
-            pool,
-            ExpiryLotCreate {
-                product_id: product_id.clone(),
-                store_id: store_id.clone(),
-                location_id: None,
-                quantity: 10.0,
-                unit: None,
-                expiry_date: expiry_date.into(),
-                alert_days_before: None,
-                batch_code: None,
-                notes: None,
-            },
-        )
-        .await?;
-        Ok((store_id, product_id, lot))
-    }
-
     // ------------------------------------------------------------------
     // Create — precondition: store must exist
     // ------------------------------------------------------------------

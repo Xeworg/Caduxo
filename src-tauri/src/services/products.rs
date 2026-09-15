@@ -104,13 +104,6 @@ pub async fn list_categories(pool: &DbPool) -> Result<Vec<CategoryResponse>, App
         .map_err(AppError::from)
 }
 
-/// Lists all categories (active first), ordered alphabetically.
-pub async fn list_all_categories(pool: &DbPool) -> Result<Vec<CategoryResponse>, AppError> {
-    repo::list_all_categories(pool)
-        .await
-        .map_err(AppError::from)
-}
-
 /// Creates a new category after validating the name.
 /// Case-fold guard: rejects names that differ only in case from an existing active category.
 pub async fn create_category(

@@ -1107,7 +1107,7 @@ mod tests {
         .await
         .unwrap();
 
-        let p = create_product(
+        let _p = create_product(
             &pool,
             ProductCreate {
                 sku: "SKU-SKU-EXACT".into(),
@@ -1241,7 +1241,7 @@ mod tests {
         .unwrap();
 
         let products = super::list_all_products_for_export(&pool).await.unwrap();
-        let found = products.iter().find(|p| p.id == p.id).unwrap();
+        let found = products.iter().find(|product| product.id == p.id).unwrap();
         // New DTO has `category_ids` field (Vec<String>), not `category_id`.
         assert!(found.category_ids.is_empty());
     }
