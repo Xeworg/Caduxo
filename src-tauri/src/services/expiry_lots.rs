@@ -67,6 +67,17 @@ fn validate_quantity(qty: f64) -> Result<(), DomainError> {
     Ok(())
 }
 
+/// Returns true when two quantities are considered equal for the purposes of
+/// the metadata-only update guard. Uses a small absolute tolerance so that
+/// innocuous float rounding from the UI never produces a false positive.
+fn quantities_equal(a: f64, b: f64) -> bool {
+    (a - b).abs() <= QUANTITY_EQ_TOLERANCE
+}
+
+/// Absolute tolerance used by [`quantities_equal`]. Far below any practical
+/// product quantity (typical inputs are whole units or 2-decimal kg/L values).
+const QUANTITY_EQ_TOLERANCE: f64 = 1e-9;
+
 /// Validates an ISO-8601 date string (YYYY-MM-DD).
 fn validate_expiry_date(date: &str) -> Result<(), DomainError> {
     let has_strict_shape = date.len() == 10
@@ -342,14 +353,56 @@ pub async fn create_expiry_lot(
 // Update
 // ============================================================
 
-/// Updates an existing active expiry lot. Returns `NotFound` if the lot does
-/// not exist or is already archived.
+/// Updates the metadata of an existing active expiry lot. The `quantity`
+/// field on the input is accepted but **must match the existing lot
+/// quantity**; any attempt to change it through this path is rejected with
+/// `BusinessRule`. Quantity changes must go through the movement /
+/// adjustment / resolve flows so the `lot_movements` ledger stays the
+/// source of truth.
+///
+/// Editable fields: `location_id`, `unit`, `expiry_date`,
+/// `alert_days_before`, `batch_code`, `notes`.
+///
+/// Returns:
+/// - `NotFound` if the lot does not exist.
+/// - `BusinessRule` if the lot is not currently `active`.
+/// - `BusinessRule` if `input.quantity` differs from the existing quantity.
+/// - `Validation` for invalid quantity / expiry date shapes.
 pub async fn update_expiry_lot(
     pool: &DbPool,
     input: ExpiryLotUpdate,
 ) -> Result<ExpiryLotResponse, AppError> {
     validate_quantity(input.quantity).map_err(AppError::Domain)?;
     validate_expiry_date(&input.expiry_date).map_err(AppError::Domain)?;
+
+    // ── Fetch existing lot to enforce metadata-only updates. ────────────────
+    let existing = repo::get_expiry_lot(pool, &input.id)
+        .await
+        .map_err(AppError::from)?
+        .ok_or(DomainError::NotFound {
+            resource: "expiry_lot",
+            id: input.id.clone(),
+        })?;
+
+    if existing.status != "active" {
+        return Err(DomainError::BusinessRule {
+            message: format!("Cannot update lot: status is `{}`", existing.status),
+        }
+        .into());
+    }
+
+    // ── Quantity guard: update is metadata-only. Movement / resolve flows ────
+    // remain the only supported way to change a lot's quantity so the
+    // `lot_movements` ledger stays authoritative.
+    if !quantities_equal(input.quantity, existing.quantity) {
+        return Err(DomainError::BusinessRule {
+            message: format!(
+"Cannot change quantity of expiry lot directly: quantity must remain {:.2} {}. Use movement / adjustment / resolve actions to change it.",
+existing.quantity, existing.unit
+            ),
+        }
+        .into());
+    }
 
     let row = repo::update_expiry_lot(pool, &input)
         .await
@@ -980,12 +1033,13 @@ mod tests {
         )
         .await?;
 
+        // Metadata-only update: quantity must be preserved.
         let updated = svc::update_expiry_lot(
             &pool,
             ExpiryLotUpdate {
                 id: lot.id.clone(),
                 location_id: None,
-                quantity: 8.0,
+                quantity: lot.quantity,
                 unit: "mL".into(),
                 expiry_date: "2026-01-15".into(),
                 alert_days_before: 14,
@@ -995,11 +1049,113 @@ mod tests {
         )
         .await?;
 
-        assert_eq!(updated.quantity, 8.0);
+        assert_eq!(
+            updated.quantity, 10.0,
+            "quantity must be preserved on metadata-only update"
+        );
         assert_eq!(updated.unit, "mL");
         assert_eq!(updated.expiry_date, "2026-01-15");
         assert_eq!(updated.alert_days_before, 14);
         assert_eq!(updated.batch_code.as_deref(), Some("BATCH-001"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn update_lot_rejects_quantity_change() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
+
+        let lot = svc::create_expiry_lot(
+            &pool,
+            ExpiryLotCreate {
+                product_id: product_id.clone(),
+                store_id: store_id.clone(),
+                location_id: None,
+                quantity: 10.0,
+                unit: Some("L".into()),
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: Some(7),
+                batch_code: None,
+                notes: None,
+            },
+        )
+        .await?;
+
+        // Attempt to change the quantity through update — must be rejected.
+        let err = svc::update_expiry_lot(
+            &pool,
+            ExpiryLotUpdate {
+                id: lot.id.clone(),
+                location_id: None,
+                quantity: 8.0,
+                unit: lot.unit.clone(),
+                expiry_date: lot.expiry_date.clone(),
+                alert_days_before: lot.alert_days_before,
+                batch_code: lot.batch_code.clone(),
+                notes: lot.notes.clone(),
+            },
+        )
+        .await
+        .expect_err("changing quantity through update must be rejected");
+
+        assert!(matches!(
+            err,
+            crate::error::AppError::Domain(
+                crate::error::DomainError::BusinessRule { ref message }
+            ) if message.contains("Cannot change quantity of expiry lot directly")
+        ));
+
+        // The lot must remain untouched: same quantity, same status.
+        let after = svc::get_expiry_lot(&pool, lot.id.clone()).await?;
+        assert_eq!(after.quantity, 10.0);
+        assert_eq!(after.status, "active");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn update_lot_metadata_only_with_same_quantity_succeeds(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
+
+        let lot = svc::create_expiry_lot(
+            &pool,
+            ExpiryLotCreate {
+                product_id: product_id.clone(),
+                store_id: store_id.clone(),
+                location_id: None,
+                quantity: 5.0,
+                unit: Some("kg".into()),
+                expiry_date: "2025-06-30".into(),
+                alert_days_before: Some(14),
+                batch_code: None,
+                notes: None,
+            },
+        )
+        .await?;
+
+        // Only metadata changes; quantity mirrors the existing lot value.
+        let updated = svc::update_expiry_lot(
+            &pool,
+            ExpiryLotUpdate {
+                id: lot.id.clone(),
+                location_id: None,
+                quantity: lot.quantity,
+                unit: "g".into(),
+                expiry_date: "2026-06-30".into(),
+                alert_days_before: 60,
+                batch_code: Some("META-ONLY".into()),
+                notes: Some("metadata only".into()),
+            },
+        )
+        .await?;
+
+        assert_eq!(updated.quantity, 5.0);
+        assert_eq!(updated.unit, "g");
+        assert_eq!(updated.expiry_date, "2026-06-30");
+        assert_eq!(updated.alert_days_before, 60);
+        assert_eq!(updated.batch_code.as_deref(), Some("META-ONLY"));
+        assert_eq!(updated.notes.as_deref(), Some("metadata only"));
         Ok(())
     }
 
