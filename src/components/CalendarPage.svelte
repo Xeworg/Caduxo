@@ -10,7 +10,7 @@
     getExpiryLot,
     type ExpiryLotResponse,
   } from "../lib/expiry_lots.js";
-  import { listStoreLocations, type StoreLocationResponse } from "../lib/stores.js";
+  import { listStores, listStoreLocations, type StoreLocationResponse } from "../lib/stores.js";
   import LotMovementsPanel from "./LotMovementsPanel.svelte";
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -290,6 +290,18 @@ const watchdog = window.setTimeout(() => {
 
   // ── Lot detail ───────────────────────────────────────────────────────────────
 
+  async function loadAllStoreLocations(): Promise<StoreLocationResponse[]> {
+    const activeStores = (await listStores()).filter((store) => store.is_active);
+    const locationLists = await Promise.all(
+      activeStores.map((store) =>
+        listStoreLocations(store.id).then((locations) =>
+          locations.map((location) => ({ ...location, store_name: store.name })),
+        ),
+      ),
+    );
+    return locationLists.flat();
+  }
+
   async function openLot(row: DashboardLotRow) {
     detailLoading = true;
     showLotDetail = true;
@@ -299,7 +311,7 @@ const watchdog = window.setTimeout(() => {
     try {
       [detailLot, lotDetailLocations] = await Promise.all([
     getExpiryLot(row.lot_id),
-    listStoreLocations(row.store_id),
+    loadAllStoreLocations(),
       ]);
     } catch (e) {
       errorMsg = String(e);

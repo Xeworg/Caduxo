@@ -283,6 +283,20 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
        * transfer/exit/adjust location names. Reuses the same `listExpiryLotsByProduct`
        * + `listStoreLocations` calls used by the dedicated Product Detail page.
        */
+      async function loadAllStoreLocations(): Promise<StoreLocationResponse[]> {
+        const activeStores = stores.length > 0
+          ? stores.filter((store) => store.is_active)
+          : (await listStores()).filter((store) => store.is_active);
+        const locationLists = await Promise.all(
+          activeStores.map((store) =>
+            listStoreLocations(store.id)
+              .then((locations) => locations.map((location) => ({ ...location, store_name: store.name })))
+              .catch(() => [] as StoreLocationResponse[]),
+          ),
+        );
+        return locationLists.flat();
+      }
+
       async function loadProductDetailLots(productId: string) {
         detailLotsLoading = true;
         try {
@@ -295,16 +309,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
             const firstActive = detailLots.find((l) => l.status === "active");
             detailSelectedLotId = firstActive?.id ?? detailLots[0]?.id ?? null;
           }
-          // Load locations for every store that holds at least one of the lots
-          // (products can span multiple stores). Failures are non-fatal so a
-          // single bad store does not blank the whole picker.
-          const storeIds = Array.from(new Set(detailLots.map((l) => l.store_id)));
-          const locationLists = await Promise.all(
-            storeIds.map((sid) =>
-              listStoreLocations(sid).catch(() => [] as StoreLocationResponse[]),
-            ),
-          );
-          detailAllLocations = locationLists.flat();
+          detailAllLocations = await loadAllStoreLocations();
         } catch (e) {
           errorMsg = String(e);
         } finally {
@@ -345,7 +350,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
     try {
       [detailLot, lotDetailLocations] = await Promise.all([
     getExpiryLot(lot.lot_id),
-    listStoreLocations(lot.store_id),
+    loadAllStoreLocations(),
       ]);
     } catch (e) {
       errorMsg = String(e);

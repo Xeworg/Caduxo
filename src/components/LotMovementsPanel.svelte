@@ -92,11 +92,6 @@
     return loc?.name ?? id.slice(0, 8) + "…";
   }
 
-  function getLocationBalance(id: string): number {
-    const bal = balances.find((b) => b.location_id === id);
-    return bal?.balance ?? 0;
-  }
-
   function handleMovementCreated() {
     showMoveStock = false;
     showRegisterExit = false;

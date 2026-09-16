@@ -22,6 +22,7 @@
   let sourceLocationId = "";
   let destinationLocationId = "";
   let quantity = 0;
+  let transferAcrossStores = false;
   let submitting = false;
   let errorMsg = "";
 
@@ -48,7 +49,23 @@
     ? currentBalances.find((b) => b.location_id === sourceLocationId)?.balance ?? 0
     : 0;
 
-  $: filteredDestinations = locations.filter((l) => l.id !== sourceLocationId);
+  $: locationCatalog = allLocations.length > 0 ? allLocations : locations;
+  $: sourceLocations = locationCatalog.filter((loc) =>
+    currentBalances.some((bal) => bal.location_id === loc.id && bal.balance > 0),
+  );
+  $: sourceStoreId = locationCatalog.find((loc) => loc.id === sourceLocationId)?.store_id ?? null;
+  $: filteredDestinations = locationCatalog.filter((loc) => {
+    if (loc.id === sourceLocationId) return false;
+    if (!sourceStoreId) return true;
+    return transferAcrossStores ? loc.store_id !== sourceStoreId : loc.store_id === sourceStoreId;
+  });
+  $: if (destinationLocationId && !filteredDestinations.some((loc) => loc.id === destinationLocationId)) {
+    destinationLocationId = "";
+  }
+
+  function locationLabel(loc: { name: string; store_name?: string }): string {
+    return loc.store_name ? `${loc.store_name} / ${loc.name}` : loc.name;
+  }
 
   /**
    * Local validation for integer-unit products: catches fractional input
@@ -114,16 +131,27 @@
     </div>
 
     <div class="modal-body">
-      {#if locations.length < 2}
-        <p class="info-text">Se necesita al menos dos ubicaciones para realizar una transferencia.</p>
+      <label class="checkbox-row">
+        <input type="checkbox" bind:checked={transferAcrossStores} disabled={submitting || sourceLocations.length === 0} />
+        Transferir a otra tienda
+      </label>
+
+      {#if sourceLocations.length === 0 || filteredDestinations.length === 0}
+        <p class="info-text">
+          {sourceLocations.length === 0
+            ? "Se necesita stock disponible para realizar una transferencia."
+            : transferAcrossStores
+              ? "No hay ubicaciones disponibles en otras tiendas."
+              : "No hay otra ubicación disponible en la misma tienda. Marcá Transferir a otra tienda si corresponde."}
+        </p>
       {:else}
         <div class="form-group">
           <label for="move-source">Ubicación de origen *</label>
           <select id="move-source" bind:value={sourceLocationId} disabled={submitting}>
             <option value="">Seleccionar ubicación…</option>
-            {#each locations as loc}
+            {#each sourceLocations as loc}
               {@const bal = currentBalances.find((b) => b.location_id === loc.id)?.balance ?? 0}
-              <option value={loc.id}>{loc.name} ({bal} disponibles)</option>
+              <option value={loc.id}>{locationLabel(loc)} ({bal} disponibles)</option>
             {/each}
           </select>
         </div>
@@ -133,7 +161,7 @@
           <select id="move-dest" bind:value={destinationLocationId} disabled={submitting}>
             <option value="">Seleccionar ubicación…</option>
             {#each filteredDestinations as loc}
-              <option value={loc.id}>{loc.name}</option>
+              <option value={loc.id}>{locationLabel(loc)}</option>
             {/each}
           </select>
         </div>
@@ -167,7 +195,7 @@
         type="button"
         class="btn-primary"
         on:click={submit}
-        disabled={submitting || locations.length < 2}
+        disabled={submitting || sourceLocations.length === 0 || filteredDestinations.length === 0}
       >
         {submitting ? "Guardando…" : "Mover"}
       </button>
@@ -180,6 +208,15 @@
     color: #6b7280;
     font-size: 0.88rem;
     margin: 0;
+  }
+
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    font-size: 0.86rem;
+    color: #374151;
   }
 
   .form-group {
