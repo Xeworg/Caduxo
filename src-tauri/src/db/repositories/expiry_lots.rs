@@ -111,25 +111,6 @@ pub async fn update_expiry_lot(
     get_expiry_lot(pool, &input.id).await
 }
 
-/// Soft-archives an expiry lot by setting status = 'archived'. Returns `true`
-/// if a row was updated, `false` if the lot did not exist or was already
-/// archived.
-pub async fn archive_expiry_lot(pool: &SqlitePool, id: &str) -> Result<bool, sqlx::Error> {
-    let now = Utc::now().to_rfc3339();
-    let affected = sqlx::query(
-        r#"
-        UPDATE expiry_lots
-        SET status = 'archived', updated_at = $1
-        WHERE id = $2 AND status = 'active'
-        "#,
-    )
-    .bind(&now)
-    .bind(id)
-    .execute(pool)
-    .await?;
-    Ok(affected.rows_affected() > 0)
-}
-
 // ============================================================
 // Expiry lots — list queries
 // ============================================================

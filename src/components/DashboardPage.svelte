@@ -564,17 +564,12 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
               <td class="cell-actions">
                 <button
                   class="action-btn"
-                  title="View product"
-                  on:click={() => viewProduct(lot)}
-                >👁</button>
-                <button
-                  class="action-btn"
                   title="Edit lot"
                   on:click={() => editLot(lot)}
                 >✏️</button>
                 <button
                   class="action-btn action-btn-lot-actions"
-                  title="View lot movements"
+                  title="View product and lot movements"
                   on:click={() => viewProduct(lot, lot.lot_id)}
                 >↓</button>
               </td>

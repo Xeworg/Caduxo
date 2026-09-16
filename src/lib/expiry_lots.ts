@@ -38,6 +38,39 @@ export interface ExpiryLotResolve {
   notes?: string | null;
 }
 
+/**
+ * Allow-listed archive reason codes. Mirrors the backend
+ * `VALID_ARCHIVE_REASONS` constant in `src-tauri/src/services/expiry_lots.rs`.
+ * Keep both in sync when adding new reasons.
+ */
+export interface ArchiveReasonOption {
+  value: string;
+  label: string;
+}
+
+export const ARCHIVE_REASONS: readonly ArchiveReasonOption[] = [
+  { value: "expired_unsold", label: "Expired (unsold)" },
+  { value: "damaged", label: "Damaged" },
+  { value: "returned_to_supplier", label: "Returned to supplier" },
+  { value: "recall", label: "Manufacturer recall" },
+  { value: "lost", label: "Lost / unaccounted" },
+  { value: "internal_use", label: "Internal use" },
+  { value: "administrative", label: "Administrative cleanup" },
+  { value: "other", label: "Other" },
+] as const;
+
+/** Minimum trimmed length required for archive `notes` (server-side rule). */
+export const ARCHIVE_NOTES_MIN_CHARS = 5;
+/** Maximum trimmed length allowed for archive `notes` (server-side rule). */
+export const ARCHIVE_NOTES_MAX_CHARS = 1000;
+
+/** Input for archiving an active expiry lot with a required justification. */
+export interface ArchiveLotInput {
+  id: string;
+  reason: string;
+  notes: string;
+}
+
 export interface ExpiryLotResponse {
   id: string;
   product_id: string;
@@ -123,9 +156,16 @@ export async function updateExpiryLot(
   return invoke<ExpiryLotResponse>("update_expiry_lot", { input });
 }
 
-/** Soft-archives an expiry lot (status = 'archived'). */
-export async function archiveExpiryLot(id: string): Promise<void> {
-  return invoke<void>("archive_expiry_lot", { id });
+/**
+ * Soft-archives an active expiry lot with a required justification.
+ *
+ * The Rust command persists the archive reason + notes in `lot_movements`
+ * as an `exit:other` marker in the same transaction as flipping the lot
+ * status to `archived`. Pass `notes` as trimmed text — the backend will
+ * also enforce trimming, a minimum of 5 characters, and a cap of 1000.
+ */
+export async function archiveExpiryLot(input: ArchiveLotInput): Promise<void> {
+  return invoke<void>("archive_expiry_lot", { input });
 }
 
 /**

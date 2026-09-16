@@ -69,6 +69,23 @@ pub struct ExpiryLotResolve {
     pub notes: Option<String>,
 }
 
+/// Input for archiving an active expiry lot with a required justification.
+///
+/// `reason` must be one of the allow-listed archive reason codes
+/// (`expired_unsold`, `damaged`, `returned_to_supplier`, `recall`, `lost`,
+/// `internal_use`, `administrative`, `other`). `notes` is trimmed and must be
+/// at least 5 characters and at most 1000 characters.
+#[derive(Debug, Deserialize)]
+pub struct ArchiveLotInput {
+    /// The lot id to archive. Must point to a lot whose status is `active`.
+    pub id: String,
+    /// Allow-listed reason code explaining why the lot is being archived.
+    pub reason: String,
+    /// Free-text justification. Validated server-side: trimmed length must be
+    /// at least 5 characters and at most 1000 characters.
+    pub notes: String,
+}
+
 // ============================================================
 // Expiry Lot — responses
 // ============================================================

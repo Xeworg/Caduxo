@@ -19,8 +19,8 @@ use crate::domain::lot_resolution::{
     compute_remaining_quantity, is_fully_resolved, is_valid_quantity,
 };
 use crate::dto::expiry_lots::{
-    ExpiryLotCreate, ExpiryLotResolve, ExpiryLotResolveResult, ExpiryLotResponse, ExpiryLotUpdate,
-    LotResolutionEventResponse,
+    ArchiveLotInput, ExpiryLotCreate, ExpiryLotResolve, ExpiryLotResolveResult, ExpiryLotResponse,
+    ExpiryLotUpdate, LotResolutionEventResponse,
 };
 use crate::error::{AppError, DomainError};
 
@@ -30,6 +30,31 @@ const VALID_RESOLUTIONS: &[&str] = &["consumed", "sold", "discarded", "donated",
 /// Returns true if the given resolution type is allowed.
 fn is_valid_resolution_type(resolution: &str) -> bool {
     VALID_RESOLUTIONS.contains(&resolution.trim().to_ascii_lowercase().as_str())
+}
+
+/// Allow-listed archive reason codes. Mirrors the frontend `ARCHIVE_REASONS`
+/// constant in `src/lib/expiry_lots.ts`. Keep both in sync.
+const VALID_ARCHIVE_REASONS: &[&str] = &[
+    "expired_unsold",
+    "damaged",
+    "returned_to_supplier",
+    "recall",
+    "lost",
+    "internal_use",
+    "administrative",
+    "other",
+];
+
+/// Minimum trimmed length (in characters) for the archive justification notes.
+const ARCHIVE_NOTES_MIN_CHARS: usize = 5;
+
+/// Maximum trimmed length (in characters) for the archive justification notes.
+const ARCHIVE_NOTES_MAX_CHARS: usize = 1000;
+
+/// Returns true if the given reason is one of the allow-listed archive codes.
+/// Comparison is case-insensitive and ignores surrounding whitespace.
+fn is_valid_archive_reason(reason: &str) -> bool {
+    VALID_ARCHIVE_REASONS.contains(&reason.trim().to_ascii_lowercase().as_str())
 }
 
 /// Validates that a quantity value is positive.
@@ -340,18 +365,115 @@ pub async fn update_expiry_lot(
 // Archive
 // ============================================================
 
-/// Soft-archives an expiry lot. Returns `NotFound` if the lot does not exist.
-pub async fn archive_expiry_lot(pool: &DbPool, id: String) -> Result<(), AppError> {
-    let archived = repo::archive_expiry_lot(pool, &id)
+/// Soft-archives an active expiry lot and persists the archive
+/// justification in `lot_movements` as an `exit:other` marker.
+///
+/// Validation:
+/// - `reason` must be one of [`VALID_ARCHIVE_REASONS`] (case-insensitive).
+/// - `notes` must be at least [`ARCHIVE_NOTES_MIN_CHARS`] and at most
+///   [`ARCHIVE_NOTES_MAX_CHARS`] characters after trimming.
+///
+/// The soft-archive update and the ledger insert happen in the same DB
+/// transaction. The ledger row uses `movement_kind = 'exit:other'`,
+/// `direction = NULL`, `quantity = 0`, `source_location_id` from the lot,
+/// `actor = 'system'`, and copies `reason` / `notes` from the input.
+///
+/// Returns `NotFound` if the lot does not exist; `BusinessRule` if the lot
+/// is not currently `active`.
+pub async fn archive_expiry_lot(pool: &DbPool, input: ArchiveLotInput) -> Result<(), AppError> {
+    // ── Validate reason (allow-list, case-insensitive). ──────────────────────
+    let reason = input.reason.trim().to_ascii_lowercase();
+    if !is_valid_archive_reason(&input.reason) {
+        return Err(AppError::Domain(DomainError::Validation {
+            message: format!(
+                "Reason must be one of {:?}, got `{}`",
+                VALID_ARCHIVE_REASONS, input.reason
+            ),
+        }));
+    }
+
+    // ── Validate notes (trimmed char length). ───────────────────────────────
+    let notes = input.notes.trim();
+    let notes_len = notes.chars().count();
+    if notes_len < ARCHIVE_NOTES_MIN_CHARS {
+        return Err(AppError::Domain(DomainError::Validation {
+            message: format!(
+                "Notes must be at least {} characters (got {})",
+                ARCHIVE_NOTES_MIN_CHARS, notes_len
+            ),
+        }));
+    }
+    if notes_len > ARCHIVE_NOTES_MAX_CHARS {
+        return Err(AppError::Domain(DomainError::Validation {
+            message: format!(
+                "Notes must be at most {} characters (got {})",
+                ARCHIVE_NOTES_MAX_CHARS, notes_len
+            ),
+        }));
+    }
+
+    // ── Fetch the lot to verify it exists and is active. ────────────────────
+    let lot = repo::get_expiry_lot(pool, &input.id)
         .await
-        .map_err(AppError::from)?;
-    if !archived {
-        return Err(DomainError::NotFound {
+        .map_err(AppError::from)?
+        .ok_or_else(|| DomainError::NotFound {
             resource: "expiry_lot",
-            id,
+            id: input.id.clone(),
+        })?;
+
+    if lot.status != "active" {
+        return Err(DomainError::BusinessRule {
+            message: format!("Cannot archive lot: status is already `{}`", lot.status),
         }
         .into());
     }
+
+    // ── Transactional archive + ledger insert. ───────────────────────────────
+    let mut tx = pool.begin().await?;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    let affected = sqlx::query(
+        r#"
+        UPDATE expiry_lots
+        SET status = 'archived', updated_at = $1
+        WHERE id = $2 AND status = 'active'
+        "#,
+    )
+    .bind(&now)
+    .bind(&input.id)
+    .execute(&mut *tx)
+    .await?;
+
+    if affected.rows_affected() == 0 {
+        // Race: another writer archived this lot between our pre-fetch and
+        // the transactional UPDATE. Treat as no-longer-archiveable.
+        return Err(DomainError::BusinessRule {
+            message: "Lot is no longer active and cannot be archived".to_string(),
+        }
+        .into());
+    }
+
+    let movement_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        r#"
+        INSERT INTO lot_movements (
+            id, expiry_lot_id, movement_kind, direction, quantity,
+            source_location_id, destination_location_id, reason, notes,
+            actor, created_at
+        )
+        VALUES ($1, $2, 'exit:other', NULL, 0.0, $3, NULL, $4, $5, 'system', $6)
+        "#,
+    )
+    .bind(&movement_id)
+    .bind(&input.id)
+    .bind(&lot.location_id)
+    .bind(&reason)
+    .bind(notes)
+    .bind(&now)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 
@@ -508,7 +630,9 @@ pub async fn list_resolution_events(
 #[cfg(test)]
 mod tests {
     use crate::db::migrations::fresh_test_pool;
-    use crate::dto::expiry_lots::{ExpiryLotCreate, ExpiryLotResolve, ExpiryLotUpdate};
+    use crate::dto::expiry_lots::{
+        ArchiveLotInput, ExpiryLotCreate, ExpiryLotResolve, ExpiryLotUpdate,
+    };
     use crate::dto::products::ProductCreate;
     use crate::dto::stores::StoreCreate;
     use crate::services::expiry_lots as svc;
@@ -929,7 +1053,15 @@ mod tests {
         )
         .await?;
 
-        svc::archive_expiry_lot(&pool, lot.id.clone()).await?;
+        svc::archive_expiry_lot(
+            &pool,
+            ArchiveLotInput {
+                id: lot.id.clone(),
+                reason: "expired_unsold".into(),
+                notes: "Past expiry date, no buyer".into(),
+            },
+        )
+        .await?;
 
         // Archived lot should no longer appear in the active list.
         let lots = svc::list_expiry_lots_by_product(&pool, lot.product_id.clone()).await?;
@@ -941,11 +1073,184 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn archive_lot_records_exit_other_movement() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
+
+        let lot = svc::create_expiry_lot(
+            &pool,
+            ExpiryLotCreate {
+                product_id,
+                store_id: store_id.clone(),
+                location_id: None,
+                quantity: 5.0,
+                unit: None,
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: None,
+                batch_code: None,
+                notes: None,
+            },
+        )
+        .await?;
+
+        let reason = "damaged";
+        let notes = "Water damage in storage, discarded for safety.";
+        svc::archive_expiry_lot(
+            &pool,
+            ArchiveLotInput {
+                id: lot.id.clone(),
+                reason: reason.into(),
+                notes: notes.into(),
+            },
+        )
+        .await?;
+
+        // Verify exactly one exit:other row was persisted for this lot.
+        let rows: Vec<(
+            String,
+            Option<String>,
+            f64,
+            Option<String>,
+            Option<String>,
+            String,
+        )> = sqlx::query_as(
+            r#"
+                SELECT movement_kind, direction, quantity, source_location_id, reason, notes
+                FROM lot_movements
+                WHERE expiry_lot_id = $1
+                "#,
+        )
+        .bind(&lot.id)
+        .fetch_all(&pool)
+        .await?;
+
+        // Lots carry an entry:initial movement from creation plus the archive's exit:other.
+        let exit_rows: Vec<_> = rows
+            .iter()
+            .filter(|(k, _, _, _, _, _)| k == "exit:other")
+            .collect();
+        assert_eq!(
+            exit_rows.len(),
+            1,
+            "exactly one exit:other movement should be persisted on archive"
+        );
+
+        let (_kind, direction, qty, source, stored_reason, stored_notes) = exit_rows[0];
+        assert!(direction.is_none(), "exit:other direction should be NULL");
+        assert_eq!(
+            *qty, 0.0,
+            "archive marker should have quantity 0 to avoid double-counting stock"
+        );
+        // Lot was created with location_id: None → service used the sentinel location
+        // (because require_initial_location_on_lot_create defaults off in tests).
+        assert!(
+            source.is_some(),
+            "source_location_id should be populated from the lot location"
+        );
+        assert_eq!(stored_reason.as_deref(), Some(reason));
+        assert_eq!(stored_notes.as_str(), notes);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn archive_lot_rejects_blank_or_short_notes() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
+
+        let lot = svc::create_expiry_lot(
+            &pool,
+            ExpiryLotCreate {
+                product_id,
+                store_id: store_id.clone(),
+                location_id: None,
+                quantity: 5.0,
+                unit: None,
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: None,
+                batch_code: None,
+                notes: None,
+            },
+        )
+        .await?;
+
+        for bad_notes in ["", "   ", "\t\n", "abcd"] {
+            let err = svc::archive_expiry_lot(
+                &pool,
+                ArchiveLotInput {
+                    id: lot.id.clone(),
+                    reason: "expired_unsold".into(),
+                    notes: bad_notes.into(),
+                },
+            )
+            .await
+            .expect_err(&format!("blank/short notes `{bad_notes}` must be rejected"));
+            assert!(matches!(
+                err,
+                crate::error::AppError::Domain(crate::error::DomainError::Validation { .. })
+            ));
+        }
+
+        // Lot must remain active because every attempt was rejected.
+        let after = svc::get_expiry_lot(&pool, lot.id.clone()).await?;
+        assert_eq!(after.status, "active");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn archive_lot_rejects_invalid_reason() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
+
+        let lot = svc::create_expiry_lot(
+            &pool,
+            ExpiryLotCreate {
+                product_id,
+                store_id: store_id.clone(),
+                location_id: None,
+                quantity: 5.0,
+                unit: None,
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: None,
+                batch_code: None,
+                notes: None,
+            },
+        )
+        .await?;
+
+        let err = svc::archive_expiry_lot(
+            &pool,
+            ArchiveLotInput {
+                id: lot.id.clone(),
+                reason: "because_i_said_so".into(),
+                notes: "This should never persist.".into(),
+            },
+        )
+        .await
+        .expect_err("unknown reason must be rejected");
+        assert!(matches!(
+            err,
+            crate::error::AppError::Domain(crate::error::DomainError::Validation { .. })
+        ));
+
+        // Lot must remain active.
+        let after = svc::get_expiry_lot(&pool, lot.id.clone()).await?;
+        assert_eq!(after.status, "active");
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn archive_missing_lot_returns_not_found() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let err = svc::archive_expiry_lot(&pool, "nope".into())
-            .await
-            .expect_err("archiving missing lot must be NotFound");
+        let err = svc::archive_expiry_lot(
+            &pool,
+            ArchiveLotInput {
+                id: "nope".into(),
+                reason: "expired_unsold".into(),
+                notes: "Trying to archive something that doesn't exist".into(),
+            },
+        )
+        .await
+        .expect_err("archiving missing lot must be NotFound");
         assert!(matches!(
             err,
             crate::error::AppError::Domain(crate::error::DomainError::NotFound { .. })

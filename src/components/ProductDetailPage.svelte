@@ -11,11 +11,11 @@
     } from "../lib/products.js";
     import {
         listExpiryLotsByProduct,
-        archiveExpiryLot,
         type ExpiryLotResponse,
     } from "../lib/expiry_lots.js";
     import LotForm from "./LotForm.svelte";
     import ResolveQuantityDialog from "./ResolveQuantityDialog.svelte";
+    import ArchiveLotDialog from "./ArchiveLotDialog.svelte";
 
     // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -45,6 +45,7 @@
     let showLotForm = false;
     let editingLot: ExpiryLotResponse | null = null;
     let resolvingLot: ExpiryLotResponse | null = null;
+    let archivingLot: ExpiryLotResponse | null = null;
     let lotError = "";
 
     // ── Load ───────────────────────────────────────────────────────────────────
@@ -138,13 +139,10 @@
         await load();
     }
 
-    async function archiveLot(lot: ExpiryLotResponse) {
-        try {
-            await archiveExpiryLot(lot.id);
-            await load();
-        } catch (e: unknown) {
-            lotError = String(e);
-        }
+    async function onLotArchived() {
+        archivingLot = null;
+        lotError = "";
+        await load();
     }
 
     function formatDate(dateStr: string): string {
@@ -441,7 +439,7 @@
                                         type="button"
                                         class="btn-icon btn-danger-icon"
                                         title="Archive lot"
-                                        on:click={() => archiveLot(lot)}
+                                        on:click={() => (archivingLot = lot)}
                                     >
                                         🗄
                                     </button>
@@ -461,6 +459,15 @@
         lot={resolvingLot}
         onResolved={onLotResolved}
         onClose={() => (resolvingLot = null)}
+    />
+{/if}
+
+<!-- ── Archive dialog ─────────────────────────────────────────────────────── -->
+{#if archivingLot}
+    <ArchiveLotDialog
+        lot={archivingLot}
+        onArchived={onLotArchived}
+        onClose={() => (archivingLot = null)}
     />
 {/if}
 
