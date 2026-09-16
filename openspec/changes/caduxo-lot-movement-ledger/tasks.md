@@ -59,7 +59,7 @@ Concrete mismatches in design.md:
 
 ### Reconciliation work unit (lands first)
 
-- [ ] Edit `openspec/changes/caduxo-lot-movement-ledger/design.md` to remove the same-store validation rule (§0 row 10, §1.3 invariant 4) and replace `entry:inventory_adjustment` + `exit:inventory_adjustment` with the unified `inventory_adjustment` kind + `direction` column at every site listed above (Conflict 2 bullets). No code change. <!-- sdd-owner: implementation -->
+- [x] Edit `openspec/changes/caduxo-lot-movement-ledger/design.md` to remove the same-store validation rule (§0 row 10, §1.3 invariant 4) and replace `entry:inventory_adjustment` + `exit:inventory_adjustment` with the unified `inventory_adjustment` kind + `direction` column at every site listed above (Conflict 2 bullets). No code change. <!-- sdd-owner: implementation -->
 
 Verification: a single reviewer can `grep` design.md for `Same-store transfers only` (must return zero matches) and inspect the active contract sites (§1.1 schema CHECK, §1.2 vocabulary table rows, §1.3 invariant 7, §3.3 pseudocode arm, §3.5 reactivation, §6.4 client routing) — none of them may reference `entry:inventory_adjustment` as an active kind. Any remaining textual mentions of `entry:inventory_adjustment` are limited to explanatory/closed-item rationale (e.g., "rejected in favor of the unified kind") and are acceptable. The spec's vocabulary table is the authority and remains unchanged.
 
@@ -194,7 +194,7 @@ This phase is the lot-creation hand-off from the new ledger to the existing lot 
 
 ## Phase 5 — Optional Polish (Deferred / Out of v1)
 
-- [ ] No-op. Recent-activity dashboard widget, bulk movement entry, and the print-friendly ledger are deferred per the proposal's "Open questions" round (decisions 5 and 6). Reopen only on user request. <!-- sdd-owner: implementation -->
+- [x] No-op. Recent-activity dashboard widget, bulk movement entry, and the print-friendly ledger are deferred per the proposal's "Open questions" round (decisions 5 and 6). Reopen only on user request. <!-- sdd-owner: implementation -->
 
 ---
 
@@ -229,10 +229,7 @@ Plus manual smoke on **Linux + Windows** covering:
 
 ## Parent / Lifecycle Actions (post-implementation; bounded review and gates)
 
-- [ ] Open PR **#1 (Phase 1a)**; request bounded review focused only on the migration SQL and tests. <!-- sdd-owner: parent -->
-- [ ] Open PR **#2 (Phase 1b)**; request bounded review focused only on the domain / repository / service surface and the conflict-resolution tests. <!-- sdd-owner: parent -->
-- [ ] Open PR **#3 (Phase 2)**; request bounded review on the create-lot integration and the FE guard. <!-- sdd-owner: parent -->
-- [ ] Open PR **#4 (Phase 3)**; request bounded review on the Historial tab and the three modals (UI relies on manual smoke per `strictTdd: false`). <!-- sdd-owner: parent -->
-- [ ] Open PR **#5 (Phase 4)**; request bounded review on the settings menu and toggle UX. <!-- sdd-owner: parent -->
-- [ ] After all PRs land: run the full verify gate (cargo test, svelte-check, npm run build, manual smoke on Linux + Windows) and confirm the canonical reference cited in `caduxo-lot-movement-ledger/proposal.md` is satisfied before archiving the change. <!-- sdd-owner: parent -->
-- [ ] Archive the change via `openspec archive caduxo-lot-movement-ledger` once the verify gate is green. <!-- sdd-owner: parent -->
+- [x] Collapse the original five-PR chained delivery plan into the user-selected local-commit-then-verify path. Local commits exist on `feat/caduxo-lot-movement-ledger`; PR creation is deferred until after SDD verify. <!-- sdd-owner: parent -->
+- [ ] Run the full verify gate (cargo test, svelte-check, npm run build, manual smoke on Linux + Windows) and confirm the canonical reference cited in `caduxo-lot-movement-ledger/proposal.md` is satisfied before archiving the change. <!-- sdd-owner: parent -->
+- [ ] Open one aggregate PR for `feat/caduxo-lot-movement-ledger` after verify is green. <!-- sdd-owner: parent -->
+- [ ] Archive the change via `openspec archive caduxo-lot-movement-ledger` once the verify gate is green and delivery policy allows archive. <!-- sdd-owner: parent -->

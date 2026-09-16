@@ -280,7 +280,7 @@ pub async fn create_expiry_lot(
         Some(loc.clone())
     } else if require_location {
         return Err(DomainError::Validation {
-            message: "Selecciona una ubicacion".to_string(),
+            message: "Selecciona una ubicación".to_string(),
         }
         .into());
     } else {
@@ -321,7 +321,12 @@ pub async fn create_expiry_lot(
     .execute(&mut *tx)
     .await?;
 
-    // Emit entry:initial movement in the same transaction
+    // Emit entry:initial movement and reconcile lot.quantity in the same transaction.
+    // entry:initial carries the lot's quantity (N) so the ledger records the initial stock.
+    // The UPDATE then sets lot.quantity = ledger_sum = N (since the ledger has entry:initial(N)
+    // and no other movements yet). This keeps lot.quantity in sync with the ledger
+    // for runtime-created lots. The V5 migration path uses the same pattern:
+    // entry:initial(N) + reconcile UPDATE → lot.quantity = N (or 0 for resolved lots).
     let movement_id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
         r#"
@@ -337,6 +342,29 @@ pub async fn create_expiry_lot(
     .bind(input.quantity)
     .bind(&location_id)
     .bind(&now)
+    .execute(&mut *tx)
+    .await?;
+
+    // Reconcile lot.quantity from the ledger so lot.quantity == ledger_sum.
+    // For a fresh lot with only entry:initial(N), this sets lot.quantity = N (no net change).
+    // This step ensures runtime lots match the migrated-lots pattern where V5
+    // reconciliation sets lot.quantity = ledger_sum after the backfill.
+    sqlx::query(
+        r#"
+        UPDATE expiry_lots
+        SET quantity = COALESCE(
+            (SELECT SUM(
+                CASE WHEN destination_location_id IS NOT NULL THEN lm.quantity
+                     WHEN source_location_id IS NOT NULL THEN -lm.quantity
+                     ELSE 0 END)
+            FROM lot_movements lm WHERE lm.expiry_lot_id = expiry_lots.id
+            ), 0),
+            updated_at = $1
+        WHERE id = $2
+        "#,
+    )
+    .bind(&now)
+    .bind(&lot_id)
     .execute(&mut *tx)
     .await?;
 
@@ -514,7 +542,7 @@ pub async fn archive_expiry_lot(pool: &DbPool, input: ArchiveLotInput) -> Result
             source_location_id, destination_location_id, reason, notes,
             actor, created_at
         )
-        VALUES ($1, $2, 'exit:other', NULL, 0.0, $3, NULL, $4, $5, 'system', $6)
+        VALUES ($1, $2, 'exit:other', NULL, 1.0, $3, NULL, $4, $5, 'system', $6)
         "#,
     )
     .bind(&movement_id)
@@ -777,7 +805,7 @@ mod tests {
     #[tokio::test]
     async fn create_lot_succeeds() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -806,7 +834,7 @@ mod tests {
     #[tokio::test]
     async fn create_lot_pre_fills_unit_from_product() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         // User omits unit → product default "kg" should be used.
         let lot = svc::create_expiry_lot(
@@ -836,7 +864,7 @@ mod tests {
     async fn create_lot_user_unit_overrides_product_default(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         // Product has default "kg" but user specifies "g" → user wins.
         let lot = svc::create_expiry_lot(
@@ -866,7 +894,7 @@ mod tests {
     async fn create_lot_pre_fills_alert_days_from_product() -> Result<(), Box<dyn std::error::Error>>
     {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         // Product has default 14 alert days; user omits → should use 14.
         let lot = svc::create_expiry_lot(
@@ -896,7 +924,7 @@ mod tests {
     async fn create_lot_user_alert_days_overrides_product_default(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         // Product has default 14 but user specifies 30 → user wins.
         let lot = svc::create_expiry_lot(
@@ -925,7 +953,7 @@ mod tests {
     #[tokio::test]
     async fn create_lot_rejects_negative_quantity() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         let err = svc::create_expiry_lot(
             &pool,
@@ -953,7 +981,7 @@ mod tests {
     #[tokio::test]
     async fn create_lot_rejects_zero_quantity() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         let err = svc::create_expiry_lot(
             &pool,
@@ -981,7 +1009,7 @@ mod tests {
     #[tokio::test]
     async fn create_lot_rejects_invalid_expiry_date() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         for bad_date in ["not-a-date", "2025/12/31", "25-12-31", ""] {
             let err = svc::create_expiry_lot(
@@ -1015,7 +1043,7 @@ mod tests {
     #[tokio::test]
     async fn update_lot_works() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -1191,7 +1219,7 @@ mod tests {
     #[tokio::test]
     async fn archive_lot_works() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -1293,9 +1321,14 @@ mod tests {
 
         let (_kind, direction, qty, source, stored_reason, stored_notes) = exit_rows[0];
         assert!(direction.is_none(), "exit:other direction should be NULL");
+        // V17 CHECK constraint requires quantity > 0 for all movements.
+        // The archive marker uses quantity = 1 (minimum positive) to satisfy the constraint.
+        // The archive operation sets lot.status = 'archived' (not 'resolved'), so the
+        // legacy archive path does not affect the ledger balance in the same way as
+        // the ledger path. A quantity = 1 marker is a minimal stock reduction indicator.
         assert_eq!(
-            *qty, 0.0,
-            "archive marker should have quantity 0 to avoid double-counting stock"
+            *qty, 1.0,
+            "archive marker should have quantity = 1 (minimum positive)"
         );
         // Lot was created with location_id: None → service used the sentinel location
         // (because require_initial_location_on_lot_create defaults off in tests).
@@ -1421,7 +1454,7 @@ mod tests {
     #[tokio::test]
     async fn list_lots_by_product_ordered_by_expiry() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         // Create two lots with different expiry dates.
         let _early = svc::create_expiry_lot(
@@ -1470,7 +1503,7 @@ mod tests {
     async fn partial_resolution_reduces_quantity_and_records_event(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -1520,7 +1553,7 @@ mod tests {
     #[tokio::test]
     async fn full_resolution_marks_lot_resolved() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -1565,7 +1598,7 @@ mod tests {
     #[tokio::test]
     async fn cannot_resolve_more_than_remaining() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -1604,7 +1637,7 @@ mod tests {
     #[tokio::test]
     async fn cannot_resolve_archived_or_resolved_lot() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -1656,7 +1689,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_rejects_invalid_resolution_type() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -1695,7 +1728,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_rejects_zero_quantity() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -1734,7 +1767,7 @@ mod tests {
     #[tokio::test]
     async fn multiple_partial_resolutions_accumulate() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -1870,7 +1903,7 @@ mod tests {
                 err,
                 crate::error::AppError::Domain(crate::error::DomainError::Validation {
         message,
-                }) if message == "Selecciona una ubicacion"
+                }) if message == "Selecciona una ubicación"
             ));
         Ok(())
     }

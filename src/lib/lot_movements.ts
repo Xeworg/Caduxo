@@ -110,7 +110,7 @@ export function getKindLabel(kind: string, direction?: string | null): string {
   "entry:initial": "Entrada inicial",
   transfer: "Transferencia",
   "exit:sale": "Venta",
-  "exit:waste": "Pérdida",
+  "exit:waste": "Merma",
   "exit:expired": "Vencido",
   "exit:damaged": "Dañado",
   "exit:internal_consumption": "Consumo interno",

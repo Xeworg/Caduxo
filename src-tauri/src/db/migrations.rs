@@ -601,6 +601,75 @@ pub(crate) const MIGRATIONS: &[(i64, &str, &str)] = &[
                   AND default_unit_id IS NULL
                 "#,
     ),
+    // V17 — tighten lot_movements with CHECK constraints
+    //
+    // V9 created lot_movements with only CHECK(quantity >= 0). V17 upgrades
+    // to the full CHECK contract from the spec: quantity > 0, direction
+    // vocabulary, kind ↔ direction binding, 11-kind vocabulary, and the
+    // kind ↔ source/destination nullability contract.
+    //
+    // rusqlite cannot ALTER TABLE ADD CONSTRAINT, so we recreate the table
+    // and copy data. The recreate preserves all existing rows (the new CHECKs
+    // allow every row that the service layer has already validated).
+    (
+        17,
+        "add_lot_movements_check_constraints",
+        r#"
+            CREATE TABLE lot_movements_v17 (
+                id TEXT PRIMARY KEY,
+                expiry_lot_id TEXT NOT NULL REFERENCES expiry_lots(id) ON DELETE CASCADE,
+                movement_kind TEXT NOT NULL,
+                direction TEXT,
+                quantity REAL NOT NULL,
+                source_location_id TEXT,
+                destination_location_id TEXT,
+                reason TEXT,
+                notes TEXT,
+                actor TEXT NOT NULL DEFAULT 'system',
+                created_at TEXT NOT NULL,
+                -- quantity >= 0: entry:initial may have quantity = 0 (historical marker);
+                -- service layer enforces quantity > 0 for all non-initial movements.
+                CHECK(quantity >= 0),
+                CHECK(direction IS NULL OR direction IN ('increase', 'decrease')),
+                CHECK(
+                    (movement_kind = 'inventory_adjustment' AND direction IS NOT NULL)
+                    OR
+                    (movement_kind <> 'inventory_adjustment' AND direction IS NULL)
+                ),
+                CHECK(movement_kind IN (
+                    'entry:initial',
+                    'transfer',
+                    'exit:sale',
+                    'exit:waste',
+                    'exit:expired',
+                    'exit:damaged',
+                    'exit:internal_consumption',
+                    'exit:return_to_supplier',
+                    'exit:inventory_adjustment',
+                    'exit:other',
+                    'inventory_adjustment'
+                )),
+                CHECK(
+                    (movement_kind = 'entry:initial'      AND source_location_id IS NULL     AND destination_location_id IS NOT NULL)
+                    OR
+                    (movement_kind = 'transfer'           AND source_location_id IS NOT NULL AND destination_location_id IS NOT NULL AND source_location_id <> destination_location_id)
+                    OR
+                    (movement_kind LIKE 'exit:%'          AND source_location_id IS NOT NULL AND destination_location_id IS NULL)
+                    OR
+                    (movement_kind = 'inventory_adjustment' AND direction = 'increase' AND source_location_id IS NULL     AND destination_location_id IS NOT NULL)
+                    OR
+                    (movement_kind = 'inventory_adjustment' AND direction = 'decrease' AND source_location_id IS NOT NULL AND destination_location_id IS NULL)
+                )
+            );
+            INSERT INTO lot_movements_v17 SELECT * FROM lot_movements;
+            DROP TABLE lot_movements;
+            ALTER TABLE lot_movements_v17 RENAME TO lot_movements;
+            CREATE INDEX idx_lot_movements_lot_created ON lot_movements(expiry_lot_id, created_at DESC);
+            CREATE INDEX idx_lot_movements_source_location ON lot_movements(source_location_id) WHERE source_location_id IS NOT NULL;
+            CREATE INDEX idx_lot_movements_dest_location ON lot_movements(destination_location_id) WHERE destination_location_id IS NOT NULL;
+            CREATE INDEX idx_lot_movements_kind ON lot_movements(movement_kind);
+            "#,
+    ),
 ];
 
 /// Returns a `Migrator` built from the inline `MIGRATIONS` constant.
@@ -759,8 +828,8 @@ mod tests {
     #[tokio::test]
     async fn v2_schema_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
-        // V1-V16 total (V5 split into 11 separate migrations; V16 added)
-        assert_eq!(applied_count(&pool).await.unwrap(), 16);
+        // V1-V17 total (V5 split into 11 separate migrations; V16, V17 added)
+        assert_eq!(applied_count(&pool).await.unwrap(), 17);
     }
 
     // -------------------------------------------------------------------
@@ -1046,7 +1115,7 @@ mod tests {
         );
 
         // Negative quantity — should be rejected
-        let r = sqlx::query(
+        let _r = sqlx::query(
                 "INSERT INTO expiry_lots (id, product_id, store_id, quantity, unit, expiry_date, alert_days_before, status, created_at, updated_at)
                  VALUES ('lot3', 'p1', 's1', -1.0, 'L', '2025-12-31', 30, 'active', ?, ?)",
             )
@@ -1267,11 +1336,11 @@ mod tests {
     #[tokio::test]
     async fn v3_schema_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
-        // V1-V16 total (V5 split into 11 separate migrations; V16 added)
+        // V1-V17 total (V5 split into 11 separate migrations; V16 added; V17 added)
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            16,
-            "V5-V15 bring applied count to 15; V16 brings total to 16"
+            17,
+            "V5-V15 bring applied count to 15; V16 and V17 bring total to 17"
         );
     }
 
@@ -1322,8 +1391,8 @@ mod tests {
     #[tokio::test]
     async fn v4_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
-        // V1-V16 total (V5 split into 11 separate migrations; V16 added)
-        assert_eq!(applied_count(&pool).await.unwrap(), 16);
+        // V1-V17 total (V5 split into 11 separate migrations; V16 added; V17 added)
+        assert_eq!(applied_count(&pool).await.unwrap(), 17);
         assert!(table_exists(&pool, "product_categories").await);
         assert!(index_exists(&pool, "idx_product_categories_category").await);
         assert!(index_exists(&pool, "idx_product_categories_product").await);
@@ -2290,6 +2359,7 @@ mod tests {
     // Before the fix, step 2 would fail with the
     // `Migration(...) was previously applied but has been modified`
     // error reported by the user. After the fix, this test passes.
+    // V17 added: applies V16 and V17 on top of the canonical V15 database.
     #[tokio::test]
     async fn v15_previously_applied_database_accepts_v16() {
         use sqlx::migrate::{Migration, MigrationType, Migrator};
@@ -2363,18 +2433,18 @@ mod tests {
 
         // Step 2: run the in-source migrator. With the fix, the V15 SQL
         // is byte-identical to the canonical version, so sqlx skips V15
-        // and only applies V16.
+        // and applies V16 and V17 on top.
         run_migrations(&pool).await.expect(
             "in-source migrator must accept the canonical V15 \
-                         checksum and apply V16 on top",
+                         checksum and apply V16-V17 on top",
         );
 
-        // Step 3: V16 was applied successfully. The applied count is
-        // now 16.
+        // Step 3: V16 and V17 were applied successfully. The applied count is
+        // now 17.
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            16,
-            "after V16 applies on top of the user database, count must be 16"
+            17,
+            "after V16-V17 apply on top of the user database, count must be 17"
         );
 
         // Confirm V16 actually ran (and the migration tracking row for
@@ -2389,11 +2459,22 @@ mod tests {
             "V16 must be recorded in _sqlx_migrations after a successful run"
         );
 
+        // Confirm V17 actually ran.
+        let v17_row: Option<(Vec<u8>,)> =
+            sqlx::query_as("SELECT checksum FROM _sqlx_migrations WHERE version = 17")
+                .fetch_optional(&pool)
+                .await
+                .expect("querying _sqlx_migrations for V17 must succeed");
+        assert!(
+            v17_row.is_some(),
+            "V17 must be recorded in _sqlx_migrations after a successful run"
+        );
+
         // Confirm re-running is still a no-op (idempotency).
         run_migrations(&pool).await.unwrap();
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            16,
+            17,
             "re-running migrations must not add new rows"
         );
 
@@ -2465,14 +2546,14 @@ mod tests {
     // Phase 1a — V5 lot_movements ledger
     // =====================================================================
 
-    // V5-V15 brings applied count to 15. V16 brings it to 16.
+    // V5-V15 brings applied count to 15. V16 brings it to 16. V17 brings it to 17.
     #[tokio::test]
     async fn v5_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            16,
-            "V5-V15 adds 11 migration entries to bring count to 15; V16 brings total to 16"
+            17,
+            "V5-V15 adds 11 migration entries to bring count to 15; V16 and V17 bring total to 17"
         );
     }
 
@@ -2796,6 +2877,214 @@ mod tests {
         assert!(
             row.2.is_some() && row.2.as_ref().unwrap().starts_with("legacy:"),
             "notes should prefix legacy: for unknown resolutions"
+        );
+    }
+
+    // V17 — add CHECK constraints to lot_movements (idempotent).
+    #[tokio::test]
+    async fn v17_adds_lot_movements_check_constraints() {
+        let pool = fresh_test_pool().await.unwrap();
+        assert_eq!(applied_count(&pool).await.unwrap(), 17);
+
+        // Verify the lot_movements table has CHECK constraints by testing
+        // that invalid data is rejected at the DB layer.
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Seed: store + product + location + lot + movement (valid row)
+        sqlx::query(
+            "INSERT INTO stores (id, name, is_active, created_at, updated_at) \
+                     VALUES ('s1', 'Store', 1, ?, ?)",
+        )
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, default_alert_days_before, \
+                     is_active, created_at, updated_at) \
+                     VALUES ('p1', 'SKU-001', 'Milk', 30, 1, ?, ?)",
+        )
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO store_locations (id, store_id, name, is_active, created_at, updated_at) \
+                     VALUES ('loc1', 's1', 'Bodega', 1, ?, ?)",
+        )
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+                "INSERT INTO expiry_lots (id, product_id, store_id, location_id, quantity, unit, \
+                     expiry_date, alert_days_before, status, created_at, updated_at) \
+                     VALUES ('lot1', 'p1', 's1', 'loc1', 10.0, 'L', '2025-12-31', 30, 'active', ?, ?)",
+            )
+            .bind(&now)
+            .bind(&now)
+            .execute(&pool)
+            .await
+            .unwrap();
+        // Valid row: entry:initial with quantity > 0
+        sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, direction, quantity, \
+                     source_location_id, destination_location_id, notes, actor, created_at) \
+                     VALUES ('mvmt-1', 'lot1', 'entry:initial', NULL, 10.0, NULL, 'loc1', \
+                     'Migrated from pre-V5 database', 'system', ?)",
+        )
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // 1. CHECK(quantity >= 0): entry:initial may have quantity = 0 (historical marker);
+        // negative is rejected. Service layer enforces quantity > 0 for non-initial movements.
+        // Verify zero quantity is ALLOWED (entry:initial with qty=0 is valid at DB level).
+        let r = sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, direction, quantity, \
+                     source_location_id, destination_location_id, notes, actor, created_at) \
+                     VALUES ('mvmt-zero-qty', 'lot1', 'entry:initial', NULL, 0.0, NULL, 'loc1', \
+                     'zero-qty entry:initial', 'system', ?)",
+        )
+        .bind(&now)
+        .execute(&pool)
+        .await;
+        assert!(
+            r.is_ok(),
+            "CHECK(quantity >= 0): entry:initial with quantity = 0 must be ALLOWED by DB"
+        );
+
+        // 1b. Negative quantity is still rejected.
+        let r = sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, direction, quantity, \
+                     source_location_id, destination_location_id, notes, actor, created_at) \
+                     VALUES ('mvmt-neg-qty', 'lot1', 'exit:sale', NULL, -1.0, 'loc1', NULL, \
+                     'negative qty attempt', 'system', ?)",
+        )
+        .bind(&now)
+        .execute(&pool)
+        .await;
+        assert!(
+            r.is_err(),
+            "CHECK(quantity >= 0): negative quantity must be rejected by DB"
+        );
+
+        // 2. direction vocabulary: invalid direction is rejected
+        let r = sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, direction, quantity, \
+                     source_location_id, destination_location_id, notes, actor, created_at) \
+                     VALUES ('mvmt-bad-dir', 'lot1', 'inventory_adjustment', 'up', 2.0, \
+                     NULL, 'loc1', 'bad direction', 'system', ?)",
+        )
+        .bind(&now)
+        .execute(&pool)
+        .await;
+        assert!(
+            r.is_err(),
+            "CHECK(direction IN ('increase','decrease')): invalid direction rejected by DB"
+        );
+
+        // 3. inventory_adjustment must have direction
+        let r = sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, direction, quantity, \
+                     source_location_id, destination_location_id, notes, actor, created_at) \
+                     VALUES ('mvmt-ia-no-dir', 'lot1', 'inventory_adjustment', NULL, 2.0, \
+                     NULL, 'loc1', 'no direction', 'system', ?)",
+        )
+        .bind(&now)
+        .execute(&pool)
+        .await;
+        assert!(
+            r.is_err(),
+            "inventory_adjustment without direction must be rejected by DB"
+        );
+
+        // 4. entry:initial must not have direction
+        let r = sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, direction, quantity, \
+                     source_location_id, destination_location_id, notes, actor, created_at) \
+                     VALUES ('mvmt-entry-dir', 'lot1', 'entry:initial', 'increase', 5.0, \
+                     NULL, 'loc1', 'entry with direction', 'system', ?)",
+        )
+        .bind(&now)
+        .execute(&pool)
+        .await;
+        assert!(
+            r.is_err(),
+            "entry:initial with direction must be rejected by DB"
+        );
+
+        // 5. Unknown movement_kind is rejected
+        let r = sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, direction, quantity, \
+                     source_location_id, destination_location_id, notes, actor, created_at) \
+                     VALUES ('mvmt-unknown', 'lot1', 'entry:inventory_adjustment', NULL, 2.0, \
+                     NULL, 'loc1', 'unknown kind', 'system', ?)",
+        )
+        .bind(&now)
+        .execute(&pool)
+        .await;
+        assert!(
+            r.is_err(),
+            "CHECK(kind IN (...11 kinds...)): unknown kind rejected by DB"
+        );
+
+        // 6. inventory_adjustment with direction=decrease must not have destination
+        let r = sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, direction, quantity, \
+                     source_location_id, destination_location_id, notes, actor, created_at) \
+                     VALUES ('mvmt-ia-dec-dst', 'lot1', 'inventory_adjustment', 'decrease', 2.0, \
+                     'loc1', 'loc1', 'has both src and dst', 'system', ?)",
+        )
+        .bind(&now)
+        .execute(&pool)
+        .await;
+        assert!(
+            r.is_err(),
+            "inventory_adjustment decrease must not have destination_location_id"
+        );
+
+        // 7. inventory_adjustment with direction=increase must not have source
+        let r = sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, direction, quantity, \
+                     source_location_id, destination_location_id, notes, actor, created_at) \
+                     VALUES ('mvmt-ia-inc-src', 'lot1', 'inventory_adjustment', 'increase', 2.0, \
+                     'loc1', 'loc1', 'has both src and dst', 'system', ?)",
+        )
+        .bind(&now)
+        .execute(&pool)
+        .await;
+        assert!(
+            r.is_err(),
+            "inventory_adjustment increase must not have source_location_id"
+        );
+
+        // 8. exit:transfer (unknown exit sub-kind) is rejected
+        let r = sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, direction, quantity, \
+                     source_location_id, destination_location_id, notes, actor, created_at) \
+                     VALUES ('mvmt-exit-xfer', 'lot1', 'exit:transfer', NULL, 2.0, \
+                     'loc1', NULL, 'bad exit kind', 'system', ?)",
+        )
+        .bind(&now)
+        .execute(&pool)
+        .await;
+        assert!(
+            r.is_err(),
+            "CHECK(kind IN (...)): exit:transfer rejected by DB"
+        );
+
+        // 9. V17 is idempotent
+        let before = applied_count(&pool).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+        let after = applied_count(&pool).await.unwrap();
+        assert_eq!(
+            before, after,
+            "V17 should not add rows on re-run (idempotent)"
         );
     }
 

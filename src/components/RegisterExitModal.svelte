@@ -26,7 +26,7 @@
   // Exit reasons (the eight kinds from the spec)
   const EXIT_REASONS = [
     { value: "exit:sale", label: "Venta" },
-    { value: "exit:waste", label: "Pérdida" },
+    { value: "exit:waste", label: "Merma" },
     { value: "exit:expired", label: "Vencido" },
     { value: "exit:damaged", label: "Dañado" },
     { value: "exit:internal_consumption", label: "Consumo interno" },

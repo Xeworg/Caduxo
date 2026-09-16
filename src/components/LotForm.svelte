@@ -68,6 +68,9 @@
 
     let loadingStores = true;
 
+    /** Echoes the generated batch code after a successful create when manual input was blank. */
+    let batchEcho: string | null = null;
+
     // ── Init ───────────────────────────────────────────────────────────────────
 
     async function init() {
@@ -136,7 +139,7 @@
             return;
         }
         if (requireInitialLocation && !selectedLocationId) {
-            errorMsg = "Selecciona una ubicacion";
+            errorMsg = "Selecciona una ubicación";
             return;
         }
         if (!expiryDate) {
@@ -149,6 +152,7 @@
         }
         submitting = true;
         try {
+            const userProvidedBatch = batchCode.trim();
             if (mode === "edit" && lot) {
                 // Edit is metadata-only: quantity is sent verbatim from the
                 // loaded lot so the server guard rejects any change. The
@@ -160,7 +164,7 @@
                     unit: unit.trim(),
                     expiry_date: expiryDate,
                     alert_days_before: alertDaysBefore,
-                    batch_code: batchCode.trim() || null,
+                    batch_code: userProvidedBatch || null,
                     notes: notes.trim() || null,
                 };
                 const saved = await updateExpiryLot(payload);
@@ -174,10 +178,15 @@
                     unit: unit.trim() || null,
                     expiry_date: expiryDate,
                     alert_days_before: alertDaysBefore,
-                    batch_code: batchCode.trim() || null,
+                    batch_code: userProvidedBatch || null,
                     notes: notes.trim() || null,
                 };
                 const saved = await createExpiryLot(payload);
+                // Batch echo chip: show the generated batch code when the user left
+                // the batch input blank and the server auto-generated one.
+                if (!userProvidedBatch && saved.batch_code) {
+                    batchEcho = saved.batch_code;
+                }
                 onSaved(saved);
             }
         } catch (e: unknown) {
@@ -328,15 +337,22 @@ accurate.
             </label>
         </div>
 
-        <label>
-            Batch code (optional)
-            <input
-                type="text"
-                bind:value={batchCode}
-                placeholder="e.g. B2024-001"
-                autocomplete="off"
-            />
-        </label>
+        <div class="batch-code-wrapper">
+            <label>
+                Batch code (optional)
+                <input
+                    type="text"
+                    bind:value={batchCode}
+                    placeholder="e.g. B2024-001"
+                    autocomplete="off"
+                />
+            </label>
+            {#if batchEcho}
+                <span class="batch-echo-chip" aria-live="polite">
+                    Lote generado: <code>{batchEcho}</code>
+                </span>
+            {/if}
+        </div>
 
         <label>
             Notes (optional)
@@ -426,6 +442,32 @@ accurate.
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 12px;
+    }
+
+    .batch-code-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .batch-echo-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.82rem;
+        color: #16a34a;
+        background: #dcfce7;
+        border: 1px solid #86efac;
+        border-radius: 4px;
+        padding: 3px 8px;
+        width: fit-content;
+    }
+
+    .batch-echo-chip code {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #15803d;
     }
 
     .form-actions {
