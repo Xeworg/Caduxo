@@ -37,23 +37,6 @@ pub enum MovementKind {
     InventoryAdjustment,
 }
 
-impl MovementKind {
-    /// All valid movement kind string values.
-    pub const ALL_KINDS: &'static [&'static str] = &[
-        "entry:initial",
-        "transfer",
-        "exit:sale",
-        "exit:waste",
-        "exit:expired",
-        "exit:damaged",
-        "exit:internal_consumption",
-        "exit:return_to_supplier",
-        "exit:inventory_adjustment",
-        "exit:other",
-        "inventory_adjustment",
-    ];
-}
-
 impl fmt::Display for MovementKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -221,26 +204,6 @@ pub fn derive_batch_prefix(sku: Option<&str>) -> String {
     padded
 }
 
-/// Extracts the NNN counter from a batch code matching `PREFIX-YYYYMMDD-NNN` format.
-/// Returns `None` if the format doesn't match.
-pub fn extract_batch_nnn(batch_code: &str, prefix: &str, date: &str) -> Option<u32> {
-    let expected_prefix = format!("{}-{}", prefix, date);
-    if !batch_code.starts_with(&expected_prefix) {
-        return None;
-    }
-
-    let suffix = &batch_code[expected_prefix.len()..];
-    // Strip leading dash if present (for collision suffix format)
-    let suffix = suffix.strip_prefix('-').unwrap_or(suffix);
-
-    // Try NN or NNN format
-    let nnn_str = suffix
-        .chars()
-        .take_while(|c| c.is_ascii_digit())
-        .collect::<String>();
-    nnn_str.parse::<u32>().ok()
-}
-
 /// Generates the next batch candidate given the current max NNN.
 /// Handles collision suffix `-M` format when NNN > 999.
 pub fn next_batch_candidate(prefix: &str, date: &str, last_nnn: u32) -> String {
@@ -256,18 +219,6 @@ pub fn next_batch_candidate(prefix: &str, date: &str, last_nnn: u32) -> String {
 // ============================================================
 // Legacy resolution mapping
 // ============================================================
-
-/// Maps a legacy resolution text to the corresponding movement kind.
-/// The lookup is case-insensitive.
-pub fn legacy_resolution_to_kind(text: &str) -> MovementKind {
-    match text.trim().to_ascii_lowercase().as_str() {
-        "consumed" => MovementKind::ExitInternalConsumption,
-        "sold" => MovementKind::ExitSale,
-        "discarded" => MovementKind::ExitWaste,
-        // Unknown resolutions map to exit:other
-        _ => MovementKind::ExitOther,
-    }
-}
 
 // ============================================================
 // Unit-kind aware quantity validation
@@ -592,42 +543,6 @@ mod tests {
     }
 
     // ============================================================
-    // Batch NNN extraction tests
-    // ============================================================
-
-    #[test]
-    fn extract_batch_nnn_valid() {
-        assert_eq!(
-            extract_batch_nnn("SKU001-20261015-001", "SKU001", "20261015"),
-            Some(1)
-        );
-        assert_eq!(
-            extract_batch_nnn("SKU001-20261015-999", "SKU001", "20261015"),
-            Some(999)
-        );
-    }
-
-    #[test]
-    fn extract_batch_nnn_with_collision_suffix() {
-        assert_eq!(
-            extract_batch_nnn("SKU001-20261015-999-2", "SKU001", "20261015"),
-            Some(999)
-        );
-    }
-
-    #[test]
-    fn extract_batch_nnn_mismatch() {
-        assert_eq!(
-            extract_batch_nnn("OTHER-20261015-001", "SKU001", "20261015"),
-            None
-        );
-        assert_eq!(
-            extract_batch_nnn("SKU001-20261231-001", "SKU001", "20261015"),
-            None
-        );
-    }
-
-    // ============================================================
     // Next batch candidate tests
     // ============================================================
 
@@ -658,44 +573,6 @@ mod tests {
         assert_eq!(
             next_batch_candidate("SKU001", "20261015", 1000),
             "SKU001-20261015-999-2"
-        );
-    }
-
-    // ============================================================
-    // Legacy resolution mapping tests
-    // ============================================================
-
-    #[test]
-    fn legacy_resolution_known_values() {
-        assert_eq!(
-            legacy_resolution_to_kind("consumed"),
-            MovementKind::ExitInternalConsumption
-        );
-        assert_eq!(
-            legacy_resolution_to_kind("CONSUMED"),
-            MovementKind::ExitInternalConsumption
-        );
-        assert_eq!(legacy_resolution_to_kind("sold"), MovementKind::ExitSale);
-        assert_eq!(
-            legacy_resolution_to_kind("discarded"),
-            MovementKind::ExitWaste
-        );
-    }
-
-    #[test]
-    fn legacy_resolution_unknown() {
-        assert_eq!(
-            legacy_resolution_to_kind("donated"),
-            MovementKind::ExitOther
-        );
-        assert_eq!(
-            legacy_resolution_to_kind("transferred"),
-            MovementKind::ExitOther
-        );
-        assert_eq!(legacy_resolution_to_kind("other"), MovementKind::ExitOther);
-        assert_eq!(
-            legacy_resolution_to_kind("unknown-value"),
-            MovementKind::ExitOther
         );
     }
 

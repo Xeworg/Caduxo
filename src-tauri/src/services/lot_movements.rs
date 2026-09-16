@@ -2,19 +2,16 @@
 //!
 //! Business rules live here; SQL is delegated to `db::repositories::lot_movements`.
 
-use chrono::Local;
 use sqlx::SqlitePool;
 
 use crate::db::repositories::expiry_lots as lot_repo;
 use crate::db::repositories::lot_movements as repo;
 use crate::db::repositories::products as products_repo;
-use crate::db::repositories::settings as settings_repo;
 use crate::db::DbPool;
 use crate::domain::lot_movements::{
     compute_signed_delta, validate_movement_kind, validate_notes, validate_quantity_for_unit_kind,
     Direction, MovementKind,
 };
-use crate::domain::lot_movements::{derive_batch_prefix, next_batch_candidate};
 use crate::dto::lot_movements::{
     Direction as DtoDirection, LotLocationBalance, LotMovementCreate, LotMovementResponse,
 };
@@ -427,110 +424,6 @@ pub async fn get_lot_location_balances(
     repo::location_balances_for_lot(pool, lot_id)
         .await
         .map_err(AppError::from)
-}
-
-/// Derives an auto-generated batch code for a product.
-///
-/// Format: PREFIX-YYYYMMDD-NNN
-///
-/// This is called when the user leaves batch_code blank during lot creation.
-pub async fn derive_auto_batch_code(pool: &DbPool, product_id: &str) -> Result<String, AppError> {
-    // Get product SKU
-    let product = crate::db::repositories::products::get_product(pool, product_id)
-        .await
-        .map_err(AppError::from)?
-        .ok_or_else(|| DomainError::NotFound {
-            resource: "product",
-            id: product_id.to_string(),
-        })?;
-
-    let prefix = derive_batch_prefix(Some(product.sku.as_str()));
-    let date = Local::now().format("%Y%m%d").to_string();
-
-    // Find max NNN for this prefix and date
-    let max_nnn = repo::find_max_nnn_for_prefix_on_date(pool, &prefix, &date)
-        .await
-        .map_err(AppError::from)?
-        .unwrap_or(0);
-
-    let candidate = next_batch_candidate(&prefix, &date, max_nnn);
-
-    // Check for collisions with manually entered batch codes
-    // If the candidate already exists, increment until we find a free one
-    let mut batch_code = candidate.clone();
-    let mut attempts = 0;
-    while attempts < 100 {
-        let exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM expiry_lots WHERE batch_code = $1)")
-                .bind(&batch_code)
-                .fetch_one(pool)
-                .await
-                .map_err(AppError::from)?;
-
-        if !exists {
-            return Ok(batch_code);
-        }
-
-        // Increment NNN and try again
-        let current_nnn = max_nnn + attempts + 1;
-        batch_code = next_batch_candidate(&prefix, &date, current_nnn);
-        attempts += 1;
-    }
-
-    // Fallback: use a UUID suffix if we hit 100 collisions
-    Ok(format!(
-        "{}-{}-{}-{}",
-        prefix,
-        date,
-        999,
-        uuid::Uuid::new_v4().to_string()[..6].to_uppercase()
-    ))
-}
-
-/// Creates the sentinel location for a store if it doesn't exist.
-/// Returns the sentinel location ID.
-pub async fn ensure_sentinel_location(pool: &DbPool, store_id: &str) -> Result<String, AppError> {
-    let sentinel_id = format!("loc-sentinel-{}", store_id);
-
-    // Check if sentinel exists
-    let exists: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM store_locations WHERE id = $1)")
-            .bind(&sentinel_id)
-            .fetch_one(pool)
-            .await
-            .map_err(AppError::from)?;
-
-    if exists {
-        return Ok(sentinel_id);
-    }
-
-    // Create sentinel
-    let now = chrono::Utc::now().to_rfc3339();
-    sqlx::query(
-        r#"
-        INSERT INTO store_locations (id, store_id, name, notes, is_active, created_at, updated_at)
-        VALUES ($1, $2, 'Sin ubicacion', NULL, 1, $3, $4)
-        "#,
-    )
-    .bind(&sentinel_id)
-    .bind(store_id)
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
-    .await
-    .map_err(AppError::from)?;
-
-    Ok(sentinel_id)
-}
-
-/// Checks if the require_initial_location_on_lot_create setting is enabled.
-/// Returns `true` if the setting is '1' or absent (default).
-pub async fn is_initial_location_required(pool: &DbPool) -> Result<bool, AppError> {
-    let value = settings_repo::get_setting(pool, "require_initial_location_on_lot_create")
-        .await
-        .map_err(AppError::from)?;
-
-    Ok(value.as_deref() != Some("0"))
 }
 
 #[cfg(test)]

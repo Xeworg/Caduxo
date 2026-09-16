@@ -5,7 +5,6 @@
   // ── Props ──────────────────────────────────────────────────────────────────
 
   export let lotId: string;
-  export let lotQuantity: number;
   export let locations: { id: string; name: string; store_id: string }[];
   export let allLocations: { id: string; name: string; store_id: string; store_name?: string }[];
   export let currentBalances: LotLocationBalance[];

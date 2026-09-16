@@ -2,76 +2,9 @@
 //!
 //! Provides data access for the lot_movements ledger table.
 
-use chrono::Utc;
 use sqlx::SqlitePool;
-use uuid::Uuid;
 
-use crate::dto::lot_movements::Direction as DtoDirection;
 use crate::dto::lot_movements::{LotLocationBalance, LotMovementResponse};
-
-// ============================================================
-// Movement persistence
-// ============================================================
-
-/// Input for inserting a new movement row.
-pub struct NewMovement {
-    /// Lot to record the movement against.
-    pub lot_id: String,
-    /// Movement kind string (e.g., "entry:initial", "transfer", "exit:sale").
-    pub kind: String,
-    /// Optional direction for inventory_adjustment kind.
-    pub direction: Option<DtoDirection>,
-    /// Quantity magnitude (always positive).
-    pub quantity: f64,
-    /// Source location (set for exits and transfers).
-    pub source_location_id: Option<String>,
-    /// Destination location (set for entries and transfers).
-    pub destination_location_id: Option<String>,
-    /// Optional notes.
-    pub notes: Option<String>,
-    /// Actor (always "system" in v1).
-    pub actor: String,
-}
-
-/// Inserts a new movement row and returns the inserted response.
-pub async fn insert_movement(
-    pool: &SqlitePool,
-    input: &NewMovement,
-) -> Result<LotMovementResponse, sqlx::Error> {
-    let id = Uuid::new_v4().to_string();
-    let now = Utc::now().to_rfc3339();
-
-    let direction: Option<String> = input.direction.map(|d| match d {
-        DtoDirection::Increase => "increase".to_string(),
-        DtoDirection::Decrease => "decrease".to_string(),
-    });
-
-    sqlx::query(
-        r#"
-        INSERT INTO lot_movements (
-            id, expiry_lot_id, movement_kind, direction, quantity,
-            source_location_id, destination_location_id, notes, actor, created_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        "#,
-    )
-    .bind(&id)
-    .bind(&input.lot_id)
-    .bind(&input.kind)
-    .bind(&direction)
-    .bind(input.quantity)
-    .bind(&input.source_location_id)
-    .bind(&input.destination_location_id)
-    .bind(&input.notes)
-    .bind(&input.actor)
-    .bind(&now)
-    .execute(pool)
-    .await?;
-
-    get_movement(pool, &id)
-        .await?
-        .ok_or_else(|| sqlx::Error::RowNotFound)
-}
 
 /// Fetches a single movement by id, or `None` if it does not exist.
 pub async fn get_movement(
@@ -206,26 +139,6 @@ fn extract_nnn_from_batch_code(batch_code: &str, prefix: &str, date: &str) -> Op
     // Try to extract the first sequence of digits (NNN)
     let nnn_str: String = suffix.chars().take_while(|c| c.is_ascii_digit()).collect();
     nnn_str.parse::<u32>().ok()
-}
-
-// ============================================================
-// Initial entry check
-// ============================================================
-
-/// Returns `true` if the lot has an initial entry movement.
-pub async fn has_initial_entry(pool: &SqlitePool, lot_id: &str) -> Result<bool, sqlx::Error> {
-    let count: i64 = sqlx::query_scalar(
-        r#"
-        SELECT COUNT(*)
-        FROM lot_movements
-        WHERE expiry_lot_id = $1 AND movement_kind = 'entry:initial'
-        "#,
-    )
-    .bind(lot_id)
-    .fetch_one(pool)
-    .await?;
-
-    Ok(count > 0)
 }
 
 #[cfg(test)]

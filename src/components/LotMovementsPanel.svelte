@@ -198,7 +198,6 @@
 {#if showMoveStock}
   <MoveStockModal
     {lotId}
-    {lotQuantity}
     {locations}
     {allLocations}
     currentBalances={balances}
@@ -224,7 +223,6 @@
     {lotQuantity}
     {lotUnit}
     currentBalances={balances}
-    allLocations={allLocations}
     {unitType}
     onClose={() => (showAdjustCount = false)}
     onCreated={handleMovementCreated}

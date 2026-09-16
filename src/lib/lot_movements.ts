@@ -15,10 +15,10 @@ export type MovementKind =
  | "entry:initial"
  | "transfer"
  | "exit:sale"
- | "exit:loss"
+ | "exit:waste"
  | "exit:expired"
  | "exit:damaged"
- | "exit:internal_use"
+ | "exit:internal_consumption"
  | "exit:return_to_supplier"
  | "exit:inventory_adjustment"
  | "exit:other"
@@ -110,10 +110,10 @@ export function getKindLabel(kind: string, direction?: string | null): string {
   "entry:initial": "Entrada inicial",
   transfer: "Transferencia",
   "exit:sale": "Venta",
-  "exit:loss": "Pérdida",
+  "exit:waste": "Pérdida",
   "exit:expired": "Vencido",
   "exit:damaged": "Dañado",
-  "exit:internal_use": "Consumo interno",
+  "exit:internal_consumption": "Consumo interno",
   "exit:return_to_supplier": "Devolución a proveedor",
   "exit:inventory_adjustment": "Ajuste de inventario (salida)",
   "exit:other": "Otro",

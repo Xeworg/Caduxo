@@ -5,53 +5,12 @@ use sqlx::SqlitePool;
 use uuid::Uuid;
 
 use crate::dto::expiry_lots::{
-    ExpiryLotCreate, ExpiryLotResolve, ExpiryLotResponse, ExpiryLotUpdate,
-    LotResolutionEventResponse,
+    ExpiryLotResolve, ExpiryLotResponse, ExpiryLotUpdate, LotResolutionEventResponse,
 };
 
 // ============================================================
 // Expiry lots — create / update / archive
 // ============================================================
-
-/// Inserts a new active expiry lot and returns the inserted row.
-pub async fn insert_expiry_lot(
-    pool: &SqlitePool,
-    input: &ExpiryLotCreate,
-    unit: &str,
-    alert_days_before: i32,
-) -> Result<ExpiryLotResponse, sqlx::Error> {
-    let id = Uuid::new_v4().to_string();
-    let now = Utc::now().to_rfc3339();
-
-    sqlx::query(
-        r#"
-        INSERT INTO expiry_lots (
-            id, product_id, store_id, location_id, quantity, unit,
-            expiry_date, alert_days_before, batch_code, notes,
-            status, created_at, updated_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', $11, $12)
-        "#,
-    )
-    .bind(&id)
-    .bind(&input.product_id)
-    .bind(&input.store_id)
-    .bind(&input.location_id)
-    .bind(input.quantity)
-    .bind(unit)
-    .bind(&input.expiry_date)
-    .bind(alert_days_before)
-    .bind(&input.batch_code)
-    .bind(&input.notes)
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
-    .await?;
-
-    get_expiry_lot(pool, &id)
-        .await?
-        .ok_or_else(|| sqlx::Error::RowNotFound)
-}
 
 /// Fetches a single expiry lot by id, or `None` if it does not exist.
 /// JOINs `products` to expose the unit kind for unit-aware downstream consumers.

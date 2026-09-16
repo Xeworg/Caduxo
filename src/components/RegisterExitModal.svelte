@@ -26,10 +26,10 @@
   // Exit reasons (the eight kinds from the spec)
   const EXIT_REASONS = [
     { value: "exit:sale", label: "Venta" },
-    { value: "exit:loss", label: "Pérdida" },
+    { value: "exit:waste", label: "Pérdida" },
     { value: "exit:expired", label: "Vencido" },
     { value: "exit:damaged", label: "Dañado" },
-    { value: "exit:internal_use", label: "Consumo interno" },
+    { value: "exit:internal_consumption", label: "Consumo interno" },
     { value: "exit:return_to_supplier", label: "Devolución a proveedor" },
     { value: "exit:inventory_adjustment", label: "Ajuste de inventario (salida)" },
     { value: "exit:other", label: "Otro" },

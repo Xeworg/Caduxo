@@ -8,7 +8,6 @@
   export let lotQuantity: number;
   export let lotUnit: string;
   export let currentBalances: LotLocationBalance[];
-  export let allLocations: { id: string; name: string; store_id: string; store_name?: string }[];
   /**
    * Unit kind resolved from the lot's product catalog link.
    * `null` for legacy/uncatalogued products — treated as decimal.
