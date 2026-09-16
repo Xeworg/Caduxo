@@ -36,10 +36,18 @@
   let loading = true;
   let errorMsg = "";
 
-  // Modal states
+  // Modal states. Only one action form should be open at a time.
   let showMoveStock = false;
   let showRegisterExit = false;
   let showAdjustCount = false;
+
+  type ActionForm = "move" | "exit" | "adjust";
+
+  function openActionForm(form: ActionForm) {
+    showMoveStock = form === "move";
+    showRegisterExit = form === "exit";
+    showAdjustCount = form === "adjust";
+  }
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -124,7 +132,7 @@
         <button
           type="button"
           class="btn-action btn-move"
-          on:click={() => (showMoveStock = true)}
+          on:click={() => openActionForm("move")}
           title="Mover stock entre ubicaciones"
         >
           Mover stock
@@ -132,7 +140,7 @@
         <button
           type="button"
           class="btn-action btn-exit"
-          on:click={() => (showRegisterExit = true)}
+          on:click={() => openActionForm("exit")}
           title="Registrar salida de stock"
         >
           Registrar salida
@@ -140,7 +148,7 @@
         <button
           type="button"
           class="btn-action btn-adjust"
-          on:click={() => (showAdjustCount = true)}
+          on:click={() => openActionForm("adjust")}
           title="Ajustar conteo de inventario"
         >
           Ajustar conteo
