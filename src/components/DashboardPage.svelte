@@ -23,6 +23,7 @@
   } from "../lib/products.js";
   import {
     getExpiryLot,
+    listExpiryLotsByProduct,
     type ExpiryLotResponse,
   } from "../lib/expiry_lots.js";
       import { exportReportWithDialog } from "../lib/csv.js";
@@ -91,6 +92,13 @@
   let showUnitReview = false;
   let detailProduct: ProductDetailResponse | null = null;
   let detailLoading = false;
+
+  // Product detail: lots + per-lot movement history
+  let detailLots: ExpiryLotResponse[] = [];
+  let detailLotsLoading = false;
+  let detailSelectedLotId: string | null = null;
+  /** Locations across every store that holds at least one of this product's lots. */
+  let detailAllLocations: StoreLocationResponse[] = [];
 
   // CSV export state (Slice 10a)
   let exporting = false;
@@ -270,19 +278,82 @@
 
       // ─── Row actions ────────────────────────────────────────────────────────────
 
-  async function viewProduct(lot: DashboardLotRow) {
-    detailLoading = true;
-    showProductDetail = true;
-    detailProduct = null;
-    try {
-      detailProduct = await getProduct(lot.product_id);
-    } catch (e) {
-      errorMsg = String(e);
-      showProductDetail = false;
-    } finally {
-      detailLoading = false;
-    }
-  }
+      async function viewProduct(lot: DashboardLotRow) {
+        detailLoading = true;
+        showProductDetail = true;
+        detailProduct = null;
+        detailLots = [];
+        detailSelectedLotId = null;
+        detailAllLocations = [];
+        try {
+          detailProduct = await getProduct(lot.product_id);
+          await loadProductDetailLots(lot.product_id);
+        } catch (e) {
+          errorMsg = String(e);
+          showProductDetail = false;
+        } finally {
+          detailLoading = false;
+        }
+      }
+
+      /**
+       * Loads every active/resolved/archived expiry lot for the given product and
+       * caches the per-store location catalog so the movements panel can resolve
+       * transfer/exit/adjust location names. Reuses the same `listExpiryLotsByProduct`
+       * + `listStoreLocations` calls used by the dedicated Product Detail page.
+       */
+      async function loadProductDetailLots(productId: string) {
+        detailLotsLoading = true;
+        try {
+          detailLots = await listExpiryLotsByProduct(productId);
+          // Keep the current selection if it still exists; otherwise pick the
+          // first active lot (and fall back to the first available lot).
+          const stillExists = detailSelectedLotId
+            && detailLots.some((l) => l.id === detailSelectedLotId);
+          if (!stillExists) {
+            const firstActive = detailLots.find((l) => l.status === "active");
+            detailSelectedLotId = firstActive?.id ?? detailLots[0]?.id ?? null;
+          }
+          // Load locations for every store that holds at least one of the lots
+          // (products can span multiple stores). Failures are non-fatal so a
+          // single bad store does not blank the whole picker.
+          const storeIds = Array.from(new Set(detailLots.map((l) => l.store_id)));
+          const locationLists = await Promise.all(
+            storeIds.map((sid) =>
+              listStoreLocations(sid).catch(() => [] as StoreLocationResponse[]),
+            ),
+          );
+          detailAllLocations = locationLists.flat();
+        } catch (e) {
+          errorMsg = String(e);
+        } finally {
+          detailLotsLoading = false;
+        }
+      }
+
+      /** Closes the product-detail modal and clears its transient state. */
+      function closeProductDetail() {
+        showProductDetail = false;
+        detailProduct = null;
+        detailLots = [];
+        detailSelectedLotId = null;
+        detailAllLocations = [];
+      }
+
+      /** Refreshes the currently selected lot row after a movement is created. */
+      async function refreshSelectedLot() {
+        if (!detailSelectedLotId) return;
+        try {
+          const fresh = await getExpiryLot(detailSelectedLotId);
+          detailLots = detailLots.map((l) => (l.id === fresh.id ? fresh : l));
+        } catch (e) {
+          errorMsg = String(e);
+        }
+      }
+
+      /** The lot row currently highlighted in the picker (or null). */
+      $: detailSelectedLot =
+        detailLots.find((l) => l.id === detailSelectedLotId) ?? null;
 
   async function editLot(lot: DashboardLotRow) {
     detailLotLoading = true;
@@ -605,39 +676,103 @@
   {/if}
 </div>
 
-<!-- ── Product detail modal ─────────────────────────────────────────────────── -->
-{#if showProductDetail}
-  <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Product detail">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3>Product Detail</h3>
-        <button class="modal-close" on:click={() => (showProductDetail = false)}>✕</button>
-      </div>
-      {#if detailLoading}
-        <p class="modal-loading">Loading…</p>
-      {:else if detailProduct}
-        <dl class="detail-grid">
-          <dt>SKU</dt><dd>{detailProduct.product.sku}</dd>
-          <dt>Description</dt><dd>{detailProduct.product.description}</dd>
-          <dt>Category</dt><dd>{detailProduct.categories.length > 0 ? detailProduct.categories.map(c => c.name).join(", ") : "—"}</dd>
-          <dt>Default unit</dt><dd>{detailProduct.product.default_unit ?? "—"}</dd>
-          <dt>Alert days</dt><dd>{detailProduct.product.default_alert_days_before}</dd>
-          <dt>Status</dt><dd>{detailProduct.product.is_active ? "Active" : "Archived"}</dd>
-          {#if detailProduct.barcodes.length > 0}
-            <dt>Barcodes</dt>
-            <dd>
-              {#each detailProduct.barcodes as bc}
-                <span class="barcode-chip" class:primary={bc.is_primary}>
-                  {bc.barcode}{bc.is_primary ? " ★" : ""}
-                </span>
-              {/each}
-            </dd>
+    <!-- ── Product detail modal ─────────────────────────────────────────────────── -->
+    {#if showProductDetail}
+      <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Product detail">
+        <div class="modal-box modal-box-wide">
+          <div class="modal-header">
+            <h3>Product Detail</h3>
+            <button class="modal-close" on:click={closeProductDetail}>✕</button>
+          </div>
+          {#if detailLoading}
+            <p class="modal-loading">Loading…</p>
+          {:else if detailProduct}
+            <dl class="detail-grid">
+              <dt>SKU</dt><dd>{detailProduct.product.sku}</dd>
+              <dt>Description</dt><dd>{detailProduct.product.description}</dd>
+              <dt>Category</dt><dd>{detailProduct.categories.length > 0 ? detailProduct.categories.map(c => c.name).join(", ") : "—"}</dd>
+              <dt>Default unit</dt><dd>{detailProduct.product.default_unit ?? "—"}</dd>
+              <dt>Alert days</dt><dd>{detailProduct.product.default_alert_days_before}</dd>
+              <dt>Status</dt><dd>{detailProduct.product.is_active ? "Active" : "Archived"}</dd>
+              {#if detailProduct.barcodes.length > 0}
+                <dt>Barcodes</dt>
+                <dd>
+                  {#each detailProduct.barcodes as bc}
+                    <span class="barcode-chip" class:primary={bc.is_primary}>
+                      {bc.barcode}{bc.is_primary ? " ★" : ""}
+                    </span>
+                  {/each}
+                </dd>
+              {/if}
+            </dl>
+
+            <!-- ── Expiry lots + per-lot movement history ───────────────────── -->
+            <section class="lots-section" aria-label="Expiry lots and movement history">
+              <div class="lots-section-header">
+                <h4>Expiry lots</h4>
+                {#if detailLotsLoading}
+                  <span class="lots-loading-hint">Loading…</span>
+                {:else}
+                  <span class="lots-count">
+                    {detailLots.length} lot{detailLots.length === 1 ? "" : "s"}
+                  </span>
+                {/if}
+              </div>
+
+              {#if !detailLotsLoading && detailLots.length === 0}
+                <p class="empty-hint">
+                  This product has no expiry lots yet.
+                </p>
+              {:else if detailLots.length > 0}
+                <ul class="lot-picker" role="listbox" aria-label="Product expiry lots">
+                  {#each detailLots as lot (lot.id)}
+                    <li>
+                      <button
+                        type="button"
+                        class="lot-picker-item"
+                        class:active={detailSelectedLotId === lot.id}
+                        class:lot-status-inactive={lot.status !== "active"}
+                        on:click={() => (detailSelectedLotId = lot.id)}
+                        aria-pressed={detailSelectedLotId === lot.id}
+                      >
+                        <span class="lot-picker-qty">
+                          {lot.quantity} {lot.unit}
+                        </span>
+                        <span class="lot-picker-date">
+                          Exp {formatDate(lot.expiry_date)}
+                        </span>
+                        {#if lot.batch_code}
+                          <span class="lot-picker-batch">{lot.batch_code}</span>
+                        {/if}
+                        <span class="lot-picker-status status-{lot.status}">
+                          {lot.status}
+                        </span>
+                      </button>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+
+              {#if detailSelectedLot}
+                <div class="lot-panel-wrap">
+                  <LotMovementsPanel
+                    lotId={detailSelectedLot.id}
+                    lotQuantity={detailSelectedLot.quantity}
+                    lotUnit={detailSelectedLot.unit}
+                    lotStatus={detailSelectedLot.status}
+                    locations={detailAllLocations.filter(
+                      (l) => l.store_id === detailSelectedLot!.store_id,
+                    )}
+                    allLocations={detailAllLocations}
+                    onMovementCreated={refreshSelectedLot}
+                  />
+                </div>
+              {/if}
+            </section>
           {/if}
-        </dl>
-      {/if}
-    </div>
-  </div>
-{/if}
+        </div>
+      </div>
+    {/if}
 
 <!-- ── Lot detail modal ─────────────────────────────────────────────────────── -->
 {#if showLotDetail}
@@ -1353,6 +1488,136 @@ detailLot = await getExpiryLot(detailLot!.id);
     background: #eff6ff;
     border-color: #bfdbfe;
     color: #1d4ed8;
+  }
+
+  /* ── Product detail: expiry lots picker ─────────────────────────────── */
+  .lots-section {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .lots-section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .lots-section-header h4 {
+    margin: 0;
+    font-size: 0.92rem;
+    color: #0f172a;
+    font-weight: 600;
+  }
+
+  .lots-loading-hint,
+  .lots-count {
+    font-size: 0.78rem;
+    color: #6b7280;
+  }
+
+  .empty-hint {
+    color: #9ca3af;
+    font-size: 0.85rem;
+    font-style: italic;
+    margin: 0;
+  }
+
+  .lot-picker {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 180px;
+    overflow-y: auto;
+  }
+
+  .lot-picker-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-family: inherit;
+    font-size: 0.82rem;
+    color: #1e293b;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.12s, border-color 0.12s;
+  }
+
+  .lot-picker-item:hover {
+    background: #f3f4f6;
+  }
+
+  .lot-picker-item.active {
+    background: #eff6ff;
+    border-color: #3b82f6;
+  }
+
+  .lot-picker-item.lot-status-inactive {
+    opacity: 0.7;
+  }
+
+  .lot-picker-qty {
+    font-weight: 600;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  .lot-picker-date {
+    color: #475569;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .lot-picker-batch {
+    background: #e5e7eb;
+    color: #374151;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.74rem;
+  }
+
+  .lot-picker-status {
+    margin-left: auto;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #475569;
+  }
+
+  .lot-picker-status.status-active {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .lot-picker-status.status-resolved {
+    background: #dbeafe;
+    color: #1e40af;
+  }
+
+  .lot-picker-status.status-archived {
+    background: #f3f4f6;
+    color: #9ca3af;
+  }
+
+  .lot-panel-wrap {
+    margin-top: 6px;
+    padding-top: 10px;
+    border-top: 1px dashed #e5e7eb;
   }
 
   /* ── Resolve form ────────────────────────────────────────────────────── */
