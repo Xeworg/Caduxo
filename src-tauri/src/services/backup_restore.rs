@@ -840,10 +840,10 @@ mod tests {
             .fetch_one(&restored_pool)
             .await
             .unwrap();
-        // V1-V15 total (V5 split into 11 separate migrations)
+        // V1-V16 total (V5 split into 11 separate migrations; V16 added)
         assert_eq!(
-            applied_count, 15,
-            "expected 15 migrations (V1–V15); all should have applied automatically"
+            applied_count, 16,
+            "expected 16 migrations (V1–V16); all should have applied automatically"
         );
 
         // ── Step 4: assert junction table exists and is populated ──────────

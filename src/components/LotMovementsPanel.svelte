@@ -8,6 +8,7 @@
     type LotMovementResponse,
     type LotLocationBalance,
   } from "../lib/lot_movements.js";
+  import type { UnitKind } from "../lib/products.js";
   import MoveStockModal from "./MoveStockModal.svelte";
   import RegisterExitModal from "./RegisterExitModal.svelte";
   import AdjustCountModal from "./AdjustCountModal.svelte";
@@ -20,6 +21,12 @@
   export let lotStatus: string;
   export let locations: { id: string; name: string; store_id: string }[] = [];
   export let allLocations: { id: string; name: string; store_id: string; store_name?: string }[] = [];
+  /**
+   * Unit kind resolved from the lot's product catalog link. Propagated to
+   * every modal so quantity inputs apply unit-aware min/step/validation.
+   * `null` for legacy/uncatalogued products — treated as decimal.
+   */
+  export let unitType: UnitKind | null = null;
   export let onMovementCreated: () => void;
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -192,6 +199,7 @@
     {locations}
     {allLocations}
     currentBalances={balances}
+    {unitType}
     onClose={() => (showMoveStock = false)}
     onCreated={handleMovementCreated}
   />
@@ -201,6 +209,7 @@
   <RegisterExitModal
     {lotId}
     currentBalances={balances}
+    {unitType}
     onClose={() => (showRegisterExit = false)}
     onCreated={handleMovementCreated}
   />
@@ -213,6 +222,7 @@
     {lotUnit}
     currentBalances={balances}
     allLocations={allLocations}
+    {unitType}
     onClose={() => (showAdjustCount = false)}
     onCreated={handleMovementCreated}
   />

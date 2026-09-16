@@ -523,17 +523,74 @@ pub(crate) const MIGRATIONS: &[(i64, &str, &str)] = &[
         15,
         "reconcile_expiry_lots_quantity_from_movements",
         r#"
-            UPDATE expiry_lots
-            SET quantity = COALESCE(
-                (SELECT SUM(
-                    CASE WHEN destination_location_id IS NOT NULL THEN lm.quantity
-                         WHEN source_location_id IS NOT NULL THEN -lm.quantity
-                         ELSE 0 END
-                )
-                FROM lot_movements lm WHERE lm.expiry_lot_id = expiry_lots.id
-                ), 0),
-                updated_at = CURRENT_TIMESTAMP
-            "#,
+                UPDATE expiry_lots
+                SET quantity = COALESCE(
+                    (SELECT SUM(
+                        CASE WHEN destination_location_id IS NOT NULL THEN lm.quantity
+                             WHEN source_location_id IS NOT NULL THEN -lm.quantity
+                             ELSE 0 END
+                    )
+                    FROM lot_movements lm WHERE lm.expiry_lot_id = expiry_lots.id
+                    ), 0),
+                    updated_at = CURRENT_TIMESTAMP
+                "#,
+    ),
+    // V16 — broaden unit back-fill: Spanish singular/plural aliases + display_name.
+    //
+    // Recognises legacy `products.default_unit` text values that V3 left
+    // unlinked because the raw text didn't match a catalog `key`. Two passes
+    // are combined into a single UPDATE via `OR`:
+    //   1. Apply Spanish singular→canonical alias (Unidad→units, Caja→cajas,
+    //      Botella→bottles, Bolsa→bags, Paquete→packs, Pieza→pcs) and match
+    //      against `unit_definitions.key` (case-insensitive). The CASE
+    //      returns the original normalised text in the ELSE branch so
+    //      already-known keys still resolve (defensive idempotency).
+    //   2. Match the trimmed raw value against `unit_definitions.display_name`
+    //      so display names like `Kilogramo`, `Unidades`, `Litro` resolve
+    //      even when no catalog key matches.
+    //
+    // Idempotent: the WHERE clause filters to rows with
+    // `default_unit_id IS NULL`, so already-linked products are skipped on
+    // re-runs. Decimal units (kg, L, mL, etc.) continue to link via either
+    // the V3 path or this V16 display_name pass — no behavioural change.
+    (
+        16,
+        "broaden_unit_backfill_spanish_singular_plural_and_display_names",
+        r#"
+                UPDATE products
+                SET
+                    default_unit_id = (
+                        SELECT ud.id FROM unit_definitions ud
+                        WHERE lower(ud.key) = CASE lower(trim(products.default_unit))
+                                WHEN 'unidad'   THEN 'units'
+                                WHEN 'caja'     THEN 'cajas'
+                                WHEN 'botella'  THEN 'bottles'
+                                WHEN 'bolsa'    THEN 'bags'
+                                WHEN 'paquete'  THEN 'packs'
+                                WHEN 'pieza'    THEN 'pcs'
+                                ELSE lower(trim(products.default_unit))
+                            END
+                           OR lower(ud.display_name) = lower(trim(products.default_unit))
+                        LIMIT 1
+                    ),
+                    unit_type = (
+                        SELECT ud.kind FROM unit_definitions ud
+                        WHERE lower(ud.key) = CASE lower(trim(products.default_unit))
+                                WHEN 'unidad'   THEN 'units'
+                                WHEN 'caja'     THEN 'cajas'
+                                WHEN 'botella'  THEN 'bottles'
+                                WHEN 'bolsa'    THEN 'bags'
+                                WHEN 'paquete'  THEN 'packs'
+                                WHEN 'pieza'    THEN 'pcs'
+                                ELSE lower(trim(products.default_unit))
+                            END
+                           OR lower(ud.display_name) = lower(trim(products.default_unit))
+                        LIMIT 1
+                    )
+                WHERE default_unit IS NOT NULL
+                  AND TRIM(default_unit) <> ''
+                  AND default_unit_id IS NULL
+                "#,
     ),
 ];
 
@@ -693,8 +750,8 @@ mod tests {
     #[tokio::test]
     async fn v2_schema_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
-        // V1-V15 total (V5 split into 11 separate migrations)
-        assert_eq!(applied_count(&pool).await.unwrap(), 15);
+        // V1-V16 total (V5 split into 11 separate migrations; V16 added)
+        assert_eq!(applied_count(&pool).await.unwrap(), 16);
     }
 
     // -------------------------------------------------------------------
@@ -1201,11 +1258,11 @@ mod tests {
     #[tokio::test]
     async fn v3_schema_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
-        // V1-V15 total (V5 split into 11 separate migrations)
+        // V1-V16 total (V5 split into 11 separate migrations; V16 added)
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            15,
-            "V5-V15 bring applied count to 15"
+            16,
+            "V5-V15 bring applied count to 15; V16 brings total to 16"
         );
     }
 
@@ -1256,8 +1313,8 @@ mod tests {
     #[tokio::test]
     async fn v4_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
-        // V1-V15 total (V5 split into 11 separate migrations)
-        assert_eq!(applied_count(&pool).await.unwrap(), 15);
+        // V1-V16 total (V5 split into 11 separate migrations; V16 added)
+        assert_eq!(applied_count(&pool).await.unwrap(), 16);
         assert!(table_exists(&pool, "product_categories").await);
         assert!(index_exists(&pool, "idx_product_categories_category").await);
         assert!(index_exists(&pool, "idx_product_categories_product").await);
@@ -1891,6 +1948,234 @@ mod tests {
         let _ = std::fs::remove_file(&db_path);
     }
 
+    // ====================================================================
+    // V16 — broaden unit back-fill tests
+    //
+    // SKU-style legacy values that V3 left unlinked (because the raw text
+    // didn't match a catalog key) are now linked by V16. The tests below
+    // exercise the alias path (Unidad → units) and the display_name path
+    // (Kilogramo → ud-kg) and prove the migration is idempotent.
+    // ====================================================================
+
+    // V16 back-fills the singular Spanish form "Unidad" to the integer
+    // preset `ud-units`. This is the regression test for SKU 1106000626.
+    #[tokio::test]
+    async fn v16_backfills_unidad_singular_to_integer_preset() {
+        use sqlx::migrate::{Migration, MigrationType, Migrator};
+        use std::borrow::Cow;
+
+        let now_ts = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+
+        // Build a V2-only migrator so we can seed a product with the legacy
+        // free-text "Unidad" before V3 / V16 run.
+        let v2_migrations: Vec<Migration> = MIGRATIONS
+            .iter()
+            .filter(|(v, _, _)| *v <= 2)
+            .map(|(version, description, sql)| {
+                Migration::new(
+                    *version,
+                    Cow::Owned(description.to_string()),
+                    MigrationType::Simple,
+                    Cow::Owned(sql.to_string()),
+                    false,
+                )
+            })
+            .collect();
+        let v2_migrator = Migrator {
+            migrations: Cow::Owned(v2_migrations),
+            ignore_missing: false,
+            locking: true,
+            no_tx: false,
+        };
+
+        let pid = std::process::id();
+        let rand: u16 = rand::random();
+        let db_path =
+            std::path::PathBuf::from(format!("/tmp/caduxo_test_v16_unidad_{pid}_{rand}.db"));
+        let _ = std::fs::remove_file(&db_path);
+
+        let pool = super::open_pool(&db_path).await.unwrap();
+        v2_migrator.run(&pool).await.unwrap();
+
+        // Seed V2 product with `default_unit = "Unidad"` (singular Spanish).
+        sqlx::query(
+                    "INSERT INTO products (id, sku, description, default_unit, default_alert_days_before, is_active, created_at, updated_at)
+                     VALUES ('p-1106000626', '1106000626', 'SKU 1106000626', 'Unidad', 30, 1, $1, $2)",
+                )
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+
+        // Also seed a product with the plural form to confirm both forms resolve.
+        sqlx::query(
+                    "INSERT INTO products (id, sku, description, default_unit, default_alert_days_before, is_active, created_at, updated_at)
+                     VALUES ('p-unidades', 'SKU-UNIDADES', 'Plural test', 'Unidades', 30, 1, $1, $2)",
+                )
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+
+        // Run full migrator — V3 + V16 both apply back-fills.
+        run_migrations(&pool).await.unwrap();
+
+        // Singular "Unidad" → ud-units (integer).
+        let row: (Option<String>, Option<String>) = sqlx::query_as(
+            "SELECT default_unit_id, unit_type FROM products WHERE id = 'p-1106000626'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            row.0,
+            Some("ud-units".to_string()),
+            "V16 must backfill singular `Unidad` to ud-units"
+        );
+        assert_eq!(
+            row.1,
+            Some("integer".to_string()),
+            "V16 must set unit_type=integer for singular `Unidad`"
+        );
+
+        // Plural "Unidades" → ud-units (integer) via display_name match.
+        let row2: (Option<String>, Option<String>) = sqlx::query_as(
+            "SELECT default_unit_id, unit_type FROM products WHERE id = 'p-unidades'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            row2.0,
+            Some("ud-units".to_string()),
+            "V16 must backfill plural `Unidades` to ud-units via display_name"
+        );
+        assert_eq!(
+            row2.1,
+            Some("integer".to_string()),
+            "V16 must set unit_type=integer for plural `Unidades`"
+        );
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    // V16 back-fills display_name lookups: `Kilogramo` → `ud-kg` (decimal).
+    // Confirms decimal-unit semantics are preserved by the broadened resolver.
+    #[tokio::test]
+    async fn v16_backfills_kilogramo_display_name_to_decimal_preset() {
+        use sqlx::migrate::{Migration, MigrationType, Migrator};
+        use std::borrow::Cow;
+
+        let now_ts = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+
+        let v2_migrations: Vec<Migration> = MIGRATIONS
+            .iter()
+            .filter(|(v, _, _)| *v <= 2)
+            .map(|(version, description, sql)| {
+                Migration::new(
+                    *version,
+                    Cow::Owned(description.to_string()),
+                    MigrationType::Simple,
+                    Cow::Owned(sql.to_string()),
+                    false,
+                )
+            })
+            .collect();
+        let v2_migrator = Migrator {
+            migrations: Cow::Owned(v2_migrations),
+            ignore_missing: false,
+            locking: true,
+            no_tx: false,
+        };
+
+        let pid = std::process::id();
+        let rand: u16 = rand::random();
+        let db_path =
+            std::path::PathBuf::from(format!("/tmp/caduxo_test_v16_kilogramo_{pid}_{rand}.db"));
+        let _ = std::fs::remove_file(&db_path);
+
+        let pool = super::open_pool(&db_path).await.unwrap();
+        v2_migrator.run(&pool).await.unwrap();
+
+        sqlx::query(
+                    "INSERT INTO products (id, sku, description, default_unit, default_alert_days_before, is_active, created_at, updated_at)
+                     VALUES ('p-kilo', 'SKU-KILO', 'Display name test', 'Kilogramo', 30, 1, $1, $2)",
+                )
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+
+        run_migrations(&pool).await.unwrap();
+
+        let row: (Option<String>, Option<String>) =
+            sqlx::query_as("SELECT default_unit_id, unit_type FROM products WHERE id = 'p-kilo'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            row.0,
+            Some("ud-kg".to_string()),
+            "V16 must backfill display_name `Kilogramo` to ud-kg"
+        );
+        assert_eq!(
+            row.1,
+            Some("decimal".to_string()),
+            "V16 must preserve decimal unit_type for `Kilogramo`"
+        );
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    // V16 leaves truly-unknown values unlinked and is idempotent on re-run.
+    #[tokio::test]
+    async fn v16_leaves_unknown_values_unlinked_and_is_idempotent() {
+        let pool = fresh_test_pool().await.unwrap();
+        let now_ts = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+
+        // Truly-unknown unit text. V3 and V16 both leave it unlinked.
+        sqlx::query(
+                    "INSERT INTO products (id, sku, description, default_unit, default_alert_days_before, is_active, created_at, updated_at)
+                     VALUES ('p-foo', 'SKU-FOO', 'Foo', 'foo-unknown', 30, 1, $1, $2)",
+                )
+                .bind(&now_ts)
+                .bind(&now_ts)
+                .execute(&pool)
+                .await
+                .unwrap();
+
+        // Run a second time — V16 must not change anything.
+        run_migrations(&pool).await.unwrap();
+        let first: (Option<String>, Option<String>) =
+            sqlx::query_as("SELECT default_unit_id, unit_type FROM products WHERE id = 'p-foo'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(
+            first.0.is_none(),
+            "unknown `foo-unknown` must remain unlinked"
+        );
+        assert!(
+            first.1.is_none(),
+            "unknown `foo-unknown` must keep unit_type NULL"
+        );
+
+        run_migrations(&pool).await.unwrap();
+        let second: (Option<String>, Option<String>) =
+            sqlx::query_as("SELECT default_unit_id, unit_type FROM products WHERE id = 'p-foo'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            first.0, second.0,
+            "V16 re-run must not change unlinked state"
+        );
+        assert_eq!(first.1, second.1, "V16 re-run must not change unit_type");
+    }
+
     // -------------------------------------------------------------------
     // Test: notification_log cascade — deleting a lot removes log rows.
     // -------------------------------------------------------------------
@@ -1956,14 +2241,14 @@ mod tests {
     // Phase 1a — V5 lot_movements ledger
     // =====================================================================
 
-    // V5-V15 brings applied count to 15.
+    // V5-V15 brings applied count to 15. V16 brings it to 16.
     #[tokio::test]
     async fn v5_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            15,
-            "V5-V15 adds 11 migration entries to bring count to 15"
+            16,
+            "V5-V15 adds 11 migration entries to bring count to 15; V16 brings total to 16"
         );
     }
 

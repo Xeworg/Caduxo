@@ -216,12 +216,50 @@ pub async fn update_product(
     Ok(row)
 }
 
+/// Maps singular Spanish unit text forms to their canonical plural catalog
+/// key. The lookup is normalized (trim + lowercase) before being applied.
+/// Both forms then resolve to the same catalog row and therefore the same
+/// `unit_type`, preserving the existing decimal-unit semantics.
+///
+/// The aliases are intentionally narrow: only forms that have a clear,
+/// pre-existing canonical row. Adding more entries here is safe and
+/// idempotent — the migration V16 mirrors this list at the SQL layer.
+fn unit_text_aliases() -> &'static std::collections::HashMap<&'static str, &'static str> {
+    use std::collections::HashMap;
+    use std::sync::OnceLock;
+    static ALIASES: OnceLock<HashMap<&'static str, &'static str>> = OnceLock::new();
+    ALIASES.get_or_init(|| {
+        let mut m = HashMap::new();
+        // Integer-family singular forms.
+        m.insert("unidad", "units");
+        m.insert("caja", "cajas");
+        m.insert("botella", "bottles");
+        m.insert("bolsa", "bags");
+        m.insert("paquete", "packs");
+        m.insert("pieza", "pcs");
+        m
+    })
+}
+
+/// Returns the canonical key for a normalized unit text form. Falls back to
+/// the input when no alias matches, so existing keys (e.g. "kg") still work.
+fn apply_unit_alias(normalized: &str) -> &str {
+    unit_text_aliases()
+        .get(normalized)
+        .copied()
+        .unwrap_or(normalized)
+}
+
 /// Resolves `default_unit_id` and `unit_type` from the provided inputs.
 ///
 /// Priority:
 /// 1. If `explicit_unit_id` is Some, look it up in the catalog and use its kind.
-/// 2. Else if `default_unit_text` is Some, do a case-insensitive `find_by_key` lookup.
-///    On hit: use the catalog id and kind. On miss: leave both None (text stays in `default_unit`).
+/// 2. Else if `default_unit_text` is Some, do a case-insensitive lookup:
+///    apply a singular→plural alias (e.g. `Unidad` → `units`) and then
+///    `find_by_key` against the canonical key; fall back to
+///    `find_by_display_name_ci` so display names like `Kilogramo` or
+///    `Unidades` resolve to their catalog row.
+///    On hit: use the catalog id and kind. On miss: leave both None.
 /// 3. Else (no unit info): both None.
 async fn resolve_unit_fields(
     pool: &DbPool,
@@ -251,7 +289,23 @@ async fn resolve_unit_fields(
     if let Some(text) = default_unit_text {
         let trimmed = text.trim();
         if !trimmed.is_empty() {
-            if let Some(unit) = units_repo::find_by_key(pool, trimmed)
+            let normalized = trimmed.to_lowercase();
+            let canonical = apply_unit_alias(&normalized);
+
+            // 2a: alias-canonicalized key lookup (handles "Unidad" → "units").
+            if let Some(unit) = units_repo::find_by_key(pool, canonical)
+                .await
+                .map_err(AppError::from)?
+            {
+                let kind_str = match unit.kind {
+                    UnitKind::Integer => "integer",
+                    UnitKind::Decimal => "decimal",
+                };
+                return Ok((Some(unit.id), Some(kind_str.to_string())));
+            }
+
+            // 2b: display_name lookup (handles "Kilogramo", "Unidades", etc.).
+            if let Some(unit) = units_repo::find_by_display_name_ci(pool, trimmed)
                 .await
                 .map_err(AppError::from)?
             {
@@ -1268,6 +1322,273 @@ mod tests {
                 panic!("expected Found");
             }
         }
+        Ok(())
+    }
+
+    // ====================================================================
+    // Unit resolver — singular/plural Spanish + display_name coverage
+    //
+    // Regression for SKU 1106000626: the product has `default_unit = "Unidad"`
+    // (singular Spanish) and was previously unlinked, so Product Detail showed
+    // `—` and LotForm accepted fractional quantities.
+    // ====================================================================
+
+    // Singular Spanish `Unidad` resolves to integer preset `ud-units`.
+    #[tokio::test]
+    async fn create_product_with_unidad_singular_resolves_to_integer(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let p = create_product(
+            &pool,
+            ProductCreate {
+                sku: "1106000626".into(),
+                description: "SKU 1106000626".into(),
+                category_ids: None,
+                default_unit: Some("Unidad".into()),
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+
+        assert_eq!(
+            p.default_unit_id.as_deref(),
+            Some("ud-units"),
+            "singular `Unidad` must resolve to ud-units via alias"
+        );
+        assert_eq!(
+            p.unit_type,
+            Some(crate::dto::unit_definitions::UnitKind::Integer),
+            "singular `Unidad` must yield UnitKind::Integer"
+        );
+        Ok(())
+    }
+
+    // Plural Spanish `Unidades` resolves to integer preset `ud-units` via display_name.
+    #[tokio::test]
+    async fn create_product_with_unidades_plural_resolves_to_integer(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let p = create_product(
+            &pool,
+            ProductCreate {
+                sku: "SKU-UNIDADES".into(),
+                description: "Plural form".into(),
+                category_ids: None,
+                default_unit: Some("Unidades".into()),
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+
+        assert_eq!(
+            p.default_unit_id.as_deref(),
+            Some("ud-units"),
+            "plural `Unidades` must resolve to ud-units via display_name"
+        );
+        assert_eq!(
+            p.unit_type,
+            Some(crate::dto::unit_definitions::UnitKind::Integer),
+            "plural `Unidades` must yield UnitKind::Integer"
+        );
+        Ok(())
+    }
+
+    // Decimal units (`kg`) still resolve to decimal via catalog key. Preserves prior semantics.
+    #[tokio::test]
+    async fn create_product_with_kg_key_resolves_to_decimal(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let p = create_product(
+            &pool,
+            ProductCreate {
+                sku: "SKU-KG".into(),
+                description: "Decimal unit".into(),
+                category_ids: None,
+                default_unit: Some("kg".into()),
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+
+        assert_eq!(p.default_unit_id.as_deref(), Some("ud-kg"));
+        assert_eq!(
+            p.unit_type,
+            Some(crate::dto::unit_definitions::UnitKind::Decimal),
+            "decimal-unit semantics must be preserved"
+        );
+        Ok(())
+    }
+
+    // Display_name match: `Kilogramo` resolves to `ud-kg` (decimal).
+    #[tokio::test]
+    async fn create_product_with_kilogramo_display_name_resolves_to_decimal(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let p = create_product(
+            &pool,
+            ProductCreate {
+                sku: "SKU-KILO-DN".into(),
+                description: "Display name match".into(),
+                category_ids: None,
+                default_unit: Some("Kilogramo".into()),
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+
+        assert_eq!(
+            p.default_unit_id.as_deref(),
+            Some("ud-kg"),
+            "`Kilogramo` (display_name) must resolve to ud-kg"
+        );
+        assert_eq!(
+            p.unit_type,
+            Some(crate::dto::unit_definitions::UnitKind::Decimal)
+        );
+        Ok(())
+    }
+
+    // Truly-unknown values remain unlinked (no catalog row to point at).
+    #[tokio::test]
+    async fn create_product_with_unknown_unit_remains_unlinked(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let p = create_product(
+            &pool,
+            ProductCreate {
+                sku: "SKU-UNK".into(),
+                description: "Unknown unit".into(),
+                category_ids: None,
+                default_unit: Some("totally-unknown".into()),
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+
+        assert!(
+            p.default_unit_id.is_none(),
+            "unknown unit must not link to any catalog row"
+        );
+        assert!(
+            p.unit_type.is_none(),
+            "unknown unit must keep unit_type as None"
+        );
+        // Raw text is preserved verbatim for the audit banner / review surface.
+        assert_eq!(p.default_unit.as_deref(), Some("totally-unknown"));
+        Ok(())
+    }
+
+    // Updating an existing product with the singular form also links it.
+    #[tokio::test]
+    async fn update_product_with_unidad_singular_links_to_integer_preset(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let created = create_product(
+            &pool,
+            ProductCreate {
+                sku: "SKU-UP".into(),
+                description: "Update path".into(),
+                category_ids: None,
+                default_unit: None,
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+        assert!(created.default_unit_id.is_none());
+        assert!(created.unit_type.is_none());
+
+        let updated = update_product(
+            &pool,
+            ProductUpdate {
+                id: created.id.clone(),
+                sku: created.sku.clone(),
+                description: created.description.clone(),
+                category_ids: None,
+                default_unit: Some("Unidad".into()),
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+                is_active: true,
+            },
+        )
+        .await?;
+
+        assert_eq!(updated.default_unit_id.as_deref(), Some("ud-units"));
+        assert_eq!(
+            updated.unit_type,
+            Some(crate::dto::unit_definitions::UnitKind::Integer)
+        );
+        Ok(())
+    }
+
+    // Singular Spanish `Caja` (alias for `cajas`) resolves to integer preset.
+    #[tokio::test]
+    async fn create_product_with_caja_singular_resolves_to_integer(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let p = create_product(
+            &pool,
+            ProductCreate {
+                sku: "SKU-CAJA-S".into(),
+                description: "Caja singular".into(),
+                category_ids: None,
+                default_unit: Some("Caja".into()),
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+
+        assert_eq!(
+            p.default_unit_id.as_deref(),
+            Some("ud-cajas"),
+            "singular `Caja` must alias to ud-cajas"
+        );
+        assert_eq!(
+            p.unit_type,
+            Some(crate::dto::unit_definitions::UnitKind::Integer)
+        );
+        Ok(())
+    }
+
+    // Idempotency: a known FK supplied explicitly bypasses the alias logic but
+    // still yields the correct kind. Confirms explicit_unit_id path stays intact.
+    #[tokio::test]
+    async fn create_product_with_explicit_decimal_fk_resolves_to_decimal(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let p = create_product(
+            &pool,
+            ProductCreate {
+                sku: "SKU-FK".into(),
+                description: "Explicit FK".into(),
+                category_ids: None,
+                default_unit: None,
+                default_unit_id: Some("ud-kg".into()),
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+
+        assert_eq!(p.default_unit_id.as_deref(), Some("ud-kg"));
+        assert_eq!(
+            p.unit_type,
+            Some(crate::dto::unit_definitions::UnitKind::Decimal)
+        );
         Ok(())
     }
 }

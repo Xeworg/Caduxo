@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
+  import type { UnitKind } from "../lib/products.js";
 
   // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -8,6 +9,11 @@
   export let locations: { id: string; name: string; store_id: string }[];
   export let allLocations: { id: string; name: string; store_id: string; store_name?: string }[];
   export let currentBalances: LotLocationBalance[];
+  /**
+   * Unit kind resolved from the lot's product catalog link.
+   * `null` for legacy/uncatalogued products — treated as decimal.
+   */
+  export let unitType: UnitKind | null = null;
   export let onClose: () => void;
   export let onCreated: () => void;
 
@@ -18,6 +24,17 @@
   let quantity = 0;
   let submitting = false;
   let errorMsg = "";
+
+  // ── Unit-aware quantity input rules ───────────────────────────────────────
+  // Integer products (e.g. Unidad) reject fractional quantities at the backend;
+  // we apply matching min/step/inputmode here so the browser input UX matches
+  // the server invariant. Decimal and legacy (null) units accept any positive.
+  $: isIntegerUnit = unitType === "integer";
+  $: qtyMin = isIntegerUnit ? 1 : 0.01;
+  $: qtyStep = isIntegerUnit ? 1 : 0.01;
+  $: qtyInputMode = (isIntegerUnit ? "numeric" : "decimal") as
+    | "numeric"
+    | "decimal";
 
   // Initialize source to highest-balance location
   $: if (!sourceLocationId && currentBalances.length > 0) {
@@ -32,6 +49,17 @@
     : 0;
 
   $: filteredDestinations = locations.filter((l) => l.id !== sourceLocationId);
+
+  /**
+   * Local validation for integer-unit products: catches fractional input
+   * before submit so the user gets immediate feedback. Backend enforces the
+   * same invariant, but this avoids a round-trip for the common case.
+   */
+  function isFractionalForIntegerUnit(qty: number): boolean {
+    if (!isIntegerUnit) return false;
+    if (qty <= 0) return false;
+    return !Number.isInteger(qty);
+  }
 
   // ── Submit ────────────────────────────────────────────────────────────────
 
@@ -48,6 +76,10 @@
     }
     if (quantity <= 0) {
       errorMsg = "La cantidad debe ser mayor a 0";
+      return;
+    }
+    if (isFractionalForIntegerUnit(quantity)) {
+      errorMsg = `La unidad del producto es de tipo entero; no se permiten cantidades fraccionarias (${quantity})`;
       return;
     }
     if (quantity > availableQuantity) {
@@ -111,13 +143,14 @@
           <input
             id="move-qty"
             type="number"
-            min="0.01"
-            step="0.01"
+            min={qtyMin}
+            step={qtyStep}
+            inputmode={qtyInputMode}
             max={availableQuantity}
             bind:value={quantity}
             disabled={submitting}
           />
-          <span class="hint">Disponibles: {availableQuantity}</span>
+          <span class="hint">Disponibles: {availableQuantity}{isIntegerUnit ? " (solo enteros)" : ""}</span>
         </div>
 
         {#if errorMsg}

@@ -54,18 +54,21 @@ pub async fn insert_expiry_lot(
 }
 
 /// Fetches a single expiry lot by id, or `None` if it does not exist.
+/// JOINs `products` to expose the unit kind for unit-aware downstream consumers.
 pub async fn get_expiry_lot(
     pool: &SqlitePool,
     id: &str,
 ) -> Result<Option<ExpiryLotResponse>, sqlx::Error> {
     sqlx::query_as::<_, ExpiryLotResponse>(
         r#"
-        SELECT id, product_id, store_id, location_id, quantity, unit,
-               expiry_date, alert_days_before, batch_code,
-               status, resolution, resolved_at, notes,
-               created_at, updated_at
-        FROM expiry_lots
-        WHERE id = $1
+        SELECT el.id, el.product_id, el.store_id, el.location_id, el.quantity, el.unit,
+               el.expiry_date, el.alert_days_before, el.batch_code,
+               el.status, el.resolution, el.resolved_at, el.notes,
+               el.created_at, el.updated_at,
+               p.unit_type AS unit_type
+        FROM expiry_lots el
+        LEFT JOIN products p ON p.id = el.product_id
+        WHERE el.id = $1
         "#,
     )
     .bind(id)
@@ -132,19 +135,22 @@ pub async fn archive_expiry_lot(pool: &SqlitePool, id: &str) -> Result<bool, sql
 // ============================================================
 
 /// Returns all active expiry lots for a given product.
+/// JOINs `products` to expose the unit kind for unit-aware downstream consumers.
 pub async fn list_expiry_lots_by_product(
     pool: &SqlitePool,
     product_id: &str,
 ) -> Result<Vec<ExpiryLotResponse>, sqlx::Error> {
     sqlx::query_as::<_, ExpiryLotResponse>(
         r#"
-        SELECT id, product_id, store_id, location_id, quantity, unit,
-               expiry_date, alert_days_before, batch_code,
-               status, resolution, resolved_at, notes,
-               created_at, updated_at
-        FROM expiry_lots
-        WHERE product_id = $1 AND status = 'active'
-        ORDER BY expiry_date ASC
+        SELECT el.id, el.product_id, el.store_id, el.location_id, el.quantity, el.unit,
+               el.expiry_date, el.alert_days_before, el.batch_code,
+               el.status, el.resolution, el.resolved_at, el.notes,
+               el.created_at, el.updated_at,
+               p.unit_type AS unit_type
+        FROM expiry_lots el
+        LEFT JOIN products p ON p.id = el.product_id
+        WHERE el.product_id = $1 AND el.status = 'active'
+        ORDER BY el.expiry_date ASC
         "#,
     )
     .bind(product_id)
@@ -153,19 +159,22 @@ pub async fn list_expiry_lots_by_product(
 }
 
 /// Returns all active expiry lots for a given store.
+/// JOINs `products` to expose the unit kind for unit-aware downstream consumers.
 pub async fn list_expiry_lots_by_store(
     pool: &SqlitePool,
     store_id: &str,
 ) -> Result<Vec<ExpiryLotResponse>, sqlx::Error> {
     sqlx::query_as::<_, ExpiryLotResponse>(
         r#"
-        SELECT id, product_id, store_id, location_id, quantity, unit,
-               expiry_date, alert_days_before, batch_code,
-               status, resolution, resolved_at, notes,
-               created_at, updated_at
-        FROM expiry_lots
-        WHERE store_id = $1 AND status = 'active'
-        ORDER BY expiry_date ASC
+        SELECT el.id, el.product_id, el.store_id, el.location_id, el.quantity, el.unit,
+               el.expiry_date, el.alert_days_before, el.batch_code,
+               el.status, el.resolution, el.resolved_at, el.notes,
+               el.created_at, el.updated_at,
+               p.unit_type AS unit_type
+        FROM expiry_lots el
+        LEFT JOIN products p ON p.id = el.product_id
+        WHERE el.store_id = $1 AND el.status = 'active'
+        ORDER BY el.expiry_date ASC
         "#,
     )
     .bind(store_id)
@@ -174,18 +183,21 @@ pub async fn list_expiry_lots_by_store(
 }
 
 /// Returns all active expiry lots (no filter).
+/// JOINs `products` to expose the unit kind for unit-aware downstream consumers.
 pub async fn list_all_active_expiry_lots(
     pool: &SqlitePool,
 ) -> Result<Vec<ExpiryLotResponse>, sqlx::Error> {
     sqlx::query_as::<_, ExpiryLotResponse>(
         r#"
-        SELECT id, product_id, store_id, location_id, quantity, unit,
-               expiry_date, alert_days_before, batch_code,
-               status, resolution, resolved_at, notes,
-               created_at, updated_at
-        FROM expiry_lots
-        WHERE status = 'active'
-        ORDER BY expiry_date ASC
+        SELECT el.id, el.product_id, el.store_id, el.location_id, el.quantity, el.unit,
+               el.expiry_date, el.alert_days_before, el.batch_code,
+               el.status, el.resolution, el.resolved_at, el.notes,
+               el.created_at, el.updated_at,
+               p.unit_type AS unit_type
+        FROM expiry_lots el
+        LEFT JOIN products p ON p.id = el.product_id
+        WHERE el.status = 'active'
+        ORDER BY el.expiry_date ASC
         "#,
     )
     .fetch_all(pool)

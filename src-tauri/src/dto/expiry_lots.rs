@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
+use super::unit_definitions::UnitKind;
+
 // ============================================================
 // Expiry Lot — inputs
 // ============================================================
@@ -89,6 +91,11 @@ pub struct ExpiryLotResponse {
     pub notes: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    /// Unit kind from the product's catalog link (`integer` or `decimal`).
+    /// `None` for legacy/uncatalogued products — treated as decimal by the
+    /// backend. Propagated to the UI so modals can apply unit-aware input
+    /// rules (min/step/validation) without an extra round-trip.
+    pub unit_type: Option<UnitKind>,
 }
 
 /// Resolution event response row.

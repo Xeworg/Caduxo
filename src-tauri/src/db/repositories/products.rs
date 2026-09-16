@@ -363,6 +363,31 @@ pub async fn archive_product(pool: &SqlitePool, id: &str) -> Result<bool, sqlx::
     Ok(affected.rows_affected() > 0)
 }
 
+/// Returns the catalog-resolved unit kind for a product, or `None` when the
+/// product has no catalog link (legacy / uncatalogued).
+///
+/// Lightweight accessor used by the lot movement service to enforce
+/// unit-aware quantity validation without loading the full `ProductResponse`.
+/// Returns `Ok(None)` when the product does not exist, so callers can decide
+/// how to surface the missing-product case (typically a `NotFound` error).
+pub async fn get_product_unit_kind(
+    pool: &SqlitePool,
+    product_id: &str,
+) -> Result<Option<UnitKind>, sqlx::Error> {
+    let row: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT unit_type FROM products WHERE id = $1")
+            .bind(product_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.and_then(|(raw,)| {
+        raw.and_then(|k| match k.as_str() {
+            "integer" => Some(UnitKind::Integer),
+            "decimal" => Some(UnitKind::Decimal),
+            _ => None,
+        })
+    }))
+}
+
 /// Searches products by description, SKU, or barcode (case-insensitive
 /// `LIKE` match). An empty query returns all products.
 /// `category_ids` is resolved from the junction table for each hit.

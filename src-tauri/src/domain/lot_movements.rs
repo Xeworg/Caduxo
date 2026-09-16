@@ -2,10 +2,13 @@
 //!
 //! All functions here are unit-testable in isolation. They handle:
 //! - Movement kind validation and delta computation
+//! - Unit-kind aware quantity validation (integer vs decimal units)
 //! - Batch code derivation and collision resolution
 //! - Legacy resolution mapping
 
 use std::fmt;
+
+use crate::dto::unit_definitions::UnitKind;
 
 /// Movement kind vocabulary per the spec.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -263,6 +266,67 @@ pub fn legacy_resolution_to_kind(text: &str) -> MovementKind {
         "discarded" => MovementKind::ExitWaste,
         // Unknown resolutions map to exit:other
         _ => MovementKind::ExitOther,
+    }
+}
+
+// ============================================================
+// Unit-kind aware quantity validation
+// ============================================================
+
+/// Validates a movement quantity against the product's unit kind.
+///
+/// - `UnitKind::Integer`: quantity must be a whole number (no fractional part).
+/// - `UnitKind::Decimal`: any positive magnitude is allowed.
+/// - `None` (legacy / uncatalogued product): treated as decimal — preserves
+///   back-compat with products that have no catalog link.
+///
+/// `entry:initial` is allowed to use `quantity = 0` for every unit kind
+/// (the lot's quantity already exists on the `expiry_lots` row, so the
+/// initial movement is a history marker rather than a real delta).
+///
+/// Returns `Ok(())` when valid, or a Spanish-language error string explaining
+/// the rejection when invalid.
+pub fn validate_quantity_for_unit_kind(
+    quantity: f64,
+    kind: &MovementKind,
+    unit_kind: Option<UnitKind>,
+) -> Result<(), String> {
+    // entry:initial keeps its special-case: qty == 0 is allowed even for
+    // integer-unit products (history marker; lot quantity is already on file).
+    if matches!(kind, MovementKind::EntryInitial) && quantity == 0.0 {
+        return Ok(());
+    }
+
+    match unit_kind {
+        Some(UnitKind::Integer) => {
+            // Negative or zero quantity is rejected for non-entry movements
+            // (the existing service-level rule).
+            if quantity <= 0.0 {
+                return Err(format!(
+                    "La cantidad debe ser mayor a 0 (recibido {})",
+                    quantity
+                ));
+            }
+            // Fractional component must be zero — reject 1.5, 0.25, etc.
+            if quantity.fract() != 0.0 {
+                return Err(format!(
+                    "La unidad del producto es de tipo entero; no se permiten cantidades fraccionarias ({})",
+                    quantity
+                ));
+            }
+            Ok(())
+        }
+        Some(UnitKind::Decimal) | None => {
+            // Decimal units (and legacy/null units) accept any positive magnitude.
+            // entry:initial still allows 0; other kinds reject non-positive.
+            if quantity <= 0.0 && !matches!(kind, MovementKind::EntryInitial) {
+                return Err(format!(
+                    "La cantidad debe ser mayor a 0 (recibido {})",
+                    quantity
+                ));
+            }
+            Ok(())
+        }
     }
 }
 
@@ -658,5 +722,199 @@ mod tests {
     fn direction_display() {
         assert_eq!(Direction::Increase.to_string(), "increase");
         assert_eq!(Direction::Decrease.to_string(), "decrease");
+    }
+
+    // ============================================================
+    // Unit-kind aware quantity validation tests
+    // ============================================================
+
+    #[test]
+    fn validate_qty_integer_accepts_whole_numbers() {
+        // Integer unit kinds accept positive whole quantities (1, 2, 100).
+        assert!(validate_quantity_for_unit_kind(
+            1.0,
+            &MovementKind::ExitSale,
+            Some(UnitKind::Integer)
+        )
+        .is_ok());
+        assert!(validate_quantity_for_unit_kind(
+            5.0,
+            &MovementKind::InventoryAdjustment,
+            Some(UnitKind::Integer)
+        )
+        .is_ok());
+        assert!(validate_quantity_for_unit_kind(
+            100.0,
+            &MovementKind::Transfer,
+            Some(UnitKind::Integer)
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn validate_qty_integer_rejects_fractional() {
+        // Fractional quantities are rejected for integer-unit products.
+        let err =
+            validate_quantity_for_unit_kind(1.5, &MovementKind::ExitSale, Some(UnitKind::Integer));
+        assert!(err.is_err());
+        let msg = err.unwrap_err();
+        assert!(
+            msg.contains("entero") && msg.contains("fraccionarias"),
+            "error message should mention integer-unit and fractional rejection, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn validate_qty_integer_rejects_small_fractional() {
+        // 0.25 — small fractional quantity also rejected.
+        assert!(validate_quantity_for_unit_kind(
+            0.25,
+            &MovementKind::InventoryAdjustment,
+            Some(UnitKind::Integer)
+        )
+        .is_err());
+        // 0.99 — almost-whole but still fractional.
+        assert!(validate_quantity_for_unit_kind(
+            0.99,
+            &MovementKind::ExitSale,
+            Some(UnitKind::Integer)
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn validate_qty_integer_rejects_zero_and_negative_for_non_entry() {
+        // Zero is rejected for non-entry movement kinds.
+        assert!(validate_quantity_for_unit_kind(
+            0.0,
+            &MovementKind::ExitSale,
+            Some(UnitKind::Integer)
+        )
+        .is_err());
+        // Negative quantities are rejected too.
+        assert!(validate_quantity_for_unit_kind(
+            -1.0,
+            &MovementKind::ExitSale,
+            Some(UnitKind::Integer)
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn validate_qty_integer_allows_zero_for_entry_initial() {
+        // entry:initial is a history marker; qty == 0 is allowed even
+        // when the product uses integer units (the lot's quantity is
+        // already on the expiry_lots row).
+        assert!(validate_quantity_for_unit_kind(
+            0.0,
+            &MovementKind::EntryInitial,
+            Some(UnitKind::Integer)
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn validate_qty_integer_rejects_fractional_for_entry_initial() {
+        // Even entry:initial rejects fractional quantities for integer units.
+        assert!(validate_quantity_for_unit_kind(
+            0.5,
+            &MovementKind::EntryInitial,
+            Some(UnitKind::Integer)
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn validate_qty_decimal_accepts_fractional() {
+        // Decimal unit kinds accept any positive magnitude, including
+        // fractional values.
+        assert!(validate_quantity_for_unit_kind(
+            0.25,
+            &MovementKind::ExitSale,
+            Some(UnitKind::Decimal)
+        )
+        .is_ok());
+        assert!(validate_quantity_for_unit_kind(
+            1.5,
+            &MovementKind::InventoryAdjustment,
+            Some(UnitKind::Decimal)
+        )
+        .is_ok());
+        assert!(validate_quantity_for_unit_kind(
+            3.14159,
+            &MovementKind::Transfer,
+            Some(UnitKind::Decimal)
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn validate_qty_decimal_rejects_zero_and_negative_for_non_entry() {
+        // Decimal units still reject qty == 0 for non-entry movements.
+        assert!(validate_quantity_for_unit_kind(
+            0.0,
+            &MovementKind::ExitSale,
+            Some(UnitKind::Decimal)
+        )
+        .is_err());
+        assert!(validate_quantity_for_unit_kind(
+            -2.0,
+            &MovementKind::ExitSale,
+            Some(UnitKind::Decimal)
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn validate_qty_none_unit_kind_treated_as_decimal() {
+        // Legacy / uncatalogued products (unit_kind = None) accept
+        // fractional quantities to preserve back-compat.
+        assert!(validate_quantity_for_unit_kind(1.5, &MovementKind::ExitSale, None).is_ok());
+        assert!(
+            validate_quantity_for_unit_kind(0.75, &MovementKind::InventoryAdjustment, None).is_ok()
+        );
+        // Whole numbers are also accepted.
+        assert!(validate_quantity_for_unit_kind(4.0, &MovementKind::Transfer, None).is_ok());
+    }
+
+    #[test]
+    fn validate_qty_inventory_adjustment_increase_with_integer_unit_whole() {
+        // Inventory adjustment (increase) with integer unit + whole qty.
+        assert!(validate_quantity_for_unit_kind(
+            7.0,
+            &MovementKind::InventoryAdjustment,
+            Some(UnitKind::Integer)
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn validate_qty_inventory_adjustment_decrease_with_integer_unit_whole() {
+        // Inventory adjustment (decrease) with integer unit + whole qty.
+        assert!(validate_quantity_for_unit_kind(
+            3.0,
+            &MovementKind::InventoryAdjustment,
+            Some(UnitKind::Integer)
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn validate_qty_error_messages_in_spanish() {
+        // Verify all rejection branches produce Spanish-language messages.
+        let err_integer_frac =
+            validate_quantity_for_unit_kind(1.5, &MovementKind::ExitSale, Some(UnitKind::Integer))
+                .unwrap_err();
+        assert!(err_integer_frac.contains("entero"));
+
+        let err_integer_zero =
+            validate_quantity_for_unit_kind(0.0, &MovementKind::ExitSale, Some(UnitKind::Integer))
+                .unwrap_err();
+        assert!(err_integer_zero.contains("mayor a 0"));
+
+        let err_decimal_zero =
+            validate_quantity_for_unit_kind(0.0, &MovementKind::ExitSale, Some(UnitKind::Decimal))
+                .unwrap_err();
+        assert!(err_decimal_zero.contains("mayor a 0"));
     }
 }

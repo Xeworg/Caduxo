@@ -586,6 +586,7 @@ function onLotCancel() {
               lotStatus={detailLot.status}
               locations={lotDetailLocations}
               allLocations={lotDetailLocations}
+              unitType={detailLot.unit_type}
               onMovementCreated={async () => {
                 // Reload lot data after movement
                 detailLot = await getExpiryLot(detailLot!.id);

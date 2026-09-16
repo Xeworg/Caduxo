@@ -7,15 +7,18 @@ use sqlx::SqlitePool;
 
 use crate::db::repositories::expiry_lots as lot_repo;
 use crate::db::repositories::lot_movements as repo;
+use crate::db::repositories::products as products_repo;
 use crate::db::repositories::settings as settings_repo;
 use crate::db::DbPool;
 use crate::domain::lot_movements::{
-    compute_signed_delta, validate_movement_kind, validate_notes, Direction, MovementKind,
+    compute_signed_delta, validate_movement_kind, validate_notes, validate_quantity_for_unit_kind,
+    Direction, MovementKind,
 };
 use crate::domain::lot_movements::{derive_batch_prefix, next_batch_candidate};
 use crate::dto::lot_movements::{
     Direction as DtoDirection, LotLocationBalance, LotMovementCreate, LotMovementResponse,
 };
+use crate::dto::unit_definitions::UnitKind;
 use crate::error::{AppError, DomainError};
 
 // ============================================================
@@ -157,6 +160,31 @@ fn validate_quantity(qty: f64, kind: &MovementKind) -> Result<(), DomainError> {
     Ok(())
 }
 
+/// Validates a movement quantity against the product's unit kind (integer/decimal).
+///
+/// Looks up the lot → product → unit_type chain and delegates to the domain
+/// validator. When the product has no catalog link (legacy/uncatalogued),
+/// the lookup returns `None` which the domain validator treats as decimal
+/// to preserve back-compat.
+///
+/// Returns `Ok(())` when valid, or a `DomainError::Validation` carrying a
+/// Spanish-language message otherwise. This is the single source of truth
+/// for the unit-aware quantity invariant on the backend.
+async fn validate_quantity_against_product_unit(
+    pool: &SqlitePool,
+    lot: &crate::dto::expiry_lots::ExpiryLotResponse,
+    quantity: f64,
+    kind: &MovementKind,
+) -> Result<(), DomainError> {
+    let unit_kind: Option<UnitKind> = products_repo::get_product_unit_kind(pool, &lot.product_id)
+        .await
+        .map_err(|e| DomainError::Validation {
+            message: format!("Failed to resolve product unit kind: {}", e),
+        })?;
+    validate_quantity_for_unit_kind(quantity, kind, unit_kind)
+        .map_err(|msg| DomainError::Validation { message: msg })
+}
+
 /// Validates source balance coverage for the movement.
 async fn validate_source_balance(
     pool: &SqlitePool,
@@ -237,6 +265,12 @@ pub async fn create_lot_movement(
             resource: "lot",
             id: input.lot_id.clone(),
         })?;
+
+    // Enforce the unit-aware quantity invariant: integer-unit products
+    // (e.g. Unidad) must not accept fractional quantities, even if a UI
+    // bypass submits them. Runs after lot lookup because we need
+    // product_id to resolve unit_type from the catalog.
+    validate_quantity_against_product_unit(pool, &lot, input.quantity, &kind).await?;
 
     // ── Validate source balance for exits and transfers ───────────────────────
     if let Some(ref src) = input.source_location_id {
@@ -1307,5 +1341,281 @@ mod integration_tests {
         .await;
 
         assert!(result.is_err());
+    }
+
+    // ============================================================
+    // Unit-aware quantity invariant integration tests
+    // ============================================================
+
+    /// Creates a test fixture whose product has the requested `unit_type`
+    /// (`"integer"`, `"decimal"`, or `None` for legacy). The store and
+    /// location are shared with the canonical fixture so existing tests
+    /// can be reused.
+    async fn create_test_lot_with_unit_kind(
+        pool: &DbPool,
+        unit_type: Option<&str>,
+    ) -> (String, String) {
+        let now = chrono::Utc::now().to_rfc3339();
+        let store_id = uuid::Uuid::new_v4().to_string();
+        let product_id = uuid::Uuid::new_v4().to_string();
+        let location_id = uuid::Uuid::new_v4().to_string();
+        let lot_id = uuid::Uuid::new_v4().to_string();
+
+        // Store
+        sqlx::query(
+            "INSERT INTO stores (id, name, is_active, created_at, updated_at) \
+                 VALUES ($1, $2, 1, $3, $4)",
+        )
+        .bind(&store_id)
+        .bind("Unit-kind store")
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert store");
+
+        // Product with the requested unit_type
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, default_alert_days_before, \
+                     unit_type, is_active, created_at, updated_at) \
+                 VALUES ($1, $2, $3, 30, $4, 1, $5, $6)",
+        )
+        .bind(&product_id)
+        .bind(format!("UNITKIND-{}", uuid::Uuid::new_v4()))
+        .bind("Unit-kind test product")
+        .bind(unit_type)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert product");
+
+        // Location
+        sqlx::query(
+            "INSERT INTO store_locations (id, store_id, name, is_active, created_at, updated_at) \
+                 VALUES ($1, $2, 'Bodega', 1, $3, $4)",
+        )
+        .bind(&location_id)
+        .bind(&store_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert location");
+
+        // Lot — 20 units so the fractional-rejection path has headroom.
+        sqlx::query(
+            "INSERT INTO expiry_lots (id, product_id, store_id, location_id, quantity, unit, \
+                     expiry_date, alert_days_before, status, created_at, updated_at) \
+                     VALUES ($1, $2, $3, $4, 20.0, 'pcs', '2025-12-31', 30, 'active', $5, $6)",
+        )
+        .bind(&lot_id)
+        .bind(&product_id)
+        .bind(&store_id)
+        .bind(&location_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert lot");
+
+        // Emit the initial entry so the per-location ledger has a non-zero
+        // balance (the source-balance check sums movement rows, not the
+        // lot row). This mirrors the existing test fixtures.
+        sqlx::query(
+                "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, direction, \
+                     quantity, source_location_id, destination_location_id, notes, actor, created_at) \
+                 VALUES ($1, $2, 'entry:initial', NULL, 20.0, NULL, $3, NULL, 'system', $4)",
+            )
+            .bind(uuid::Uuid::new_v4().to_string())
+            .bind(&lot_id)
+            .bind(&location_id)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .expect("insert initial entry");
+
+        (lot_id, location_id)
+    }
+
+    #[tokio::test]
+    async fn create_lot_movement_integer_unit_rejects_fractional_quantity() {
+        // Product uses integer units ("pcs"). Fractional quantity must be rejected.
+        let pool = fresh_test_pool().await.expect("test pool setup");
+        let (lot_id, location_id) = create_test_lot_with_unit_kind(&pool, Some("integer")).await;
+
+        let result = create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "exit:sale".to_string(),
+                direction: None,
+                quantity: 1.5, // fractional
+                source_location_id: Some(location_id.clone()),
+                destination_location_id: None,
+                notes: Some("Bypass attempt".to_string()),
+            },
+        )
+        .await;
+
+        assert!(
+            result.is_err(),
+            "fractional quantity must be rejected for integer-unit products"
+        );
+        let err_msg = format!("{:?}", result.unwrap_err());
+        assert!(
+            err_msg.contains("entero") || err_msg.contains("fraccionarias"),
+            "error should mention integer-unit fractional rejection, got: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_lot_movement_integer_unit_accepts_whole_quantity() {
+        // Same fixture, but with a whole-number quantity — must succeed.
+        let pool = fresh_test_pool().await.expect("test pool setup");
+        let (lot_id, location_id) = create_test_lot_with_unit_kind(&pool, Some("integer")).await;
+
+        let result = create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "exit:sale".to_string(),
+                direction: None,
+                quantity: 3.0,
+                source_location_id: Some(location_id.clone()),
+                destination_location_id: None,
+                notes: Some("Whole number sale".to_string()),
+            },
+        )
+        .await;
+
+        assert!(
+            result.is_ok(),
+            "whole quantity must be accepted for integer-unit products"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_lot_movement_decimal_unit_accepts_fractional_quantity() {
+        // Product uses decimal units. Fractional quantity must be accepted.
+        let pool = fresh_test_pool().await.expect("test pool setup");
+        let (lot_id, location_id) = create_test_lot_with_unit_kind(&pool, Some("decimal")).await;
+
+        let result = create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "exit:sale".to_string(),
+                direction: None,
+                quantity: 1.25, // fractional
+                source_location_id: Some(location_id.clone()),
+                destination_location_id: None,
+                notes: Some("Decimal sale".to_string()),
+            },
+        )
+        .await;
+
+        assert!(
+            result.is_ok(),
+            "fractional quantity must be accepted for decimal-unit products"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_lot_movement_legacy_unit_kind_accepts_fractional() {
+        // Product has no catalog link (unit_type = None, legacy back-compat).
+        let pool = fresh_test_pool().await.expect("test pool setup");
+        let (lot_id, location_id) = create_test_lot_with_unit_kind(&pool, None).await;
+
+        let result = create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "exit:sale".to_string(),
+                direction: None,
+                quantity: 0.75, // fractional
+                source_location_id: Some(location_id.clone()),
+                destination_location_id: None,
+                notes: Some("Legacy sale".to_string()),
+            },
+        )
+        .await;
+
+        assert!(
+            result.is_ok(),
+            "fractional quantity must be accepted for legacy products to preserve back-compat"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_lot_movement_integer_unit_inventory_adjustment_rejects_fractional() {
+        // Inventory adjustment also respects the unit-kind invariant.
+        let pool = fresh_test_pool().await.expect("test pool setup");
+        let (lot_id, location_id) = create_test_lot_with_unit_kind(&pool, Some("integer")).await;
+
+        let result = create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "inventory_adjustment".to_string(),
+                direction: Some(DtoDirection::Increase),
+                quantity: 2.5, // fractional
+                source_location_id: None,
+                destination_location_id: Some(location_id.clone()),
+                notes: Some("Found partial unit".to_string()),
+            },
+        )
+        .await;
+
+        assert!(
+            result.is_err(),
+            "fractional inventory_adjustment must be rejected for integer-unit products"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_lot_movement_integer_unit_transfer_rejects_fractional() {
+        // Transfer also respects the unit-kind invariant.
+        let pool = fresh_test_pool().await.expect("test pool setup");
+        let (lot_id, location_id) = create_test_lot_with_unit_kind(&pool, Some("integer")).await;
+        // Add a second location in the same store.
+        let now = chrono::Utc::now().to_rfc3339();
+        let dst_id = uuid::Uuid::new_v4().to_string();
+        let store_id: String =
+            sqlx::query_scalar("SELECT store_id FROM store_locations WHERE id = $1")
+                .bind(&location_id)
+                .fetch_one(&pool)
+                .await
+                .expect("lookup store_id");
+        sqlx::query(
+            "INSERT INTO store_locations (id, store_id, name, is_active, created_at, updated_at) \
+                 VALUES ($1, $2, 'Exhibicion', 1, $3, $4)",
+        )
+        .bind(&dst_id)
+        .bind(&store_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .expect("insert second location");
+
+        let result = create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "transfer".to_string(),
+                direction: None,
+                quantity: 1.75, // fractional
+                source_location_id: Some(location_id.clone()),
+                destination_location_id: Some(dst_id.clone()),
+                notes: None,
+            },
+        )
+        .await;
+
+        assert!(
+            result.is_err(),
+            "fractional transfer must be rejected for integer-unit products"
+        );
     }
 }

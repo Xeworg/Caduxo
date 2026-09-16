@@ -1,10 +1,16 @@
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
+  import type { UnitKind } from "../lib/products.js";
 
   // ── Props ──────────────────────────────────────────────────────────────────
 
   export let lotId: string;
   export let currentBalances: LotLocationBalance[];
+  /**
+   * Unit kind resolved from the lot's product catalog link.
+   * `null` for legacy/uncatalogued products — treated as decimal.
+   */
+  export let unitType: UnitKind | null = null;
   export let onClose: () => void;
   export let onCreated: () => void;
 
@@ -37,6 +43,25 @@
     ? currentBalances.find((b) => b.location_id === sourceLocationId)?.balance ?? 0
     : 0;
 
+  // ── Unit-aware quantity input rules ───────────────────────────────────────
+  $: isIntegerUnit = unitType === "integer";
+  $: qtyMin = isIntegerUnit ? 1 : 0.01;
+  $: qtyStep = isIntegerUnit ? 1 : 0.01;
+  $: qtyInputMode = (isIntegerUnit ? "numeric" : "decimal") as
+    | "numeric"
+    | "decimal";
+
+  /**
+   * Local validation for integer-unit products: catches fractional input
+   * before submit so the user gets immediate feedback. Backend enforces the
+   * same invariant, but this avoids a round-trip for the common case.
+   */
+  function isFractionalForIntegerUnit(qty: number): boolean {
+    if (!isIntegerUnit) return false;
+    if (qty <= 0) return false;
+    return !Number.isInteger(qty);
+  }
+
   // ── Submit ────────────────────────────────────────────────────────────────
 
   async function submit() {
@@ -52,6 +77,10 @@
     }
     if (quantity <= 0) {
       errorMsg = "La cantidad debe ser mayor a 0";
+      return;
+    }
+    if (isFractionalForIntegerUnit(quantity)) {
+      errorMsg = `La unidad del producto es de tipo entero; no se permiten cantidades fraccionarias (${quantity})`;
       return;
     }
     if (quantity > availableQuantity) {
@@ -117,13 +146,14 @@
         <input
           id="exit-qty"
           type="number"
-          min="0.01"
-          step="0.01"
+          min={qtyMin}
+          step={qtyStep}
+          inputmode={qtyInputMode}
           max={availableQuantity}
           bind:value={quantity}
           disabled={submitting}
         />
-        <span class="hint">Disponibles: {availableQuantity}</span>
+        <span class="hint">Disponibles: {availableQuantity}{isIntegerUnit ? " (solo enteros)" : ""}</span>
       </div>
 
       <div class="form-group">

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
+  import type { UnitKind } from "../lib/products.js";
 
   // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -8,6 +9,11 @@
   export let lotUnit: string;
   export let currentBalances: LotLocationBalance[];
   export let allLocations: { id: string; name: string; store_id: string; store_name?: string }[];
+  /**
+   * Unit kind resolved from the lot's product catalog link.
+   * `null` for legacy/uncatalogued products — treated as decimal.
+   */
+  export let unitType: UnitKind | null = null;
   export let onClose: () => void;
   export let onCreated: () => void;
 
@@ -28,6 +34,25 @@
   $: isDecrease = delta < 0;
   $: isNoOp = delta === 0;
 
+  // ── Unit-aware quantity input rules ───────────────────────────────────────
+  $: isIntegerUnit = unitType === "integer";
+  $: qtyMin = isIntegerUnit ? 0 : 0.01;
+  $: qtyStep = isIntegerUnit ? 1 : 0.01;
+  $: qtyInputMode = (isIntegerUnit ? "numeric" : "decimal") as
+    | "numeric"
+    | "decimal";
+
+  /**
+   * Local validation for integer-unit products: catches fractional input
+   * before submit so the user gets immediate feedback. Backend enforces the
+   * same invariant, but this avoids a round-trip for the common case.
+   */
+  function isFractionalForIntegerUnit(qty: number): boolean {
+    if (!isIntegerUnit) return false;
+    if (qty < 0) return false;
+    return !Number.isInteger(qty);
+  }
+
   // ── Submit ────────────────────────────────────────────────────────────────
 
   async function submit() {
@@ -39,6 +64,10 @@
     }
     if (realQuantity < 0) {
       errorMsg = "La cantidad no puede ser negativa";
+      return;
+    }
+    if (isFractionalForIntegerUnit(realQuantity)) {
+      errorMsg = `La unidad del producto es de tipo entero; no se permiten cantidades fraccionarias (${realQuantity})`;
       return;
     }
     if (!notes.trim()) {
@@ -106,24 +135,25 @@
         <input
           id="adjust-real"
           type="number"
-          min="0"
-          step="0.01"
+          min={qtyMin}
+          step={qtyStep}
+          inputmode={qtyInputMode}
           bind:value={realQuantity}
           disabled={submitting}
         />
-        <span class="hint">Inventario actual en esta ubicación: {currentBalance}</span>
+        <span class="hint">Inventario actual en esta ubicación: {currentBalance}{isIntegerUnit ? " (solo enteros)" : ""}</span>
       </div>
 
       {#if locationId && realQuantity >= 0}
-        <div class="delta-preview" class:positive={isIncrease} class:negative={isDecrease}>
+        <div class="delta-preview" class:positive={isIncrease} class:negative={isDecrease} class:no-change={isNoOp}>
           {#if isIncrease}
             <span class="delta-sign">+</span>
             <span class="delta-value">{delta} {lotUnit}</span>
-            <span class="delta-label">Se会增加库存</span>
+            <span class="delta-label">Aumentará el inventario</span>
           {:else if isDecrease}
             <span class="delta-sign">−</span>
             <span class="delta-value">{Math.abs(delta)} {lotUnit}</span>
-            <span class="delta-label">Se会增加库存</span>
+            <span class="delta-label">Disminuirá el inventario</span>
           {:else}
             <span class="delta-label no-change">Sin cambios — el inventario coincide</span>
           {/if}
