@@ -144,14 +144,14 @@ This phase is the lot-creation hand-off from the new ledger to the existing lot 
 
 ## Phase 3 — Movements UI (Historial tab + three modals)
 
-- [ ] Add `src/lib/lot_movements.ts` exporting `createLotMovement`, `listLotMovements`, `getLotLocationBalances`, typed against the new DTOs. Calls the new Tauri commands. <!-- sdd-owner: implementation -->
-- [ ] Create `src-tauri/src/commands/lot_movements.rs` exposing `create_lot_movement`, `list_lot_movements`, `get_lot_location_balances` and register them in `src-tauri/src/lib.rs::invoke_handler`. <!-- sdd-owner: implementation -->
-- [ ] Add `src-tauri/src/dto/lot_movements.rs` DTOs: `MovementKind`, `LotMovementCreate` (includes `direction: Option<Direction>`), `LotMovementResponse`, `LotLocationBalanceResponse`. The frontend lib wrapper maps `kind` ↔ `direction`. <!-- sdd-owner: implementation -->
-- [ ] Add `src/components/LotMovementsPanel.svelte`: header (lot total + per-location breakdown), three buttons (*Mover stock*, *Registrar salida*, *Ajustar conteo*), and the chronological list with newest-first rows. Each row renders the Spanish kind label, reason label, source/destination arrows, magnitude, and notes when present; `inventory_adjustment` rows prefix the magnitude with `+` or `−`. Newest first. <!-- sdd-owner: implementation -->
-- [ ] Add `src/components/MoveStockModal.svelte`: source select (defaults to highest-balance location), destination select (excludes source, includes other stores per Conflict 1 resolution), quantity input, submit calls `createLotMovement({ kind: 'transfer', ... })`. <!-- sdd-owner: implementation -->
-- [ ] Add `src/components/RegisterExitModal.svelte`: source select, motivo select from the eight exit kinds (renders `Ajuste de inventario` and `Otro` with the required-notes textarea), quantity input, submit calls `createLotMovement({ kind: 'exit:<motivo>', ... })`. <!-- sdd-owner: implementation -->
-- [ ] Add `src/components/AdjustCountModal.svelte`: location select, real physical quantity input, notes textarea (required). On submit, computes the delta; emits one `createLotMovement` call with `kind: 'inventory_adjustment'`, `direction: 'increase' | 'decrease'` (or `null` direction → no-op when delta is `0`). The FE computes delta and submits the already-signed sign once, matching the unified kind. No split between two kinds on the wire. <!-- sdd-owner: implementation -->
-- [ ] Hook the panel into the existing lot detail modal opened from `ProductDetailPage.svelte` and `DashboardPage.svelte`: add a third *Historial* tab alongside the existing detail/edit surfaces. NO per-lot movement widget on the dashboard itself (per spec). <!-- sdd-owner: implementation -->
+- [x] Add `src/lib/lot_movements.ts` exporting `createLotMovement`, `listLotMovements`, `getLotLocationBalances`, typed against the new DTOs. Calls the new Tauri commands. <!-- sdd-owner: implementation -->
+- [x] Create `src-tauri/src/commands/lot_movements.rs` exposing `create_lot_movement`, `list_lot_movements`, `get_lot_location_balances` and register them in `src-tauri/src/lib.rs::invoke_handler`. <!-- sdd-owner: implementation -->
+- [x] Add `src-tauri/src/dto/lot_movements.rs` DTOs: `MovementKind`, `LotMovementCreate` (includes `direction: Option<Direction>`), `LotMovementResponse`, `LotLocationBalanceResponse`. The frontend lib wrapper maps `kind` ↔ `direction`. <!-- sdd-owner: implementation -->
+- [x] Add `src/components/LotMovementsPanel.svelte`: header (lot total + per-location breakdown), three buttons (*Mover stock*, *Registrar salida*, *Ajustar conteo*), and the chronological list with newest-first rows. Each row renders the Spanish kind label, reason label, source/destination arrows, magnitude, and notes when present; `inventory_adjustment` rows prefix the magnitude with `+` or `−`. Newest first. <!-- sdd-owner: implementation -->
+- [x] Add `src/components/MoveStockModal.svelte`: source select (defaults to highest-balance location), destination select (excludes source, includes other stores per Conflict 1 resolution), quantity input, submit calls `createLotMovement({ kind: 'transfer', ... })`. <!-- sdd-owner: implementation -->
+- [x] Add `src/components/RegisterExitModal.svelte`: source select, motivo select from the eight exit kinds (renders `Ajuste de inventario` and `Otro` with the required-notes textarea), quantity input, submit calls `createLotMovement({ kind: 'exit:<motivo>', ... })`. <!-- sdd-owner: implementation -->
+- [x] Add `src/components/AdjustCountModal.svelte`: location select, real physical quantity input, notes textarea (required). On submit, computes the delta; emits one `createLotMovement` call with `kind: 'inventory_adjustment'`, `direction: 'increase' | 'decrease'` (or `null` direction → no-op when delta is `0`). The FE computes delta and submits the already-signed sign once, matching the unified kind. No split between two kinds on the wire. <!-- sdd-owner: implementation -->
+- [x] Hook the panel into the existing lot detail modal opened from `ProductDetailPage.svelte` and `DashboardPage.svelte`: add a third *Historial* tab alongside the existing detail/edit surfaces. NO per-lot movement widget on the dashboard itself (per spec). <!-- sdd-owner: implementation -->
 
 **Acceptance / evidence**
 
@@ -172,9 +172,9 @@ This phase is the lot-creation hand-off from the new ledger to the existing lot 
 
 ## Phase 4 — Settings Menu (`Configuración`)
 
-- [ ] Add `src-tauri/src/dto/stores.rs::SettingsResponse` already carries `require_initial_location_on_lot_create` from Phase 2; Phase 4 wires it into a page-level toggle. <!-- sdd-owner: implementation -->
-- [ ] Create `src/components/ConfigurationPage.svelte`: one `Lotes` section with a single `Ubicación inicial obligatoria al crear lote` toggle. Bind to `settings.require_initial_location_on_lot_create`. Save on toggle (auto-save, rollback on failure). Reads settings on mount. <!-- sdd-owner: implementation -->
-- [ ] Register `Configuración` in `src/components/App.svelte` navigation alongside Dashboard / Calendar / Products / Reports / CSV / Stores / Backup. <!-- sdd-owner: implementation -->
+- [x] Add `src-tauri/src/dto/stores.rs::SettingsResponse` already carries `require_initial_location_on_lot_create` from Phase 2; Phase 4 wires it into a page-level toggle. <!-- sdd-owner: implementation -->
+- [x] Create `src/components/ConfigurationPage.svelte`: one `Lotes` section with a single `Ubicación inicial obligatoria al crear lote` toggle. Bind to `settings.require_initial_location_on_lot_create`. Save on toggle (auto-save, rollback on failure). Reads settings on mount. <!-- sdd-owner: implementation -->
+- [x] Register `Configuración` in `src/components/App.svelte` navigation alongside Dashboard / Calendar / Products / Reports / CSV / Stores / Backup. <!-- sdd-owner: implementation -->
 
 **Acceptance / evidence**
 

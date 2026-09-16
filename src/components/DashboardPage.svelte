@@ -36,6 +36,7 @@
   import ProductForm from "./ProductForm.svelte";
   import UnitReviewBanner from "./UnitReviewBanner.svelte";
   import UnitReviewPage from "./UnitReviewPage.svelte";
+  import LotMovementsPanel from "./LotMovementsPanel.svelte";
 
   // ─── State ──────────────────────────────────────────────────────────────────
 
@@ -97,6 +98,8 @@
   let showLotDetail = false;
   let detailLot: ExpiryLotResponse | null = null;
   let detailLotLoading = false;
+  let lotDetailTab: "detail" | "history" = "detail";
+  let lotDetailLocations: StoreLocationResponse[] = [];
 
   let showResolveDialog = false;
   let resolveLot: DashboardLotRow | null = null;
@@ -132,10 +135,7 @@
   });
 
   // Reload dashboard when store, location, or quick-filter preset changes.
-  $: if (!loading) {
-    selectedStoreId;
-    selectedLocationId;
-    activePreset;
+  $: if (!loading && (selectedStoreId || selectedLocationId || activePreset)) {
     loadDashboard();
   }
 
@@ -287,9 +287,14 @@
   async function editLot(lot: DashboardLotRow) {
     detailLotLoading = true;
     showLotDetail = true;
+    lotDetailTab = "detail";
     detailLot = null;
+    lotDetailLocations = [];
     try {
-      detailLot = await getExpiryLot(lot.lot_id);
+      [detailLot, lotDetailLocations] = await Promise.all([
+    getExpiryLot(lot.lot_id),
+    listStoreLocations(lot.store_id),
+      ]);
     } catch (e) {
       errorMsg = String(e);
       showLotDetail = false;
@@ -637,37 +642,76 @@
 <!-- ── Lot detail modal ─────────────────────────────────────────────────────── -->
 {#if showLotDetail}
   <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Lot detail">
-    <div class="modal-box">
+    <div class="modal-box modal-box-wide">
       <div class="modal-header">
         <h3>Lot Detail</h3>
         <button class="modal-close" on:click={() => (showLotDetail = false)}>✕</button>
       </div>
+
       {#if detailLotLoading}
         <p class="modal-loading">Loading…</p>
       {:else if detailLot}
-        <dl class="detail-grid">
-          <dt>Lot ID</dt><dd class="cell-sku">{detailLot.id.slice(0, 8)}…</dd>
-          <dt>Quantity</dt><dd>{detailLot.quantity} {detailLot.unit}</dd>
-          <dt>Expiry</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
-          <dt>Alert days</dt><dd>{detailLot.alert_days_before}</dd>
-          <dt>Batch</dt><dd>{detailLot.batch_code ?? "—"}</dd>
-          <dt>Status</dt><dd>{detailLot.status}</dd>
-          {#if detailLot.resolution}
-            <dt>Resolution</dt><dd>{detailLot.resolution}</dd>
-          {/if}
-          {#if detailLot.notes}
-            <dt>Notes</dt><dd>{detailLot.notes}</dd>
-          {/if}
-        </dl>
-        <div class="modal-actions">
+        <!-- Tabs -->
+        <div class="detail-tabs">
           <button
-            class="btn-primary"
-            on:click={() => {
-              showLotDetail = false;
-              openResolveFromDetail(detailLot!);
-            }}
-          >Resolve quantity</button>
+            type="button"
+            class="tab-btn"
+            class:active={lotDetailTab === "detail"}
+            on:click={() => (lotDetailTab = "detail")}
+          >
+            Detalle
+          </button>
+          <button
+            type="button"
+            class="tab-btn"
+            class:active={lotDetailTab === "history"}
+            on:click={() => (lotDetailTab = "history")}
+          >
+            Historial
+          </button>
         </div>
+
+        {#if lotDetailTab === "detail"}
+          <dl class="detail-grid">
+            <dt>Lot ID</dt><dd class="cell-sku">{detailLot.id.slice(0, 8)}…</dd>
+            <dt>Quantity</dt><dd>{detailLot.quantity} {detailLot.unit}</dd>
+            <dt>Expiry</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
+            <dt>Alert days</dt><dd>{detailLot.alert_days_before}</dd>
+            <dt>Batch</dt><dd>{detailLot.batch_code ?? "—"}</dd>
+            <dt>Status</dt><dd>{detailLot.status}</dd>
+            {#if detailLot.resolution}
+              <dt>Resolution</dt><dd>{detailLot.resolution}</dd>
+            {/if}
+            {#if detailLot.notes}
+              <dt>Notes</dt><dd>{detailLot.notes}</dd>
+            {/if}
+          </dl>
+          <div class="modal-actions">
+            <button
+              class="btn-primary"
+              on:click={() => {
+showLotDetail = false;
+openResolveFromDetail(detailLot!);
+              }}
+            >Resolve quantity</button>
+          </div>
+        {:else}
+          <!-- Historial tab -->
+          <div class="tab-content">
+            <LotMovementsPanel
+              lotId={detailLot.id}
+              lotQuantity={detailLot.quantity}
+              lotUnit={detailLot.unit}
+              lotStatus={detailLot.status}
+              locations={lotDetailLocations}
+              allLocations={lotDetailLocations}
+              onMovementCreated={async () => {
+// Reload lot data after movement
+detailLot = await getExpiryLot(detailLot!.id);
+              }}
+            />
+          </div>
+        {/if}
       {/if}
     </div>
   </div>
@@ -1171,7 +1215,7 @@
 
       /* ── Modals ──────────────────────────────────────────────────────────── */
       .modal-box-wide {
-        width: 600px;
+        width: 720px;
         max-width: 95vw;
       }
 
@@ -1245,6 +1289,41 @@
     grid-template-columns: 110px 1fr;
     gap: 6px 12px;
     margin-bottom: 16px;
+  }
+
+  /* ── Detail tabs ────────────────────────────────────────────────────── */
+  .detail-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .tab-btn {
+    background: none;
+    border: none;
+    padding: 8px 16px;
+    font-size: 0.88rem;
+    cursor: pointer;
+    color: #6b7280;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    font-family: inherit;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .tab-btn:hover {
+    color: #374151;
+  }
+
+  .tab-btn.active {
+    color: #2563eb;
+    border-bottom-color: #2563eb;
+    font-weight: 500;
+  }
+
+  .tab-content {
+    min-height: 200px;
   }
 
   .detail-grid dt {

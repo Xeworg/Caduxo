@@ -201,3 +201,126 @@ svelte-check found 0 errors and 2 warnings in 2 files
 ## Next Steps
 
 **Phase 3:** Movements UI — `LotMovementsPanel`, `MoveStockModal`, `RegisterExitModal`, `AdjustCountModal`, Historial tab on lot detail.
+
+---
+
+### Phase 3 — Movements UI (Historial tab + three modals)
+
+**Status:** COMPLETE
+
+#### Completed Tasks
+
+- [x] Add `src/lib/lot_movements.ts` exporting `createLotMovement`, `listLotMovements`, `getLotLocationBalances`, typed against the new DTOs
+- [x] Create `src-tauri/src/commands/lot_movements.rs` exposing `create_lot_movement`, `list_lot_movements`, `get_lot_location_balances` and register them in `src-tauri/src/lib.rs::invoke_handler`
+- [x] Add `src-tauri/src/dto/lot_movements.rs` DTOs (already existed from Phase 1b: `MovementKind`, `LotMovementCreate`, `LotMovementResponse`, `LotLocationBalanceResponse`, `Direction`)
+- [x] Add `src/components/LotMovementsPanel.svelte`: header (lot total + per-location breakdown), three buttons (*Mover stock*, *Registrar salida*, *Ajustar conteo*), and the chronological list with newest-first rows
+- [x] Add `src/components/MoveStockModal.svelte`: source select (defaults to highest-balance location), destination select (excludes source, includes other stores per Conflict 1 resolution), quantity input
+- [x] Add `src/components/RegisterExitModal.svelte`: source select, motivo select from the eight exit kinds, quantity input
+- [x] Add `src/components/AdjustCountModal.svelte`: location select, real physical quantity input, notes textarea (required). Computes delta and emits one movement with `direction='increase'` or `'decrease'`
+- [x] Hook the panel into the existing lot detail modal opened from `DashboardPage.svelte` and `CalendarPage.svelte`: add a third *Historial* tab alongside the existing detail surface
+
+#### Files Changed
+
+**Backend:**
+
+- `src-tauri/src/commands/lot_movements.rs` (new) — Tauri command handlers
+- `src-tauri/src/commands/mod.rs` — Added lot_movements module
+- `src-tauri/src/lib.rs` — Registered new commands in invoke_handler
+
+**Frontend:**
+
+- `src/lib/lot_movements.ts` (new) — TypeScript API wrapper with DTOs and helper functions
+- `src/components/LotMovementsPanel.svelte` (new) — Main panel with header, action buttons, and movement list
+- `src/components/MoveStockModal.svelte` (new) — Transfer modal
+- `src/components/RegisterExitModal.svelte` (new) — Exit registration modal with eight reasons
+- `src/components/AdjustCountModal.svelte` (new) — Inventory adjustment modal with delta preview
+- `src/components/DashboardPage.svelte` — Added Historial tab to lot detail modal
+- `src/components/CalendarPage.svelte` — Added Historial tab to lot detail modal
+
+#### Verification Results
+
+```text
+cargo test --manifest-path src-tauri/Cargo.toml --lib
+test result: ok. 383 passed; 0 failed
+```
+
+```text
+npx svelte-check --output machine-readable
+svelte-check found 0 errors and 6 warnings in 4 files
+```
+
+```text
+npm run build
+✓ built in 1.11s
+```
+
+#### Key Implementation Details
+
+1. **Movement kind labels**: Spanish labels for all movement kinds (`Entrada inicial`, `Transferencia`, `Venta`, etc.)
+2. **Quantity display**: `inventory_adjustment` rows prefix magnitude with `+` or `−`
+3. **Balance tracking**: Per-location balances shown in header; defaults source to highest-balance location
+4. **Tab integration**: Lot detail modal now has "Detalle" and "Historial" tabs
+5. **Modal styling**: Wide modal (720px) for movements panel, consistent with existing modal patterns
+6. **Exit reasons**: Eight reasons from spec, with notes required for `Ajuste de inventario` and `Otro`
+7. **Adjustment delta preview**: Shows preview of adjustment (positive/negative) before submission
+
+## Next Steps
+
+**Phase 4:** Settings menu (`Configuración`) — wire the toggle into a page-level toggle, create ConfigurationPage.svelte.
+
+---
+
+*Generated: Phase 4 completion*
+
+---
+
+### Phase 4 — Settings Menu (`Configuración`)
+
+**Status:** COMPLETE
+
+#### Completed Tasks
+
+- [x] Wire `SettingsResponse.require_initial_location_on_lot_create` from Phase 2 into a page-level toggle (already present in backend DTO from Phase 2)
+- [x] Create `src/components/ConfigurationPage.svelte`: one "Lotes" section with `Ubicación inicial obligatoria al crear lote` toggle; reads settings on mount; auto-saves on toggle with optimistic update and rollback on failure
+- [x] Register `Configuración` nav entry in `src/App.svelte` alongside Dashboard / Stores / Products / Calendar / Reports / Import / Backup
+
+#### Files Changed
+
+- `src/components/ConfigurationPage.svelte` (new) — Settings page with CSS-only toggle switch, optimistic update, rollback on error
+- `src/App.svelte` — Added `ConfigurationPage` import, `settings` tab variant, nav button, and `{:else if}` branch
+
+#### Verification Results
+
+```text
+cargo test --manifest-path src-tauri/Cargo.toml --lib
+test result: ok. 383 passed; 0 failed
+```
+
+```text
+npx svelte-check --output machine-readable
+svelte-check found 0 errors and 6 warnings in 4 files
+```
+
+(6 warnings are pre-existing from Phase 3; none introduced by Phase 4)
+
+```text
+npm run build
+✓ built in 1.09s
+```
+
+#### Key Implementation Details
+
+1. **CSS-only toggle**: no Tailwind; matches the existing app's visual style
+2. **Optimistic update**: toggle flips immediately; reverts on API error
+3. **Spanish labels**: matches the spec scenario wording (`Ubicación inicial obligatoria al crear lote`)
+4. **No backend changes needed**: DTO and service layer were fully implemented in Phase 2
+5. **Auto-save**: `updateSettings` is called on every toggle change; no separate save button
+
+#### Pending Tasks
+
+Phase 5 (optional polish, deferred) — no work planned unless user requests it.
+
+#### Verify Gate — Manual Smoke (deferred to parent)
+
+- Toggle OFF → create a lot with the picker empty → lot lands against `Sin ubicación` sentinel and initial entry's destination is the sentinel
+- Toggle ON → empty picker on LotForm rejects with `Selecciona una ubicación` (already covered by Phase 2 tests)

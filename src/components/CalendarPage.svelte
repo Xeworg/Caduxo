@@ -11,7 +11,9 @@
     resolveExpiryLot,
     type ExpiryLotResponse,
   } from "../lib/expiry_lots.js";
+  import { listStoreLocations, type StoreLocationResponse } from "../lib/stores.js";
   import LotForm from "./LotForm.svelte";
+  import LotMovementsPanel from "./LotMovementsPanel.svelte";
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -152,6 +154,8 @@
   let showLotDetail = false;
   let detailLot: ExpiryLotResponse | null = null;
   let detailLoading = false;
+  let lotDetailTab: "detail" | "history" = "detail";
+  let lotDetailLocations: StoreLocationResponse[] = [];
 
   // Resolve dialog (mirrors DashboardPage.resolve dialog state)
   let showResolveDialog = false;
@@ -311,9 +315,14 @@ const watchdog = window.setTimeout(() => {
   async function openLot(row: DashboardLotRow) {
     detailLoading = true;
     showLotDetail = true;
+    lotDetailTab = "detail";
     detailLot = null;
+    lotDetailLocations = [];
     try {
-      detailLot = await getExpiryLot(row.lot_id);
+      [detailLot, lotDetailLocations] = await Promise.all([
+    getExpiryLot(row.lot_id),
+    listStoreLocations(row.store_id),
+      ]);
     } catch (e) {
       errorMsg = String(e);
       showLotDetail = false;
@@ -504,52 +513,90 @@ function onLotCancel() {
 <!-- Lot edit overlay — reusing the existing LotForm pattern -->
 {#if showLotDetail}
   <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Lot detail">
-    <div class="modal-box">
+    <div class="modal-box modal-box-wide">
       <div class="modal-header">
         <h3>Lot Detail</h3>
         <button class="modal-close" on:click={onLotCancel}>✕</button>
       </div>
       {#if detailLoading}
         <p class="modal-loading">Loading…</p>
-          {:else if detailLot}
-            <dl class="detail-grid">
-              <dt>Product</dt>
-              <dd>{detailLot.product_id}</dd>
-              <dt>Store</dt>
-              <dd>{detailLot.store_id}</dd>
-              <dt>Location</dt>
-              <dd>{detailLot.location_id ?? "—"}</dd>
-              <dt>Quantity</dt>
-              <dd>{detailLot.quantity}</dd>
-              <dt>Expiry date</dt>
-              <dd>{detailLot.expiry_date}</dd>
-              <dt>Alert days</dt>
-              <dd>{detailLot.alert_days_before}</dd>
-              {#if detailLot.batch_code}
-                <dt>Batch</dt>
-                <dd>{detailLot.batch_code}</dd>
-              {/if}
-            </dl>
-            <div class="modal-actions">
-              <button
-                type="button"
-                class="btn-secondary"
-                on:click={onLotCancel}
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                class="btn-primary"
-                on:click={() => openResolveFromDetail(detailLot!)}
-              >
-                Resolve quantity
-              </button>
-            </div>
-          {/if}
+      {:else if detailLot}
+        <!-- Tabs -->
+        <div class="detail-tabs">
+          <button
+            type="button"
+            class="tab-btn"
+            class:active={lotDetailTab === "detail"}
+            on:click={() => (lotDetailTab = "detail")}
+          >
+            Detalle
+          </button>
+          <button
+            type="button"
+            class="tab-btn"
+            class:active={lotDetailTab === "history"}
+            on:click={() => (lotDetailTab = "history")}
+          >
+            Historial
+          </button>
         </div>
-      </div>
-    {/if}
+
+        {#if lotDetailTab === "detail"}
+          <dl class="detail-grid">
+            <dt>Product</dt>
+            <dd>{detailLot.product_id}</dd>
+            <dt>Store</dt>
+            <dd>{detailLot.store_id}</dd>
+            <dt>Location</dt>
+            <dd>{detailLot.location_id ?? "—"}</dd>
+            <dt>Quantity</dt>
+            <dd>{detailLot.quantity}</dd>
+            <dt>Expiry date</dt>
+            <dd>{detailLot.expiry_date}</dd>
+            <dt>Alert days</dt>
+            <dd>{detailLot.alert_days_before}</dd>
+            {#if detailLot.batch_code}
+              <dt>Batch</dt>
+              <dd>{detailLot.batch_code}</dd>
+            {/if}
+          </dl>
+          <div class="modal-actions">
+            <button
+              type="button"
+              class="btn-secondary"
+              on:click={onLotCancel}
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              class="btn-primary"
+              on:click={() => openResolveFromDetail(detailLot!)}
+            >
+              Resolve quantity
+            </button>
+          </div>
+        {:else}
+          <!-- Historial tab -->
+          <div class="tab-content">
+            <LotMovementsPanel
+              lotId={detailLot.id}
+              lotQuantity={detailLot.quantity}
+              lotUnit={detailLot.unit}
+              lotStatus={detailLot.status}
+              locations={lotDetailLocations}
+              allLocations={lotDetailLocations}
+              onMovementCreated={async () => {
+                // Reload lot data after movement
+                detailLot = await getExpiryLot(detailLot!.id);
+              }}
+            />
+          </div>
+        {/if}
+      {/if}
+    </div>
+  </div>
+{/if}
 
     <!-- Resolve quantity dialog (mirrors DashboardPage) -->
     {#if showResolveDialog}
@@ -843,6 +890,11 @@ function onLotCancel() {
     overflow-y: auto;
   }
 
+  .modal-box-wide {
+    width: 720px;
+    max-width: 95vw;
+  }
+
   .modal-header {
     display: flex;
     align-items: center;
@@ -882,6 +934,41 @@ function onLotCancel() {
     text-align: center;
     padding: 20px;
     color: #64748b;
+  }
+
+  /* ── Detail tabs ────────────────────────────────────────────────────── */
+  .detail-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .tab-btn {
+    background: none;
+    border: none;
+    padding: 8px 16px;
+    font-size: 0.88rem;
+    cursor: pointer;
+    color: #6b7280;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    font-family: inherit;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .tab-btn:hover {
+    color: #374151;
+  }
+
+  .tab-btn.active {
+    color: #2563eb;
+    border-bottom-color: #2563eb;
+    font-weight: 500;
+  }
+
+  .tab-content {
+    min-height: 200px;
   }
 
   .detail-grid {

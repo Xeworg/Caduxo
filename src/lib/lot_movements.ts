@@ -1,0 +1,146 @@
+/**
+ * TypeScript API wrapper for Caduxo lot movement commands.
+ * Thin wrappers around the Rust command layer; no business logic here.
+ */
+
+import { invoke } from "@tauri-apps/api/core";
+
+// ─── DTOs ────────────────────────────────────────────────────────────────────
+
+/** Direction for inventory_adjustment movements. */
+export type MovementDirection = "increase" | "decrease";
+
+/** Movement kind values. */
+export type MovementKind =
+ | "entry:initial"
+ | "transfer"
+ | "exit:sale"
+ | "exit:loss"
+ | "exit:expired"
+ | "exit:damaged"
+ | "exit:internal_use"
+ | "exit:return_to_supplier"
+ | "exit:inventory_adjustment"
+ | "exit:other"
+ | "inventory_adjustment";
+
+/** Input for creating a new lot movement. */
+export interface LotMovementCreate {
+ lot_id: string;
+ /** Movement kind (e.g., "transfer", "exit:sale", "inventory_adjustment"). */
+ kind: string;
+ /** Optional direction for `inventory_adjustment` kind. */
+ direction?: MovementDirection | null;
+ /** Quantity being moved (always positive magnitude). */
+ quantity: number;
+ /** Source location for exits and transfers. */
+ source_location_id?: string | null;
+ /** Destination location for entries and transfers. */
+ destination_location_id?: string | null;
+ /** Optional notes (required for some kinds). */
+ notes?: string | null;
+}
+
+/** Full movement response row. */
+export interface LotMovementResponse {
+ id: string;
+ expiry_lot_id: string;
+ movement_kind: string;
+ direction: string | null;
+ quantity: number;
+ source_location_id: string | null;
+ destination_location_id: string | null;
+ reason: string | null;
+ notes: string | null;
+ actor: string;
+ created_at: string;
+}
+
+/** Per-location balance for a lot. */
+export interface LotLocationBalance {
+ location_id: string;
+ balance: number;
+}
+
+// ─── Commands ─────────────────────────────────────────────────────────────────
+
+/**
+ * Creates a new lot movement and updates the lot total atomically.
+ *
+ * @param input - Movement creation input
+ * @returns The created movement response
+ */
+export async function createLotMovement(
+ input: LotMovementCreate,
+): Promise<LotMovementResponse> {
+ return invoke<LotMovementResponse>("create_lot_movement", { input });
+}
+
+/**
+ * Lists all movements for a lot, newest first.
+ *
+ * @param lotId - The lot ID to list movements for
+ * @returns Array of movement responses
+ */
+export async function listLotMovements(
+ lotId: string,
+): Promise<LotMovementResponse[]> {
+ return invoke<LotMovementResponse[]>("list_lot_movements", { lotId });
+}
+
+/**
+ * Returns per-location balances for a lot.
+ *
+ * @param lotId - The lot ID to get balances for
+ * @returns Array of location balances
+ */
+export async function getLotLocationBalances(
+ lotId: string,
+): Promise<LotLocationBalance[]> {
+ return invoke<LotLocationBalance[]>("get_lot_location_balances", { lotId });
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Maps movement kind to Spanish display label.
+ */
+export function getKindLabel(kind: string, direction?: string | null): string {
+ const kindLabels: Record<string, string> = {
+  "entry:initial": "Entrada inicial",
+  transfer: "Transferencia",
+  "exit:sale": "Venta",
+  "exit:loss": "Pérdida",
+  "exit:expired": "Vencido",
+  "exit:damaged": "Dañado",
+  "exit:internal_use": "Consumo interno",
+  "exit:return_to_supplier": "Devolución a proveedor",
+  "exit:inventory_adjustment": "Ajuste de inventario (salida)",
+  "exit:other": "Otro",
+  inventory_adjustment: "Ajuste de inventario",
+ };
+
+ const base = kindLabels[kind] ?? kind;
+
+ if (kind === "inventory_adjustment" && direction) {
+  return direction === "increase"
+   ? "Ajuste de inventario (+)"
+   : "Ajuste de inventario (−)";
+ }
+
+ return base;
+}
+
+/**
+ * Formats a movement quantity with sign prefix for inventory_adjustment.
+ */
+export function formatMovementQuantity(
+ quantity: number,
+ kind: string,
+ direction?: string | null,
+): string {
+ if (kind === "inventory_adjustment" && direction) {
+  return direction === "increase" ? `+${quantity}` : `−${quantity}`;
+ }
+ return `${quantity}`;
+}
