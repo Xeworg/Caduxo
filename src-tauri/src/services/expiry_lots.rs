@@ -3,14 +3,18 @@
 //! Business rules (pre-fill, validation, resolution) live here.
 //! SQL is delegated to `db::repositories::expiry_lots`.
 //! Product/store lookups use `db::repositories::products` and `stores`.
+//! Lot movement emission (entry:initial) is handled here for atomicity with lot creation.
 
 use chrono::NaiveDate;
 
 use crate::db::repositories::expiry_lots as repo;
+use crate::db::repositories::lot_movements as lm_repo;
 use crate::db::repositories::products as product_repo;
+use crate::db::repositories::settings as settings_repo;
 use crate::db::repositories::stores as store_repo;
 use crate::db::repositories::unit_definitions as unit_repo;
 use crate::db::DbPool;
+use crate::domain::lot_movements::{derive_batch_prefix, next_batch_candidate};
 use crate::domain::lot_resolution::{
     compute_remaining_quantity, is_fully_resolved, is_valid_quantity,
 };
@@ -97,11 +101,105 @@ fn resolve_alert_days(user_alert: Option<i32>, product_default: i32) -> i32 {
 }
 
 // ============================================================
+// Location helpers
+// ============================================================
+
+/// Ensures a sentinel location exists for the given store and returns its id.
+async fn ensure_sentinel_for_store(pool: &DbPool, store_id: &str) -> Result<String, AppError> {
+    let sentinel_id = format!("loc-sentinel-{}", store_id);
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM store_locations WHERE id = $1)")
+            .bind(&sentinel_id)
+            .fetch_one(pool)
+            .await
+            .map_err(AppError::from)?;
+    if exists {
+        return Ok(sentinel_id);
+    }
+    let now = chrono::Utc::now().to_rfc3339();
+    sqlx::query(
+        r#"
+        INSERT INTO store_locations (id, store_id, name, notes, is_active, created_at, updated_at)
+        VALUES ($1, $2, 'Sin ubicacion', NULL, 1, $3, $4)
+        "#,
+    )
+    .bind(&sentinel_id)
+    .bind(store_id)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .map_err(AppError::from)?;
+    Ok(sentinel_id)
+}
+
+// ============================================================
+// Batch code helpers
+// ============================================================
+
+/// Resolves batch_code: auto-generates if blank/None, preserves verbatim otherwise.
+async fn resolve_batch_code(
+    pool: &DbPool,
+    input_batch_code: &Option<String>,
+    product: &crate::dto::products::ProductResponse,
+) -> Result<String, AppError> {
+    if let Some(ref code) = input_batch_code {
+        let trimmed = code.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.to_string());
+        }
+    }
+    // Auto-generate
+    let prefix = derive_batch_prefix(Some(product.sku.as_str()));
+    let date = chrono::Local::now().format("%Y%m%d").to_string();
+    let max_nnn = lm_repo::find_max_nnn_for_prefix_on_date(pool, &prefix, &date)
+        .await
+        .map_err(AppError::from)?
+        .unwrap_or(0);
+    let candidate = next_batch_candidate(&prefix, &date, max_nnn);
+    // Check for collisions
+    let mut batch_code = candidate.clone();
+    let mut attempts = 0;
+    while attempts < 100 {
+        let exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM expiry_lots WHERE batch_code = $1)")
+                .bind(&batch_code)
+                .fetch_one(pool)
+                .await
+                .map_err(AppError::from)?;
+        if !exists {
+            return Ok(batch_code);
+        }
+        let current_nnn = max_nnn + attempts + 1;
+        batch_code = next_batch_candidate(&prefix, &date, current_nnn);
+        attempts += 1;
+    }
+    // Fallback: UUID suffix after 100 collisions
+    Ok(format!(
+        "{}-{}-{}-{}",
+        prefix,
+        date,
+        999,
+        uuid::Uuid::new_v4().to_string()[..6].to_uppercase()
+    ))
+}
+
+// ============================================================
 // Create
 // ============================================================
 
-/// Creates a new expiry lot. Fails if no active store exists (precondition).
-/// Unit and alert_days are pre-filled from the product defaults when omitted.
+/// Creates a new expiry lot with an atomic entry:initial movement.
+///
+/// Location resolution:
+/// - If `require_initial_location_on_lot_create` is true and `location_id` is None → reject.
+/// - If `require_initial_location_on_lot_create` is false and `location_id` is None → use sentinel.
+/// - If `location_id` is provided → use as-is.
+///
+/// Batch code:
+/// - If `batch_code` is blank/None → auto-generate via `derive_batch_prefix` + counter.
+/// - If `batch_code` is provided → preserve verbatim.
+///
+/// The entry:initial movement is written in the same transaction as the lot insert.
 pub async fn create_expiry_lot(
     pool: &DbPool,
     input: ExpiryLotCreate,
@@ -136,9 +234,83 @@ pub async fn create_expiry_lot(
     let alert_days_before =
         resolve_alert_days(input.alert_days_before, product.default_alert_days_before);
 
-    repo::insert_expiry_lot(pool, &input, &unit, alert_days_before)
+    // ── Check require_initial_location_on_lot_create setting. ─────────────────
+    let require_location = settings_repo::get_require_initial_location_on_lot_create(pool)
         .await
-        .map_err(AppError::from)
+        .map_err(AppError::from)?;
+
+    // ── Resolve location_id: sentinel vs. explicit vs. required. ────────────
+    let location_id = if let Some(ref loc) = input.location_id {
+        Some(loc.clone())
+    } else if require_location {
+        return Err(DomainError::Validation {
+            message: "Selecciona una ubicacion".to_string(),
+        }
+        .into());
+    } else {
+        // Setting is off and no location chosen → use/create sentinel
+        Some(ensure_sentinel_for_store(pool, &input.store_id).await?)
+    };
+
+    // ── Resolve batch_code: auto-generate if blank, preserve if set. ───────────
+    let batch_code = resolve_batch_code(pool, &input.batch_code, &product).await?;
+
+    // ── Insert lot and emit entry:initial in a single transaction. ───────────
+    let mut tx = pool.begin().await?;
+    let lot_id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+
+    sqlx::query(
+        r#"
+        INSERT INTO expiry_lots (
+            id, product_id, store_id, location_id, quantity, unit,
+            expiry_date, alert_days_before, batch_code, notes,
+            status, created_at, updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', $11, $12)
+        "#,
+    )
+    .bind(&lot_id)
+    .bind(&input.product_id)
+    .bind(&input.store_id)
+    .bind(&location_id)
+    .bind(input.quantity)
+    .bind(&unit)
+    .bind(&input.expiry_date)
+    .bind(alert_days_before)
+    .bind(&batch_code)
+    .bind(&input.notes)
+    .bind(&now)
+    .bind(&now)
+    .execute(&mut *tx)
+    .await?;
+
+    // Emit entry:initial movement in the same transaction
+    let movement_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        r#"
+        INSERT INTO lot_movements (
+            id, expiry_lot_id, movement_kind, direction, quantity,
+            source_location_id, destination_location_id, notes, actor, created_at
+        )
+        VALUES ($1, $2, 'entry:initial', NULL, $3, NULL, $4, NULL, 'system', $5)
+        "#,
+    )
+    .bind(&movement_id)
+    .bind(&lot_id)
+    .bind(input.quantity)
+    .bind(&location_id)
+    .bind(&now)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    // Fetch and return the created lot
+    repo::get_expiry_lot(pool, &lot_id)
+        .await
+        .map_err(AppError::from)?
+        .ok_or_else(|| AppError::from(sqlx::Error::RowNotFound))
 }
 
 // ============================================================
@@ -345,7 +517,7 @@ mod tests {
     /// Helper: creates a store + product, returning (store_id, product_id).
     async fn seed_product(
         pool: &crate::db::DbPool,
-    ) -> Result<(String, String), Box<dyn std::error::Error>> {
+    ) -> Result<(String, String, String), Box<dyn std::error::Error>> {
         // Create a store first (required by lot creation).
         let store = create_store_svc(
             pool,
@@ -356,6 +528,24 @@ mod tests {
             },
         )
         .await?;
+
+        // Create a location for the store.
+        let location = crate::db::repositories::stores::insert_location(
+            pool,
+            &crate::dto::stores::StoreLocationCreate {
+                store_id: store.id.clone(),
+                name: "Test Location".into(),
+                notes: None,
+            },
+        )
+        .await?;
+
+        // Disable require_initial_location_on_lot_create so existing tests
+        // that pass location_id: None continue to work with the sentinel.
+        // Tests that exercise the location-requirement feature should instead
+        // pass a location_id explicitly.
+        crate::db::repositories::settings::set_require_initial_location_on_lot_create(pool, false)
+            .await?;
 
         // Create a product with a known default_unit and alert_days.
         let product = crate::services::products::create_product(
@@ -371,7 +561,7 @@ mod tests {
             },
         )
         .await?;
-        Ok((store.id, product.id))
+        Ok((store.id, product.id, location.id))
     }
 
     // ------------------------------------------------------------------
@@ -410,7 +600,7 @@ mod tests {
     #[tokio::test]
     async fn create_lot_succeeds() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -439,7 +629,7 @@ mod tests {
     #[tokio::test]
     async fn create_lot_pre_fills_unit_from_product() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         // User omits unit → product default "kg" should be used.
         let lot = svc::create_expiry_lot(
@@ -469,7 +659,7 @@ mod tests {
     async fn create_lot_user_unit_overrides_product_default(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         // Product has default "kg" but user specifies "g" → user wins.
         let lot = svc::create_expiry_lot(
@@ -499,7 +689,7 @@ mod tests {
     async fn create_lot_pre_fills_alert_days_from_product() -> Result<(), Box<dyn std::error::Error>>
     {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         // Product has default 14 alert days; user omits → should use 14.
         let lot = svc::create_expiry_lot(
@@ -529,7 +719,7 @@ mod tests {
     async fn create_lot_user_alert_days_overrides_product_default(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         // Product has default 14 but user specifies 30 → user wins.
         let lot = svc::create_expiry_lot(
@@ -558,7 +748,7 @@ mod tests {
     #[tokio::test]
     async fn create_lot_rejects_negative_quantity() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         let err = svc::create_expiry_lot(
             &pool,
@@ -586,7 +776,7 @@ mod tests {
     #[tokio::test]
     async fn create_lot_rejects_zero_quantity() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         let err = svc::create_expiry_lot(
             &pool,
@@ -614,7 +804,7 @@ mod tests {
     #[tokio::test]
     async fn create_lot_rejects_invalid_expiry_date() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         for bad_date in ["not-a-date", "2025/12/31", "25-12-31", ""] {
             let err = svc::create_expiry_lot(
@@ -648,7 +838,7 @@ mod tests {
     #[tokio::test]
     async fn update_lot_works() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -721,7 +911,7 @@ mod tests {
     #[tokio::test]
     async fn archive_lot_works() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -770,7 +960,7 @@ mod tests {
     #[tokio::test]
     async fn list_lots_by_product_ordered_by_expiry() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         // Create two lots with different expiry dates.
         let _early = svc::create_expiry_lot(
@@ -819,7 +1009,7 @@ mod tests {
     async fn partial_resolution_reduces_quantity_and_records_event(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -869,7 +1059,7 @@ mod tests {
     #[tokio::test]
     async fn full_resolution_marks_lot_resolved() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -914,7 +1104,7 @@ mod tests {
     #[tokio::test]
     async fn cannot_resolve_more_than_remaining() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -953,7 +1143,7 @@ mod tests {
     #[tokio::test]
     async fn cannot_resolve_archived_or_resolved_lot() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -1005,7 +1195,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_rejects_invalid_resolution_type() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -1044,7 +1234,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_rejects_zero_quantity() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -1083,7 +1273,7 @@ mod tests {
     #[tokio::test]
     async fn multiple_partial_resolutions_accumulate() -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
-        let (store_id, product_id) = seed_product(&pool).await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
 
         let lot = svc::create_expiry_lot(
             &pool,
@@ -1148,6 +1338,208 @@ mod tests {
 
         let updated = svc::get_expiry_lot(&pool, lot.id.clone()).await?;
         assert_eq!(updated.status, "resolved");
+        Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // Phase 2: lot movement emission, location requirement, auto batch code
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn create_lot_emits_entry_initial_movement() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
+
+        let lot = svc::create_expiry_lot(
+            &pool,
+            ExpiryLotCreate {
+                product_id: product_id.clone(),
+                store_id: store_id.clone(),
+                location_id: None,
+                quantity: 10.0,
+                unit: None,
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: None,
+                batch_code: None,
+                notes: None,
+            },
+        )
+        .await?;
+
+        // Verify an entry:initial movement was created for this lot.
+        let movements: Vec<(String, String)> =
+            sqlx::query_as("SELECT id, movement_kind FROM lot_movements WHERE expiry_lot_id = $1")
+                .bind(&lot.id)
+                .fetch_all(&pool)
+                .await?;
+
+        assert_eq!(movements.len(), 1, "exactly one movement should exist");
+        assert_eq!(movements[0].1, "entry:initial");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn create_lot_requires_location_when_setting_is_on(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
+
+        // Enable the require-location setting.
+        crate::db::repositories::settings::set_require_initial_location_on_lot_create(&pool, true)
+            .await?;
+
+        let err = svc::create_expiry_lot(
+            &pool,
+            ExpiryLotCreate {
+                product_id,
+                store_id,
+                location_id: None,
+                quantity: 5.0,
+                unit: None,
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: None,
+                batch_code: None,
+                notes: None,
+            },
+        )
+        .await
+        .expect_err("location_id: None with require=true must be rejected");
+
+        assert!(matches!(
+                err,
+                crate::error::AppError::Domain(crate::error::DomainError::Validation {
+        message,
+                }) if message == "Selecciona una ubicacion"
+            ));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn create_lot_uses_explicit_location_when_provided(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_id, product_id, location_id) = seed_product(&pool).await?;
+
+        // Enable require-location setting (explicit location should bypass requirement).
+        crate::db::repositories::settings::set_require_initial_location_on_lot_create(&pool, true)
+            .await?;
+
+        let lot = svc::create_expiry_lot(
+            &pool,
+            ExpiryLotCreate {
+                product_id,
+                store_id: store_id.clone(),
+                location_id: Some(location_id.clone()),
+                quantity: 5.0,
+                unit: None,
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: None,
+                batch_code: None,
+                notes: None,
+            },
+        )
+        .await?;
+
+        assert_eq!(lot.location_id.as_deref(), Some(location_id.as_str()));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn create_lot_auto_generates_batch_code() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
+
+        let lot = svc::create_expiry_lot(
+            &pool,
+            ExpiryLotCreate {
+                product_id,
+                store_id,
+                location_id: None,
+                quantity: 5.0,
+                unit: None,
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: None,
+                batch_code: None, // blank → auto-generate
+                notes: None,
+            },
+        )
+        .await?;
+
+        // Batch code must be non-empty and contain today's date (format: PREFIX-YYYYMMDD-NNN).
+        let batch = lot.batch_code.as_deref().unwrap();
+        assert!(!batch.is_empty(), "batch_code should not be empty");
+        let today = chrono::Local::now().format("%Y%m%d").to_string();
+        assert!(
+            batch.contains(&today),
+            "batch_code should contain today's date ({today}), got: {batch}"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn create_lot_preserves_explicit_batch_code() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_id, product_id, _location_id) = seed_product(&pool).await?;
+
+        let lot = svc::create_expiry_lot(
+            &pool,
+            ExpiryLotCreate {
+                product_id,
+                store_id,
+                location_id: None,
+                quantity: 5.0,
+                unit: None,
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: None,
+                batch_code: Some("MY-BATCH-42".into()),
+                notes: None,
+            },
+        )
+        .await?;
+
+        assert_eq!(lot.batch_code.as_deref(), Some("MY-BATCH-42"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn settings_require_initial_location_defaults_to_true(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let settings = crate::services::settings::get_settings(&pool).await?;
+        assert!(
+            settings.require_initial_location_on_lot_create,
+            "require_initial_location_on_lot_create should default to true"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn settings_update_toggles_require_initial_location(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+
+        let s1 = crate::services::settings::get_settings(&pool).await?;
+        assert!(s1.require_initial_location_on_lot_create);
+
+        let s2 = crate::services::settings::update_settings(
+            &pool,
+            crate::dto::stores::SettingsUpdate {
+                last_selected_store_id: None,
+                require_initial_location_on_lot_create: Some(false),
+            },
+        )
+        .await?;
+        assert!(!s2.require_initial_location_on_lot_create);
+
+        let s3 = crate::services::settings::update_settings(
+            &pool,
+            crate::dto::stores::SettingsUpdate {
+                last_selected_store_id: None,
+                require_initial_location_on_lot_create: Some(true),
+            },
+        )
+        .await?;
+        assert!(s3.require_initial_location_on_lot_create);
         Ok(())
     }
 }

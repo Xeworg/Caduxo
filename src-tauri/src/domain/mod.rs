@@ -4,5 +4,6 @@
 //! They are the primary target for fast unit tests.
 
 pub mod expiry_status;
+pub mod lot_movements;
 pub mod lot_resolution;
 pub mod validation;

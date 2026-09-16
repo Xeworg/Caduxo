@@ -433,7 +433,7 @@ pub(crate) const MIGRATIONS: &[(i64, &str, &str)] = &[
                 expiry_lot_id TEXT NOT NULL REFERENCES expiry_lots(id) ON DELETE CASCADE,
                 movement_kind TEXT NOT NULL,
                 direction TEXT,
-                quantity REAL NOT NULL CHECK(quantity > 0),
+                quantity REAL NOT NULL CHECK(quantity >= 0),
                 source_location_id TEXT,
                 destination_location_id TEXT,
                 reason TEXT,

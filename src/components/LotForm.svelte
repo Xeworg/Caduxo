@@ -10,6 +10,7 @@
     import {
         listStores,
         listStoreLocations,
+        getSettings,
         type StoreResponse,
         type StoreLocationResponse,
     } from "../lib/stores.js";
@@ -46,6 +47,9 @@
 
     // ── Local state ────────────────────────────────────────────────────────────
 
+    // Determines whether lot creation requires a location to be chosen.
+    let requireInitialLocation = true;
+
     let stores: StoreResponse[] = [];
     let locations: StoreLocationResponse[] = [];
 
@@ -68,6 +72,14 @@
 
     async function init() {
         loadingStores = true;
+        // Fetch the require_initial_location_on_lot_create setting.
+        try {
+            const settings = await getSettings();
+            requireInitialLocation = settings.require_initial_location_on_lot_create;
+        } catch {
+            // Keep default (true) if settings are unavailable.
+        }
+
         try {
             stores = await listStores();
             if (mode === "edit" && lot) {
@@ -101,8 +113,9 @@
 
     init();
 
-    // Reload locations when the selected store changes.
+    // Reload locations and clear selection when the selected store changes.
     $: if (selectedStoreId) {
+        selectedLocationId = "";
         loadLocations(selectedStoreId);
     }
 
@@ -120,6 +133,10 @@
         errorMsg = "";
         if (!selectedStoreId) {
             errorMsg = "Store is required";
+            return;
+        }
+        if (requireInitialLocation && !selectedLocationId) {
+            errorMsg = "Selecciona una ubicacion";
             return;
         }
         if (!expiryDate) {
@@ -200,12 +217,19 @@
             </p>
         {/if}
 
-        <!-- Location — only when locations exist for the selected store -->
+        <!-- Location picker — shown when the store has locations -->
         {#if selectedStoreId && locations.length > 0}
             <label>
-                Internal location (optional)
+                Internal location
+                {#if requireInitialLocation}
+                    <span class="required-hint">(required)</span>
+                {:else}
+                    <span class="optional-hint">(optional)</span>
+                {/if}
                 <select bind:value={selectedLocationId}>
-                    <option value="">— None —</option>
+                    {#if !requireInitialLocation}
+                        <option value="">— None —</option>
+                    {/if}
                     {#each locations as loc (loc.id)}
                         <option value={loc.id}>{loc.name}</option>
                     {/each}

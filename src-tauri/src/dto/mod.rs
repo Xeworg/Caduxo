@@ -7,6 +7,7 @@ pub mod backup_restore;
 pub mod csv_io;
 pub mod dashboard;
 pub mod expiry_lots;
+pub mod lot_movements;
 pub mod notifications;
 pub mod products;
 pub mod reports;
