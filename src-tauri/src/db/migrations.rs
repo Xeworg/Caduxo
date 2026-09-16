@@ -519,21 +519,30 @@ pub(crate) const MIGRATIONS: &[(i64, &str, &str)] = &[
             "#,
     ),
     // V15 — reconcile expiry_lots quantity from movements
+    //
+    // NOTE: The exact SQL text of this migration is part of its on-disk
+    // identity. sqlx stores a SHA-384 checksum of the SQL in
+    // `_sqlx_migrations` and refuses to start if the on-disk checksum
+    // differs from the in-source one ("migration 15 was previously
+    // applied but has been modified"). Whitespace inside the raw string
+    // is part of the checksummed bytes, so any reformat that shifts the
+    // indentation of these lines WILL break every existing user
+    // database. If you must change the SQL, bump the version instead.
     (
         15,
         "reconcile_expiry_lots_quantity_from_movements",
         r#"
-                UPDATE expiry_lots
-                SET quantity = COALESCE(
-                    (SELECT SUM(
-                        CASE WHEN destination_location_id IS NOT NULL THEN lm.quantity
-                             WHEN source_location_id IS NOT NULL THEN -lm.quantity
-                             ELSE 0 END
-                    )
-                    FROM lot_movements lm WHERE lm.expiry_lot_id = expiry_lots.id
-                    ), 0),
-                    updated_at = CURRENT_TIMESTAMP
-                "#,
+            UPDATE expiry_lots
+            SET quantity = COALESCE(
+                (SELECT SUM(
+                    CASE WHEN destination_location_id IS NOT NULL THEN lm.quantity
+                         WHEN source_location_id IS NOT NULL THEN -lm.quantity
+                         ELSE 0 END
+                )
+                FROM lot_movements lm WHERE lm.expiry_lot_id = expiry_lots.id
+                ), 0),
+                updated_at = CURRENT_TIMESTAMP
+            "#,
     ),
     // V16 — broaden unit back-fill: Spanish singular/plural aliases + display_name.
     //
@@ -2174,6 +2183,221 @@ mod tests {
             "V16 re-run must not change unlinked state"
         );
         assert_eq!(first.1, second.1, "V16 re-run must not change unit_type");
+    }
+
+    // ====================================================================
+    // V15 checksum-drift regression tests
+    //
+    // sqlx stores a SHA-384 checksum of each migration's SQL inside
+    // `_sqlx_migrations`. The on-disk checksum is computed from the
+    // exact bytes of the raw string in `MIGRATIONS`. Any whitespace-only
+    // change to the V15 SQL produces a new checksum that doesn't match
+    // what existing user databases recorded on first start-up, and the
+    // app refuses to boot with:
+    //
+    //     migration 15 was previously applied but has been modified
+    //
+    // The two tests below lock the V15 SQL to the canonical pre-drift
+    // bytes (the version that shipped in commit `2b150a1^`, parent of
+    // "fix: enforce unit-aware lot quantities") and prove that an
+    // existing user database where V15 was applied with that text can
+    // still accept V16 on a subsequent start-up.
+    // ====================================================================
+
+    // Lock the V15 SQL to the exact canonical bytes.
+    //
+    // This is the single source of truth for what existing user databases
+    // recorded in `_sqlx_migrations.checksum` for V15. If a future
+    // reformat, save-action, or auto-formatter touches the raw string
+    // (even by changing only indentation), this assertion fires and
+    // blocks the change before it ships.
+    #[test]
+    fn v15_sql_text_matches_canonical_pre_drift_version() {
+        let actual_v15_sql: &str = MIGRATIONS
+            .iter()
+            .find(|(version, _, _)| *version == 15)
+            .map(|(_, _, sql)| *sql)
+            .expect("V15 migration must exist in MIGRATIONS");
+
+        // Canonical V15 SQL text — byte-for-byte identical to what
+        // shipped in commit `2b150a1^` (parent of "fix: enforce
+        // unit-aware lot quantities"). This is the text that existing
+        // user databases already have applied and recorded in
+        // `_sqlx_migrations.checksum`. Do not edit; bump the version
+        // instead.
+        const CANONICAL_V15_SQL: &str = r#"
+            UPDATE expiry_lots
+            SET quantity = COALESCE(
+                (SELECT SUM(
+                    CASE WHEN destination_location_id IS NOT NULL THEN lm.quantity
+                         WHEN source_location_id IS NOT NULL THEN -lm.quantity
+                         ELSE 0 END
+                )
+                FROM lot_movements lm WHERE lm.expiry_lot_id = expiry_lots.id
+                ), 0),
+                updated_at = CURRENT_TIMESTAMP
+            "#;
+
+        assert_eq!(
+            actual_v15_sql, CANONICAL_V15_SQL,
+            "V15 migration SQL must remain byte-identical to the \
+                 canonical version that user databases have already applied. \
+                 Whitespace changes inside the raw string change the sqlx \
+                 checksum and break startup on existing databases. \
+                 If you need to change the SQL, bump the migration version."
+        );
+
+        // Belt-and-braces: also assert that the sqlx-computed checksum
+        // of the in-source V15 SQL matches the sqlx-computed checksum
+        // of the canonical text. This pins the checksum at the sqlx
+        // API boundary without hard-coding a SHA-384 hex value that
+        // would need to be regenerated every time sqlx changes its
+        // hashing scheme.
+        let in_source_migration = sqlx::migrate::Migration::new(
+            15,
+            std::borrow::Cow::Borrowed("reconcile_expiry_lots_quantity_from_movements"),
+            sqlx::migrate::MigrationType::Simple,
+            std::borrow::Cow::Borrowed(actual_v15_sql),
+            false,
+        );
+        let canonical_migration = sqlx::migrate::Migration::new(
+            15,
+            std::borrow::Cow::Borrowed("reconcile_expiry_lots_quantity_from_movements"),
+            sqlx::migrate::MigrationType::Simple,
+            std::borrow::Cow::Borrowed(CANONICAL_V15_SQL),
+            false,
+        );
+        assert_eq!(
+            in_source_migration.checksum.as_ref(),
+            canonical_migration.checksum.as_ref(),
+            "sqlx-computed checksum of the in-source V15 SQL must match \
+                 the canonical SHA-384 that user databases have stored."
+        );
+    }
+
+    // Simulate the user scenario end-to-end.
+    //
+    // 1. Build a migrator that contains the canonical V15 text (i.e. the
+    //    exact bytes user databases already have) and apply it to a
+    //    fresh DB. This records the canonical checksum for V15 in
+    //    `_sqlx_migrations`.
+    // 2. Run the *current* in-source migrator (which, after the fix,
+    //    contains the same canonical V15 text). The checksum must match,
+    //    so sqlx skips V15 and only runs V16.
+    // 3. Verify V16 was applied successfully and the applied count
+    //    reached 16.
+    //
+    // Before the fix, step 2 would fail with the
+    // `Migration(...) was previously applied but has been modified`
+    // error reported by the user. After the fix, this test passes.
+    #[tokio::test]
+    async fn v15_previously_applied_database_accepts_v16() {
+        use sqlx::migrate::{Migration, MigrationType, Migrator};
+        use std::borrow::Cow;
+
+        // Canonical V15 SQL — the bytes user databases have applied.
+        const CANONICAL_V15_SQL: &str = r#"
+            UPDATE expiry_lots
+            SET quantity = COALESCE(
+                (SELECT SUM(
+                    CASE WHEN destination_location_id IS NOT NULL THEN lm.quantity
+                         WHEN source_location_id IS NOT NULL THEN -lm.quantity
+                         ELSE 0 END
+                )
+                FROM lot_movements lm WHERE lm.expiry_lot_id = expiry_lots.id
+                ), 0),
+                updated_at = CURRENT_TIMESTAMP
+            "#;
+
+        // Build a V1..V15 migrator that uses the canonical V15 text.
+        // Everything else comes from the current in-source MIGRATIONS.
+        let mut v1_to_v15: Vec<(i64, &str, &str)> = MIGRATIONS
+            .iter()
+            .filter(|(version, _, _)| *version <= 15)
+            .copied()
+            .collect();
+        for entry in v1_to_v15.iter_mut() {
+            if entry.0 == 15 {
+                entry.2 = CANONICAL_V15_SQL;
+            }
+        }
+        let v1_to_v15_migrations: Vec<Migration> = v1_to_v15
+            .iter()
+            .map(|(version, description, sql)| {
+                Migration::new(
+                    *version,
+                    Cow::Owned((*description).to_string()),
+                    MigrationType::Simple,
+                    Cow::Owned((*sql).to_string()),
+                    false,
+                )
+            })
+            .collect();
+        let v1_to_v15_migrator = Migrator {
+            migrations: Cow::Owned(v1_to_v15_migrations),
+            ignore_missing: false,
+            locking: true,
+            no_tx: false,
+        };
+
+        let pid = std::process::id();
+        let rand: u16 = rand::random();
+        let db_path =
+            std::path::PathBuf::from(format!("/tmp/caduxo_test_v15_drift_{pid}_{rand}.db"));
+        let _ = std::fs::remove_file(&db_path);
+
+        let pool = super::open_pool(&db_path).await.unwrap();
+
+        // Step 1: apply V1..V15 with the canonical V15 text, simulating
+        // an existing user database. This records the canonical
+        // checksum in `_sqlx_migrations`.
+        v1_to_v15_migrator
+            .run(&pool)
+            .await
+            .expect("V1..V15 with canonical V15 must apply cleanly");
+        assert_eq!(
+            applied_count(&pool).await.unwrap(),
+            15,
+            "after V1..V15, exactly 15 migrations must be recorded"
+        );
+
+        // Step 2: run the in-source migrator. With the fix, the V15 SQL
+        // is byte-identical to the canonical version, so sqlx skips V15
+        // and only applies V16.
+        run_migrations(&pool).await.expect(
+            "in-source migrator must accept the canonical V15 \
+                         checksum and apply V16 on top",
+        );
+
+        // Step 3: V16 was applied successfully. The applied count is
+        // now 16.
+        assert_eq!(
+            applied_count(&pool).await.unwrap(),
+            16,
+            "after V16 applies on top of the user database, count must be 16"
+        );
+
+        // Confirm V16 actually ran (and the migration tracking row for
+        // V16 is present with a non-empty checksum).
+        let v16_row: Option<(Vec<u8>,)> =
+            sqlx::query_as("SELECT checksum FROM _sqlx_migrations WHERE version = 16")
+                .fetch_optional(&pool)
+                .await
+                .expect("querying _sqlx_migrations for V16 must succeed");
+        assert!(
+            v16_row.is_some(),
+            "V16 must be recorded in _sqlx_migrations after a successful run"
+        );
+
+        // Confirm re-running is still a no-op (idempotency).
+        run_migrations(&pool).await.unwrap();
+        assert_eq!(
+            applied_count(&pool).await.unwrap(),
+            16,
+            "re-running migrations must not add new rows"
+        );
+
+        let _ = std::fs::remove_file(&db_path);
     }
 
     // -------------------------------------------------------------------
