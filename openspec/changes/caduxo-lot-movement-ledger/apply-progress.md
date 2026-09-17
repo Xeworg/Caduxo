@@ -536,8 +536,7 @@ Manual smoke items 1–7 require running the compiled Caduxo desktop application
 
 #### Implementation-owned Tasks
 
-All 29 implementation-owned tasks are marked complete (`- [x]`) in `tasks.md`. The parent-owned verify gate is also marked complete by explicit parent decision with Windows manual smoke deferred. The 2 remaining `- [ ]` tasks are parent-owned:
-- Open one aggregate PR (deferred until after verify)
+All 29 implementation-owned tasks are marked complete (`- [x]`) in `tasks.md`. The parent-owned verify gate is also marked complete by explicit parent decision with Windows manual smoke deferred. Aggregate PR #8 was opened against `main`: https://github.com/Xeworg/Caduxo/pull/8. The 1 remaining `- [ ]` task is parent-owned:
 - Archive the change (deferred until after PR)
 
 #### Files Changed
