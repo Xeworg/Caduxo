@@ -7,9 +7,10 @@
   import ReportsPage from "./components/ReportsPage.svelte";
   import BackupRestorePage from "./components/BackupRestorePage.svelte";
   import CalendarPage from "./components/CalendarPage.svelte";
+  import ConfigurationPage from "./components/ConfigurationPage.svelte";
   import { startPeriodicNotificationCheck } from "./lib/notifications.js";
 
-  type Tab = "dashboard" | "stores" | "products" | "calendar" | "reports" | "import" | "backup";
+  type Tab = "dashboard" | "stores" | "products" | "calendar" | "reports" | "import" | "backup" | "settings";
   let activeTab: Tab = "stores";
 
   // Slice 7b: start notification permission check and periodic polling.
@@ -71,6 +72,13 @@
     >
       Backup
     </button>
+    <button
+      class="nav-btn"
+      class:active={activeTab === "settings"}
+      on:click={() => (activeTab = "settings")}
+    >
+      Configuración
+    </button>
   </nav>
 
   <!-- Views -->
@@ -88,6 +96,8 @@
     <CsvImportPage />
   {:else if activeTab === "backup"}
     <BackupRestorePage />
+  {:else if activeTab === "settings"}
+    <ConfigurationPage />
   {/if}
 </div>
 

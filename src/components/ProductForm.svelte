@@ -126,9 +126,26 @@
 
 
 
-  // ── Unit helpers ───────────────────────────────────────────────────────────
+      // ── Unit helpers ───────────────────────────────────────────────────────────
 
-  /** Slugifies display_name into a valid unit key (lowercase, alphanumeric, hyphen/underscore). */
+      /**
+       * Singular Spanish unit-text forms that resolve to a canonical catalog
+       * key on the backend. Mirrors the alias map in
+       * `services::products::unit_text_aliases` so the UI guard here does not
+       * surface the inline unit-create form for values the backend already
+       * resolves to an existing preset (e.g. `Unidad` → `ud-units`).
+       * Keep the entries aligned with the Rust alias map; expand in tandem.
+       */
+      const UNIT_TEXT_ALIASES: Record<string, string> = {
+        unidad: "units",
+        caja: "cajas",
+        botella: "bottles",
+        bolsa: "bags",
+        paquete: "packs",
+        pieza: "pcs",
+      };
+
+      /** Slugifies display_name into a valid unit key (lowercase, alphanumeric, hyphen/underscore). */
   function slugify(name: string): string {
     return name
       .toLowerCase()
@@ -371,12 +388,18 @@
               }}
               on:blur={() => {
                 // Auto-create: if the typed value matches no known unit, show the inline form.
+                // The match must also recognise the singular→plural aliases the
+                // backend resolver applies (e.g. "Unidad" → "units"), otherwise
+                // we would surface an inline unit-create form for a value that
+                // already resolves to an integer preset on the backend.
                 const v = defaultUnit.trim().toLowerCase();
+                const canonical = v ? UNIT_TEXT_ALIASES[v] ?? v : v;
                 if (
                   v &&
                   !unitList.some(
                     (u) =>
                       u.key === v ||
+                      u.key === canonical ||
                       u.display_name.toLowerCase() === v,
                   )
                 ) {

@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
+use super::unit_definitions::UnitKind;
+
 // ============================================================
 // Expiry Lot — inputs
 // ============================================================
@@ -67,6 +69,23 @@ pub struct ExpiryLotResolve {
     pub notes: Option<String>,
 }
 
+/// Input for archiving an active expiry lot with a required justification.
+///
+/// `reason` must be one of the allow-listed archive reason codes
+/// (`expired_unsold`, `damaged`, `returned_to_supplier`, `recall`, `lost`,
+/// `internal_use`, `administrative`, `other`). `notes` is trimmed and must be
+/// at least 5 characters and at most 1000 characters.
+#[derive(Debug, Deserialize)]
+pub struct ArchiveLotInput {
+    /// The lot id to archive. Must point to a lot whose status is `active`.
+    pub id: String,
+    /// Allow-listed reason code explaining why the lot is being archived.
+    pub reason: String,
+    /// Free-text justification. Validated server-side: trimmed length must be
+    /// at least 5 characters and at most 1000 characters.
+    pub notes: String,
+}
+
 // ============================================================
 // Expiry Lot — responses
 // ============================================================
@@ -89,6 +108,11 @@ pub struct ExpiryLotResponse {
     pub notes: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    /// Unit kind from the product's catalog link (`integer` or `decimal`).
+    /// `None` for legacy/uncatalogued products — treated as decimal by the
+    /// backend. Propagated to the UI so modals can apply unit-aware input
+    /// rules (min/step/validation) without an extra round-trip.
+    pub unit_type: Option<UnitKind>,
 }
 
 /// Resolution event response row.

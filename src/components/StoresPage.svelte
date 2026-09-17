@@ -37,10 +37,12 @@
   let storeCode = "";
   let storeNotes = "";
   let storeActive = true;
+  let storeFormOpen = false;
 
   let locationName = "";
   let locationNotes = "";
   let locationActive = true;
+  let locationFormOpen = false;
 
   // ── Derived ─────────────────────────────────────────────────────────────────
 
@@ -112,6 +114,7 @@
     storeCode = "";
     storeNotes = "";
     storeActive = true;
+    storeFormOpen = true;
   }
 
   function startEditStore(store: StoreResponse) {
@@ -120,6 +123,7 @@
     storeCode = store.code ?? "";
     storeNotes = store.notes ?? "";
     storeActive = store.is_active;
+    storeFormOpen = true;
   }
 
   async function submitStore() {
@@ -149,14 +153,21 @@
         if (firstRun) firstRun = false;
         flash("Store created", "success");
       }
-      editingStore = null;
-    } catch (e: unknown) {
+          editingStore = null;
+          storeFormOpen = false;
+        } catch (e: unknown) {
+
       flash(String(e), "error");
     }
   }
 
   function cancelStoreForm() {
     editingStore = null;
+    storeName = "";
+    storeCode = "";
+    storeNotes = "";
+    storeActive = true;
+    storeFormOpen = false;
   }
 
   function startCreateLocation() {
@@ -164,6 +175,7 @@
     locationName = "";
     locationNotes = "";
     locationActive = true;
+    locationFormOpen = true;
   }
 
   function startEditLocation(loc: StoreLocationResponse) {
@@ -171,6 +183,7 @@
     locationName = loc.name;
     locationNotes = loc.notes ?? "";
     locationActive = loc.is_active;
+    locationFormOpen = true;
   }
 
   async function submitLocation() {
@@ -195,15 +208,22 @@
         locations = [...locations, created];
         flash("Location created", "success");
       }
-      editingLocation = null;
-    } catch (e: unknown) {
+          editingLocation = null;
+          locationFormOpen = false;
+        } catch (e: unknown) {
+
       flash(String(e), "error");
     }
   }
 
-  function cancelLocationForm() {
-    editingLocation = null;
-  }
+      function cancelLocationForm() {
+        editingLocation = null;
+        locationName = "";
+        locationNotes = "";
+        locationActive = true;
+        locationFormOpen = false;
+      }
+
 </script>
 
 <!-- ── Layout ──────────────────────────────────────────────────────────────── -->
@@ -212,8 +232,9 @@
   <!-- Header -->
   <header class="page-header">
     <h1>Stores</h1>
-    {#if !editingStore}
-      <button class="btn-primary" on:click={startCreateStore}>
+        {#if !editingStore && !storeFormOpen}
+          <button class="btn-primary" on:click={startCreateStore}>
+
         + New Store
       </button>
     {/if}
@@ -236,7 +257,7 @@
         <h2>Welcome to Caduxo!</h2>
         <p>Before you can track expiry lots, you need to create at least one store.</p>
 
-        {#if editingStore !== null || storeName !== "" || editingStore === null}
+        {#if storeFormOpen}
           <!-- Show store form for first run -->
           <form class="store-form" on:submit|preventDefault={submitStore}>
             <h3>Create your first store</h3>
@@ -311,7 +332,7 @@
 
       <!-- Right: store detail / form -->
       <main class="store-detail">
-        {#if editingStore}
+{#if editingStore}
           <!-- Edit form -->
           <form class="store-form" on:submit|preventDefault={submitStore}>
             <h3>Edit Store</h3>
@@ -337,10 +358,33 @@
                 Cancel
               </button>
             </div>
-          </form>
+              </form>
 
-        {:else if selectedStore}
-          <!-- Store detail header -->
+            {:else if storeFormOpen}
+              <form class="store-form" on:submit|preventDefault={submitStore}>
+                <h3>Create Store</h3>
+                <label>
+                  Name *
+                  <input type="text" bind:value={storeName} required />
+                </label>
+                <label>
+                  Code
+                  <input type="text" bind:value={storeCode} />
+                </label>
+                <label>
+                  Notes
+                  <textarea bind:value={storeNotes} rows="2"></textarea>
+                </label>
+                <div class="form-actions">
+                  <button type="submit" class="btn-primary">Create Store</button>
+                  <button type="button" class="btn-secondary" on:click={cancelStoreForm}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+
+            {:else if selectedStore}
+              <!-- Store detail header -->
           <div class="detail-header">
             <div>
               <h2>{selectedStore.name}</h2>
@@ -359,14 +403,14 @@
           <section class="locations-section">
             <div class="section-header">
               <h3>Internal Locations</h3>
-              {#if !editingLocation}
+              {#if !editingLocation && !locationFormOpen}
                 <button class="btn-small" on:click={startCreateLocation}>
                   + Add Location
                 </button>
               {/if}
             </div>
 
-            {#if editingLocation === null && locationName === ""}
+            {#if !locationFormOpen}
               <!-- Location list -->
               {#if locations.length === 0}
                 <p class="empty-hint">No locations defined. Add shelves, fridges, or sections.</p>

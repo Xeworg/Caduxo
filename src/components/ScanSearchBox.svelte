@@ -111,8 +111,6 @@
     color: #1e293b;
     transition: border-color 0.15s, box-shadow 0.15s;
     outline: none;
-    /* Prevent browser autocomplete from interfering with scan input. */
-    autocomplete: off;
   }
 
   .scan-input:focus {

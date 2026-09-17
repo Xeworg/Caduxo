@@ -19,6 +19,28 @@ pub async fn get_last_selected_store_id(pool: &SqlitePool) -> Result<Option<Stri
     get_setting(pool, "last_selected_store_id").await
 }
 
+/// Retrieves the require_initial_location_on_lot_create setting.
+/// Returns true if absent (default).
+pub async fn get_require_initial_location_on_lot_create(
+    pool: &SqlitePool,
+) -> Result<bool, sqlx::Error> {
+    let val = get_setting(pool, "require_initial_location_on_lot_create").await?;
+    Ok(val.as_deref() != Some("0"))
+}
+
+/// Persists the require_initial_location_on_lot_create setting.
+pub async fn set_require_initial_location_on_lot_create(
+    pool: &SqlitePool,
+    value: bool,
+) -> Result<(), sqlx::Error> {
+    upsert_setting(
+        pool,
+        "require_initial_location_on_lot_create",
+        if value { "1" } else { "0" },
+    )
+    .await
+}
+
 /// Upserts a setting value (insert-or-replace semantics).
 pub async fn upsert_setting(pool: &SqlitePool, key: &str, value: &str) -> Result<(), sqlx::Error> {
     let now = Utc::now().to_rfc3339();
@@ -53,8 +75,11 @@ pub async fn set_last_selected_store_id(
 /// Builds the full settings snapshot.
 pub async fn get_settings(pool: &SqlitePool) -> Result<SettingsResponse, sqlx::Error> {
     let last_selected_store_id = get_last_selected_store_id(pool).await?;
+    let require_initial_location_on_lot_create =
+        get_require_initial_location_on_lot_create(pool).await?;
     Ok(SettingsResponse {
         last_selected_store_id,
+        require_initial_location_on_lot_create,
     })
 }
 

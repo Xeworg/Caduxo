@@ -69,6 +69,10 @@ pub fn run() {
             commands::expiry_lots::archive_expiry_lot,
             commands::expiry_lots::resolve_expiry_lot,
             commands::expiry_lots::list_lot_resolution_events,
+            // Lot movements
+            commands::lot_movements::create_lot_movement,
+            commands::lot_movements::list_lot_movements,
+            commands::lot_movements::get_lot_location_balances,
             // Dashboard (Slice 6a)
             commands::dashboard::list_dashboard_lots,
             // Local notifications (Slice 7 — backend only)

@@ -55,10 +55,14 @@ export interface StoreLocationUpdate {
 
 export interface SettingsResponse {
  last_selected_store_id: string | null;
+ /** When true, lot creation requires a location to be chosen. */
+ require_initial_location_on_lot_create: boolean;
 }
 
 export interface SettingsUpdate {
  last_selected_store_id?: string | null;
+ /** Optional: toggles the require_initial_location_on_lot_create setting. */
+ require_initial_location_on_lot_create?: boolean;
 }
 
 // ─── First-run / settings ────────────────────────────────────────────────────

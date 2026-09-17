@@ -23,6 +23,7 @@
   } from "../lib/products.js";
   import {
     getExpiryLot,
+    listExpiryLotsByProduct,
     type ExpiryLotResponse,
   } from "../lib/expiry_lots.js";
       import { exportReportWithDialog } from "../lib/csv.js";
@@ -36,6 +37,7 @@
   import ProductForm from "./ProductForm.svelte";
   import UnitReviewBanner from "./UnitReviewBanner.svelte";
   import UnitReviewPage from "./UnitReviewPage.svelte";
+  import LotMovementsPanel from "./LotMovementsPanel.svelte";
 
   // ─── State ──────────────────────────────────────────────────────────────────
 
@@ -91,37 +93,27 @@
   let detailProduct: ProductDetailResponse | null = null;
   let detailLoading = false;
 
+  // Product detail: lots + per-lot movement history
+  let detailLots: ExpiryLotResponse[] = [];
+  let detailLotsLoading = false;
+  let detailSelectedLotId: string | null = null;
+  /** Locations across every store that holds at least one of this product's lots. */
+  let detailAllLocations: StoreLocationResponse[] = [];
+
   // CSV export state (Slice 10a)
   let exporting = false;
 
   let showLotDetail = false;
   let detailLot: ExpiryLotResponse | null = null;
   let detailLotLoading = false;
-
-  let showResolveDialog = false;
-  let resolveLot: DashboardLotRow | null = null;
-  let resolveQty = 0;
-  let resolveType = "consumed";
-  let resolveNotes = "";
-  let resolveLoading = false;
-  let resolveError = "";
+  let lotDetailTab: "detail" | "history" = "detail";
+  let lotDetailLocations: StoreLocationResponse[] = [];
 
   // ─── Quick-create modal ─────────────────────────────────────────────────────
 
   let showQuickCreate = false;
   let quickCreateScannedValue = "";   // pre-fill UPC field in quick-create
   let categories: CategoryResponse[] = [];
-
-  // ─── Resolve types ──────────────────────────────────────────────────────────
-
-  const RESOLVE_TYPES = [
-    { value: "consumed", label: "Consumed / Used" },
-    { value: "sold", label: "Sold" },
-    { value: "discarded", label: "Discarded" },
-    { value: "donated", label: "Donated" },
-    { value: "transferred", label: "Transferred" },
-    { value: "other", label: "Other" },
-  ];
 
   // ─── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -132,10 +124,7 @@
   });
 
   // Reload dashboard when store, location, or quick-filter preset changes.
-  $: if (!loading) {
-    selectedStoreId;
-    selectedLocationId;
-    activePreset;
+  $: if (!loading && (selectedStoreId || selectedLocationId || activePreset)) {
     loadDashboard();
   }
 
@@ -242,13 +231,13 @@
 
       // ─── Scan handler ──────────────────────────────────────────────────────────
 
-      function handleScanFound(productId: string, hasLots: boolean) {
-        // Jump to lot entry if the product already has lots, otherwise show detail.
+function handleScanFound(productId: string, hasLots: boolean) {
+        // Jump to product detail if the product already has lots, otherwise show detail.
         if (hasLots) {
-          // Find the lot row from the dashboard to open resolve dialog directly.
+          // Find the lot row from the dashboard to open product detail with that lot pre-selected.
           const row = lots.find((l) => l.product_id === productId);
           if (row) {
-            openResolve(row);
+            viewProduct(row, row.lot_id);
           }
         } else {
           viewProduct({ lot_id: "", product_id: productId } as DashboardLotRow);
@@ -270,102 +259,104 @@
 
       // ─── Row actions ────────────────────────────────────────────────────────────
 
-  async function viewProduct(lot: DashboardLotRow) {
-    detailLoading = true;
-    showProductDetail = true;
-    detailProduct = null;
-    try {
-      detailProduct = await getProduct(lot.product_id);
-    } catch (e) {
-      errorMsg = String(e);
-      showProductDetail = false;
-    } finally {
-      detailLoading = false;
-    }
-  }
+async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null = null) {
+        detailLoading = true;
+        showProductDetail = true;
+        detailProduct = null;
+        detailLots = [];
+        detailSelectedLotId = preselectLotId;
+        detailAllLocations = [];
+        try {
+          detailProduct = await getProduct(lot.product_id);
+          await loadProductDetailLots(lot.product_id);
+        } catch (e) {
+          errorMsg = String(e);
+          showProductDetail = false;
+        } finally {
+          detailLoading = false;
+        }
+      }
+
+      /**
+       * Loads every active/resolved/archived expiry lot for the given product and
+       * caches the per-store location catalog so the movements panel can resolve
+       * transfer/exit/adjust location names. Reuses the same `listExpiryLotsByProduct`
+       * + `listStoreLocations` calls used by the dedicated Product Detail page.
+       */
+      async function loadAllStoreLocations(): Promise<StoreLocationResponse[]> {
+        const activeStores = stores.length > 0
+          ? stores.filter((store) => store.is_active)
+          : (await listStores()).filter((store) => store.is_active);
+        const locationLists = await Promise.all(
+          activeStores.map((store) =>
+            listStoreLocations(store.id)
+              .then((locations) => locations.map((location) => ({ ...location, store_name: store.name })))
+              .catch(() => [] as StoreLocationResponse[]),
+          ),
+        );
+        return locationLists.flat();
+      }
+
+      async function loadProductDetailLots(productId: string) {
+        detailLotsLoading = true;
+        try {
+          detailLots = await listExpiryLotsByProduct(productId);
+          // Keep the current selection if it still exists; otherwise pick the
+          // first active lot (and fall back to the first available lot).
+          const stillExists = detailSelectedLotId
+            && detailLots.some((l) => l.id === detailSelectedLotId);
+          if (!stillExists) {
+            const firstActive = detailLots.find((l) => l.status === "active");
+            detailSelectedLotId = firstActive?.id ?? detailLots[0]?.id ?? null;
+          }
+          detailAllLocations = await loadAllStoreLocations();
+        } catch (e) {
+          errorMsg = String(e);
+        } finally {
+          detailLotsLoading = false;
+        }
+      }
+
+      /** Closes the product-detail modal and clears its transient state. */
+      function closeProductDetail() {
+        showProductDetail = false;
+        detailProduct = null;
+        detailLots = [];
+        detailSelectedLotId = null;
+        detailAllLocations = [];
+      }
+
+      /** Refreshes the currently selected lot row after a movement is created. */
+      async function refreshSelectedLot() {
+        if (!detailSelectedLotId) return;
+        try {
+          const fresh = await getExpiryLot(detailSelectedLotId);
+          detailLots = detailLots.map((l) => (l.id === fresh.id ? fresh : l));
+        } catch (e) {
+          errorMsg = String(e);
+        }
+      }
+
+      /** The lot row currently highlighted in the picker (or null). */
+      $: detailSelectedLot =
+        detailLots.find((l) => l.id === detailSelectedLotId) ?? null;
 
   async function editLot(lot: DashboardLotRow) {
     detailLotLoading = true;
     showLotDetail = true;
+    lotDetailTab = "detail";
     detailLot = null;
+    lotDetailLocations = [];
     try {
-      detailLot = await getExpiryLot(lot.lot_id);
+      [detailLot, lotDetailLocations] = await Promise.all([
+    getExpiryLot(lot.lot_id),
+    loadAllStoreLocations(),
+      ]);
     } catch (e) {
       errorMsg = String(e);
       showLotDetail = false;
     } finally {
       detailLotLoading = false;
-    }
-  }
-
-  function openResolve(lot: DashboardLotRow) {
-    resolveLot = lot;
-    resolveQty = 0;
-    resolveType = "consumed";
-    resolveNotes = "";
-    resolveError = "";
-    resolveLoading = false;
-    showResolveDialog = true;
-  }
-
-  async function openResolveFromDetail(detail: ExpiryLotResponse) {
-    // Build a minimal DashboardLotRow from the ExpiryLotResponse for the resolve dialog.
-    const row: DashboardLotRow = {
-      lot_id: detail.id,
-      product_id: detail.product_id,
-      sku: "",       // resolved from product in viewProduct; not needed for resolve
-      description: "",
-      store_id: detail.store_id,
-      store_name: "",
-      location_id: detail.location_id,
-      location_name: null,
-      quantity: detail.quantity,
-      unit: detail.unit,
-      expiry_date: detail.expiry_date,
-      alert_days_before: detail.alert_days_before,
-      batch_code: detail.batch_code,
-      status: detail.status,
-      urgency: "",
-      days_remaining: 0,
-      default_unit_id: null,
-      unit_type: null,
-    };
-    resolveLot = row;
-    resolveQty = 0;
-    resolveType = "consumed";
-    resolveNotes = "";
-    resolveError = "";
-    resolveLoading = false;
-    showResolveDialog = true;
-  }
-
-  async function submitResolve() {
-    if (!resolveLot) return;
-    resolveError = "";
-    if (resolveQty <= 0) {
-      resolveError = "Quantity must be greater than zero.";
-      return;
-    }
-    if (resolveQty > resolveLot.quantity) {
-      resolveError = `Cannot resolve more than the remaining quantity (${resolveLot.quantity} ${resolveLot.unit}).`;
-      return;
-    }
-    resolveLoading = true;
-    try {
-      const { resolveExpiryLot } = await import("../lib/expiry_lots.js");
-      await resolveExpiryLot({
-        lot_id: resolveLot.lot_id,
-        quantity: resolveQty,
-        resolution: resolveType,
-        notes: resolveNotes || null,
-      });
-      showResolveDialog = false;
-      resolveLot = null;
-      await loadDashboard();
-    } catch (e) {
-      resolveError = String(e);
-    } finally {
-      resolveLoading = false;
     }
   }
 
@@ -578,18 +569,13 @@
               <td class="cell-actions">
                 <button
                   class="action-btn"
-                  title="View product"
-                  on:click={() => viewProduct(lot)}
-                >👁</button>
-                <button
-                  class="action-btn"
                   title="Edit lot"
                   on:click={() => editLot(lot)}
                 >✏️</button>
                 <button
-                  class="action-btn action-btn-resolve"
-                  title="Resolve quantity"
-                  on:click={() => openResolve(lot)}
+                  class="action-btn action-btn-lot-actions"
+                  title="View product and lot movements"
+                  on:click={() => viewProduct(lot, lot.lot_id)}
                 >↓</button>
               </td>
             </tr>
@@ -600,144 +586,176 @@
   {/if}
 </div>
 
-<!-- ── Product detail modal ─────────────────────────────────────────────────── -->
-{#if showProductDetail}
-  <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Product detail">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3>Product Detail</h3>
-        <button class="modal-close" on:click={() => (showProductDetail = false)}>✕</button>
-      </div>
-      {#if detailLoading}
-        <p class="modal-loading">Loading…</p>
-      {:else if detailProduct}
-        <dl class="detail-grid">
-          <dt>SKU</dt><dd>{detailProduct.product.sku}</dd>
-          <dt>Description</dt><dd>{detailProduct.product.description}</dd>
-          <dt>Category</dt><dd>{detailProduct.categories.length > 0 ? detailProduct.categories.map(c => c.name).join(", ") : "—"}</dd>
-          <dt>Default unit</dt><dd>{detailProduct.product.default_unit ?? "—"}</dd>
-          <dt>Alert days</dt><dd>{detailProduct.product.default_alert_days_before}</dd>
-          <dt>Status</dt><dd>{detailProduct.product.is_active ? "Active" : "Archived"}</dd>
-          {#if detailProduct.barcodes.length > 0}
-            <dt>Barcodes</dt>
-            <dd>
-              {#each detailProduct.barcodes as bc}
-                <span class="barcode-chip" class:primary={bc.is_primary}>
-                  {bc.barcode}{bc.is_primary ? " ★" : ""}
-                </span>
-              {/each}
-            </dd>
-          {/if}
-        </dl>
-      {/if}
-    </div>
-  </div>
-{/if}
+    <!-- ── Product detail modal ─────────────────────────────────────────────────── -->
+    {#if showProductDetail}
+      <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Product detail">
+        <div class="modal-box modal-box-wide">
+          <div class="modal-header">
+            <h3>Product Detail</h3>
+            <button class="modal-close" on:click={closeProductDetail}>✕</button>
+          </div>
+          {#if detailLoading}
+            <p class="modal-loading">Loading…</p>
+          {:else if detailProduct}
+            <dl class="detail-grid">
+              <dt>SKU</dt><dd>{detailProduct.product.sku}</dd>
+              <dt>Description</dt><dd>{detailProduct.product.description}</dd>
+              <dt>Category</dt><dd>{detailProduct.categories.length > 0 ? detailProduct.categories.map(c => c.name).join(", ") : "—"}</dd>
+              <dt>Default unit</dt><dd>{detailProduct.product.default_unit ?? "—"}</dd>
+              <dt>Alert days</dt><dd>{detailProduct.product.default_alert_days_before}</dd>
+              <dt>Status</dt><dd>{detailProduct.product.is_active ? "Active" : "Archived"}</dd>
+              {#if detailProduct.barcodes.length > 0}
+                <dt>Barcodes</dt>
+                <dd>
+                  {#each detailProduct.barcodes as bc}
+                    <span class="barcode-chip" class:primary={bc.is_primary}>
+                      {bc.barcode}{bc.is_primary ? " ★" : ""}
+                    </span>
+                  {/each}
+                </dd>
+              {/if}
+            </dl>
 
-<!-- ── Lot detail modal ─────────────────────────────────────────────────────── -->
-{#if showLotDetail}
-  <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Lot detail">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3>Lot Detail</h3>
-        <button class="modal-close" on:click={() => (showLotDetail = false)}>✕</button>
-      </div>
-      {#if detailLotLoading}
-        <p class="modal-loading">Loading…</p>
-      {:else if detailLot}
-        <dl class="detail-grid">
-          <dt>Lot ID</dt><dd class="cell-sku">{detailLot.id.slice(0, 8)}…</dd>
-          <dt>Quantity</dt><dd>{detailLot.quantity} {detailLot.unit}</dd>
-          <dt>Expiry</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
-          <dt>Alert days</dt><dd>{detailLot.alert_days_before}</dd>
-          <dt>Batch</dt><dd>{detailLot.batch_code ?? "—"}</dd>
-          <dt>Status</dt><dd>{detailLot.status}</dd>
-          {#if detailLot.resolution}
-            <dt>Resolution</dt><dd>{detailLot.resolution}</dd>
-          {/if}
-          {#if detailLot.notes}
-            <dt>Notes</dt><dd>{detailLot.notes}</dd>
-          {/if}
-        </dl>
-        <div class="modal-actions">
-          <button
-            class="btn-primary"
-            on:click={() => {
-              showLotDetail = false;
-              openResolveFromDetail(detailLot!);
-            }}
-          >Resolve quantity</button>
-        </div>
-      {/if}
-    </div>
-  </div>
-{/if}
+            <!-- ── Expiry lots + per-lot movement history ───────────────────── -->
+            <section class="lots-section" aria-label="Expiry lots and movement history">
+              <div class="lots-section-header">
+                <h4>Expiry lots</h4>
+                {#if detailLotsLoading}
+                  <span class="lots-loading-hint">Loading…</span>
+                {:else}
+                  <span class="lots-count">
+                    {detailLots.length} lot{detailLots.length === 1 ? "" : "s"}
+                  </span>
+                {/if}
+              </div>
 
-<!-- ── Resolve dialog ──────────────────────────────────────────────────────── -->
-{#if showResolveDialog}
-  <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Resolve quantity">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3>Resolve Quantity</h3>
-        <button class="modal-close" on:click={() => (showResolveDialog = false)}>✕</button>
-      </div>
-      {#if resolveLot}
-        <div class="resolve-info">
-          <strong>{resolveLot.description}</strong>
-          <br>
-          Remaining: <strong>{resolveLot.quantity} {resolveLot.unit}</strong>
-          — Expires: <strong>{formatDate(resolveLot.expiry_date)}</strong>
-        </div>
+              {#if !detailLotsLoading && detailLots.length === 0}
+                <p class="empty-hint">
+                  This product has no expiry lots yet.
+                </p>
+              {:else if detailLots.length > 0}
+                <ul class="lot-picker" role="listbox" aria-label="Product expiry lots">
+                  {#each detailLots as lot (lot.id)}
+                    <li>
+                      <button
+                        type="button"
+                        class="lot-picker-item"
+                        class:active={detailSelectedLotId === lot.id}
+                        class:lot-status-inactive={lot.status !== "active"}
+                        on:click={() => (detailSelectedLotId = lot.id)}
+                        aria-pressed={detailSelectedLotId === lot.id}
+                      >
+                        <span class="lot-picker-qty">
+                          {lot.quantity} {lot.unit}
+                        </span>
+                        <span class="lot-picker-date">
+                          Exp {formatDate(lot.expiry_date)}
+                        </span>
+                        {#if lot.batch_code}
+                          <span class="lot-picker-batch">{lot.batch_code}</span>
+                        {/if}
+                        <span class="lot-picker-status status-{lot.status}">
+                          {lot.status}
+                        </span>
+                      </button>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
 
-        <div class="form-group">
-          <label for="resolve-qty">Quantity to resolve</label>
-          <input
-            id="resolve-qty"
-            type="number"
-            min="0.01"
-            step="0.01"
-            bind:value={resolveQty}
-            disabled={resolveLoading}
-          />
-        </div>
-
-        <div class="form-group">
-          <label for="resolve-type">Resolution type</label>
-          <select id="resolve-type" bind:value={resolveType} disabled={resolveLoading}>
-            {#each RESOLVE_TYPES as rt}
-              <option value={rt.value}>{rt.label}</option>
-            {/each}
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="resolve-notes">Notes (optional)</label>
-          <textarea
-            id="resolve-notes"
-            rows="2"
-            bind:value={resolveNotes}
-            disabled={resolveLoading}
-          ></textarea>
-        </div>
-
-        {#if resolveError}
-          <div class="error-inline" role="alert">{resolveError}</div>
-        {/if}
-
-        <div class="modal-actions">
-          <button class="btn-secondary" on:click={() => (showResolveDialog = false)} disabled={resolveLoading}>
-            Cancel
-          </button>
-          <button class="btn-primary" on:click={submitResolve} disabled={resolveLoading}>
-            {resolveLoading ? "Saving…" : "Save"}
-          </button>
-            </div>
+              {#if detailSelectedLot}
+                <div class="lot-panel-wrap">
+                  <LotMovementsPanel
+                    lotId={detailSelectedLot.id}
+                    lotQuantity={detailSelectedLot.quantity}
+                    lotUnit={detailSelectedLot.unit}
+                    lotStatus={detailSelectedLot.status}
+                    locations={detailAllLocations.filter(
+                      (l) => l.store_id === detailSelectedLot!.store_id,
+                    )}
+                    allLocations={detailAllLocations}
+                    unitType={detailSelectedLot.unit_type}
+                    onMovementCreated={refreshSelectedLot}
+                  />
+                </div>
+              {/if}
+            </section>
           {/if}
         </div>
       </div>
     {/if}
 
-    <!-- ── Quick-create product modal ──────────────────────────────────────────── -->
+<!-- ── Lot detail modal ─────────────────────────────────────────────────────── -->
+{#if showLotDetail}
+  <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Lot detail">
+    <div class="modal-box modal-box-wide">
+      <div class="modal-header">
+        <h3>Lot Detail</h3>
+        <button class="modal-close" on:click={() => (showLotDetail = false)}>✕</button>
+      </div>
+
+      {#if detailLotLoading}
+        <p class="modal-loading">Loading…</p>
+      {:else if detailLot}
+        <!-- Tabs -->
+        <div class="detail-tabs">
+          <button
+            type="button"
+            class="tab-btn"
+            class:active={lotDetailTab === "detail"}
+            on:click={() => (lotDetailTab = "detail")}
+          >
+            Detalle
+          </button>
+          <button
+            type="button"
+            class="tab-btn"
+            class:active={lotDetailTab === "history"}
+            on:click={() => (lotDetailTab = "history")}
+          >
+            Historial
+          </button>
+        </div>
+
+        {#if lotDetailTab === "detail"}
+          <dl class="detail-grid">
+            <dt>Lot ID</dt><dd class="cell-sku">{detailLot.id.slice(0, 8)}…</dd>
+            <dt>Quantity</dt><dd>{detailLot.quantity} {detailLot.unit}</dd>
+            <dt>Expiry</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
+            <dt>Alert days</dt><dd>{detailLot.alert_days_before}</dd>
+            <dt>Batch</dt><dd>{detailLot.batch_code ?? "—"}</dd>
+            <dt>Status</dt><dd>{detailLot.status}</dd>
+            {#if detailLot.resolution}
+              <dt>Resolution</dt><dd>{detailLot.resolution}</dd>
+            {/if}
+{#if detailLot.notes}
+              <dt>Notes</dt><dd>{detailLot.notes}</dd>
+            {/if}
+          </dl>
+        {:else}
+          <!-- Historial tab -->
+          <div class="tab-content">
+            <LotMovementsPanel
+              lotId={detailLot.id}
+              lotQuantity={detailLot.quantity}
+              lotUnit={detailLot.unit}
+              lotStatus={detailLot.status}
+              locations={lotDetailLocations}
+              allLocations={lotDetailLocations}
+              unitType={detailLot.unit_type}
+              onMovementCreated={async () => {
+// Reload lot data after movement
+detailLot = await getExpiryLot(detailLot!.id);
+              }}
+            />
+          </div>
+        {/if}
+      {/if}
+    </div>
+  </div>
+{/if}
+
+<!-- ── Quick-create product modal ──────────────────────────────────────────── -->
     {#if showQuickCreate}
       <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Quick product create">
         <div class="modal-box modal-box-wide">
@@ -1133,12 +1151,12 @@
     background: #f3f4f6;
   }
 
-  .action-btn-resolve {
+  .action-btn-lot-actions {
     color: #2563eb;
     border-color: #bfdbfe;
   }
 
-  .action-btn-resolve:hover {
+  .action-btn-lot-actions:hover {
     background: #eff6ff;
   }
 
@@ -1171,7 +1189,7 @@
 
       /* ── Modals ──────────────────────────────────────────────────────────── */
       .modal-box-wide {
-        width: 600px;
+        width: 720px;
         max-width: 95vw;
       }
 
@@ -1247,6 +1265,41 @@
     margin-bottom: 16px;
   }
 
+  /* ── Detail tabs ────────────────────────────────────────────────────── */
+  .detail-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .tab-btn {
+    background: none;
+    border: none;
+    padding: 8px 16px;
+    font-size: 0.88rem;
+    cursor: pointer;
+    color: #6b7280;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    font-family: inherit;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .tab-btn:hover {
+    color: #374151;
+  }
+
+  .tab-btn.active {
+    color: #2563eb;
+    border-bottom-color: #2563eb;
+    font-weight: 500;
+  }
+
+  .tab-content {
+    min-height: 200px;
+  }
+
   .detail-grid dt {
     font-size: 0.8rem;
     color: #6b7280;
@@ -1276,59 +1329,134 @@
     color: #1d4ed8;
   }
 
-  /* ── Resolve form ────────────────────────────────────────────────────── */
-  .resolve-info {
-    background: #f8fafc;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    padding: 10px 12px;
-    font-size: 0.85rem;
-    color: #475569;
-    margin-bottom: 16px;
-    line-height: 1.6;
+  /* ── Product detail: expiry lots picker ─────────────────────────────── */
+  .lots-section {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
 
-  .form-group {
+  .lots-section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .lots-section-header h4 {
+    margin: 0;
+    font-size: 0.92rem;
+    color: #0f172a;
+    font-weight: 600;
+  }
+
+  .lots-loading-hint,
+  .lots-count {
+    font-size: 0.78rem;
+    color: #6b7280;
+  }
+
+  .empty-hint {
+    color: #9ca3af;
+    font-size: 0.85rem;
+    font-style: italic;
+    margin: 0;
+  }
+
+  .lot-picker {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
     flex-direction: column;
     gap: 4px;
-    margin-bottom: 12px;
+    max-height: 180px;
+    overflow-y: auto;
   }
 
-  .form-group label {
-    font-size: 0.82rem;
-    color: #374151;
-    font-weight: 500;
-  }
-
-  .form-group input,
-  .form-group select,
-  .form-group textarea {
-    border: 1px solid #d1d5db;
+  .lot-picker-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
     border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 0.85rem;
+    padding: 7px 10px;
     font-family: inherit;
-    background: #fff;
-    color: #1e293b;
-  }
-
-  .form-group input:focus,
-  .form-group select:focus,
-  .form-group textarea:focus {
-    outline: none;
-    border-color: #2563eb;
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
-  }
-
-  .error-inline {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    border-radius: 4px;
-    padding: 6px 10px;
-    color: #dc2626;
     font-size: 0.82rem;
-    margin-bottom: 12px;
+    color: #1e293b;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.12s, border-color 0.12s;
+  }
+
+  .lot-picker-item:hover {
+    background: #f3f4f6;
+  }
+
+  .lot-picker-item.active {
+    background: #eff6ff;
+    border-color: #3b82f6;
+  }
+
+  .lot-picker-item.lot-status-inactive {
+    opacity: 0.7;
+  }
+
+  .lot-picker-qty {
+    font-weight: 600;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  .lot-picker-date {
+    color: #475569;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .lot-picker-batch {
+    background: #e5e7eb;
+    color: #374151;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.74rem;
+  }
+
+  .lot-picker-status {
+    margin-left: auto;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #475569;
+  }
+
+  .lot-picker-status.status-active {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .lot-picker-status.status-resolved {
+    background: #dbeafe;
+    color: #1e40af;
+  }
+
+  .lot-picker-status.status-archived {
+    background: #f3f4f6;
+    color: #9ca3af;
+  }
+
+  .lot-panel-wrap {
+    margin-top: 6px;
+    padding-top: 10px;
+    border-top: 1px dashed #e5e7eb;
   }
 
   .modal-actions {

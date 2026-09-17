@@ -10,7 +10,7 @@ pub async fn get_settings(pool: &DbPool) -> Result<SettingsResponse, AppError> {
     repo::get_settings(pool).await.map_err(AppError::from)
 }
 
-/// Updates settings (currently: last_selected_store_id).
+/// Updates settings: last_selected_store_id and require_initial_location_on_lot_create.
 pub async fn update_settings(
     pool: &DbPool,
     input: SettingsUpdate,
@@ -18,6 +18,11 @@ pub async fn update_settings(
     repo::set_last_selected_store_id(pool, input.last_selected_store_id.as_deref())
         .await
         .map_err(AppError::from)?;
+    if let Some(value) = input.require_initial_location_on_lot_create {
+        repo::set_require_initial_location_on_lot_create(pool, value)
+            .await
+            .map_err(AppError::from)?;
+    }
     repo::get_settings(pool).await.map_err(AppError::from)
 }
 
@@ -34,6 +39,8 @@ mod tests {
         let pool = fresh_test_pool().await?;
         let settings = get_settings(&pool).await?;
         assert!(settings.last_selected_store_id.is_none());
+        // Default: require_initial_location_on_lot_create = true
+        assert!(settings.require_initial_location_on_lot_create);
         Ok(())
     }
 
@@ -55,6 +62,7 @@ mod tests {
             &pool,
             SettingsUpdate {
                 last_selected_store_id: Some(store.id.clone()),
+                require_initial_location_on_lot_create: None,
             },
         )
         .await?;
@@ -64,6 +72,7 @@ mod tests {
             &pool,
             SettingsUpdate {
                 last_selected_store_id: None,
+                require_initial_location_on_lot_create: None,
             },
         )
         .await?;

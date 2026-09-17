@@ -4,8 +4,8 @@
 use tauri::State;
 
 use crate::dto::expiry_lots::{
-    ExpiryLotCreate, ExpiryLotResolve, ExpiryLotResolveResult, ExpiryLotResponse, ExpiryLotUpdate,
-    LotResolutionEventResponse,
+    ArchiveLotInput, ExpiryLotCreate, ExpiryLotResolve, ExpiryLotResolveResult, ExpiryLotResponse,
+    ExpiryLotUpdate, LotResolutionEventResponse,
 };
 use crate::error::{AppError, CommandError};
 use crate::services::expiry_lots as service;
@@ -84,15 +84,17 @@ pub async fn update_expiry_lot(
         .map_err(AppError::into)
 }
 
-/// Soft-archives an expiry lot (status = 'archived'). Archived lots are
+/// Soft-archives an expiry lot (status = 'archived') with a required
+/// justification. Persists the archive reason + notes in `lot_movements`
+/// as an `exit:other` marker in the same transaction. Archived lots are
 /// excluded from active lists and dashboard queries.
 #[tauri::command]
 pub async fn archive_expiry_lot(
     state: State<'_, AppState>,
-    id: String,
+    input: ArchiveLotInput,
 ) -> Result<(), CommandError> {
     let pool = state.pool().await;
-    service::archive_expiry_lot(&pool, id)
+    service::archive_expiry_lot(&pool, input)
         .await
         .map_err(AppError::into)
 }

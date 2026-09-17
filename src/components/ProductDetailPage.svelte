@@ -11,11 +11,19 @@
     } from "../lib/products.js";
     import {
         listExpiryLotsByProduct,
-        archiveExpiryLot,
         type ExpiryLotResponse,
     } from "../lib/expiry_lots.js";
     import LotForm from "./LotForm.svelte";
     import ResolveQuantityDialog from "./ResolveQuantityDialog.svelte";
+    import ArchiveLotDialog from "./ArchiveLotDialog.svelte";
+    import LotMovementsPanel from "./LotMovementsPanel.svelte";
+    import {
+        getExpiryLot,
+    } from "../lib/expiry_lots.js";
+    import {
+        listStoreLocations,
+        type StoreLocationResponse,
+    } from "../lib/stores.js";
 
     // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -45,7 +53,15 @@
     let showLotForm = false;
     let editingLot: ExpiryLotResponse | null = null;
     let resolvingLot: ExpiryLotResponse | null = null;
+    let archivingLot: ExpiryLotResponse | null = null;
     let lotError = "";
+
+    // Lot detail modal (Historial tab)
+    let showLotDetail = false;
+    let detailLot: ExpiryLotResponse | null = null;
+    let detailLotLoading = false;
+    let lotDetailTab: "detail" | "history" = "detail";
+    let detailLotLocations: StoreLocationResponse[] = [];
 
     // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -138,12 +154,39 @@
         await load();
     }
 
-    async function archiveLot(lot: ExpiryLotResponse) {
+    async function onLotArchived() {
+        archivingLot = null;
+        lotError = "";
+        await load();
+    }
+
+    // ── Lot detail modal / Historial ───────────────────────────────────────────
+
+    async function openLotDetail(lot: ExpiryLotResponse) {
+        showLotDetail = true;
+        detailLotLoading = true;
+        lotDetailTab = "detail";
+        detailLot = null;
+        detailLotLocations = [];
         try {
-            await archiveExpiryLot(lot.id);
-            await load();
+            detailLot = await getExpiryLot(lot.id);
+            // Load all locations for this lot's store for the movements panel.
+            if (detailLot) {
+                detailLotLocations = await listStoreLocations(detailLot.store_id);
+            }
         } catch (e: unknown) {
             lotError = String(e);
+        } finally {
+            detailLotLoading = false;
+        }
+    }
+
+    async function refreshDetailLot() {
+        if (!detailLot) return;
+        try {
+            detailLot = await getExpiryLot(detailLot.id);
+        } catch {
+            // Silently ignore refresh failures — modal stays open with stale data.
         }
     }
 
@@ -439,9 +482,17 @@
                                     </button>
                                     <button
                                         type="button"
+                                        class="btn-icon"
+                                        title="Movement history"
+                                        on:click={() => openLotDetail(lot)}
+                                    >
+                                        📋
+                                    </button>
+                                    <button
+                                        type="button"
                                         class="btn-icon btn-danger-icon"
                                         title="Archive lot"
-                                        on:click={() => archiveLot(lot)}
+                                        on:click={() => (archivingLot = lot)}
                                     >
                                         🗄
                                     </button>
@@ -462,6 +513,98 @@
         onResolved={onLotResolved}
         onClose={() => (resolvingLot = null)}
     />
+{/if}
+
+<!-- ── Archive dialog ─────────────────────────────────────────────────────── -->
+{#if archivingLot}
+    <ArchiveLotDialog
+        lot={archivingLot}
+        onArchived={onLotArchived}
+        onClose={() => (archivingLot = null)}
+    />
+{/if}
+
+<!-- ── Lot detail modal ─────────────────────────────────────────────────────── -->
+{#if showLotDetail}
+    <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Lot detail">
+        <div class="modal-box modal-box-wide">
+            <div class="modal-header">
+                <h3>Lot Detail</h3>
+                <button class="modal-close" on:click={() => (showLotDetail = false)}>✕</button>
+            </div>
+
+            {#if detailLotLoading}
+                <p class="modal-loading">Loading…</p>
+            {:else if detailLot}
+                <!-- Tabs -->
+                <div class="detail-tabs">
+                    <button
+                        type="button"
+                        class="tab-btn"
+                        class:active={lotDetailTab === "detail"}
+                        on:click={() => (lotDetailTab = "detail")}
+                    >
+                        Detalle
+                    </button>
+                    <button
+                        type="button"
+                        class="tab-btn"
+                        class:active={lotDetailTab === "history"}
+                        on:click={() => (lotDetailTab = "history")}
+                    >
+                        Historial
+                    </button>
+                </div>
+
+                {#if lotDetailTab === "detail"}
+                    <dl class="detail-grid">
+                        <dt>Lot ID</dt><dd class="cell-sku">{detailLot.id.slice(0, 8)}…</dd>
+                        <dt>Quantity</dt><dd>{detailLot.quantity} {detailLot.unit || "unit(s)"}</dd>
+                        <dt>Expiry</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
+                        <dt>Alert days</dt><dd>{detailLot.alert_days_before}</dd>
+                        <dt>Batch</dt><dd>{detailLot.batch_code ?? "—"}</dd>
+                        <dt>Status</dt><dd>{detailLot.status}</dd>
+                        {#if detailLot.location_id}
+                            <dt>Location</dt><dd>{detailLot.location_id}</dd>
+                        {/if}
+                        {#if detailLot.resolution}
+                            <dt>Resolution</dt><dd>{detailLot.resolution}</dd>
+                        {/if}
+                        {#if detailLot.notes}
+                            <dt>Notes</dt><dd>{detailLot.notes}</dd>
+                        {/if}
+                    </dl>
+                    <div class="modal-actions">
+                        <button
+                            type="button"
+                            class="btn-secondary"
+                            on:click={() => (showLotDetail = false)}
+                        >
+                            Close
+                        </button>
+                    </div>
+                {:else}
+                    <!-- Historial tab -->
+                    <div class="tab-content">
+                        <LotMovementsPanel
+                            lotId={detailLot.id}
+                            lotQuantity={detailLot.quantity}
+                            lotUnit={detailLot.unit || ""}
+                            lotStatus={detailLot.status}
+                            locations={detailLotLocations.filter(
+                                (l) => l.store_id === detailLot!.store_id,
+                            )}
+                            allLocations={detailLotLocations}
+                            unitType={detailLot.unit_type}
+                            onMovementCreated={async () => {
+                                await refreshDetailLot();
+                            }}
+                        />
+                    </div>
+                {/if}
+            {/if}
+        </div>
+    </div>
 {/if}
 
 <style>

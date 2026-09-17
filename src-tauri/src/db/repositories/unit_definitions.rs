@@ -70,6 +70,27 @@ pub async fn find_by_key(
     Ok(row.map(|r| r.into_response()))
 }
 
+/// Finds a unit by its `display_name` (case-insensitive). Returns None if not found or archived.
+/// Used by the product unit resolver to recognize catalog display names such as
+/// `Unidades` or `Kilogramo` even when the raw `default_unit` text doesn't match a
+/// catalog key.
+pub async fn find_by_display_name_ci(
+    pool: &DbPool,
+    display_name: &str,
+) -> Result<Option<UnitDefinitionResponse>, sqlx::Error> {
+    let row: Option<UnitDefinitionRow> = sqlx::query_as(
+        "SELECT id, key, display_name, kind, is_preset, archived_at, created_at, updated_at
+         FROM unit_definitions
+         WHERE lower(display_name) = lower($1) AND archived_at IS NULL
+         LIMIT 1",
+    )
+    .bind(display_name)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|r| r.into_response()))
+}
+
 /// Finds a unit by its `id`. Returns None if not found or archived.
 pub async fn find_by_id(
     pool: &DbPool,
