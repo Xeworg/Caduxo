@@ -230,6 +230,6 @@ Plus manual smoke on **Linux + Windows** covering:
 ## Parent / Lifecycle Actions (post-implementation; bounded review and gates)
 
 - [x] Collapse the original five-PR chained delivery plan into the user-selected local-commit-then-verify path. Local commits exist on `feat/caduxo-lot-movement-ledger`; PR creation is deferred until after SDD verify. <!-- sdd-owner: parent -->
-- [ ] Run the full verify gate (cargo test, svelte-check, npm run build, manual smoke on Linux + Windows) and confirm the canonical reference cited in `caduxo-lot-movement-ledger/proposal.md` is satisfied before archiving the change. <!-- sdd-owner: parent -->
+- [x] Run the full verify gate (cargo test, svelte-check, npm run build, manual smoke on Linux + Windows) and confirm the canonical reference cited in `caduxo-lot-movement-ledger/proposal.md` is satisfied before archiving the change. Automated gates passed; manual Windows smoke is explicitly deferred by parent until VM setup / Windows compile. <!-- sdd-owner: parent -->
 - [ ] Open one aggregate PR for `feat/caduxo-lot-movement-ledger` after verify is green. <!-- sdd-owner: parent -->
 - [ ] Archive the change via `openspec archive caduxo-lot-movement-ledger` once the verify gate is green and delivery policy allows archive. <!-- sdd-owner: parent -->

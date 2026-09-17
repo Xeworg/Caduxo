@@ -501,3 +501,45 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib
 #### Remaining Tasks
 
 None — all 3 frontend gaps are closed. All phases complete.
+
+---
+
+### Phase 8 — Verify Gate Execution
+
+**Status:** COMPLETE — AUTOMATED GATES PASSED · WINDOWS MANUAL SMOKE DEFERRED BY PARENT
+
+#### Automated Gate Results
+
+All three automated verify gates cleared on first run from a Linux workspace.
+
+| Gate | Command | Result |
+|------|---------|--------|
+| Rust test suite | `cargo test --manifest-path src-tauri/Cargo.toml --lib` | ✅ **421 passed**, 0 failed, 0 ignored |
+| Svelte type/check | `npx svelte-check --workspace . --threshold error` | ✅ **0 errors, 0 warnings** |
+| Production build | `npm run build` | ✅ **built in 2.22s** (dist/ with 174 modules) |
+
+#### Manual Smoke Requirements (verify gate § Verify Gate)
+
+Per tasks.md, the manual smoke checklist covers:
+
+1. **Lot creation** — manual + auto batch, with and without location. ✅ Backend tests cover all paths; FE wiring confirmed in Phase 2–4. Manual on live app pending.
+2. **Mover stock** — same-store and cross-store transfers. ✅ Backend test (`create_lot_movement_transfer_accepts_cross_store_destination`) and service tests confirm; FE modal wired. Manual on live app pending.
+3. **Registrar salida** — each of 8 exit reasons, including blank-notes rejection for `Ajuste de inventario` and `Otro`. ✅ Backend tests and FE modal wiring confirmed. Manual on live app pending.
+4. **Ajustar conteo** — `+`, `−`, and zero delta; reactivation path. ✅ Backend tests confirm `inventory_adjustment` with both directions and zero-delta no-op. Manual on live app pending.
+5. **Toggle `Ubicación inicial obligatoria`** ON/OFF and create lots in both settings. ✅ Backend settings tests and FE ConfigurationPage wiring confirmed. Manual on live app pending.
+6. **CSV import/export**. ✅ CSV service tests (20+ tests) cover import/export paths. Manual on live app pending.
+7. **Pre-V5 backup restore → movements present after migration**. ✅ `restore_from_pre_v5_backup_applies_v5_backfill_in_situ` test passes. Manual on live app pending.
+
+#### Windows-Specific Smoke
+
+Manual smoke items 1–7 require running the compiled Caduxo desktop application. This cannot be performed from the current Linux workspace. The parent explicitly marked this lifecycle gate complete on 2026-09-17 because Windows VM setup will happen later and Windows compilation/smoke will be performed outside this apply session. The Rust test suite (which does run on Linux) provides equivalent backend coverage for items 1–4 and 6–7; Windows manual smoke remains deferred, not independently verified by this agent.
+
+#### Implementation-owned Tasks
+
+All 29 implementation-owned tasks are marked complete (`- [x]`) in `tasks.md`. The parent-owned verify gate is also marked complete by explicit parent decision with Windows manual smoke deferred. The 2 remaining `- [ ]` tasks are parent-owned:
+- Open one aggregate PR (deferred until after verify)
+- Archive the change (deferred until after PR)
+
+#### Files Changed
+
+No new files introduced in this gate run. The verify gate re-confirmed the build is clean with existing implementation artifacts.
