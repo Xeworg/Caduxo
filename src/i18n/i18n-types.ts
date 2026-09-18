@@ -892,9 +892,68 @@ type RootTranslation = {
 		 */
 		noStores: string
 		/**
+		 * L​o​a​d​i​n​g​…
+		 */
+		loading: string
+		/**
+		 * S​e​l​e​c​t​ ​a​ ​s​t​o​r​e​ ​t​o​ ​m​a​n​a​g​e​ ​i​t​.
+		 */
+		selectToManage: string
+		/**
+		 * W​e​l​c​o​m​e​ ​t​o​ ​C​a​d​u​x​o​!
+		 */
+		welcomeTitle: string
+		placeholders: {
+			/**
+			 * e​.​g​.​ ​M​a​i​n​ ​S​h​o​p
+			 */
+			storeName: string
+			/**
+			 * e​.​g​.​ ​M​S​-​0​0​1
+			 */
+			storeCode: string
+			/**
+			 * A​n​y​ ​n​o​t​e​s​…
+			 */
+			storeNotes: string
+			/**
+			 * e​.​g​.​ ​F​r​i​d​g​e​ ​A​,​ ​F​r​e​e​z​e​r​ ​1
+			 */
+			locationName: string
+			/**
+			 * O​p​t​i​o​n​a​l​ ​n​o​t​e​s​…
+			 */
+			locationNotes: string
+		}
+		/**
 		 * N​o​ ​l​o​c​a​t​i​o​n​s​ ​y​e​t
 		 */
 		noLocations: string
+		/**
+		 * N​o​ ​l​o​c​a​t​i​o​n​s​ ​d​e​f​i​n​e​d​.​ ​A​d​d​ ​s​h​e​l​v​e​s​,​ ​f​r​i​d​g​e​s​,​ ​o​r​ ​s​e​c​t​i​o​n​s​.
+		 */
+		noLocationsHint: string
+		/**
+		 * S​e​l​e​c​t​e​d​ ​c​a​t​e​g​o​r​i​e​s
+		 */
+		selectedCategories: string
+		/**
+		 * R​e​m​o​v​e​ ​{​n​a​m​e​}
+		 * @param {unknown} name
+		 */
+		removeCategory: RequiredParams<'name'>
+		/**
+		 * E​d​i​t
+		 */
+		edit: string
+		/**
+		 * S​e​l​e​c​t​ ​a​ ​s​t​o​r​e​ ​t​o​ ​m​a​n​a​g​e​ ​i​t​.
+		 */
+		noLocationSelectedHint: string
+		/**
+		 * S​e​l​e​c​t​ ​a​ ​s​t​o​r​e​ ​t​o​ ​m​a​n​a​g​e​ ​i​t​.
+		 */
+		noStoreSelectedHint: string
 		/**
 		 * A​r​e​ ​y​o​u​ ​s​u​r​e​ ​y​o​u​ ​w​a​n​t​ ​t​o​ ​d​e​l​e​t​e​ ​t​h​i​s​ ​s​t​o​r​e​?​ ​T​h​i​s​ ​a​c​t​i​o​n​ ​c​a​n​n​o​t​ ​b​e​ ​u​n​d​o​n​e​.
 		 */
@@ -911,6 +970,42 @@ type RootTranslation = {
 		 * I​n​a​c​t​i​v​e
 		 */
 		inactive: string
+		/**
+		 * S​t​o​r​e​ ​n​a​m​e​ ​i​s​ ​r​e​q​u​i​r​e​d
+		 */
+		storeNameRequired: string
+		/**
+		 * S​t​o​r​e​ ​c​r​e​a​t​e​d
+		 */
+		storeCreated: string
+		/**
+		 * S​t​o​r​e​ ​u​p​d​a​t​e​d
+		 */
+		storeUpdated: string
+		/**
+		 * L​o​c​a​t​i​o​n​ ​c​r​e​a​t​e​d
+		 */
+		locationCreated: string
+		/**
+		 * L​o​c​a​t​i​o​n​ ​u​p​d​a​t​e​d
+		 */
+		locationUpdated: string
+		/**
+		 * A​d​d​ ​L​o​c​a​t​i​o​n
+		 */
+		addLocation: string
+		/**
+		 * L​o​c​a​t​i​o​n​ ​n​a​m​e​ ​i​s​ ​r​e​q​u​i​r​e​d
+		 */
+		locationRequired: string
+		/**
+		 * S​a​v​e​ ​C​h​a​n​g​e​s
+		 */
+		saveChanges: string
+		/**
+		 * C​a​n​c​e​l
+		 */
+		cancel: string
 	}
 	products: {
 		/**
@@ -1552,6 +1647,14 @@ type RootTranslation = {
 		 */
 		placeholder: string
 		/**
+		 * S​c​a​n​ ​b​a​r​c​o​d​e​ ​o​r​ ​e​n​t​e​r​ ​S​K​U
+		 */
+		ariaLabel: string
+		/**
+		 * P​r​e​s​s​ ​E​n​t​e​r​ ​t​o​ ​s​e​a​r​c​h
+		 */
+		title: string
+		/**
 		 * N​o​ ​p​r​o​d​u​c​t​ ​f​o​u​n​d​ ​f​o​r​ ​t​h​i​s​ ​b​a​r​c​o​d​e​.
 		 */
 		noMatch: string
@@ -1567,9 +1670,64 @@ type RootTranslation = {
 		 */
 		placeholder: string
 		/**
+		 * S​e​a​r​c​h​ ​c​a​t​e​g​o​r​i​e​s​…
+		 */
+		searchPlaceholder: string
+		/**
+		 * S​e​l​e​c​t​e​d​ ​c​a​t​e​g​o​r​i​e​s
+		 */
+		selectedCategories: string
+		/**
+		 * R​e​m​o​v​e​ ​{​n​a​m​e​}
+		 * @param {unknown} name
+		 */
+		removeCategory: RequiredParams<'name'>
+		/**
+		 * C​l​e​a​r​ ​a​l​l
+		 */
+		clearAll: string
+		/**
+		 * C​l​e​a​r​ ​a​l​l​ ​s​e​l​e​c​t​e​d​ ​c​a​t​e​g​o​r​i​e​s
+		 */
+		clearAllAria: string
+		/**
+		 * S​e​a​r​c​h​ ​c​a​t​e​g​o​r​i​e​s
+		 */
+		searchAria: string
+		/**
+		 * C​l​o​s​e
+		 */
+		closeAria: string
+		/**
+		 * S​e​a​r​c​h​i​n​g​…
+		 */
+		searching: string
+		/**
+		 * N​o​ ​c​a​t​e​g​o​r​i​e​s​ ​y​e​t
+		 */
+		noCategories: string
+		/**
+		 * C​r​e​a​t​i​n​g​…
+		 */
+		creating: string
+		/**
+		 * U​n​c​a​t​e​g​o​r​i​z​e​d
+		 */
+		uncategorized: string
+		/**
 		 * N​o​ ​c​a​t​e​g​o​r​y
 		 */
 		noCategory: string
+		/**
+		 * "​{​n​a​m​e​}​"​ ​a​l​r​e​a​d​y​ ​e​x​i​s​t​s
+		 * @param {unknown} name
+		 */
+		alreadyExists: RequiredParams<'name'>
+		/**
+		 * C​r​e​a​t​e​ ​"​{​n​a​m​e​}​"
+		 * @param {unknown} name
+		 */
+		createOption: RequiredParams<'name'>
 	}
 	notification: {
 		/**
@@ -2560,9 +2718,67 @@ export type TranslationFunctions = {
 		 */
 		noStores: () => LocalizedString
 		/**
+		 * Loading…
+		 */
+		loading: () => LocalizedString
+		/**
+		 * Select a store to manage it.
+		 */
+		selectToManage: () => LocalizedString
+		/**
+		 * Welcome to Caduxo!
+		 */
+		welcomeTitle: () => LocalizedString
+		placeholders: {
+			/**
+			 * e.g. Main Shop
+			 */
+			storeName: () => LocalizedString
+			/**
+			 * e.g. MS-001
+			 */
+			storeCode: () => LocalizedString
+			/**
+			 * Any notes…
+			 */
+			storeNotes: () => LocalizedString
+			/**
+			 * e.g. Fridge A, Freezer 1
+			 */
+			locationName: () => LocalizedString
+			/**
+			 * Optional notes…
+			 */
+			locationNotes: () => LocalizedString
+		}
+		/**
 		 * No locations yet
 		 */
 		noLocations: () => LocalizedString
+		/**
+		 * No locations defined. Add shelves, fridges, or sections.
+		 */
+		noLocationsHint: () => LocalizedString
+		/**
+		 * Selected categories
+		 */
+		selectedCategories: () => LocalizedString
+		/**
+		 * Remove {name}
+		 */
+		removeCategory: (arg: { name: unknown }) => LocalizedString
+		/**
+		 * Edit
+		 */
+		edit: () => LocalizedString
+		/**
+		 * Select a store to manage it.
+		 */
+		noLocationSelectedHint: () => LocalizedString
+		/**
+		 * Select a store to manage it.
+		 */
+		noStoreSelectedHint: () => LocalizedString
 		/**
 		 * Are you sure you want to delete this store? This action cannot be undone.
 		 */
@@ -2579,6 +2795,42 @@ export type TranslationFunctions = {
 		 * Inactive
 		 */
 		inactive: () => LocalizedString
+		/**
+		 * Store name is required
+		 */
+		storeNameRequired: () => LocalizedString
+		/**
+		 * Store created
+		 */
+		storeCreated: () => LocalizedString
+		/**
+		 * Store updated
+		 */
+		storeUpdated: () => LocalizedString
+		/**
+		 * Location created
+		 */
+		locationCreated: () => LocalizedString
+		/**
+		 * Location updated
+		 */
+		locationUpdated: () => LocalizedString
+		/**
+		 * Add Location
+		 */
+		addLocation: () => LocalizedString
+		/**
+		 * Location name is required
+		 */
+		locationRequired: () => LocalizedString
+		/**
+		 * Save Changes
+		 */
+		saveChanges: () => LocalizedString
+		/**
+		 * Cancel
+		 */
+		cancel: () => LocalizedString
 	}
 	products: {
 		/**
@@ -3216,6 +3468,14 @@ export type TranslationFunctions = {
 		 */
 		placeholder: () => LocalizedString
 		/**
+		 * Scan barcode or enter SKU
+		 */
+		ariaLabel: () => LocalizedString
+		/**
+		 * Press Enter to search
+		 */
+		title: () => LocalizedString
+		/**
 		 * No product found for this barcode.
 		 */
 		noMatch: () => LocalizedString
@@ -3230,9 +3490,61 @@ export type TranslationFunctions = {
 		 */
 		placeholder: () => LocalizedString
 		/**
+		 * Search categories…
+		 */
+		searchPlaceholder: () => LocalizedString
+		/**
+		 * Selected categories
+		 */
+		selectedCategories: () => LocalizedString
+		/**
+		 * Remove {name}
+		 */
+		removeCategory: (arg: { name: unknown }) => LocalizedString
+		/**
+		 * Clear all
+		 */
+		clearAll: () => LocalizedString
+		/**
+		 * Clear all selected categories
+		 */
+		clearAllAria: () => LocalizedString
+		/**
+		 * Search categories
+		 */
+		searchAria: () => LocalizedString
+		/**
+		 * Close
+		 */
+		closeAria: () => LocalizedString
+		/**
+		 * Searching…
+		 */
+		searching: () => LocalizedString
+		/**
+		 * No categories yet
+		 */
+		noCategories: () => LocalizedString
+		/**
+		 * Creating…
+		 */
+		creating: () => LocalizedString
+		/**
+		 * Uncategorized
+		 */
+		uncategorized: () => LocalizedString
+		/**
 		 * No category
 		 */
 		noCategory: () => LocalizedString
+		/**
+		 * "{name}" already exists
+		 */
+		alreadyExists: (arg: { name: unknown }) => LocalizedString
+		/**
+		 * Create "{name}"
+		 */
+		createOption: (arg: { name: unknown }) => LocalizedString
 	}
 	notification: {
 		/**

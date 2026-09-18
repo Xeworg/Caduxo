@@ -16,6 +16,7 @@
     type StoreUpdate,
     type SettingsResponse,
   } from "../lib/stores.js";
+  import { LL } from "../i18n/i18n-svelte.js";
 
   // ── State ──────────────────────────────────────────────────────────────────
 
@@ -128,7 +129,7 @@
 
   async function submitStore() {
     if (!storeName.trim()) {
-      flash("Store name is required", "error");
+      flash($LL.stores.storeNameRequired(), "error");
       return;
     }
     try {
@@ -141,7 +142,7 @@
           is_active: storeActive,
         });
         stores = stores.map((s) => (s.id === updated.id ? updated : s));
-        flash("Store updated", "success");
+        flash($LL.stores.storeUpdated(), "success");
       } else {
         const created = await createStore({
           name: storeName.trim(),
@@ -151,7 +152,7 @@
         stores = [...stores, created];
         selectedStoreId = created.id;
         if (firstRun) firstRun = false;
-        flash("Store created", "success");
+        flash($LL.stores.storeCreated(), "success");
       }
           editingStore = null;
           storeFormOpen = false;
@@ -198,7 +199,7 @@
           is_active: locationActive,
         });
         locations = locations.map((l) => (l.id === updated.id ? updated : l));
-        flash("Location updated", "success");
+        flash($LL.stores.locationUpdated(), "success");
       } else {
         const created = await createStoreLocation({
           store_id: selectedStoreId,
@@ -206,7 +207,7 @@
           notes: locationNotes.trim() || null,
         });
         locations = [...locations, created];
-        flash("Location created", "success");
+        flash($LL.stores.locationCreated(), "success");
       }
           editingLocation = null;
           locationFormOpen = false;
@@ -231,11 +232,11 @@
 <div class="page">
   <!-- Header -->
   <header class="page-header">
-    <h1>Stores</h1>
+    <h1>{$LL.stores.pageTitle()}</h1>
         {#if !editingStore && !storeFormOpen}
           <button class="btn-primary" on:click={startCreateStore}>
 
-        + New Store
+        + {$LL.stores.createStore()}
       </button>
     {/if}
   </header>
@@ -249,57 +250,57 @@
   {/if}
 
   {#if loading}
-    <p class="loading">Loading…</p>
+    <p class="loading">{$LL.stores.loading()}</p>
   {:else if firstRun}
     <!-- ── First-run banner ──────────────────────────────────────────────── -->
     <section class="first-run">
       <div class="first-run-card">
-        <h2>Welcome to Caduxo!</h2>
-        <p>Before you can track expiry lots, you need to create at least one store.</p>
+        <h2>{$LL.stores.welcomeTitle()}</h2>
+        <p>{$LL.stores.firstRun.title()}</p>
 
         {#if storeFormOpen}
           <!-- Show store form for first run -->
           <form class="store-form" on:submit|preventDefault={submitStore}>
-            <h3>Create your first store</h3>
+            <h3>{$LL.stores.firstRun.subtitle()}</h3>
             <label>
-              Store name *
+              {$LL.stores.storeName()} *
               <input
                 type="text"
                 bind:value={storeName}
-                placeholder="e.g. Main Shop"
+                placeholder={$LL.stores.placeholders.storeName()}
                 required
               />
             </label>
             <label>
-              Code (optional)
+              {$LL.stores.storeCode()} {$LL.common.optional()}
               <input
                 type="text"
                 bind:value={storeCode}
-                placeholder="e.g. MS-001"
+                placeholder={$LL.stores.placeholders.storeCode()}
               />
             </label>
             <label>
-              Notes (optional)
+              {$LL.stores.storeNotes()} {$LL.common.optional()}
               <textarea
                 bind:value={storeNotes}
-                placeholder="Any notes…"
+                placeholder={$LL.stores.placeholders.storeNotes()}
                 rows="2"
               ></textarea>
             </label>
             <div class="form-actions">
               <button type="submit" class="btn-primary">
-                {editingStore ? "Update" : "Create Store"}
+                {editingStore ? $LL.stores.saveChanges() : $LL.stores.createStore()}
               </button>
               {#if editingStore}
                 <button type="button" class="btn-secondary" on:click={cancelStoreForm}>
-                  Cancel
+                  {$LL.common.cancel()}
                 </button>
               {/if}
             </div>
           </form>
         {:else}
           <button class="btn-primary" on:click={startCreateStore}>
-            + Create First Store
+            + {$LL.stores.createStore()}
           </button>
         {/if}
       </div>
@@ -321,12 +322,12 @@
               <span class="store-code">{store.code}</span>
             {/if}
             {#if !store.is_active}
-              <span class="badge-inactive">Inactive</span>
+              <span class="badge-inactive">{$LL.stores.inactive()}</span>
             {/if}
           </button>
         {/each}
         {#if stores.length === 0}
-          <p class="empty-hint">No stores yet.</p>
+          <p class="empty-hint">{$LL.stores.noStores()}</p>
         {/if}
       </aside>
 
@@ -335,50 +336,50 @@
 {#if editingStore}
           <!-- Edit form -->
           <form class="store-form" on:submit|preventDefault={submitStore}>
-            <h3>Edit Store</h3>
+            <h3>{$LL.stores.editStore()}</h3>
             <label>
-              Name *
+              {$LL.stores.storeName()} *
               <input type="text" bind:value={storeName} required />
             </label>
             <label>
-              Code
+              {$LL.stores.storeCode()}
               <input type="text" bind:value={storeCode} />
             </label>
             <label>
-              Notes
+              {$LL.stores.storeNotes()}
               <textarea bind:value={storeNotes} rows="2"></textarea>
             </label>
             <label class="checkbox-label">
               <input type="checkbox" bind:checked={storeActive} />
-              Active
+              {$LL.stores.active()}
             </label>
             <div class="form-actions">
-              <button type="submit" class="btn-primary">Save Changes</button>
+              <button type="submit" class="btn-primary">{$LL.stores.saveChanges()}</button>
               <button type="button" class="btn-secondary" on:click={cancelStoreForm}>
-                Cancel
+                {$LL.common.cancel()}
               </button>
             </div>
               </form>
 
             {:else if storeFormOpen}
               <form class="store-form" on:submit|preventDefault={submitStore}>
-                <h3>Create Store</h3>
+                <h3>{$LL.stores.createStore()}</h3>
                 <label>
-                  Name *
+                  {$LL.stores.storeName()} *
                   <input type="text" bind:value={storeName} required />
                 </label>
                 <label>
-                  Code
+                  {$LL.stores.storeCode()}
                   <input type="text" bind:value={storeCode} />
                 </label>
                 <label>
-                  Notes
+                  {$LL.stores.storeNotes()}
                   <textarea bind:value={storeNotes} rows="2"></textarea>
                 </label>
                 <div class="form-actions">
-                  <button type="submit" class="btn-primary">Create Store</button>
+                  <button type="submit" class="btn-primary">{$LL.stores.createStore()}</button>
                   <button type="button" class="btn-secondary" on:click={cancelStoreForm}>
-                    Cancel
+                    {$LL.common.cancel()}
                   </button>
                 </div>
               </form>
@@ -389,12 +390,12 @@
             <div>
               <h2>{selectedStore.name}</h2>
               {#if selectedStore.code}<span class="detail-code">{selectedStore.code}</span>{/if}
-              {#if !selectedStore.is_active}<span class="badge-inactive">Inactive</span>{/if}
+              {#if !selectedStore.is_active}<span class="badge-inactive">{$LL.stores.inactive()}</span>{/if}
               {#if selectedStore.notes}<p class="detail-notes">{selectedStore.notes}</p>{/if}
             </div>
             <div class="detail-actions">
               <button class="btn-secondary" on:click={() => startEditStore(selectedStore!)}>
-                Edit
+                {$LL.stores.edit()}
               </button>
             </div>
           </div>
@@ -402,10 +403,10 @@
           <!-- Locations section -->
           <section class="locations-section">
             <div class="section-header">
-              <h3>Internal Locations</h3>
+              <h3>{$LL.stores.internalLocations()}</h3>
               {#if !editingLocation && !locationFormOpen}
                 <button class="btn-small" on:click={startCreateLocation}>
-                  + Add Location
+                  + {$LL.stores.createLocation()}
                 </button>
               {/if}
             </div>
@@ -413,7 +414,7 @@
             {#if !locationFormOpen}
               <!-- Location list -->
               {#if locations.length === 0}
-                <p class="empty-hint">No locations defined. Add shelves, fridges, or sections.</p>
+                <p class="empty-hint">{$LL.stores.noLocationsHint()}</p>
               {:else}
                 <ul class="location-list">
                   {#each locations as loc (loc.id)}
@@ -421,11 +422,11 @@
                       <div class="location-info">
                         <span class="location-name">{loc.name}</span>
                         {#if loc.notes}<span class="location-notes">{loc.notes}</span>{/if}
-                        {#if !loc.is_active}<span class="badge-inactive">Inactive</span>{/if}
+                        {#if !loc.is_active}<span class="badge-inactive">{$LL.stores.inactive()}</span>{/if}
                       </div>
                       <button
                         class="btn-icon"
-                        title="Edit"
+                        title={$LL.stores.edit()}
                         on:click={() => startEditLocation(loc)}
                       >
                         ✏️
@@ -439,28 +440,28 @@
               <!-- Location form -->
               <form class="location-form" on:submit|preventDefault={submitLocation}>
                 <label>
-                  Location name *
+                  {$LL.stores.locationName()} *
                   <input
                     type="text"
                     bind:value={locationName}
-                    placeholder="e.g. Fridge A, Freezer 1"
+                    placeholder={$LL.stores.placeholders.locationName()}
                     required
                   />
                 </label>
                 <label>
-                  Notes
-                  <textarea bind:value={locationNotes} rows="1" placeholder="Optional notes…"></textarea>
+                  {$LL.stores.locationNotes()}
+                  <textarea bind:value={locationNotes} rows="1" placeholder={$LL.stores.placeholders.locationNotes()}></textarea>
                 </label>
                 <label class="checkbox-label">
                   <input type="checkbox" bind:checked={locationActive} />
-                  Active
+                  {$LL.stores.active()}
                 </label>
                 <div class="form-actions">
                   <button type="submit" class="btn-primary btn-small">
-                    {editingLocation ? "Save" : "Add Location"}
+                    {editingLocation ? $LL.stores.saveChanges() : $LL.stores.createLocation()}
                   </button>
                   <button type="button" class="btn-secondary btn-small" on:click={cancelLocationForm}>
-                    Cancel
+                    {$LL.common.cancel()}
                   </button>
                 </div>
               </form>
@@ -468,7 +469,7 @@
           </section>
 
         {:else}
-          <p class="empty-hint">Select a store to manage it.</p>
+          <p class="empty-hint">{$LL.stores.selectToManage()}</p>
         {/if}
       </main>
     </div>

@@ -383,7 +383,6 @@
             bind:value={categoryIds}
             {categories}
             includeUncategorized={true}
-            placeholder={$LL.categoryPicker.placeholder()}
           />
         </div>
 

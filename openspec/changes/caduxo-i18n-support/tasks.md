@@ -97,10 +97,11 @@ The chain-strategy selection is `deferred` in the session preflight and the desi
 
 ### 2.5 Re-key remaining components
 
-- [ ] Re-key `src/components/ScanSearchBox.svelte` placeholder + error through `$LL.scan.*`. <!-- sdd-owner: implementation -->
-- [ ] Re-key titles, buttons, placeholders, modals through `$LL.*` in `src/components/StoresPage.svelte`, `src/components/ProductCatalogPage.svelte`, `src/components/ProductForm.svelte`, `src/components/ProductDetailPage.svelte`, `src/components/LotForm.svelte`, `src/components/CalendarPage.svelte`, `src/components/BackupRestorePage.svelte`, `src/components/CsvImportPage.svelte`, `src/components/UnitReviewPage.svelte`, `src/components/LotMovementsPanel.svelte`. <!-- sdd-owner: implementation -->
+- [x] Re-key `src/components/ScanSearchBox.svelte` placeholder + error through `$LL.scan.*`. <!-- sdd-owner: implementation -->
+- [ ] Re-key titles, buttons, placeholders, modals through `$LL.*` in `src/components/ProductCatalogPage.svelte`, `src/components/ProductForm.svelte`, `src/components/ProductDetailPage.svelte`, `src/components/LotForm.svelte`, `src/components/CalendarPage.svelte`, `src/components/BackupRestorePage.svelte`, `src/components/CsvImportPage.svelte`, `src/components/UnitReviewPage.svelte`, `src/components/LotMovementsPanel.svelte`. <!-- sdd-owner: implementation -->
+- [x] Re-key titles, buttons, placeholders, modals through `$LL.*` in `src/components/StoresPage.svelte`. <!-- sdd-owner: implementation -->
 - [ ] Re-key plural-aware copy in `src/components/UnitReviewBanner.svelte` through `$LL.unitReview.*`. <!-- sdd-owner: implementation -->
-- [ ] Re-key placeholder + helper text in `src/components/inputs/CategoryPicker.svelte` through `$LL.categoryPicker.*`. <!-- sdd-owner: implementation -->
+- [x] Re-key placeholder + helper text in `src/components/inputs/CategoryPicker.svelte` through `$LL.categoryPicker.*`. <!-- sdd-owner: implementation -->
 - [ ] Re-key modal helpers (`MoveStockModal`, `RegisterExitModal`, `AdjustCountModal`, `ResolveQuantityDialog`, `ArchiveLotDialog`, `LotMovementsPanel` dialogs) and any other user-visible English residue surfaced by `grep -RIn '>[A-Z][a-z]' src/components src/App.svelte | grep -v '\$LL'` after the per-component re-keying pass. <!-- sdd-owner: implementation -->
 
 ### 2.6 PR 2 verify gate

@@ -471,7 +471,6 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
         bind:value={categoryIds}
         {categories}
         includeUncategorized={true}
-        placeholder={$LL.categoryPicker.placeholder()}
       />
     </div>
   </header>

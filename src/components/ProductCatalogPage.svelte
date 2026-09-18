@@ -217,7 +217,6 @@
               bind:value={categoryIds}
               {categories}
               includeUncategorized={true}
-              placeholder="Filter by category…"
             />
           </div>
         </div>

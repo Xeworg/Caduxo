@@ -5,11 +5,12 @@
     type ScanFoundResult,
     type ScanNotFoundResult,
   } from "../lib/products.js";
+  import { LL } from "../i18n/i18n-svelte.js";
 
   // ── Props ─────────────────────────────────────────────────────────────────────
 
   /** Text shown as placeholder in the input field. */
-  export let placeholder = "Scan barcode or type SKU…";
+  export let placeholder = "";
   /** Called when a barcode or SKU matches — caller decides the next step. */
   export let onFound: (productId: string, hasLots: boolean) => void;
   /** Called when nothing matched — caller opens quick-create. */
@@ -51,7 +52,7 @@
       // Clear the input after a successful scan regardless of outcome.
       scanValue = "";
     } catch (e) {
-      errorMsg = String(e);
+      errorMsg = $LL.scan.searchError({ msg: String(e) });
     } finally {
       scanning = false;
     }
@@ -78,8 +79,8 @@
     autocapitalize="off"
     spellcheck="false"
     on:keydown={handleKeydown}
-    aria-label="Scan barcode or enter SKU"
-    title="Press Enter to search"
+    aria-label={$LL.scan.ariaLabel()}
+    title={$LL.scan.title()}
   />
 
   {#if scanning}
