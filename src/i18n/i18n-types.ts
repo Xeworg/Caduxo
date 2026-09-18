@@ -1053,6 +1053,10 @@ type RootTranslation = {
 		 */
 		addBarcode: string
 		/**
+		 * A​d​d​i​n​g​…
+		 */
+		addingBarcode: string
+		/**
 		 * B​a​r​c​o​d​e​ ​a​d​d​e​d
 		 */
 		barcodeAdded: string
@@ -1061,7 +1065,7 @@ type RootTranslation = {
 		 */
 		barcodeRemoved: string
 		/**
-		 * N​o​ ​p​r​o​d​u​c​t​s​ ​y​e​t
+		 * N​o​ ​p​r​o​d​u​c​t​s​ ​y​e​t​.
 		 */
 		noProducts: string
 		/**
@@ -1136,6 +1140,232 @@ type RootTranslation = {
 		 * S​e​t​ ​c​o​u​n​t
 		 */
 		setCount: string
+		/**
+		 * A​r​c​h​i​v​e​d
+		 */
+		archived: string
+		catalog: {
+			/**
+			 * P​r​o​d​u​c​t​s
+			 */
+			pageTitle: string
+			/**
+			 * E​x​p​o​r​t​ ​C​S​V
+			 */
+			exportCsv: string
+			/**
+			 * E​x​p​o​r​t​i​n​g​…
+			 */
+			exporting: string
+			/**
+			 * E​x​p​o​r​t​ ​a​l​l​ ​p​r​o​d​u​c​t​s​ ​t​o​ ​a​ ​C​S​V​ ​f​i​l​e
+			 */
+			exportCsvTitle: string
+			/**
+			 * S​e​a​r​c​h​ ​b​y​ ​d​e​s​c​r​i​p​t​i​o​n​,​ ​S​K​U​,​ ​o​r​ ​b​a​r​c​o​d​e​…
+			 */
+			searchPlaceholder: string
+			/**
+			 * C​l​e​a​r
+			 */
+			clear: string
+			/**
+			 * L​o​a​d​i​n​g​ ​p​r​o​d​u​c​t​s​…
+			 */
+			loading: string
+			/**
+			 * S​e​a​r​c​h​i​n​g​…
+			 */
+			searching: string
+			/**
+			 * N​o​ ​p​r​o​d​u​c​t​s​ ​y​e​t​.
+			 */
+			noProductsYet: string
+			/**
+			 * C​l​i​c​k​ ​+​ ​N​e​w​ ​P​r​o​d​u​c​t​ ​t​o​ ​a​d​d​ ​t​h​e​ ​f​i​r​s​t​ ​o​n​e​.
+			 */
+			noProductsYetHint: string
+			/**
+			 * N​o​ ​p​r​o​d​u​c​t​s​ ​m​a​t​c​h​ ​"​{​q​u​e​r​y​}​"​.
+			 * @param {unknown} query
+			 */
+			noProductsMatch: RequiredParams<'query'>
+			/**
+			 * {​n​}​ ​p​r​o​d​u​c​t
+			 * @param {unknown} n
+			 */
+			productCount: RequiredParams<'n'>
+			/**
+			 * {​n​}​ ​p​r​o​d​u​c​t​s
+			 * @param {unknown} n
+			 */
+			productCount_plural: RequiredParams<'n'>
+			/**
+			 * f​o​r​ ​"​{​q​u​e​r​y​}​"
+			 * @param {unknown} query
+			 */
+			forQuery: RequiredParams<'query'>
+		}
+		detail: {
+			/**
+			 * ←​ ​B​a​c​k​ ​t​o​ ​l​i​s​t
+			 */
+			backToList: string
+			/**
+			 * L​o​a​d​i​n​g​ ​p​r​o​d​u​c​t​…
+			 */
+			loading: string
+			/**
+			 * R​e​t​r​y
+			 */
+			retry: string
+			/**
+			 * E​d​i​t
+			 */
+			edit: string
+			/**
+			 * A​r​c​h​i​v​e
+			 */
+			archive: string
+			/**
+			 * Y​e​s​,​ ​a​r​c​h​i​v​e
+			 */
+			yesArchive: string
+			/**
+			 * A​r​c​h​i​v​e​ ​t​h​i​s​ ​p​r​o​d​u​c​t​?
+			 */
+			archiveThisProduct: string
+			/**
+			 * U​n​i​t
+			 */
+			unit: string
+			/**
+			 * A​l​e​r​t​:​ ​{​d​a​y​s​}​ ​d​a​y​s
+			 * @param {unknown} days
+			 */
+			alertDaysBefore: RequiredParams<'days'>
+			/**
+			 * N​o​ ​b​a​r​c​o​d​e
+			 */
+			noBarcode: string
+			/**
+			 * N​o​ ​b​a​r​c​o​d​e​s​ ​y​e​t​.
+			 */
+			noBarcodeYet: string
+			/**
+			 * P​r​i​m​a​r​y
+			 */
+			primary: string
+			/**
+			 * R​e​m​o​v​e​ ​b​a​r​c​o​d​e
+			 */
+			removeBarcode: string
+			/**
+			 * E​x​p​i​r​y​ ​l​o​t​s
+			 */
+			expiryLots: string
+			/**
+			 * N​o​ ​e​x​p​i​r​y​ ​l​o​t​s​ ​y​e​t​.
+			 */
+			noExpiryLotsYet: string
+			/**
+			 * +​ ​N​e​w​ ​l​o​t
+			 */
+			newLot: string
+			lot: {
+				/**
+				 * {​q​t​y​}​ ​{​u​n​i​t​}
+				 * @param {unknown} qty
+				 * @param {unknown} unit
+				 */
+				qtyUnit: RequiredParams<'qty' | 'unit'>
+				/**
+				 * {​q​t​y​}​ ​u​n​i​t​(​s​)
+				 * @param {unknown} qty
+				 */
+				qtyUnitFallback: RequiredParams<'qty'>
+				/**
+				 * E​x​p​:​ ​{​d​a​t​e​}
+				 * @param {unknown} date
+				 */
+				exp: RequiredParams<'date'>
+				/**
+				 * A​r​c​h​i​v​e​d
+				 */
+				archived: string
+				/**
+				 * R​e​s​o​l​v​e​d
+				 */
+				resolved: string
+				/**
+				 * R​e​s​o​l​v​e​ ​q​u​a​n​t​i​t​y
+				 */
+				resolveQty: string
+				/**
+				 * E​d​i​t​ ​l​o​t
+				 */
+				editLot: string
+				/**
+				 * M​o​v​e​m​e​n​t​ ​h​i​s​t​o​r​y
+				 */
+				movementHistory: string
+				/**
+				 * A​r​c​h​i​v​e​ ​l​o​t
+				 */
+				archiveLot: string
+				/**
+				 * E​x​p​i​r​e​d
+				 */
+				urgencyExpired: string
+				/**
+				 * T​o​d​a​y
+				 */
+				urgencyToday: string
+				/**
+				 * T​o​m​o​r​r​o​w
+				 */
+				urgencyTomorrow: string
+				/**
+				 * {​d​a​y​s​}​d
+				 * @param {unknown} days
+				 */
+				urgencyDays: RequiredParams<'days'>
+			}
+			barcode: {
+				/**
+				 * B​a​r​c​o​d​e​s
+				 */
+				title: string
+				/**
+				 * B​a​r​c​o​d​e​ ​v​a​l​u​e
+				 */
+				valueLabel: string
+				/**
+				 * T​y​p​e​ ​(​o​p​t​i​o​n​a​l​)
+				 */
+				typeLabel: string
+				/**
+				 * e​.​g​.​ ​E​A​N​1​3​,​ ​U​P​C
+				 */
+				typePlaceholder: string
+				/**
+				 * S​e​t​ ​a​s​ ​p​r​i​m​a​r​y
+				 */
+				setAsPrimary: string
+				/**
+				 * +​ ​A​d​d​ ​b​a​r​c​o​d​e
+				 */
+				addBarcode: string
+				/**
+				 * A​d​d​i​n​g​…
+				 */
+				adding: string
+				/**
+				 * B​a​r​c​o​d​e​ ​v​a​l​u​e​ ​i​s​ ​r​e​q​u​i​r​e​d
+				 */
+				valueRequired: string
+			}
+		}
 	}
 	lotForm: {
 		/**
@@ -1143,7 +1373,7 @@ type RootTranslation = {
 		 */
 		createTitle: string
 		/**
-		 * E​d​i​t​ ​e​x​p​i​r​y​ ​l​o​t
+		 * E​d​i​t​ ​e​x​p​i​r​y​ ​l​o​t​ ​(​m​e​t​a​d​a​t​a​ ​o​n​l​y​)
 		 */
 		editTitle: string
 		/**
@@ -1187,13 +1417,25 @@ type RootTranslation = {
 		 */
 		alertDays: string
 		/**
+		 * A​l​e​r​t​ ​d​a​y​s​ ​b​e​f​o​r​e​ ​*
+		 */
+		alertDaysStar: string
+		/**
 		 * B​a​t​c​h​ ​c​o​d​e
 		 */
 		batchCode: string
 		/**
+		 * B​a​t​c​h​ ​c​o​d​e​ ​(​o​p​t​i​o​n​a​l​)
+		 */
+		batchCodeOptional: string
+		/**
 		 * N​o​t​e​s
 		 */
 		notes: string
+		/**
+		 * N​o​t​e​s​ ​(​o​p​t​i​o​n​a​l​)
+		 */
+		notesOptional: string
 		/**
 		 * S​a​v​e​ ​l​o​t
 		 */
@@ -1202,6 +1444,14 @@ type RootTranslation = {
 		 * S​a​v​i​n​g​…
 		 */
 		saving: string
+		/**
+		 * S​a​v​e​ ​c​h​a​n​g​e​s
+		 */
+		saveChanges: string
+		/**
+		 * A​d​d​ ​l​o​t
+		 */
+		addLot: string
 		/**
 		 * S​e​l​e​c​t​ ​a​ ​l​o​c​a​t​i​o​n
 		 */
@@ -1215,9 +1465,186 @@ type RootTranslation = {
 		 */
 		requireLocationNote: string
 		/**
+		 * S​t​o​r​e​ ​i​s​ ​r​e​q​u​i​r​e​d
+		 */
+		storeRequired: string
+		/**
+		 * S​e​l​e​c​t​ ​a​ ​l​o​c​a​t​i​o​n
+		 */
+		selectLocationRequired: string
+		/**
+		 * E​x​p​i​r​y​ ​d​a​t​e​ ​i​s​ ​r​e​q​u​i​r​e​d
+		 */
+		expiryDateRequired: string
+		/**
+		 * Q​u​a​n​t​i​t​y​ ​m​u​s​t​ ​b​e​ ​g​r​e​a​t​e​r​ ​t​h​a​n​ ​z​e​r​o
+		 */
+		quantityGreaterThanZero: string
+		/**
+		 * L​o​a​d​i​n​g​ ​s​t​o​r​e​s​…
+		 */
+		loadingStores: string
+		/**
+		 * N​o​ ​s​t​o​r​e​s​ ​a​v​a​i​l​a​b​l​e​.​ ​C​r​e​a​t​e​ ​a​ ​s​t​o​r​e​ ​b​e​f​o​r​e​ ​a​d​d​i​n​g​ ​e​x​p​i​r​y​ ​l​o​t​s​.
+		 */
+		noStoresAvailable: string
+		/**
+		 * N​o​ ​s​t​o​r​e​s
+		 */
+		noStores: string
+		/**
+		 * —​ ​S​e​l​e​c​t​ ​s​t​o​r​e​ ​—
+		 */
+		selectStorePlaceholder: string
+		/**
+		 * —​ ​N​o​n​e​ ​—
+		 */
+		noLocation: string
+		/**
+		 * (​r​e​q​u​i​r​e​d​)
+		 */
+		locationRequired: string
+		/**
+		 * (​o​p​t​i​o​n​a​l​)
+		 */
+		locationOptional: string
+		/**
+		 * I​n​t​e​r​n​a​l​ ​l​o​c​a​t​i​o​n
+		 */
+		internalLocation: string
+		/**
 		 * Y​Y​Y​Y​-​M​M​-​D​D
 		 */
 		dateFormat: string
+		/**
+		 * Q​u​a​n​t​i​t​y
+		 */
+		quantityReadonly: string
+		/**
+		 * U​s​e​ ​m​o​v​e​m​e​n​t​ ​/​ ​a​d​j​u​s​t​m​e​n​t​ ​/​ ​r​e​s​o​l​v​e​ ​a​c​t​i​o​n​s​ ​t​o​ ​c​h​a​n​g​e​ ​i​t​.
+		 */
+		quantityUseMovementHint: string
+		/**
+		 * C​r​e​a​t​e​ ​c​u​s​t​o​m​ ​u​n​i​t
+		 */
+		createCustomUnit: string
+		/**
+		 * C​l​o​s​e
+		 */
+		close: string
+		/**
+		 * K​e​y
+		 */
+		key: string
+		/**
+		 * e​.​g​.​ ​m​y​-​u​n​i​t
+		 */
+		keyPlaceholder: string
+		/**
+		 * D​i​s​p​l​a​y​ ​n​a​m​e
+		 */
+		displayName: string
+		/**
+		 * e​.​g​.​ ​M​y​ ​U​n​i​t
+		 */
+		displayNamePlaceholder: string
+		/**
+		 * I​n​t​e​g​e​r
+		 */
+		integer: string
+		/**
+		 * D​e​c​i​m​a​l
+		 */
+		decimal: string
+		/**
+		 * A​d​d​ ​u​n​i​t
+		 */
+		addUnit: string
+		/**
+		 * C​r​e​a​t​i​n​g​…
+		 */
+		creating: string
+		/**
+		 * K​e​y​ ​i​s​ ​r​e​q​u​i​r​e​d
+		 */
+		keyRequired: string
+		/**
+		 * D​i​s​p​l​a​y​ ​n​a​m​e​ ​i​s​ ​r​e​q​u​i​r​e​d
+		 */
+		displayNameRequired: string
+		/**
+		 * K​e​y​ ​m​u​s​t​ ​b​e​ ​1​-​1​6​ ​l​o​w​e​r​c​a​s​e​ ​l​e​t​t​e​r​s​,​ ​d​i​g​i​t​s​,​ ​h​y​p​h​e​n​s​ ​o​r​ ​u​n​d​e​r​s​c​o​r​e​s
+		 */
+		keyPattern: string
+		/**
+		 * K​e​y​ ​"​{​k​e​y​}​"​ ​a​l​r​e​a​d​y​ ​e​x​i​s​t​s​ ​a​s​ ​"​{​e​x​i​s​t​i​n​g​}​"​.​ ​S​e​l​e​c​t​ ​i​t​ ​f​r​o​m​ ​t​h​e​ ​l​i​s​t​ ​i​n​s​t​e​a​d​.
+		 * @param {unknown} existing
+		 * @param {unknown} key
+		 */
+		keyAlreadyExists: RequiredParams<'existing' | 'key'>
+		/**
+		 * K​e​y​ ​"​{​k​e​y​}​"​ ​a​l​r​e​a​d​y​ ​e​x​i​s​t​s​.​ ​P​l​e​a​s​e​ ​c​h​o​o​s​e​ ​a​ ​d​i​f​f​e​r​e​n​t​ ​k​e​y​.
+		 * @param {unknown} key
+		 */
+		keyAlreadyExistsGeneric: RequiredParams<'key'>
+	}
+	lotsDetail: {
+		/**
+		 * L​o​t​ ​D​e​t​a​i​l
+		 */
+		title: string
+		/**
+		 * L​o​a​d​i​n​g​…
+		 */
+		loading: string
+		/**
+		 * C​l​o​s​e
+		 */
+		close: string
+		/**
+		 * D​e​t​a​i​l
+		 */
+		detail: string
+		/**
+		 * H​i​s​t​o​r​y
+		 */
+		history: string
+		/**
+		 * L​o​t​ ​I​D
+		 */
+		lotId: string
+		/**
+		 * Q​u​a​n​t​i​t​y
+		 */
+		quantity: string
+		/**
+		 * E​x​p​i​r​y
+		 */
+		expiry: string
+		/**
+		 * A​l​e​r​t​ ​d​a​y​s
+		 */
+		alertDays: string
+		/**
+		 * B​a​t​c​h
+		 */
+		batch: string
+		/**
+		 * S​t​a​t​u​s
+		 */
+		status: string
+		/**
+		 * L​o​c​a​t​i​o​n
+		 */
+		location: string
+		/**
+		 * R​e​s​o​l​u​t​i​o​n
+		 */
+		resolution: string
+		/**
+		 * N​o​t​e​s
+		 */
+		notes: string
 	}
 	lotMovements: {
 		/**
@@ -2878,6 +3305,10 @@ export type TranslationFunctions = {
 		 */
 		addBarcode: () => LocalizedString
 		/**
+		 * Adding…
+		 */
+		addingBarcode: () => LocalizedString
+		/**
 		 * Barcode added
 		 */
 		barcodeAdded: () => LocalizedString
@@ -2886,7 +3317,7 @@ export type TranslationFunctions = {
 		 */
 		barcodeRemoved: () => LocalizedString
 		/**
-		 * No products yet
+		 * No products yet.
 		 */
 		noProducts: () => LocalizedString
 		/**
@@ -2961,6 +3392,222 @@ export type TranslationFunctions = {
 		 * Set count
 		 */
 		setCount: () => LocalizedString
+		/**
+		 * Archived
+		 */
+		archived: () => LocalizedString
+		catalog: {
+			/**
+			 * Products
+			 */
+			pageTitle: () => LocalizedString
+			/**
+			 * Export CSV
+			 */
+			exportCsv: () => LocalizedString
+			/**
+			 * Exporting…
+			 */
+			exporting: () => LocalizedString
+			/**
+			 * Export all products to a CSV file
+			 */
+			exportCsvTitle: () => LocalizedString
+			/**
+			 * Search by description, SKU, or barcode…
+			 */
+			searchPlaceholder: () => LocalizedString
+			/**
+			 * Clear
+			 */
+			clear: () => LocalizedString
+			/**
+			 * Loading products…
+			 */
+			loading: () => LocalizedString
+			/**
+			 * Searching…
+			 */
+			searching: () => LocalizedString
+			/**
+			 * No products yet.
+			 */
+			noProductsYet: () => LocalizedString
+			/**
+			 * Click + New Product to add the first one.
+			 */
+			noProductsYetHint: () => LocalizedString
+			/**
+			 * No products match "{query}".
+			 */
+			noProductsMatch: (arg: { query: unknown }) => LocalizedString
+			/**
+			 * {n} product
+			 */
+			productCount: (arg: { n: unknown }) => LocalizedString
+			/**
+			 * {n} products
+			 */
+			productCount_plural: (arg: { n: unknown }) => LocalizedString
+			/**
+			 * for "{query}"
+			 */
+			forQuery: (arg: { query: unknown }) => LocalizedString
+		}
+		detail: {
+			/**
+			 * ← Back to list
+			 */
+			backToList: () => LocalizedString
+			/**
+			 * Loading product…
+			 */
+			loading: () => LocalizedString
+			/**
+			 * Retry
+			 */
+			retry: () => LocalizedString
+			/**
+			 * Edit
+			 */
+			edit: () => LocalizedString
+			/**
+			 * Archive
+			 */
+			archive: () => LocalizedString
+			/**
+			 * Yes, archive
+			 */
+			yesArchive: () => LocalizedString
+			/**
+			 * Archive this product?
+			 */
+			archiveThisProduct: () => LocalizedString
+			/**
+			 * Unit
+			 */
+			unit: () => LocalizedString
+			/**
+			 * Alert: {days} days
+			 */
+			alertDaysBefore: (arg: { days: unknown }) => LocalizedString
+			/**
+			 * No barcode
+			 */
+			noBarcode: () => LocalizedString
+			/**
+			 * No barcodes yet.
+			 */
+			noBarcodeYet: () => LocalizedString
+			/**
+			 * Primary
+			 */
+			primary: () => LocalizedString
+			/**
+			 * Remove barcode
+			 */
+			removeBarcode: () => LocalizedString
+			/**
+			 * Expiry lots
+			 */
+			expiryLots: () => LocalizedString
+			/**
+			 * No expiry lots yet.
+			 */
+			noExpiryLotsYet: () => LocalizedString
+			/**
+			 * + New lot
+			 */
+			newLot: () => LocalizedString
+			lot: {
+				/**
+				 * {qty} {unit}
+				 */
+				qtyUnit: (arg: { qty: unknown, unit: unknown }) => LocalizedString
+				/**
+				 * {qty} unit(s)
+				 */
+				qtyUnitFallback: (arg: { qty: unknown }) => LocalizedString
+				/**
+				 * Exp: {date}
+				 */
+				exp: (arg: { date: unknown }) => LocalizedString
+				/**
+				 * Archived
+				 */
+				archived: () => LocalizedString
+				/**
+				 * Resolved
+				 */
+				resolved: () => LocalizedString
+				/**
+				 * Resolve quantity
+				 */
+				resolveQty: () => LocalizedString
+				/**
+				 * Edit lot
+				 */
+				editLot: () => LocalizedString
+				/**
+				 * Movement history
+				 */
+				movementHistory: () => LocalizedString
+				/**
+				 * Archive lot
+				 */
+				archiveLot: () => LocalizedString
+				/**
+				 * Expired
+				 */
+				urgencyExpired: () => LocalizedString
+				/**
+				 * Today
+				 */
+				urgencyToday: () => LocalizedString
+				/**
+				 * Tomorrow
+				 */
+				urgencyTomorrow: () => LocalizedString
+				/**
+				 * {days}d
+				 */
+				urgencyDays: (arg: { days: unknown }) => LocalizedString
+			}
+			barcode: {
+				/**
+				 * Barcodes
+				 */
+				title: () => LocalizedString
+				/**
+				 * Barcode value
+				 */
+				valueLabel: () => LocalizedString
+				/**
+				 * Type (optional)
+				 */
+				typeLabel: () => LocalizedString
+				/**
+				 * e.g. EAN13, UPC
+				 */
+				typePlaceholder: () => LocalizedString
+				/**
+				 * Set as primary
+				 */
+				setAsPrimary: () => LocalizedString
+				/**
+				 * + Add barcode
+				 */
+				addBarcode: () => LocalizedString
+				/**
+				 * Adding…
+				 */
+				adding: () => LocalizedString
+				/**
+				 * Barcode value is required
+				 */
+				valueRequired: () => LocalizedString
+			}
+		}
 	}
 	lotForm: {
 		/**
@@ -2968,7 +3615,7 @@ export type TranslationFunctions = {
 		 */
 		createTitle: () => LocalizedString
 		/**
-		 * Edit expiry lot
+		 * Edit expiry lot (metadata only)
 		 */
 		editTitle: () => LocalizedString
 		/**
@@ -3012,13 +3659,25 @@ export type TranslationFunctions = {
 		 */
 		alertDays: () => LocalizedString
 		/**
+		 * Alert days before *
+		 */
+		alertDaysStar: () => LocalizedString
+		/**
 		 * Batch code
 		 */
 		batchCode: () => LocalizedString
 		/**
+		 * Batch code (optional)
+		 */
+		batchCodeOptional: () => LocalizedString
+		/**
 		 * Notes
 		 */
 		notes: () => LocalizedString
+		/**
+		 * Notes (optional)
+		 */
+		notesOptional: () => LocalizedString
 		/**
 		 * Save lot
 		 */
@@ -3027,6 +3686,14 @@ export type TranslationFunctions = {
 		 * Saving…
 		 */
 		saving: () => LocalizedString
+		/**
+		 * Save changes
+		 */
+		saveChanges: () => LocalizedString
+		/**
+		 * Add lot
+		 */
+		addLot: () => LocalizedString
 		/**
 		 * Select a location
 		 */
@@ -3040,9 +3707,183 @@ export type TranslationFunctions = {
 		 */
 		requireLocationNote: () => LocalizedString
 		/**
+		 * Store is required
+		 */
+		storeRequired: () => LocalizedString
+		/**
+		 * Select a location
+		 */
+		selectLocationRequired: () => LocalizedString
+		/**
+		 * Expiry date is required
+		 */
+		expiryDateRequired: () => LocalizedString
+		/**
+		 * Quantity must be greater than zero
+		 */
+		quantityGreaterThanZero: () => LocalizedString
+		/**
+		 * Loading stores…
+		 */
+		loadingStores: () => LocalizedString
+		/**
+		 * No stores available. Create a store before adding expiry lots.
+		 */
+		noStoresAvailable: () => LocalizedString
+		/**
+		 * No stores
+		 */
+		noStores: () => LocalizedString
+		/**
+		 * — Select store —
+		 */
+		selectStorePlaceholder: () => LocalizedString
+		/**
+		 * — None —
+		 */
+		noLocation: () => LocalizedString
+		/**
+		 * (required)
+		 */
+		locationRequired: () => LocalizedString
+		/**
+		 * (optional)
+		 */
+		locationOptional: () => LocalizedString
+		/**
+		 * Internal location
+		 */
+		internalLocation: () => LocalizedString
+		/**
 		 * YYYY-MM-DD
 		 */
 		dateFormat: () => LocalizedString
+		/**
+		 * Quantity
+		 */
+		quantityReadonly: () => LocalizedString
+		/**
+		 * Use movement / adjustment / resolve actions to change it.
+		 */
+		quantityUseMovementHint: () => LocalizedString
+		/**
+		 * Create custom unit
+		 */
+		createCustomUnit: () => LocalizedString
+		/**
+		 * Close
+		 */
+		close: () => LocalizedString
+		/**
+		 * Key
+		 */
+		key: () => LocalizedString
+		/**
+		 * e.g. my-unit
+		 */
+		keyPlaceholder: () => LocalizedString
+		/**
+		 * Display name
+		 */
+		displayName: () => LocalizedString
+		/**
+		 * e.g. My Unit
+		 */
+		displayNamePlaceholder: () => LocalizedString
+		/**
+		 * Integer
+		 */
+		integer: () => LocalizedString
+		/**
+		 * Decimal
+		 */
+		decimal: () => LocalizedString
+		/**
+		 * Add unit
+		 */
+		addUnit: () => LocalizedString
+		/**
+		 * Creating…
+		 */
+		creating: () => LocalizedString
+		/**
+		 * Key is required
+		 */
+		keyRequired: () => LocalizedString
+		/**
+		 * Display name is required
+		 */
+		displayNameRequired: () => LocalizedString
+		/**
+		 * Key must be 1-16 lowercase letters, digits, hyphens or underscores
+		 */
+		keyPattern: () => LocalizedString
+		/**
+		 * Key "{key}" already exists as "{existing}". Select it from the list instead.
+		 */
+		keyAlreadyExists: (arg: { existing: unknown, key: unknown }) => LocalizedString
+		/**
+		 * Key "{key}" already exists. Please choose a different key.
+		 */
+		keyAlreadyExistsGeneric: (arg: { key: unknown }) => LocalizedString
+	}
+	lotsDetail: {
+		/**
+		 * Lot Detail
+		 */
+		title: () => LocalizedString
+		/**
+		 * Loading…
+		 */
+		loading: () => LocalizedString
+		/**
+		 * Close
+		 */
+		close: () => LocalizedString
+		/**
+		 * Detail
+		 */
+		detail: () => LocalizedString
+		/**
+		 * History
+		 */
+		history: () => LocalizedString
+		/**
+		 * Lot ID
+		 */
+		lotId: () => LocalizedString
+		/**
+		 * Quantity
+		 */
+		quantity: () => LocalizedString
+		/**
+		 * Expiry
+		 */
+		expiry: () => LocalizedString
+		/**
+		 * Alert days
+		 */
+		alertDays: () => LocalizedString
+		/**
+		 * Batch
+		 */
+		batch: () => LocalizedString
+		/**
+		 * Status
+		 */
+		status: () => LocalizedString
+		/**
+		 * Location
+		 */
+		location: () => LocalizedString
+		/**
+		 * Resolution
+		 */
+		resolution: () => LocalizedString
+		/**
+		 * Notes
+		 */
+		notes: () => LocalizedString
 	}
 	lotMovements: {
 		/**

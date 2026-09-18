@@ -338,3 +338,224 @@ automatically refreshed. It may flag `Property 'createOption' does not exist` on
 
 The fix is to re-run `npm run i18n:generate` before any diagnostic read; the authoritative
 tool output always supersedes the embedded LSP snapshot.
+
+---
+
+## PR 2 apply — PR2 task 2.5 second slice (this session)
+
+### Locale tree additions (en/index.ts + es/index.ts)
+
+**New keys added to `products` top-level:**
+- `products.addingBarcode` — "Adding…" / "Añadiendo…"
+- `products.archived` — "Archived" / "Archivado"
+- `products.catalog` — nested object with 9 keys: `pageTitle`, `exportCsv`, `exporting`, `exportCsvTitle`, `searchPlaceholder`, `clear`, `loading`, `searching`, `noProductsYet`, `noProductsYetHint`, `noProductsMatch`, `productCount`, `productCount_plural`, `forQuery`
+- `products.detail` — nested object with 16 keys for product detail page + barcode section + lot rows
+
+**New keys added to `lotForm` top-level:**
+- `lotForm.alertDaysStar`, `lotForm.batchCodeOptional`, `lotForm.notesOptional`, `lotForm.saveChanges`, `lotForm.addLot`, `lotForm.storeRequired`, `lotForm.selectLocationRequired`, `lotForm.expiryDateRequired`, `lotForm.quantityGreaterThanZero`, `lotForm.loadingStores`, `lotForm.noStoresAvailable`, `lotForm.noStores`, `lotForm.selectStorePlaceholder`, `lotForm.noLocation`, `lotForm.locationRequired`, `lotForm.locationOptional`, `lotForm.internalLocation`, `lotForm.quantityReadonly`, `lotForm.quantityUseMovementHint`, `lotForm.createCustomUnit`, `lotForm.close`, `lotForm.key`, `lotForm.keyPlaceholder`, `lotForm.displayName`, `lotForm.displayNamePlaceholder`, `lotForm.integer`, `lotForm.decimal`, `lotForm.addUnit`, `lotForm.creating`, `lotForm.keyRequired`, `lotForm.displayNameRequired`, `lotForm.keyPattern`, `lotForm.keyAlreadyExists`, `lotForm.keyAlreadyExistsGeneric`
+
+**New `lotsDetail` top-level section (8 keys):**
+- `lotsDetail.title`, `loading`, `close`, `detail`, `history`, `lotId`, `quantity`, `expiry`, `alertDays`, `batch`, `status`, `location`, `resolution`, `notes`
+
+### Components re-keyed (4 of ~9 in task 2.5)
+
+#### `src/components/ProductCatalogPage.svelte`
+- `<h1>`: `"Products"` → `$LL.products.catalog.pageTitle()`
+- Export button + `title`: → `$LL.products.catalog.exportCsv()`, `$LL.products.catalog.exportCsvTitle()`, `$LL.products.catalog.exporting()`
+- "+ New Product" → `+ {$LL.products.createProduct()}`
+- Search input `placeholder`: → `$LL.products.catalog.searchPlaceholder()`
+- Clear button: → `$LL.products.catalog.clear()`
+- Loading / searching: → `$LL.products.catalog.loading()`, `$LL.products.catalog.searching()`
+- Empty state: → `$LL.products.catalog.noProductsYet()`, `$LL.products.catalog.noProductsYetHint()`, `$LL.products.catalog.noProductsMatch({ query: appliedQuery })`
+- Results summary: → `$LL.products.catalog.productCount({ n })` / `.productCount_plural({ n })` + `.forQuery({ query: appliedQuery })`
+- Archived badge: → `$LL.products.archived()`
+- `handleSaved` flash: → `$LL.products.detail.edit()` + `$LL.products.createProduct()`
+- `exportProducts` flash: → `$LL.products.catalog.exportCsv()` + product count keys
+
+#### `src/components/ProductForm.svelte`
+- Added `import { LL } from "../i18n/i18n-svelte.js"`
+- Form `<h3>`: → `$LL.products.createProduct()` / `$LL.products.editProduct()`
+- SKU label: `SKU *` → `{$LL.products.productSku()} *`
+- Description label: → `{$LL.products.productDescription()} *`
+- Category field label: → `{$LL.products.productCategory()}`
+- CategoryPicker `placeholder`: → `{$LL.categoryPicker.searchPlaceholder()}`
+- Barcode subsection header: `"Barcodes"` → `{$LL.products.detail.barcode.title()}`
+- Barcode value label: → `{$LL.products.detail.barcode.valueLabel()}`
+- Barcode type label: → `{$LL.products.detail.barcode.typeLabel()}`, `placeholder`: → `{$LL.products.detail.barcode.typePlaceholder()}`
+- Set as primary checkbox: → `{$LL.products.detail.barcode.setAsPrimary()}`
+- Default unit label: → `{$LL.products.productUnit()}`
+- "+ New unit" button + title: → `$LL.lotForm.createCustomUnit()`
+- Inline unit form header: `"Create custom unit"` → `{$LL.lotForm.createCustomUnit()}`
+- Close button `aria-label` + `title`: → `{$LL.lotForm.close()}`
+- Key label + placeholder: → `{$LL.lotForm.key()}`, `{$LL.lotForm.keyPlaceholder()}`
+- Display name label + placeholder: → `{$LL.lotForm.displayName()}`, `{$LL.lotForm.displayNamePlaceholder()}`
+- Integer radio: → `{$LL.lotForm.integer()}`; Decimal: → `{$LL.lotForm.decimal()}`
+- Add unit / Creating button: → `$LL.lotForm.addUnit()` / `$LL.lotForm.creating()`
+- Alert days before label: → `{$LL.products.productAlertDays()}`
+- Notes label: → `{$LL.products.productNotes()}`; placeholder: → `{$LL.common.optional()}`
+- Active checkbox: → `{$LL.dashboard.active()}`
+- Submit / Saving button: → `$LL.common.saving()`, `$LL.lotForm.saveChanges()`, `$LL.products.createProduct()`
+- Cancel button: → `{$LL.common.cancel()}`
+- Validation errors: `submit()` → `$LL.products.productSku()` + `$LL.common.required()`, etc.
+- Inline unit validation: `keyRequired`, `displayNameRequired`, `keyPattern`, `keyAlreadyExists({key, existing})`, `keyAlreadyExistsGeneric({key})`
+- Barcode notice (duplicate_other / duplicate_same): → `$LL.products.detail.barcode.valueRequired()`
+
+#### `src/components/ProductDetailPage.svelte`
+- Added `import { LL } from "../i18n/i18n-svelte.js"`
+- Back button: `"← Back to list"` → `{$LL.products.detail.backToList()}`
+- Loading: `"Loading product…"` → `{$LL.products.detail.loading()}`
+- Retry: `"Retry"` → `{$LL.products.detail.retry()}`
+- Archived badge: `"Archived"` → `{$LL.products.archived()}`
+- SKU meta: `"SKU: {sku}"` → `{$LL.products.productSku()}: {sku}`
+- Uncategorized badge: `"Uncategorized"` → `{$LL.categoryPicker.uncategorized()}`
+- Unit meta: `"Unit: {unit}"` → `{$LL.products.detail.unit()}: {unit}`
+- Alert meta: `"Alert: {n} days"` → `{$LL.products.detail.alertDaysBefore({ days: n })}`
+- Edit button: `"Edit"` → `{$LL.products.detail.edit()}`
+- Archive button: `"Archive"` → `{$LL.products.detail.archive()}`
+- Archive confirm text + buttons: → `$LL.products.detail.archiveThisProduct()`, `.yesArchive()`, `$LL.common.cancel()`
+- Barcode section header: `"Barcodes"` → `{$LL.products.detail.barcode.title()}`
+- No barcodes yet: `"No barcodes yet."` → `{$LL.products.detail.noBarcodeYet()}`
+- Primary badge: `"Primary"` → `{$LL.products.detail.primary()}`
+- Remove barcode title: → `{$LL.products.detail.removeBarcode()}`
+- Barcode value label + placeholder + type label + placeholder: → barcode `.valueLabel()`, `.typeLabel()`, `.typePlaceholder()`
+- Set as primary: → `{$LL.products.detail.barcode.setAsPrimary()}`
+- Add barcode button: → `$LL.products.detail.barcode.addBarcode()`, `.adding()`
+- Archived hint: → `$LL.products.archivedProducts()`
+- Expiry lots header: `"Expiry lots"` → `{$LL.products.detail.expiryLots()}`
+- "+ New lot" button: → `{$LL.products.detail.newLot()}`
+- No expiry lots: `"No expiry lots yet."` → `{$LL.products.detail.noExpiryLotsYet()}`
+- Lot qty: `"{qty} {unit}"` → `lotQtyUnit(lot)` using `$LL.products.detail.lot.qtyUnit({qty, unit})` / `.qtyUnitFallback({qty})`
+- Lot exp: `"Exp: {date}"` → `lotExpLabel(lot)` using `$LL.products.detail.lot.exp({date})`
+- Lot archived/resolved badges: → `$LL.products.detail.lot.archived()`, `.resolved()`
+- Lot action titles: → `.resolveQty()`, `.editLot()`, `.movementHistory()`, `.archiveLot()`
+- Lot detail modal: `"Lot Detail"` → `{$LL.lotsDetail.title()}`; loading → `{$LL.lotsDetail.loading()}`; close → `{$LL.lotsDetail.close()}`; tabs: `.detail()`, `.history()`
+- Detail grid dt/dd: lotId, quantity, expiry, alertDays, batch, status, location, resolution, notes → `$LL.lotsDetail.*`
+
+#### `src/components/LotForm.svelte`
+- Added `import { LL } from "../i18n/i18n-svelte.js"`
+- Form `<h3>`: `"New expiry lot"` / `"Edit expiry lot (metadata only)"` → `$LL.lotForm.createTitle()` / `.editTitle()`
+- Metadata-only notice: → `$LL.lotForm.quantityUseMovementHint()`
+- Loading stores: `"Loading stores…"` → `{$LL.lotForm.loadingStores()}`
+- No stores: `"No stores available..."` → `{$LL.lotForm.noStoresAvailable()}`
+- Store select label + placeholder: → `{$LL.lotForm.selectStore()}`, `{$LL.lotForm.selectStorePlaceholder()}`
+- Single-store hint: → `{$LL.lotForm.selectStore()}: {name}`
+- Location label: `"Internal location"` → `{$LL.lotForm.internalLocation()}`
+- `(required)` / `(optional)` hints: → `{$LL.lotForm.locationRequired()}`, `{$LL.lotForm.locationOptional()}`
+- No-location option: `"— None —"` → `{$LL.lotForm.noLocation()}`
+- Edit-mode quantity read-only: `"Quantity"` label → `{$LL.lotForm.quantityReadonly()}`; hint → `{$LL.lotForm.quantityUseMovementHint()}`
+- Create-mode quantity: `"Quantity *"` → `{$LL.lotForm.quantityStar()}`
+- Unit label: → `{$LL.lotForm.selectUnit()}`
+- Expiry date label: → `{$LL.lotForm.expiryDate()}`
+- Alert days label: → `{$LL.lotForm.alertDaysStar()}`
+- Batch code: `"Batch code (optional)"` → `{$LL.lotForm.batchCodeOptional()}`
+- Batch echo chip: `"Lote generado:"` → `{$LL.lotForm.createTitle()}` (creates lot)
+- Notes label: `"Notes (optional)"` → `{$LL.lotForm.notesOptional()}`; placeholder → `{$LL.common.optional()}`
+- Submit button: `"Saving…"` / `"Save changes"` / `"Add lot"` → `$LL.lotForm.saving()`, `.saveChanges()`, `.addLot()`
+- Cancel button: → `{$LL.common.cancel()}`
+- Validation errors: `$LL.lotForm.storeRequired()`, `.selectLocationRequired()`, `.expiryDateRequired()`, `.quantityGreaterThanZero()`
+
+### Commands run (this session)
+
+```bash
+# Add LL import and re-key all hardcoded strings in ProductCatalogPage, ProductForm,
+# ProductDetailPage, LotForm
+
+npm run i18n:generate
+# Result: all files up to date (types regenerated from updated en/index.ts + es/index.ts)
+
+npx tsc --noEmit
+# Result: EXIT 0 — no TypeScript errors
+
+npx svelte-check --workspace . --threshold error
+# Result: svelte-check found 0 errors and 0 warnings
+
+npm run build
+# Result: ✓ built in 1.22s (prebuild regenerated i18n)
+```
+
+### LSP stale-cache note (persistent)
+
+The pi-lens embedded LSP diagnostic server holds a snapshot of `i18n-types.ts` that predates
+the `npm run i18n:generate` call. After locale-tree edits, it flags missing properties like
+`Property 'detail' does not exist`, `Property 'catalog' does not exist`, `Property
+'storeRequired' does not exist`, etc. — all false positives. The authoritative pipeline
+confirms zero errors:
+
+```
+npm run i18n:generate  # regenerates i18n-types.ts
+npx tsc --noEmit        # EXIT:0
+svelte-check --threshold error  # 0 errors, 0 warnings
+npm run build           # ✓ built in 1.22s
+```
+
+The pi-lens server is a separate LSP process whose type cache cannot be invalidated from
+this session. The authoritative tool output always supersedes the embedded LSP snapshot.
+The editor itself shows no errors on the same files.
+
+---
+
+## Verifier-found residual corrections (this session — second pass)
+
+Three hardcoded strings missed in the prior task-2.5 pass were confirmed by the verifier:
+
+### Fix 1 — `ProductCatalogPage.svelte`: hardcoded "Product archived" flash
+
+`handleArchived()` called `flash("Product archived", "success")` directly.
+
+**Fix:** replaced with `flash($LL.products.archived(), "success")`.
+The `$LL.products.archived()` key already existed ("Archived" / "Archivado") — it was used
+elsewhere in the same file for the archived-product badge.
+
+### Fix 2 — `ProductDetailPage.svelte`: `urgencyLabel()` hardcoded labels
+
+`urgencyLabel(expiryDate)` returned hardcoded `"Expired"`, `"Today"`, `"Tomorrow"`,
+and `"${days}d"`.
+
+**Fix:** replaced with locale-aware keys added to `products.detail.lot.*` in both trees:
+
+| Key | EN | ES |
+|-----|----|----|
+| `lot.urgencyExpired` | "Expired" | "Caducado" |
+| `lot.urgencyToday` | "Today" | "Hoy" |
+| `lot.urgencyTomorrow` | "Tomorrow" | "Mañana" |
+| `lot.urgencyDays` | "{days}d" | "{days}d" |
+
+The `{days}d` pattern is preserved in both locales since digits are language-neutral.
+
+### Fix 3 — `ProductDetailPage.svelte`: hardcoded `aria-label="Lot detail"`
+
+**Fix:** replaced with `$LL.dashboard.lotDetail()`.
+`products.detail.lotDetail` does not exist — `lotDetail` lives in the `dashboard` section
+(`dashboard.lotDetail: "Lot Detail"` / `"Detalle del lote"`). Confirmed by reading
+`i18n-types.ts` line 397 (interface) and line 2658 (function signature). The initial edit
+using `$LL.products.detail.lotDetail()` caused a genuine svelte-check error (not LSP staleness)
+because the key was in the wrong section.
+
+### Build artifact removed
+
+`tsconfig.tsbuildinfo` deleted — it is a compiler-check side effect and must not be committed.
+
+### Commands run
+
+```bash
+npm run i18n:generate
+# Result: all files up to date
+
+npx tsc --noEmit
+# Result: EXIT:0
+
+npx svelte-check --workspace . --threshold error
+# Result: svelte-check found 0 errors and 0 warnings
+
+npm run build
+# Result: ✓ built in 1.22s (prebuild regenerated i18n)
+```
+
+### LSP stale-cache note (updated)
+
+The pi-lens embedded LSP diagnostic server holds a snapshot of `i18n-types.ts` that predates
+`npm run i18n:generate`. After locale-tree edits it flags `Property 'urgencyExpired' does not
+exist` etc. — all false positives. The authoritative pipeline confirms zero errors.
+
+The `lotDetail` path error WAS a genuine mistake in the first edit attempt:
+`$LL.products.detail.lotDetail()` does not exist; the correct path is `$LL.dashboard.lotDetail()`.

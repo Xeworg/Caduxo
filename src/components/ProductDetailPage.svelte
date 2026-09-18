@@ -24,6 +24,7 @@
         listStoreLocations,
         type StoreLocationResponse,
     } from "../lib/stores.js";
+    import { LL } from "../i18n/i18n-svelte.js";
 
     // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -98,7 +99,7 @@
         if (!detail) return;
         const value = barcodeValue.trim();
         if (!value) {
-            barcodeError = "Barcode value is required";
+            barcodeError = $LL.products.detail.barcode.valueRequired();
             return;
         }
         addingBarcode = true;
@@ -198,6 +199,16 @@
         }
     }
 
+    function lotQtyUnit(lot: ExpiryLotResponse): string {
+        return lot.unit
+            ? $LL.products.detail.lot.qtyUnit({ qty: lot.quantity, unit: lot.unit })
+            : $LL.products.detail.lot.qtyUnitFallback({ qty: lot.quantity });
+    }
+
+    function lotExpLabel(lot: ExpiryLotResponse): string {
+        return $LL.products.detail.lot.exp({ date: formatDate(lot.expiry_date) });
+    }
+
     function daysUntilExpiry(expiryDate: string): number {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -215,92 +226,92 @@
 
     function urgencyLabel(expiryDate: string): string {
         const days = daysUntilExpiry(expiryDate);
-        if (days < 0) return "Expired";
-        if (days === 0) return "Today";
-        if (days === 1) return "Tomorrow";
-        return `${days}d`;
+        if (days < 0) return $LL.products.detail.lot.urgencyExpired();
+        if (days === 0) return $LL.products.detail.lot.urgencyToday();
+        if (days === 1) return $LL.products.detail.lot.urgencyTomorrow();
+        return $LL.products.detail.lot.urgencyDays({ days });
     }
 </script>
 
 <div class="detail-page">
-    <div class="detail-toolbar">
-        <button type="button" class="btn-secondary btn-small" on:click={onBack}>
-            ← Back to list
-        </button>
-    </div>
+<div class="detail-toolbar">
+<button type="button" class="btn-secondary btn-small" on:click={onBack}>
+{$LL.products.detail.backToList()}
+</button>
+</div>
 
-    {#if loading && !detail}
-        <p class="loading">Loading product…</p>
-    {:else if errorMsg && !detail}
-        <div class="alert alert-error" role="alert">{errorMsg}</div>
-        <button type="button" class="btn-secondary" on:click={load}>Retry</button>
-    {:else if detail}
-        {@const product = detail.product}
-        <header class="detail-header">
-            <div>
-                <div class="title-row">
-                    <h2>{product.description}</h2>
-                    {#if !product.is_active}
-                        <span class="badge-inactive">Archived</span>
-                    {/if}
-                </div>
-                <div class="meta-row">
-                    <span class="sku">SKU: {product.sku}</span>
-                    {#if detail.categories.length === 0}
-                        <span class="category-badge category-badge--uncat">Uncategorized</span>
-                    {/if}
-                    {#each detail.categories as cat (cat.id)}
-                        <span class="category-badge">{cat.name}</span>
-                    {/each}
-                    {#if product.default_unit}
-                        <span class="meta">Unit: {product.default_unit}</span>
-                    {/if}
-                    <span class="meta">Alert: {product.default_alert_days_before} days</span>
-                </div>
-                {#if product.notes}
-                    <p class="notes">{product.notes}</p>
-                {/if}
-            </div>
+{#if loading && !detail}
+<p class="loading">{$LL.products.detail.loading()}</p>
+{:else if errorMsg && !detail}
+<div class="alert alert-error" role="alert">{errorMsg}</div>
+<button type="button" class="btn-secondary" on:click={load}>{$LL.products.detail.retry()}</button>
+{:else if detail}
+{@const product = detail.product}
+<header class="detail-header">
+<div>
+<div class="title-row">
+<h2>{product.description}</h2>
+{#if !product.is_active}
+<span class="badge-inactive">{$LL.products.archived()}</span>
+{/if}
+</div>
+<div class="meta-row">
+<span class="sku">{$LL.products.productSku()}: {product.sku}</span>
+{#if detail.categories.length === 0}
+<span class="category-badge category-badge--uncat">{$LL.categoryPicker.uncategorized()}</span>
+{/if}
+{#each detail.categories as cat (cat.id)}
+<span class="category-badge">{cat.name}</span>
+{/each}
+{#if product.default_unit}
+<span class="meta">{$LL.products.detail.unit()}: {product.default_unit}</span>
+{/if}
+<span class="meta">{$LL.products.detail.alertDaysBefore({ days: product.default_alert_days_before })}</span>
+</div>
+{#if product.notes}
+<p class="notes">{product.notes}</p>
+{/if}
+</div>
 
-            <div class="detail-actions">
-                <button
-                    type="button"
-                    class="btn-secondary"
-                    on:click={() => onEdit(product)}
-                >
-                    Edit
-                </button>
-                {#if product.is_active}
-                    {#if !confirmingArchive}
-                        <button
-                            type="button"
-                            class="btn-danger"
-                            on:click={() => (confirmingArchive = true)}
-                        >
-                            Archive
-                        </button>
-                    {:else}
-                        <span class="archive-confirm">
-                            Archive this product?
-                            <button
-                                type="button"
-                                class="btn-danger btn-small"
-                                on:click={confirmArchive}
-                            >
-                                Yes, archive
-                            </button>
-                            <button
-                                type="button"
-                                class="btn-secondary btn-small"
-                                on:click={() => (confirmingArchive = false)}
-                            >
-                                Cancel
-                            </button>
-                        </span>
-                    {/if}
-                {/if}
-            </div>
-        </header>
+<div class="detail-actions">
+<button
+type="button"
+class="btn-secondary"
+on:click={() => onEdit(product)}
+>
+{$LL.products.detail.edit()}
+</button>
+{#if product.is_active}
+{#if !confirmingArchive}
+<button
+type="button"
+class="btn-danger"
+on:click={() => (confirmingArchive = true)}
+>
+{$LL.products.detail.archive()}
+</button>
+{:else}
+<span class="archive-confirm">
+{$LL.products.detail.archiveThisProduct()}
+<button
+type="button"
+class="btn-danger btn-small"
+on:click={confirmArchive}
+>
+{$LL.products.detail.yesArchive()}
+</button>
+<button
+type="button"
+class="btn-secondary btn-small"
+on:click={() => (confirmingArchive = false)}
+>
+{$LL.common.cancel()}
+</button>
+</span>
+{/if}
+{/if}
+</div>
+</header>
 
         {#if errorMsg}
             <div class="alert alert-error" role="alert">{errorMsg}</div>
@@ -309,11 +320,11 @@
         <!-- ── Barcodes ──────────────────────────────────────────────────────── -->
         <section class="section">
             <div class="section-header">
-                <h3>Barcodes</h3>
+                <h3>{$LL.products.detail.barcode.title()}</h3>
             </div>
 
             {#if detail.barcodes.length === 0}
-                <p class="empty-hint">No barcodes yet.</p>
+                <p class="empty-hint">{$LL.products.detail.noBarcodeYet()}</p>
             {:else}
                 <ul class="barcode-list">
                     {#each detail.barcodes as b (b.id)}
@@ -324,13 +335,13 @@
                                     <span class="barcode-type">{b.barcode_type}</span>
                                 {/if}
                                 {#if b.is_primary}
-                                    <span class="badge-primary">Primary</span>
+                                    <span class="badge-primary">{$LL.products.detail.primary()}</span>
                                 {/if}
                             </div>
                             <button
                                 type="button"
                                 class="btn-icon"
-                                title="Remove barcode"
+                                title={$LL.products.detail.removeBarcode()}
                                 on:click={() => removeBarcode(b)}
                             >
                                 ✕
@@ -344,7 +355,7 @@
                 <form class="barcode-form" on:submit|preventDefault={submitBarcode}>
                     <div class="grid-2">
                         <label>
-                            Barcode value *
+                            {$LL.products.detail.barcode.valueLabel()}
                             <input
                                 type="text"
                                 bind:value={barcodeValue}
@@ -354,11 +365,11 @@
                             />
                         </label>
                         <label>
-                            Type (optional)
+                            {$LL.products.detail.barcode.typeLabel()}
                             <input
                                 type="text"
                                 bind:value={barcodeType}
-                                placeholder="e.g. EAN13, UPC"
+                                placeholder={$LL.products.detail.barcode.typePlaceholder()}
                                 list="barcode-types"
                             />
                             <datalist id="barcode-types">
@@ -373,7 +384,7 @@
                     </div>
                     <label class="checkbox-label">
                         <input type="checkbox" bind:checked={isPrimary} />
-                        Set as primary
+                        {$LL.products.detail.barcode.setAsPrimary()}
                     </label>
                     {#if barcodeError}
                         <div class="alert alert-error inline-error" role="alert">
@@ -386,19 +397,19 @@
                             class="btn-primary btn-small"
                             disabled={addingBarcode}
                         >
-                            {addingBarcode ? "Adding…" : "+ Add barcode"}
+                            {addingBarcode ? $LL.products.detail.barcode.adding() : $LL.products.detail.barcode.addBarcode()}
                         </button>
                     </div>
                 </form>
             {:else}
-                <p class="hint-muted">Archived products cannot receive new barcodes.</p>
+                <p class="hint-muted">{$LL.products.archivedProducts()}</p>
             {/if}
         </section>
 
         <!-- ── Expiry lots ──────────────────────────────────────────────────── -->
         <section class="section">
             <div class="section-header">
-                <h3>Expiry lots</h3>
+                <h3>{$LL.products.detail.expiryLots()}</h3>
                 {#if product.is_active}
                     <button
                         type="button"
@@ -408,7 +419,7 @@
                             showLotForm = true;
                         }}
                     >
-                        + New lot
+                        {$LL.products.detail.newLot()}
                     </button>
                 {/if}
             </div>
@@ -434,7 +445,7 @@
                     />
                 </div>
             {:else if lots.length === 0}
-                <p class="empty-hint">No expiry lots yet.</p>
+                <p class="empty-hint">{$LL.products.detail.noExpiryLotsYet()}</p>
             {:else}
                 <ul class="lot-list">
                     {#each lots as lot (lot.id)}
@@ -444,9 +455,9 @@
                             </div>
                             <div class="lot-info">
                                 <span class="lot-qty">
-                                    {lot.quantity} {lot.unit || "unit(s)"}
+                                    {lotQtyUnit(lot)}
                                 </span>
-                                <span class="lot-date">Exp: {formatDate(lot.expiry_date)}</span>
+                                <span class="lot-date">{lotExpLabel(lot)}</span>
                                 {#if lot.batch_code}
                                     <span class="lot-batch">{lot.batch_code}</span>
                                 {/if}
@@ -454,9 +465,9 @@
                                     <span class="lot-location">{lot.location_id}</span>
                                 {/if}
                                 {#if lot.status === "archived"}
-                                    <span class="badge-archived">Archived</span>
+                                    <span class="badge-archived">{$LL.products.detail.lot.archived()}</span>
                                 {:else if lot.status === "resolved"}
-                                    <span class="badge-resolved">Resolved</span>
+                                    <span class="badge-resolved">{$LL.products.detail.lot.resolved()}</span>
                                 {/if}
                             </div>
                             <div class="lot-actions">
@@ -464,7 +475,7 @@
                                     <button
                                         type="button"
                                         class="btn-icon"
-                                        title="Resolve quantity"
+                                        title={$LL.products.detail.lot.resolveQty()}
                                         on:click={() => (resolvingLot = lot)}
                                     >
                                         ↓
@@ -472,7 +483,7 @@
                                     <button
                                         type="button"
                                         class="btn-icon"
-                                        title="Edit lot"
+                                        title={$LL.products.detail.lot.editLot()}
                                         on:click={() => {
                                             editingLot = lot;
                                             showLotForm = true;
@@ -483,7 +494,7 @@
                                     <button
                                         type="button"
                                         class="btn-icon"
-                                        title="Movement history"
+                                        title={$LL.products.detail.lot.movementHistory()}
                                         on:click={() => openLotDetail(lot)}
                                     >
                                         📋
@@ -491,7 +502,7 @@
                                     <button
                                         type="button"
                                         class="btn-icon btn-danger-icon"
-                                        title="Archive lot"
+                                        title={$LL.products.detail.lot.archiveLot()}
                                         on:click={() => (archivingLot = lot)}
                                     >
                                         🗄
@@ -526,15 +537,15 @@
 
 <!-- ── Lot detail modal ─────────────────────────────────────────────────────── -->
 {#if showLotDetail}
-    <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Lot detail">
+    <div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.dashboard.lotDetail()}>
         <div class="modal-box modal-box-wide">
             <div class="modal-header">
-                <h3>Lot Detail</h3>
+                <h3>{$LL.lotsDetail.title()}</h3>
                 <button class="modal-close" on:click={() => (showLotDetail = false)}>✕</button>
             </div>
 
             {#if detailLotLoading}
-                <p class="modal-loading">Loading…</p>
+                <p class="modal-loading">{$LL.lotsDetail.loading()}</p>
             {:else if detailLot}
                 <!-- Tabs -->
                 <div class="detail-tabs">
@@ -544,7 +555,7 @@
                         class:active={lotDetailTab === "detail"}
                         on:click={() => (lotDetailTab = "detail")}
                     >
-                        Detalle
+                        {$LL.lotsDetail.detail()}
                     </button>
                     <button
                         type="button"
@@ -552,26 +563,26 @@
                         class:active={lotDetailTab === "history"}
                         on:click={() => (lotDetailTab = "history")}
                     >
-                        Historial
+                        {$LL.lotsDetail.history()}
                     </button>
                 </div>
 
                 {#if lotDetailTab === "detail"}
                     <dl class="detail-grid">
-                        <dt>Lot ID</dt><dd class="cell-sku">{detailLot.id.slice(0, 8)}…</dd>
-                        <dt>Quantity</dt><dd>{detailLot.quantity} {detailLot.unit || "unit(s)"}</dd>
-                        <dt>Expiry</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
-                        <dt>Alert days</dt><dd>{detailLot.alert_days_before}</dd>
-                        <dt>Batch</dt><dd>{detailLot.batch_code ?? "—"}</dd>
-                        <dt>Status</dt><dd>{detailLot.status}</dd>
+                        <dt>{$LL.lotsDetail.lotId()}</dt><dd class="cell-sku">{detailLot.id.slice(0, 8)}…</dd>
+                        <dt>{$LL.lotsDetail.quantity()}</dt><dd>{lotQtyUnit(detailLot)}</dd>
+                        <dt>{$LL.lotsDetail.expiry()}</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
+                        <dt>{$LL.lotsDetail.alertDays()}</dt><dd>{detailLot.alert_days_before}</dd>
+                        <dt>{$LL.lotsDetail.batch()}</dt><dd>{detailLot.batch_code ?? "—"}</dd>
+                        <dt>{$LL.lotsDetail.status()}</dt><dd>{detailLot.status}</dd>
                         {#if detailLot.location_id}
-                            <dt>Location</dt><dd>{detailLot.location_id}</dd>
+                            <dt>{$LL.lotsDetail.location()}</dt><dd>{detailLot.location_id}</dd>
                         {/if}
                         {#if detailLot.resolution}
-                            <dt>Resolution</dt><dd>{detailLot.resolution}</dd>
+                            <dt>{$LL.lotsDetail.resolution()}</dt><dd>{detailLot.resolution}</dd>
                         {/if}
                         {#if detailLot.notes}
-                            <dt>Notes</dt><dd>{detailLot.notes}</dd>
+                            <dt>{$LL.lotsDetail.notes()}</dt><dd>{detailLot.notes}</dd>
                         {/if}
                     </dl>
                     <div class="modal-actions">
@@ -580,7 +591,7 @@
                             class="btn-secondary"
                             on:click={() => (showLotDetail = false)}
                         >
-                            Close
+                            {$LL.lotsDetail.close()}
                         </button>
                     </div>
                 {:else}
