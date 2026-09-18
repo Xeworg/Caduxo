@@ -910,3 +910,75 @@ svelte-check --workspace . --threshold error  # 0 errors, 0 warnings
 npm run build           # ✓ built in 1.25s
 ```
 
+---
+
+## Verifier-follow-up slice — CalendarMonth.svelte hardcoded LABELS (this session)
+
+The independent verifier confirmed that `src/components/CalendarMonth.svelte` still had
+pre-existing hardcoded English `LABELS.months` and `LABELS.weekdays` arrays and six
+hardcoded `aria-label` string literals not covered by the prior CalendarPage pass.
+
+### Locale tree additions
+
+**New keys added to `en/index.ts` and `es/index.ts` under `calendar`:**
+
+| Key | EN | ES |
+|-----|----|----|
+| `calendar.monthNames` | `["January", …, "December"]` | `["Enero", …, "Diciembre"]` |
+| `calendar.weekdayShort` | `["Sun","Mon",…,"Sat"]` | `["Dom","Lun",…,"Sáb"]` |
+| `calendar.ariaPreviousMonth` | `"Previous month"` | `"Mes anterior"` |
+| `calendar.ariaNextMonth` | `"Next month"` | `"Mes siguiente"` |
+| `calendar.ariaCycleMonth` | `"Cycle month"` | `"Cambiar mes"` |
+| `calendar.ariaOpenYearPicker` | `"Open year picker"` | `"Abrir selector de año"` |
+| `calendar.ariaPreviousDecade` | `"Previous decade"` | `"Década anterior"` |
+| `calendar.ariaNextDecade` | `"Next decade"` | `"Década siguiente"` |
+| `calendar.ariaYear` | `"Year {year}"` | `"Año {year}"` |
+| `calendar.ariaDayCell` | `"{month} {day}, {year}"` | `"{month} {day}, {year}"` |
+
+### CalendarMonth.svelte changes
+
+- Added `import { LL } from "../i18n/i18n-svelte.js"`
+- Removed the hardcoded `LABELS` constant (hardcoded `weekdays` and `months` arrays)
+- Added reactive `$: MONTH_NAMES` and `$: WEEKDAY_NAMES` arrays that unpack the typesafe-i18n
+  array objects (`{ '0': fn, '1': fn, … }`) into plain `string[]` — needed because
+  typesafe-i18n generates array translations as index-keyed objects, not true arrays, which are
+  not directly iterable with Svelte's `{#each}`
+- `cellAriaLabel()`: replaced `${LABELS.months[d.getMonth()]} ${d.getDate()}, …` with
+  `$LL.calendar.ariaDayCell({ month: MONTH_NAMES[d.getMonth()], day, year })`
+- Month button: `{LABELS.months[viewMonth-1]}` → `{MONTH_NAMES[viewMonth-1]}`
+- Weekday row: `{#each LABELS.weekdays as wd}` → `{#each WEEKDAY_NAMES as wd}`
+- Grid `aria-label`: `{LABELS.months[viewMonth-1]} {viewYear}` → `{MONTH_NAMES[viewMonth-1]} {viewYear}`
+- Six button aria-labels replaced:
+  - `"Previous month"` → `$LL.calendar.ariaPreviousMonth()`
+  - `"Next month"` → `$LL.calendar.ariaNextMonth()`
+  - `"Cycle month"` → `$LL.calendar.ariaCycleMonth()`
+  - `"Open year picker"` → `$LL.calendar.ariaOpenYearPicker()`
+  - `"Previous decade"` → `$LL.calendar.ariaPreviousDecade()`
+  - `"Next decade"` → `$LL.calendar.ariaNextDecade()`
+  - `"Year {yr}"` → `$LL.calendar.ariaYear({ year: yr })`
+
+### Commands run
+
+```bash
+npm run i18n:generate
+# Result: generated i18n-types.ts with new calendar keys
+
+npx tsc --noEmit
+# Result: EXIT:0 — no TypeScript errors
+
+npx svelte-check --workspace . --threshold error
+# Result: svelte-check found 0 errors and 0 warnings
+
+npm run build
+# Result: ✓ built in 1.29s
+```
+
+### LSP stale-cache note (persistent)
+
+The pi-lens embedded LSP diagnostic server held a stale snapshot of `i18n-types.ts` that
+was refreshed only after `npm run i18n:generate`. Initial edits showed `Property 'monthNames'
+does not exist` errors in pi-lens; the authoritative pipeline confirmed zero errors after
+generator regeneration. Additionally, the typesafe-i18n array type (`{ '0': fn, … }`) is not
+directly callable — `$LL.calendar.monthNames()` caused a genuine svelte-check error. Fixed
+by accessing `$LL.calendar.monthNames` as a property (not a function call) then indexing it.
+

@@ -619,6 +619,19 @@ const en: BaseTranslation = {
       days: "Days",
       status: "Status",
     },
+    monthNames: [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December",
+    ],
+    weekdayShort: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    ariaPreviousMonth: "Previous month",
+    ariaNextMonth: "Next month",
+    ariaCycleMonth: "Cycle month",
+    ariaOpenYearPicker: "Open year picker",
+    ariaPreviousDecade: "Previous decade",
+    ariaNextDecade: "Next decade",
+    ariaYear: "Year {year}",
+    ariaDayCell: "{month} {day}, {year}",
   },
 
   backupRestore: {

@@ -2222,6 +2222,122 @@ type RootTranslation = {
 			 */
 			status: string
 		}
+		monthNames: {
+			/**
+			 * J​a​n​u​a​r​y
+			 */
+			'0': string
+			/**
+			 * F​e​b​r​u​a​r​y
+			 */
+			'1': string
+			/**
+			 * M​a​r​c​h
+			 */
+			'2': string
+			/**
+			 * A​p​r​i​l
+			 */
+			'3': string
+			/**
+			 * M​a​y
+			 */
+			'4': string
+			/**
+			 * J​u​n​e
+			 */
+			'5': string
+			/**
+			 * J​u​l​y
+			 */
+			'6': string
+			/**
+			 * A​u​g​u​s​t
+			 */
+			'7': string
+			/**
+			 * S​e​p​t​e​m​b​e​r
+			 */
+			'8': string
+			/**
+			 * O​c​t​o​b​e​r
+			 */
+			'9': string
+			/**
+			 * N​o​v​e​m​b​e​r
+			 */
+			'10': string
+			/**
+			 * D​e​c​e​m​b​e​r
+			 */
+			'11': string
+		}
+		weekdayShort: {
+			/**
+			 * S​u​n
+			 */
+			'0': string
+			/**
+			 * M​o​n
+			 */
+			'1': string
+			/**
+			 * T​u​e
+			 */
+			'2': string
+			/**
+			 * W​e​d
+			 */
+			'3': string
+			/**
+			 * T​h​u
+			 */
+			'4': string
+			/**
+			 * F​r​i
+			 */
+			'5': string
+			/**
+			 * S​a​t
+			 */
+			'6': string
+		}
+		/**
+		 * P​r​e​v​i​o​u​s​ ​m​o​n​t​h
+		 */
+		ariaPreviousMonth: string
+		/**
+		 * N​e​x​t​ ​m​o​n​t​h
+		 */
+		ariaNextMonth: string
+		/**
+		 * C​y​c​l​e​ ​m​o​n​t​h
+		 */
+		ariaCycleMonth: string
+		/**
+		 * O​p​e​n​ ​y​e​a​r​ ​p​i​c​k​e​r
+		 */
+		ariaOpenYearPicker: string
+		/**
+		 * P​r​e​v​i​o​u​s​ ​d​e​c​a​d​e
+		 */
+		ariaPreviousDecade: string
+		/**
+		 * N​e​x​t​ ​d​e​c​a​d​e
+		 */
+		ariaNextDecade: string
+		/**
+		 * Y​e​a​r​ ​{​y​e​a​r​}
+		 * @param {unknown} year
+		 */
+		ariaYear: RequiredParams<'year'>
+		/**
+		 * {​m​o​n​t​h​}​ ​{​d​a​y​}​,​ ​{​y​e​a​r​}
+		 * @param {unknown} day
+		 * @param {unknown} month
+		 * @param {unknown} year
+		 */
+		ariaDayCell: RequiredParams<'day' | 'month' | 'year'>
 	}
 	backupRestore: {
 		/**
@@ -5174,6 +5290,118 @@ export type TranslationFunctions = {
 			 */
 			status: () => LocalizedString
 		}
+		monthNames: {
+			/**
+			 * January
+			 */
+			'0': () => LocalizedString
+			/**
+			 * February
+			 */
+			'1': () => LocalizedString
+			/**
+			 * March
+			 */
+			'2': () => LocalizedString
+			/**
+			 * April
+			 */
+			'3': () => LocalizedString
+			/**
+			 * May
+			 */
+			'4': () => LocalizedString
+			/**
+			 * June
+			 */
+			'5': () => LocalizedString
+			/**
+			 * July
+			 */
+			'6': () => LocalizedString
+			/**
+			 * August
+			 */
+			'7': () => LocalizedString
+			/**
+			 * September
+			 */
+			'8': () => LocalizedString
+			/**
+			 * October
+			 */
+			'9': () => LocalizedString
+			/**
+			 * November
+			 */
+			'10': () => LocalizedString
+			/**
+			 * December
+			 */
+			'11': () => LocalizedString
+		}
+		weekdayShort: {
+			/**
+			 * Sun
+			 */
+			'0': () => LocalizedString
+			/**
+			 * Mon
+			 */
+			'1': () => LocalizedString
+			/**
+			 * Tue
+			 */
+			'2': () => LocalizedString
+			/**
+			 * Wed
+			 */
+			'3': () => LocalizedString
+			/**
+			 * Thu
+			 */
+			'4': () => LocalizedString
+			/**
+			 * Fri
+			 */
+			'5': () => LocalizedString
+			/**
+			 * Sat
+			 */
+			'6': () => LocalizedString
+		}
+		/**
+		 * Previous month
+		 */
+		ariaPreviousMonth: () => LocalizedString
+		/**
+		 * Next month
+		 */
+		ariaNextMonth: () => LocalizedString
+		/**
+		 * Cycle month
+		 */
+		ariaCycleMonth: () => LocalizedString
+		/**
+		 * Open year picker
+		 */
+		ariaOpenYearPicker: () => LocalizedString
+		/**
+		 * Previous decade
+		 */
+		ariaPreviousDecade: () => LocalizedString
+		/**
+		 * Next decade
+		 */
+		ariaNextDecade: () => LocalizedString
+		/**
+		 * Year {year}
+		 */
+		ariaYear: (arg: { year: unknown }) => LocalizedString
+		/**
+		 * {month} {day}, {year}
+		 */
+		ariaDayCell: (arg: { day: unknown, month: unknown, year: unknown }) => LocalizedString
 	}
 	backupRestore: {
 		/**

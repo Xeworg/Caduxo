@@ -616,6 +616,19 @@ const es: BaseTranslation = {
       days: "Días",
       status: "Estado",
     },
+    monthNames: [
+      "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+    ],
+    weekdayShort: ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"],
+    ariaPreviousMonth: "Mes anterior",
+    ariaNextMonth: "Mes siguiente",
+    ariaCycleMonth: "Cambiar mes",
+    ariaOpenYearPicker: "Abrir selector de año",
+    ariaPreviousDecade: "Década anterior",
+    ariaNextDecade: "Década siguiente",
+    ariaYear: "Año {year}",
+    ariaDayCell: "{month} {day}, {year}",
   },
 
   backupRestore: {
