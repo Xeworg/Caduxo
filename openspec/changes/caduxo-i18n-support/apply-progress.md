@@ -982,3 +982,69 @@ generator regeneration. Additionally, the typesafe-i18n array type (`{ '0': fn, 
 directly callable — `$LL.calendar.monthNames()` caused a genuine svelte-check error. Fixed
 by accessing `$LL.calendar.monthNames` as a property (not a function call) then indexing it.
 
+---
+
+## Verifier-follow-up slice — DatePicker.svelte hardcoded strings (this session)
+
+The independent verifier confirmed that `src/components/DatePicker.svelte` still had hardcoded
+English strings for helper text, aria-labels, and the Today button — none covered by prior
+CalendarMonth or CalendarPage passes.
+
+### Locale tree additions
+
+**New top-level `datePicker` section added to `en/index.ts` and `es/index.ts`:**
+
+| Key | EN | ES |
+|-----|----|----|
+| `datePicker.ariaOpenCalendar` | "Open calendar" | "Abrir calendario" |
+| `datePicker.ariaClearDate` | "Clear date" | "Borrar fecha" |
+| `datePicker.today` | "Today" | "Hoy" |
+
+The `datePicker.today` key is intentionally distinct from `calendar.today` ("this week" in
+CalendarPage) — both serve different UI contexts and reuse is not semantically appropriate.
+
+Helper-text strings were already present in `errors.*` and were reused directly:
+
+| Existing key | EN | ES |
+|-------------|----|----|
+| `errors.dateUseIsoFormat` | "Use YYYY-MM-DD" | "Usa AAAA-MM-DD" |
+| `errors.dateYearRange` | "Year must be 1900–2100" | "El año debe estar entre 1900 y 2100" |
+| `errors.dateFieldRequired` | "This field is required" | "Este campo es obligatorio" |
+| `errors.dateInvalid` | "Invalid date" | "Fecha no válida" |
+
+### DatePicker.svelte changes
+
+- Added `import { LL } from "../i18n/i18n-svelte.js"`
+- `helperText` reactive block:
+  - `"Use YYYY-MM-DD"` → `$LL.errors.dateUseIsoFormat()`
+  - `"Year must be 1900–2100"` → `$LL.errors.dateYearRange()`
+  - `"This field is required"` → `$LL.errors.dateFieldRequired()`
+  - `"Invalid date"` (fallback) → `$LL.errors.dateInvalid()`
+- Calendar trigger button: `aria-label="Open calendar"` → `aria-label={$LL.datePicker.ariaOpenCalendar()}`
+- Clear button: `aria-label="Clear date"` → `aria-label={$LL.datePicker.ariaClearDate()}`
+- Today button: `Today` → `{$LL.datePicker.today()}`
+- Prop defaults `placeholder="YYYY-MM-DD"` and `ariaLabel="Date"` left as-is (caller-supplied; no user-facing hardcoded text)
+- `aria-label="{ariaLabel} calendar"` on the popover dialog already uses the caller-supplied `ariaLabel` prop (dynamic); no change needed
+
+### Commands run
+
+```bash
+npm run i18n:generate
+# Result: generated i18n-types.ts with new datePicker section
+
+npx tsc --noEmit
+# Result: EXIT:0 — no TypeScript errors
+
+npx svelte-check --workspace . --threshold error
+# Result: svelte-check found 0 errors and 0 warnings
+
+npm run build
+# Result: ✓ built in 1.25s
+```
+
+### LSP stale-cache note (persistent)
+
+The pi-lens embedded LSP diagnostic server held a stale snapshot of `i18n-types.ts`. Initial
+edits showed `Property 'datePicker' does not exist` errors in pi-lens; the authoritative pipeline
+confirmed zero errors after `npm run i18n:generate` regenerated the types file.
+

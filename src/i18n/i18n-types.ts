@@ -3084,6 +3084,20 @@ type RootTranslation = {
 		 */
 		daysAgo: RequiredParams<'n'>
 	}
+	datePicker: {
+		/**
+		 * O​p​e​n​ ​c​a​l​e​n​d​a​r
+		 */
+		ariaOpenCalendar: string
+		/**
+		 * C​l​e​a​r​ ​d​a​t​e
+		 */
+		ariaClearDate: string
+		/**
+		 * T​o​d​a​y
+		 */
+		today: string
+	}
 	errors: {
 		/**
 		 * A​n​ ​e​r​r​o​r​ ​o​c​c​u​r​r​e​d​.​ ​P​l​e​a​s​e​ ​t​r​y​ ​a​g​a​i​n​.
@@ -6114,6 +6128,20 @@ export type TranslationFunctions = {
 		 * {n} ago
 		 */
 		daysAgo: (arg: { n: unknown }) => LocalizedString
+	}
+	datePicker: {
+		/**
+		 * Open calendar
+		 */
+		ariaOpenCalendar: () => LocalizedString
+		/**
+		 * Clear date
+		 */
+		ariaClearDate: () => LocalizedString
+		/**
+		 * Today
+		 */
+		today: () => LocalizedString
 	}
 	errors: {
 		/**

@@ -841,6 +841,12 @@ const es: BaseTranslation = {
     daysAgo: "hace {n} días",
   },
 
+  datePicker: {
+    ariaOpenCalendar: "Abrir calendario",
+    ariaClearDate: "Borrar fecha",
+    today: "Hoy",
+  },
+
   errors: {
     generic: "Ocurrió un error. Por favor, inténtalo de nuevo.",
     loadFailed: "No se pudieron cargar los datos.",
