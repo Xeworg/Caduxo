@@ -57,12 +57,16 @@ export interface SettingsResponse {
  last_selected_store_id: string | null;
  /** When true, lot creation requires a location to be chosen. */
  require_initial_location_on_lot_create: boolean;
+ /** Active interface locale; one of {"en", "es"}. */
+ language: "en" | "es";
 }
 
 export interface SettingsUpdate {
  last_selected_store_id?: string | null;
  /** Optional: toggles the require_initial_location_on_lot_create setting. */
  require_initial_location_on_lot_create?: boolean;
+ /** Optional: sets the interface language preference. */
+ language?: "en" | "es";
 }
 
 // ─── First-run / settings ────────────────────────────────────────────────────

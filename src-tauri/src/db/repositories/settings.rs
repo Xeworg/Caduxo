@@ -72,14 +72,30 @@ pub async fn set_last_selected_store_id(
     }
 }
 
+/// Retrieves the language setting, or None if absent.
+pub async fn get_language_setting(pool: &SqlitePool) -> Result<Option<String>, sqlx::Error> {
+    get_setting(pool, "language").await
+}
+
+/// Persists the language setting. Rejects values outside {"en", "es"} at the
+/// command layer; this function accepts any non-empty string.
+pub async fn set_language_setting(pool: &SqlitePool, value: &str) -> Result<(), sqlx::Error> {
+    upsert_setting(pool, "language", value).await
+}
+
 /// Builds the full settings snapshot.
 pub async fn get_settings(pool: &SqlitePool) -> Result<SettingsResponse, sqlx::Error> {
     let last_selected_store_id = get_last_selected_store_id(pool).await?;
     let require_initial_location_on_lot_create =
         get_require_initial_location_on_lot_create(pool).await?;
+    let language = match get_language_setting(pool).await? {
+        Some(v) if v == "en" || v == "es" => v,
+        _ => "en".to_string(),
+    };
     Ok(SettingsResponse {
         last_selected_store_id,
         require_initial_location_on_lot_create,
+        language,
     })
 }
 

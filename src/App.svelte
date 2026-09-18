@@ -9,6 +9,7 @@
   import CalendarPage from "./components/CalendarPage.svelte";
   import ConfigurationPage from "./components/ConfigurationPage.svelte";
   import { startPeriodicNotificationCheck } from "./lib/notifications.js";
+  import { LL } from "./i18n/i18n-svelte.js";
 
   type Tab = "dashboard" | "stores" | "products" | "calendar" | "reports" | "import" | "backup" | "settings";
   let activeTab: Tab = "stores";
@@ -28,56 +29,56 @@
       class:active={activeTab === "dashboard"}
       on:click={() => (activeTab = "dashboard")}
     >
-      Dashboard
+      {$LL.nav.dashboard()}
     </button>
     <button
       class="nav-btn"
       class:active={activeTab === "stores"}
       on:click={() => (activeTab = "stores")}
     >
-      Stores
+      {$LL.nav.stores()}
     </button>
     <button
       class="nav-btn"
       class:active={activeTab === "products"}
       on:click={() => (activeTab = "products")}
     >
-      Products
+      {$LL.nav.products()}
     </button>
     <button
       class="nav-btn"
       class:active={activeTab === "calendar"}
       on:click={() => (activeTab = "calendar")}
     >
-      Calendar
+      {$LL.nav.calendar()}
     </button>
     <button
       class="nav-btn"
       class:active={activeTab === "reports"}
       on:click={() => (activeTab = "reports")}
     >
-      Reports
+      {$LL.nav.reports()}
     </button>
     <button
       class="nav-btn"
       class:active={activeTab === "import"}
       on:click={() => (activeTab = "import")}
     >
-      Import
+      {$LL.nav.import()}
     </button>
     <button
       class="nav-btn"
       class:active={activeTab === "backup"}
       on:click={() => (activeTab = "backup")}
     >
-      Backup
+      {$LL.nav.backup()}
     </button>
     <button
       class="nav-btn"
       class:active={activeTab === "settings"}
       on:click={() => (activeTab = "settings")}
     >
-      Configuración
+      {$LL.nav.settings()}
     </button>
   </nav>
 

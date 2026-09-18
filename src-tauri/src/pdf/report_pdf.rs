@@ -23,8 +23,10 @@
 //! footer band), a new page is created. Empty reports still render one
 //! page with the header and an "No rows" notice.
 //!
-//! All visible text comes from the report DTO. PDF bytes are written to the
-//! path provided by the caller; the function does not log row contents.
+//! All visible text comes from the report DTO and the locale-aware PDF
+//! message table ([`crate::pdf::locale::pdf_messages`]). PDF bytes are
+//! written to the path provided by the caller; the function does not log
+//! row contents.
 
 use std::fs::File;
 use std::io::BufWriter;
@@ -39,6 +41,7 @@ use serde::Serialize;
 use crate::dto::dashboard::DashboardLotRow;
 use crate::dto::reports::{ReportData, ReportFilters, ReportMetadata};
 use crate::error::{AppError, InfrastructureError};
+use crate::pdf::locale::{self, Locale, PdfMessages};
 
 // ============================================================
 // Page geometry (A4 landscape)
@@ -77,45 +80,20 @@ const FONT_SIZE_TABLE_HEADER: f32 = 8.5;
 const FONT_SIZE_BODY: f32 = 8.0;
 const FONT_SIZE_FOOTER: f32 = 8.0;
 
-// Column definitions: (header text, width_mm)
+// Column widths (header text comes from PdfMessages.columns).
 struct ColumnDef {
-    header: &'static str,
     width: f32,
 }
 
 const COLUMNS: &[ColumnDef] = &[
-    ColumnDef {
-        header: "SKU",
-        width: 35.0,
-    },
-    ColumnDef {
-        header: "Description",
-        width: 65.0,
-    },
-    ColumnDef {
-        header: "Store / Location",
-        width: 55.0,
-    },
-    ColumnDef {
-        header: "Qty",
-        width: 22.0,
-    },
-    ColumnDef {
-        header: "Expiry",
-        width: 28.0,
-    },
-    ColumnDef {
-        header: "Days",
-        width: 20.0,
-    },
-    ColumnDef {
-        header: "Alert",
-        width: 20.0,
-    },
-    ColumnDef {
-        header: "Batch",
-        width: 28.0,
-    },
+    ColumnDef { width: 35.0 },
+    ColumnDef { width: 65.0 },
+    ColumnDef { width: 55.0 },
+    ColumnDef { width: 22.0 },
+    ColumnDef { width: 28.0 },
+    ColumnDef { width: 20.0 },
+    ColumnDef { width: 20.0 },
+    ColumnDef { width: 28.0 },
 ];
 
 fn table_left_x() -> f32 {
@@ -142,19 +120,29 @@ fn column_x_left(idx: usize) -> f32 {
 /// truncated if it exists. Returns the absolute path, row count, and byte
 /// count written.
 ///
-/// All visible text comes from the report DTO. No product SKU, barcode,
-/// description, or notes content is logged by this function.
-pub fn render_report(data: &ReportData, path: &Path) -> Result<RenderedReport, AppError> {
+/// The `locale` parameter controls all user-visible strings inside the PDF.
+/// Use [`Locale::parse`] to normalise a BCP-47 tag before calling this
+/// function.
+///
+/// All visible text comes from the report DTO and the locale-aware PDF
+/// message table. No product SKU, barcode, description, or notes content
+/// is logged by this function.
+pub fn render_report(
+    data: &ReportData,
+    path: &Path,
+    locale: Locale,
+) -> Result<RenderedReport, AppError> {
+    let msgs = locale::pdf_messages(locale);
+
     let total_rows = data.lots.len();
     let total_pages = if total_rows == 0 {
         1
     } else {
-        // Ceiling division without floats: (n + d - 1) / d
         total_rows.div_ceil(DATA_ROWS_PER_PAGE)
     };
 
     let (doc, first_page, first_layer) = PdfDocument::new(
-        "Caduxo Report",
+        msgs.document_title.as_ref(),
         Mm(PAGE_WIDTH_MM),
         Mm(PAGE_HEIGHT_MM),
         "Layer 1",
@@ -180,23 +168,23 @@ pub fn render_report(data: &ReportData, path: &Path) -> Result<RenderedReport, A
         let layer = doc.get_page(*page_idx_ref).get_layer(*layer_idx_ref);
         let page_num = page_idx + 1;
 
-        draw_header(&layer, &data.metadata, &bold, &regular);
-        draw_table_header(&layer, &bold);
+        draw_header(&layer, &data.metadata, &msgs, &bold, &regular);
+        draw_table_header(&layer, &msgs, &bold);
 
         let start_row = page_idx * DATA_ROWS_PER_PAGE;
         let end_row = (start_row + DATA_ROWS_PER_PAGE).min(total_rows);
         let mut y = BODY_TOP_Y - TABLE_HEADER_ROW_HEIGHT_MM;
         for lot in &data.lots[start_row..end_row] {
-            draw_table_row(&layer, y, lot, &regular);
+            draw_table_row(&layer, y, lot, &msgs, &regular);
             y -= ROW_HEIGHT_MM;
         }
 
         if total_rows == 0 {
-            draw_empty_notice(&layer, &regular);
+            draw_empty_notice(&layer, &msgs, &regular);
         }
 
         draw_table_grid(&layer, start_row, end_row);
-        draw_footer(&layer, page_num, total_pages, &regular);
+        draw_footer(&layer, page_num, total_pages, &msgs, &regular);
     }
 
     let file =
@@ -231,13 +219,14 @@ pub struct RenderedReport {
 fn draw_header(
     layer: &PdfLayerReference,
     metadata: &ReportMetadata,
+    msgs: &PdfMessages,
     bold: &IndirectFontRef,
     regular: &IndirectFontRef,
 ) {
     let title_x = MARGIN_LEFT_MM;
     let title_y = PAGE_HEIGHT_MM - MARGIN_TOP_MM - 8.0;
     layer.use_text(
-        "Caduxo Report",
+        msgs.document_title.as_ref(),
         FONT_SIZE_TITLE,
         Mm(title_x),
         Mm(title_y),
@@ -260,10 +249,11 @@ fn draw_header(
     );
 
     let generated_at_human = humanize_generated_at(&metadata.generated_at);
-    let meta_line_left = format!(
-        "Generated: {}  ·  Rows: {}",
-        generated_at_human, metadata.row_count
-    );
+    // Substitute {date} and {n} in the template.
+    let meta_line_left = msgs
+        .header_generated
+        .replace("{date}", &generated_at_human)
+        .replace("{n}", &metadata.row_count.to_string());
     layer.use_text(
         truncate(&meta_line_left, 90),
         FONT_SIZE_META,
@@ -272,10 +262,10 @@ fn draw_header(
         regular,
     );
 
-    let filter_line = format_filters(&metadata.filters_used);
+    let filter_line = format_filters(&metadata.filters_used, msgs);
     if !filter_line.is_empty() {
         layer.use_text(
-            format!("Filters: {}", filter_line),
+            format!("{} {}", msgs.header_filters_prefix, filter_line),
             FONT_SIZE_META,
             Mm(title_x),
             Mm(subtitle_y - 9.5),
@@ -298,14 +288,18 @@ fn draw_footer(
     layer: &PdfLayerReference,
     page_num: usize,
     total_pages: usize,
+    msgs: &PdfMessages,
     regular: &IndirectFontRef,
 ) {
     let y = MARGIN_BOTTOM_MM + 4.0;
-    let left = format!("Page {} of {}", page_num, total_pages);
-    layer.use_text(left, FONT_SIZE_FOOTER, Mm(MARGIN_LEFT_MM), Mm(y), regular);
+    // Substitute {n} and {m} in "Page {n} of {m}".
+    let left = msgs
+        .footer_page_of
+        .replace("{n}", &page_num.to_string())
+        .replace("{m}", &total_pages.to_string());
+    layer.use_text(&left, FONT_SIZE_FOOTER, Mm(MARGIN_LEFT_MM), Mm(y), regular);
 
-    let right = "Caduxo · Expiry Tracker";
-    // Right-anchored text by estimating character widths.
+    let right = msgs.brand.as_ref();
     let text_width_mm = approximate_text_width_mm(right, FONT_SIZE_FOOTER);
     let right_x = PAGE_WIDTH_MM - MARGIN_RIGHT_MM - text_width_mm;
     layer.use_text(right, FONT_SIZE_FOOTER, Mm(right_x), Mm(y), regular);
@@ -320,11 +314,17 @@ fn draw_footer(
     );
 }
 
-fn draw_table_header(layer: &PdfLayerReference, bold: &IndirectFontRef) {
+fn draw_table_header(layer: &PdfLayerReference, msgs: &PdfMessages, bold: &IndirectFontRef) {
     let y = BODY_TOP_Y - 5.0;
-    for (idx, col) in COLUMNS.iter().enumerate() {
+    for (idx, col_header) in msgs.columns.iter().enumerate() {
         let x = column_x_left(idx) + 1.5;
-        layer.use_text(col.header, FONT_SIZE_TABLE_HEADER, Mm(x), Mm(y), bold);
+        layer.use_text(
+            col_header.as_ref(),
+            FONT_SIZE_TABLE_HEADER,
+            Mm(x),
+            Mm(y),
+            bold,
+        );
     }
     // Horizontal rule under the table header.
     let rule_y = BODY_TOP_Y - TABLE_HEADER_ROW_HEIGHT_MM;
@@ -335,6 +335,7 @@ fn draw_table_row(
     layer: &PdfLayerReference,
     y: f32,
     lot: &DashboardLotRow,
+    msgs: &PdfMessages,
     regular: &IndirectFontRef,
 ) {
     let baseline = y - 4.0;
@@ -344,7 +345,7 @@ fn draw_table_row(
         truncate(&format_store_location(lot), 30),
         format!("{} {}", format_qty(lot.quantity), lot.unit),
         format_date_dd_mm_yyyy(&lot.expiry_date),
-        format_days(lot.days_remaining),
+        format_days(lot.days_remaining, msgs),
         lot.alert_days_before.to_string(),
         truncate(lot.batch_code.as_deref().unwrap_or(""), 16),
     ];
@@ -354,10 +355,10 @@ fn draw_table_row(
     }
 }
 
-fn draw_empty_notice(layer: &PdfLayerReference, regular: &IndirectFontRef) {
+fn draw_empty_notice(layer: &PdfLayerReference, msgs: &PdfMessages, regular: &IndirectFontRef) {
     let y = BODY_TOP_Y - TABLE_HEADER_ROW_HEIGHT_MM - 6.0;
     layer.use_text(
-        "No rows match the current report filters.",
+        msgs.empty_notice.as_ref(),
         FONT_SIZE_BODY,
         Mm(MARGIN_LEFT_MM + 1.5),
         Mm(y),
@@ -370,7 +371,6 @@ fn draw_table_grid(layer: &PdfLayerReference, start_row: usize, end_row: usize) 
     let top_y = BODY_TOP_Y;
     let bottom_y = BODY_TOP_Y - TABLE_HEADER_ROW_HEIGHT_MM - (row_count as f32) * ROW_HEIGHT_MM;
 
-    // Outer rectangle + horizontal lines for every row.
     let left = table_left_x();
     let right = table_right_x();
 
@@ -381,7 +381,6 @@ fn draw_table_grid(layer: &PdfLayerReference, start_row: usize, end_row: usize) 
         draw_horizontal_rule(layer, left, right, y, 0.2);
         y -= ROW_HEIGHT_MM;
     }
-    // Vertical column lines.
     for idx in 0..=COLUMNS.len() {
         let x = column_x_left(idx);
         draw_vertical_rule(layer, x, top_y, bottom_y, 0.2);
@@ -439,7 +438,6 @@ fn format_qty(qty: f64) -> String {
 }
 
 fn format_date_dd_mm_yyyy(date_str: &str) -> String {
-    // date_str is YYYY-MM-DD; if not, return as-is.
     if date_str.len() == 10 && date_str.as_bytes()[4] == b'-' && date_str.as_bytes()[7] == b'-' {
         let bytes = date_str.as_bytes();
         let day = std::str::from_utf8(&bytes[8..10]).unwrap_or("");
@@ -451,9 +449,9 @@ fn format_date_dd_mm_yyyy(date_str: &str) -> String {
     }
 }
 
-fn format_days(days: i64) -> String {
+fn format_days(days: i64, msgs: &PdfMessages) -> String {
     if days < 0 {
-        format!("{} ago", -days)
+        msgs.days_ago_template.replace("{n}", &(-days).to_string())
     } else {
         days.to_string()
     }
@@ -467,8 +465,6 @@ fn format_store_location(lot: &DashboardLotRow) -> String {
 }
 
 fn humanize_generated_at(rfc3339: &str) -> String {
-    // Trim sub-seconds and timezone for a compact display.
-    // RFC3339 looks like "2025-01-15T10:30:00.123+00:00" or "2025-01-15T10:30:00Z".
     if let Some(t_pos) = rfc3339.find('T') {
         let date = &rfc3339[..t_pos];
         let rest = &rfc3339[t_pos + 1..];
@@ -480,31 +476,43 @@ fn humanize_generated_at(rfc3339: &str) -> String {
     }
 }
 
-fn format_filters(filters: &ReportFilters) -> String {
+fn format_filters(filters: &ReportFilters, msgs: &PdfMessages) -> String {
     let mut parts: Vec<String> = Vec::new();
     if let Some(s) = filters.store_id.as_deref().filter(|s| !s.is_empty()) {
-        parts.push(format!("store={}", truncate(s, 16)));
+        parts.push(format!("{}{}", msgs.filter_prefix_store, truncate(s, 16)));
     }
     if let Some(l) = filters.location_id.as_deref().filter(|s| !s.is_empty()) {
-        parts.push(format!("location={}", truncate(l, 16)));
+        parts.push(format!(
+            "{}{}",
+            msgs.filter_prefix_location,
+            truncate(l, 16)
+        ));
     }
     if let Some(ids) = filters.category_ids.as_ref() {
         if !ids.is_empty() {
             if ids.len() == 1 {
-                parts.push(format!("category={}", truncate(&ids[0], 16)));
+                parts.push(format!(
+                    "{}{}",
+                    msgs.filter_prefix_category,
+                    truncate(&ids[0], 16)
+                ));
             } else {
-                parts.push(format!("categories ({})", ids.len()));
+                // Substitute {n} in "categories ({n})" / "categorías ({n})"
+                let template = msgs
+                    .filter_prefix_categories_n
+                    .replace("{n}", &ids.len().to_string());
+                parts.push(template);
             }
         }
     }
     if let Some(u) = filters.urgency.as_deref().filter(|s| !s.is_empty()) {
-        parts.push(format!("urgency={u}"));
+        parts.push(format!("{}{u}", msgs.filter_prefix_urgency));
     }
     if let Some(d) = filters.date_from.as_deref().filter(|s| !s.is_empty()) {
-        parts.push(format!("from={d}"));
+        parts.push(format!("{}{d}", msgs.filter_prefix_from));
     }
     if let Some(d) = filters.date_to.as_deref().filter(|s| !s.is_empty()) {
-        parts.push(format!("to={d}"));
+        parts.push(format!("{}{d}", msgs.filter_prefix_to));
     }
     parts.join(" · ")
 }
@@ -518,7 +526,6 @@ fn capitalize(s: &str) -> String {
 }
 
 /// Truncates `s` to at most `max_chars` characters, appending `…` when truncated.
-/// This is a char-based limit, suitable for proportional fonts at known sizes.
 fn truncate(s: &str, max_chars: usize) -> String {
     let mut out = String::with_capacity(s.len());
     for (count, c) in s.chars().enumerate() {
@@ -532,10 +539,6 @@ fn truncate(s: &str, max_chars: usize) -> String {
 }
 
 /// Approximate text width in millimetres for right-anchored text.
-/// Uses the standard Helvetica average glyph width of 0.5 * font size in pt
-/// (≈ 0.5 * size * 0.353 mm per pt). Multi-character glyphs (e.g. 'm') are
-/// wider, space is narrower, but the approximation is good enough for footer
-/// alignment at small font sizes.
 fn approximate_text_width_mm(text: &str, font_size_pt: f32) -> f32 {
     let avg_advance_pt = 0.5 * font_size_pt;
     let chars = text.chars().count() as f32;
@@ -549,11 +552,13 @@ fn approximate_text_width_mm(text: &str, font_size_pt: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dto::reports::ReportType;
+    use crate::pdf::locale::pdf_messages;
 
-    fn make_metadata() -> ReportMetadata {
+    fn make_metadata(locale: Locale) -> ReportMetadata {
         ReportMetadata {
             report_type: "expired".to_string(),
-            description: "Expired lots".to_string(),
+            description: ReportType::Expired.description(locale).into_owned(),
             filters_used: ReportFilters {
                 store_id: Some("store-a".to_string()),
                 location_id: None,
@@ -590,16 +595,15 @@ mod tests {
         }
     }
 
-    fn empty_report() -> ReportData {
+    fn empty_report(locale: Locale) -> ReportData {
         ReportData {
-            metadata: make_metadata(),
+            metadata: make_metadata(locale),
             lots: vec![],
         }
     }
 
     #[test]
     fn table_width_matches_available_width() {
-        // Table must not exceed the printable width (page width minus side margins).
         let available = PAGE_WIDTH_MM - MARGIN_LEFT_MM - MARGIN_RIGHT_MM;
         let sum: f32 = COLUMNS.iter().map(|c| c.width).sum();
         assert!(
@@ -634,10 +638,20 @@ mod tests {
     }
 
     #[test]
-    fn format_days_signs_ago_for_negative() {
-        assert_eq!(format_days(-30), "30 ago");
-        assert_eq!(format_days(0), "0");
-        assert_eq!(format_days(7), "7");
+    fn format_days_uses_english_template_by_default() {
+        let msgs = pdf_messages(Locale::En);
+        assert_eq!(format_days(-30, &msgs), "30 ago");
+        assert_eq!(format_days(0, &msgs), "0");
+        assert_eq!(format_days(7, &msgs), "7");
+    }
+
+    #[test]
+    fn format_days_uses_spanish_template_when_locale_is_es() {
+        let msgs = pdf_messages(Locale::Es);
+        assert_eq!(format_days(-30, &msgs), "hace 30 días");
+        assert_eq!(format_days(-1, &msgs), "hace 1 días");
+        assert_eq!(format_days(0, &msgs), "0");
+        assert_eq!(format_days(7, &msgs), "7");
     }
 
     #[test]
@@ -656,13 +670,13 @@ mod tests {
     #[test]
     fn truncate_long_string_appends_ellipsis() {
         let out = truncate("a long description", 8);
-        // 8 chars + ellipsis
         assert_eq!(out.chars().count(), 9);
         assert!(out.ends_with('…'));
     }
 
     #[test]
-    fn format_filters_includes_only_present_fields() {
+    fn format_filters_uses_locale_prefixes_in_english() {
+        let msgs = pdf_messages(Locale::En);
         let f = ReportFilters {
             store_id: Some("main".to_string()),
             location_id: Some("".to_string()),
@@ -671,19 +685,35 @@ mod tests {
             date_from: Some("2025-01-01".to_string()),
             date_to: None,
         };
-        let s = format_filters(&f);
+        let s = format_filters(&f, &msgs);
         assert!(s.contains("store=main"));
         assert!(s.contains("category=dairy"));
         assert!(s.contains("urgency=expired"));
         assert!(s.contains("from=2025-01-01"));
-        assert!(!s.contains("location=")); // empty filtered out
-        assert!(!s.contains("to=")); // None filtered out
+        assert!(!s.contains("location="));
+        assert!(!s.contains("to="));
+    }
+
+    #[test]
+    fn format_filters_uses_locale_prefixes_in_spanish() {
+        let msgs = pdf_messages(Locale::Es);
+        let f = ReportFilters {
+            store_id: Some("Bodega".to_string()),
+            category_ids: Some(vec!["dairy".to_string(), "bakery".to_string()]),
+            ..Default::default()
+        };
+        let s = format_filters(&f, &msgs);
+        assert!(s.contains("tienda=Bodega"), "got: {s}");
+        assert!(s.contains("categorías (2)"), "got: {s}");
+        assert!(!s.contains("store="), "got: {s}");
+        assert!(!s.contains("category="), "got: {s}");
     }
 
     #[test]
     fn format_filters_empty_when_all_blank() {
+        let msgs = pdf_messages(Locale::En);
         let f = ReportFilters::default();
-        assert!(format_filters(&f).is_empty());
+        assert!(format_filters(&f, &msgs).is_empty());
     }
 
     #[test]
@@ -716,14 +746,25 @@ mod tests {
     // --- Pagination / render integration tests -----------------------------
 
     #[test]
-    fn render_report_writes_pdf_file_with_empty_data() {
+    fn render_report_writes_pdf_file_with_empty_data_en() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let out = dir.path().join("empty.pdf");
-        let result = render_report(&empty_report(), &out).expect("render");
+        let out = dir.path().join("empty_en.pdf");
+        let result = render_report(&empty_report(Locale::En), &out, Locale::En).expect("render");
         assert_eq!(result.rows_written, 0);
         assert_eq!(result.page_count, 1);
         assert!(result.bytes_written > 0);
-        // PDF magic header: every PDF starts with "%PDF-".
+        let bytes = std::fs::read(&out).expect("read");
+        assert!(bytes.starts_with(b"%PDF-"));
+    }
+
+    #[test]
+    fn render_report_writes_pdf_file_with_empty_data_es() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let out = dir.path().join("empty_es.pdf");
+        let result = render_report(&empty_report(Locale::Es), &out, Locale::Es).expect("render");
+        assert_eq!(result.rows_written, 0);
+        assert_eq!(result.page_count, 1);
+        assert!(result.bytes_written > 0);
         let bytes = std::fs::read(&out).expect("read");
         assert!(bytes.starts_with(b"%PDF-"));
     }
@@ -732,7 +773,7 @@ mod tests {
     fn render_report_writes_pdf_file_with_many_rows() {
         let dir = tempfile::tempdir().expect("tempdir");
         let out = dir.path().join("many.pdf");
-        let mut data = empty_report();
+        let mut data = empty_report(Locale::En);
         for i in 0..60 {
             data.lots.push(make_lot(
                 &format!("SKU-{i:03}"),
@@ -742,14 +783,9 @@ mod tests {
             ));
         }
         data.metadata.row_count = data.lots.len();
-        let result = render_report(&data, &out).expect("render");
+        let result = render_report(&data, &out, Locale::En).expect("render");
         assert_eq!(result.rows_written, 60);
-        // 60 rows at DATA_ROWS_PER_PAGE per page → at least 2 pages.
-        assert!(
-            result.page_count >= 2,
-            "expected multi-page output, got {}",
-            result.page_count
-        );
+        assert!(result.page_count >= 2);
         assert!(result.bytes_written > 0);
         let bytes = std::fs::read(&out).expect("read");
         assert!(bytes.starts_with(b"%PDF-"));
@@ -757,16 +793,9 @@ mod tests {
 
     #[test]
     fn render_report_pages_contain_page_marker_object() {
-        // Verifies that the renderer splits rows across multiple pages and that
-        // each page footer contains the expected page marker. PDF files are
-        // compressed binary streams so we cannot inspect the text directly.
-        // Instead, we verify the page count from the PDF metadata dictionary
-        // and check that the rendered page count equals the expected number of
-        // data-page splits. The pagination math is exercised separately.
         let dir = tempfile::tempdir().expect("tempdir");
         let out = dir.path().join("markers.pdf");
-        let mut data = empty_report();
-        // Force at least 2 pages so the multi-page path is exercised.
+        let mut data = empty_report(Locale::En);
         for i in 0..(DATA_ROWS_PER_PAGE + 5) {
             data.lots.push(make_lot(
                 &format!("S-{i}"),
@@ -776,14 +805,11 @@ mod tests {
             ));
         }
         data.metadata.row_count = data.lots.len();
-        let result = render_report(&data, &out).expect("render");
+        let result = render_report(&data, &out, Locale::En).expect("render");
         assert_eq!(result.page_count, 2, "fixture should force exactly 2 pages");
 
         let bytes = std::fs::read(&out).expect("read");
         let content = String::from_utf8_lossy(&bytes);
-        // The PDF metadata should declare exactly 2 pages via the
-        // `/Type/Pages/Count N` line. This is the structural equivalent of
-        // checking the page marker text strings.
         assert!(
             content.contains("/Type/Pages/Count 2"),
             "expected /Type/Pages/Count 2 in PDF metadata, got snippet: {:?}",
@@ -796,16 +822,15 @@ mod tests {
 
     #[test]
     fn render_report_pagination_count_matches_total_pages() {
-        // 60 rows / DATA_ROWS_PER_PAGE per page == expected page count.
         let dir = tempfile::tempdir().expect("tempdir");
         let out = dir.path().join("pag.pdf");
-        let mut data = empty_report();
+        let mut data = empty_report(Locale::En);
         for i in 0..60 {
             data.lots
                 .push(make_lot(&format!("S-{i}"), "x", "2025-06-01", 5));
         }
         data.metadata.row_count = data.lots.len();
-        let result = render_report(&data, &out).expect("render");
+        let result = render_report(&data, &out, Locale::En).expect("render");
         let expected = 60_usize.div_ceil(DATA_ROWS_PER_PAGE);
         assert_eq!(result.page_count, expected);
     }

@@ -70,6 +70,8 @@ pub struct SettingsResponse {
     /// When true, lot creation requires a location to be chosen.
     /// When false, an empty location picker uses the sentinel "Sin ubicacion".
     pub require_initial_location_on_lot_create: bool,
+    /// Active locale; one of {"en", "es"}. Defaults to "en" when missing.
+    pub language: String,
 }
 
 /// Input for updating settings.
@@ -78,4 +80,6 @@ pub struct SettingsUpdate {
     pub last_selected_store_id: Option<String>,
     /// Optional: toggles the require_initial_location_on_lot_create setting.
     pub require_initial_location_on_lot_create: Option<bool>,
+    /// Optional: when present, sets the language preference to "en" or "es".
+    pub language: Option<String>,
 }

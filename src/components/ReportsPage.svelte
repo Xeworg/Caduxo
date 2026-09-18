@@ -26,6 +26,8 @@
     type StoreResponse,
     type StoreLocationResponse,
   } from "../lib/stores.js";
+  import { locale } from "../i18n/locale.js";
+  import { LL } from "../i18n/i18n-svelte.js";
 
   // ─── View state ──────────────────────────────────────────────────────────
 
@@ -60,36 +62,36 @@
 
   // ─── Report type options ─────────────────────────────────────────────────
 
-  const REPORT_TYPES: { value: ReportType; label: string; description: string }[] = [
+  $: REPORT_TYPES = [
     {
-      value: "in_alert_window",
-      label: "In alert window",
-      description: "Lots within their per-lot alert threshold.",
+      value: "in_alert_window" as ReportType,
+      label: $LL.reports.reportTypes.inAlertWindow(),
+      description: $LL.reports.reportTypes.inAlertWindowDesc(),
     },
     {
-      value: "expired",
-      label: "Expired",
-      description: "Lots past their expiry date.",
+      value: "expired" as ReportType,
+      label: $LL.reports.reportTypes.expired(),
+      description: $LL.reports.reportTypes.expiredDesc(),
     },
     {
-      value: "next_30_days",
-      label: "Next 30 days",
-      description: "Lots expiring within the next 30 calendar days.",
+      value: "next_30_days" as ReportType,
+      label: $LL.reports.reportTypes.next30Days(),
+      description: $LL.reports.reportTypes.next30DaysDesc(),
     },
     {
-      value: "custom",
-      label: "Custom",
-      description: "Build a report with arbitrary urgency / date / category filters.",
+      value: "custom" as ReportType,
+      label: $LL.reports.reportTypes.custom(),
+      description: $LL.reports.reportTypes.customDesc(),
     },
   ];
 
-  const URGENCY_OPTIONS: { value: string; label: string }[] = [
-    { value: "", label: "All urgencies" },
-    { value: "expired", label: "Expired" },
-    { value: "today", label: "Today" },
-    { value: "alert_window", label: "Alert window" },
-    { value: "next_30_days", label: "Next 30 days" },
-    { value: "future", label: "Future" },
+  $: URGENCY_OPTIONS = [
+    { value: "", label: $LL.reports.urgencyOptions.all() },
+    { value: "expired", label: $LL.reports.urgencyOptions.expired() },
+    { value: "today", label: $LL.reports.urgencyOptions.today() },
+    { value: "alert_window", label: $LL.reports.urgencyOptions.alertWindow() },
+    { value: "next_30_days", label: $LL.reports.urgencyOptions.next30Days() },
+    { value: "future", label: $LL.reports.urgencyOptions.future() },
   ];
 
   // ─── Lifecycle ───────────────────────────────────────────────────────────
@@ -167,7 +169,7 @@
         kind: selectedReportType,
         filters: buildFilters(),
       };
-      preview = await previewReport(request);
+      preview = await previewReport(request, locale.current);
       view = "preview";
     } catch (e: unknown) {
       errorMsg = humanizeError(String(e));
@@ -186,9 +188,20 @@
         kind: selectedReportType,
         filters: buildFilters(),
       };
-      const result = await exportReportPdfWithDialog(request);
+      const result = await exportReportPdfWithDialog(request, locale.current);
       if (result) {
-        successMsg = `Exported ${result.rows_written} ${result.rows_written === 1 ? "row" : "rows"} across ${result.page_count} page${result.page_count === 1 ? "" : "s"}`;
+        const rowWord = locale.current === "es"
+          ? (result.rows_written === 1 ? "fila" : "filas")
+          : (result.rows_written === 1 ? "row" : "rows");
+        const pageWord = locale.current === "es"
+          ? (result.page_count === 1 ? "página" : "páginas")
+          : (result.page_count === 1 ? "page" : "pages");
+        successMsg = $LL.reports.exportSuccess({
+          rows: result.rows_written,
+          rowWord,
+          pages: result.page_count,
+          pagesWord: pageWord,
+        });
         setTimeout(() => (successMsg = ""), 5000);
       }
     } catch (e: unknown) {
@@ -230,17 +243,23 @@
   }
 
   function formatDays(days: number): string {
-    if (days < 0) return `${Math.abs(days)} ago`;
+    if (days < 0) {
+      const abs = Math.abs(days);
+      if (locale.current === "es") {
+        return $LL.pdf.daysAgo({ n: abs });
+      }
+      return `${abs} ago`;
+    }
     return days.toString();
   }
 
   function urgencyLabel(u: string): string {
     switch (u) {
-      case "expired": return "Expired";
-      case "today": return "Today";
-      case "alert_window": return "Alert";
-      case "next_30_days": return "Next 30d";
-      default: return "Future";
+      case "expired": return $LL.dashboard.urgency.expired();
+      case "today": return $LL.dashboard.urgency.today();
+      case "alert_window": return $LL.dashboard.urgency.alertWindow();
+      case "next_30_days": return $LL.dashboard.urgency.next30Days();
+      default: return $LL.dashboard.urgency.future();
     }
   }
 
@@ -268,20 +287,25 @@
         if (!meta) return "";
         const f = meta.filters_used;
         const parts: string[] = [];
-        if (f.store_id) parts.push(`store=${f.store_id.slice(0, 8)}…`);
-        if (f.location_id) parts.push(`location=${f.location_id.slice(0, 8)}…`);
+        const storePrefix = $LL.reports.filterSummary.store().replace("=", "");
+        const locPrefix = $LL.reports.filterSummary.location().replace("=", "");
+        const urgencyPrefix = $LL.reports.filterSummary.urgency().replace("=", "");
+        const fromPrefix = $LL.reports.filterSummary.from().replace("=", "");
+        const toPrefix = $LL.reports.filterSummary.to().replace("=", "");
+        if (f.store_id) parts.push(`${storePrefix}=${f.store_id.slice(0, 8)}…`);
+        if (f.location_id) parts.push(`${locPrefix}=${f.location_id.slice(0, 8)}…`);
         if (f.category_ids && f.category_ids.length > 0) {
           const n = f.category_ids.length;
           if (f.category_ids.includes(UNCATEGORIZED_SENTINEL)) {
-            parts.push(`categories=${n} (includes uncategorized)`);
+            parts.push($LL.reports.filterSummary.categoriesUnc({ n }));
           } else {
-            parts.push(`categories (${n})`);
+            parts.push($LL.reports.filterSummary.categories({ n }));
           }
         }
-        if (f.urgency) parts.push(`urgency=${f.urgency}`);
-        if (f.date_from) parts.push(`from=${f.date_from}`);
-        if (f.date_to) parts.push(`to=${f.date_to}`);
-        return parts.length === 0 ? "(no filters)" : parts.join(" · ");
+        if (f.urgency) parts.push(`${urgencyPrefix}=${f.urgency}`);
+        if (f.date_from) parts.push(`${fromPrefix}=${f.date_from}`);
+        if (f.date_to) parts.push(`${toPrefix}=${f.date_to}`);
+        return parts.length === 0 ? $LL.reports.table.noFilters() : parts.join(" · ");
       }
 
   function reportTypeLabel(t: ReportType): string {

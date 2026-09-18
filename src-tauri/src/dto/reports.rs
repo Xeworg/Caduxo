@@ -11,6 +11,8 @@
 //! report mean" between the dashboard UI, the report preview, and any future
 //! PDF/CSV consumer.
 
+use std::borrow::Cow;
+
 use serde::{Deserialize, Serialize};
 
 // ============================================================
@@ -48,15 +50,22 @@ impl ReportType {
         }
     }
 
-    /// Returns a human-readable label for the report type. Used in the report
-    /// metadata so the preview UI / PDF can show a stable description without
-    /// having to map snake_case values back to UI labels.
-    pub fn description(&self) -> &'static str {
-        match self {
-            ReportType::InAlertWindow => "Lots in their alert window",
-            ReportType::Expired => "Expired lots",
-            ReportType::Next30Days => "Lots expiring in the next 30 days",
-            ReportType::Custom => "Custom filtered report",
+    /// Returns a human-readable label for the report type in the given locale.
+    /// Used in the report metadata so the preview UI / PDF can show a stable
+    /// description without having to map snake_case values back to UI labels.
+    pub fn description(&self, locale: crate::pdf::locale::Locale) -> Cow<'static, str> {
+        use crate::pdf::locale::Locale as L;
+        match (self, locale) {
+            (ReportType::InAlertWindow, L::En) => Cow::Borrowed("Lots in their alert window"),
+            (ReportType::InAlertWindow, L::Es) => Cow::Borrowed("Lotes en ventana de alerta"),
+            (ReportType::Expired, L::En) => Cow::Borrowed("Expired lots"),
+            (ReportType::Expired, L::Es) => Cow::Borrowed("Lotes vencidos"),
+            (ReportType::Next30Days, L::En) => Cow::Borrowed("Lots expiring in the next 30 days"),
+            (ReportType::Next30Days, L::Es) => {
+                Cow::Borrowed("Lotes que vencen en los próximos 30 días")
+            }
+            (ReportType::Custom, L::En) => Cow::Borrowed("Custom filtered report"),
+            (ReportType::Custom, L::Es) => Cow::Borrowed("Reporte personalizado filtrado"),
         }
     }
 }

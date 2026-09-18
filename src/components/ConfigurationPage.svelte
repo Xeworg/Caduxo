@@ -5,17 +5,28 @@
         updateSettings,
         type SettingsResponse,
     } from "../lib/stores.js";
+    import {
+        locale,
+        translationSource,
+        setLocale,
+        type SupportedLocale,
+    } from "../i18n/locale.js";
+    import { LL } from "../i18n/i18n-svelte.js";
 
     // ─── State ───────────────────────────────────────────────────────────────────
 
     let loading = true;
-    let saving = false;
+    let savingLocation = false;
     let settings: SettingsResponse | null = null;
     let errorMsg = "";
+    let localeErrorMsg = "";
 
     // Local toggle value; updated optimistically on click.
     // Reverted if the save fails.
     let requireLocation: boolean = true;
+
+    // Local locale value for the selector; kept in sync with the rune.
+    let currentLocale: SupportedLocale = "en";
 
     // ─── Init ───────────────────────────────────────────────────────────────────
 
@@ -23,21 +34,42 @@
         try {
             settings = await getSettings();
             requireLocation = settings.require_initial_location_on_lot_create;
+            // Sync the locale rune from the persisted setting.
+            currentLocale = settings.language;
         } catch (e) {
-            errorMsg = "No se pudieron cargar los ajustes: " + String(e);
+            errorMsg = $LL.configuration.language.loadErrorPrefix() + String(e);
         } finally {
             loading = false;
         }
     });
 
-    // ─── Toggle handler ─────────────────────────────────────────────────────────
+    // ─── Locale selector handler ────────────────────────────────────────────────
+
+    async function handleLocaleChange(next: SupportedLocale) {
+        const prev = currentLocale;
+        // Optimistic update
+        currentLocale = next;
+        localeErrorMsg = "";
+
+        try {
+            await setLocale(next);
+            // Update the persisted settings reference
+            if (settings) settings = { ...settings, language: next };
+        } catch {
+            // Roll back on failure
+            currentLocale = prev;
+            localeErrorMsg = $LL.configuration.language.saveErrorPrefix() + String("Failed");
+        }
+    }
+
+    // ─── Location toggle handler ────────────────────────────────────────────────
 
     async function handleToggle() {
         const newValue = !requireLocation;
         // Optimistic update
         requireLocation = newValue;
         errorMsg = "";
-        saving = true;
+        savingLocation = true;
 
         try {
             await updateSettings({
@@ -48,42 +80,77 @@
         } catch (e) {
             // Rollback on failure
             requireLocation = !newValue;
-            errorMsg = "Error al guardar el ajuste: " + String(e);
+            errorMsg = $LL.common.error() + ": " + String(e);
         } finally {
-            saving = false;
+            savingLocation = false;
         }
     }
 </script>
 
 <div class="page">
     <div class="page-header">
-        <h1 class="page-title">Configuración</h1>
+        <h1 class="page-title">{$LL.configuration.pageTitle()}</h1>
     </div>
 
     {#if loading}
-        <p class="loading-msg">Cargando…</p>
+        <p class="loading-msg">{$LL.common.loading()}</p>
     {:else if errorMsg && !settings}
         <p class="error-msg">{errorMsg}</p>
     {:else}
-        <!-- ─── Lotes section ─────────────────────────────────────────────── -->
+        <!-- ─── Language section ────────────────────────────────────────────── -->
         <section class="settings-section">
-            <h2 class="section-title">Lotes</h2>
+            <h2 class="section-title">{$LL.configuration.language.sectionTitle()}</h2>
+
+            <!-- Detected hint: shown only when the locale came from OS/browser detection -->
+            {#if translationSource.current === "detected"}
+                <p class="detected-hint">
+                    {#if currentLocale === "es"}
+                        {$LL.configuration.language.detectedHintEs()}
+                    {:else}
+                        {$LL.configuration.language.detectedHintEn()}
+                    {/if}
+                </p>
+            {/if}
 
             <div class="setting-row">
                 <div class="setting-info">
-                    <span class="setting-label">Ubicación inicial obligatoria al crear lote</span>
+                    <span class="setting-label">{$LL.configuration.language.label()}</span>
+                </div>
+
+                <select
+                    class="locale-select"
+                    bind:value={currentLocale}
+                    on:change={(e) => handleLocaleChange(e.currentTarget.value as SupportedLocale)}
+                    aria-label={$LL.configuration.language.label()}
+                >
+                    <option value="en">{$LL.configuration.language.english()}</option>
+                    <option value="es">{$LL.configuration.language.spanish()}</option>
+                </select>
+            </div>
+
+            {#if localeErrorMsg}
+                <p class="error-msg">{localeErrorMsg}</p>
+            {/if}
+        </section>
+
+        <!-- ─── Lotes section ─────────────────────────────────────────────── -->
+        <section class="settings-section">
+            <h2 class="section-title">{$LL.configuration.section.lots()}</h2>
+
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">{$LL.configuration.locationRequired.label()}</span>
                     <span class="setting-desc">
-                        Cuando está activado, el formulario de creación de lote requiere que se seleccione una ubicación.
-                        Cuando está desactivado, se permite crear lotes sin ubicación (se asigna una ubicación predeterminada).
+                        {$LL.configuration.locationRequired.description()}
                     </span>
                 </div>
 
-                <label class="toggle-wrap" aria-label="Ubicación inicial obligatoria al crear lote">
+                <label class="toggle-wrap" aria-label={$LL.configuration.locationRequired.label()}>
                     <input
                         type="checkbox"
                         class="toggle-input"
                         checked={requireLocation}
-                        disabled={saving}
+                        disabled={savingLocation}
                         on:change={handleToggle}
                     />
                     <span class="toggle-track">
@@ -92,8 +159,8 @@
                 </label>
             </div>
 
-            {#if saving}
-                <p class="saving-msg">Guardando…</p>
+            {#if savingLocation}
+                <p class="saving-msg">{$LL.configuration.language.saving()}</p>
             {/if}
             {#if errorMsg}
                 <p class="error-msg">{errorMsg}</p>
@@ -133,6 +200,7 @@
         border-radius: 10px;
         padding: 20px 24px;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+        margin-bottom: 16px;
     }
 
     .section-title {
@@ -142,6 +210,36 @@
         text-transform: uppercase;
         letter-spacing: 0.06em;
         margin: 0 0 16px 0;
+    }
+
+    /* ─── Detected hint ──────────────────────────────────────────────────────── */
+
+    .detected-hint {
+        font-size: 0.82rem;
+        color: #2563eb;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        border-radius: 6px;
+        padding: 6px 12px;
+        margin: 0 0 12px 0;
+    }
+
+    /* ─── Locale select ──────────────────────────────────────────────────────── */
+
+    .locale-select {
+        font-size: 0.9rem;
+        padding: 6px 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #fff;
+        color: #1e293b;
+        cursor: pointer;
+        min-width: 120px;
+    }
+
+    .locale-select:focus {
+        outline: 2px solid #2563eb;
+        outline-offset: 1px;
     }
 
     /* ─── Setting row ─────────────────────────────────────────────────────────── */

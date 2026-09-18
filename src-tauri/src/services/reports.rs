@@ -24,6 +24,7 @@ use crate::db::DbPool;
 use crate::dto::dashboard::{DashboardFilters, DashboardLotRow, DashboardPreset};
 use crate::dto::reports::{ReportData, ReportFilters, ReportMetadata, ReportRequest, ReportType};
 use crate::error::{AppError, DomainError};
+use crate::pdf::locale::Locale;
 
 // ============================================================
 // Filter parsing / validation
@@ -119,10 +120,11 @@ fn build_metadata(
     request: &ReportRequest,
     effective_filters: ReportFilters,
     row_count: usize,
+    locale: Locale,
 ) -> ReportMetadata {
     ReportMetadata {
         report_type: request.kind.as_str().to_string(),
-        description: request.kind.description().to_string(),
+        description: request.kind.description(locale).into_owned(),
         filters_used: effective_filters,
         generated_at: Utc::now().to_rfc3339(),
         row_count,
@@ -180,7 +182,11 @@ fn filter_by_date_range(
 ///   3. Apply `date_from`/`date_to` post-filters when set.
 ///   4. Build metadata (type, description, effective filters, generation
 ///      timestamp, row count).
-pub async fn preview_report(pool: &DbPool, request: ReportRequest) -> Result<ReportData, AppError> {
+pub async fn preview_report(
+    pool: &DbPool,
+    request: ReportRequest,
+    locale: Locale,
+) -> Result<ReportData, AppError> {
     let effective = request.filters.clone().unwrap_or_default();
     validate_filters(&effective).map_err(AppError::Domain)?;
 
@@ -196,7 +202,7 @@ pub async fn preview_report(pool: &DbPool, request: ReportRequest) -> Result<Rep
     );
 
     let row_count = response.lots.len();
-    let metadata = build_metadata(&request, effective, row_count);
+    let metadata = build_metadata(&request, effective, row_count, locale);
     Ok(ReportData {
         metadata,
         lots: response.lots,
@@ -215,9 +221,10 @@ pub async fn export_report_pdf(
     pool: &DbPool,
     request: ReportRequest,
     path: std::path::PathBuf,
+    locale: Locale,
 ) -> Result<crate::pdf::report_pdf::RenderedReport, AppError> {
-    let data = preview_report(pool, request).await?;
-    let rendered = crate::pdf::report_pdf::render_report(&data, &path)?;
+    let data = preview_report(pool, request, locale).await?;
+    let rendered = crate::pdf::report_pdf::render_report(&data, &path, locale)?;
     Ok(rendered)
 }
 
@@ -479,7 +486,7 @@ mod tests {
             ReportType::Custom,
         ] {
             assert!(
-                !kind.description().is_empty(),
+                !kind.description(Locale::En).is_empty(),
                 "description for {:?} must be non-empty",
                 kind
             );
@@ -671,6 +678,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect("preview");
@@ -695,6 +703,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect("preview");
@@ -719,6 +728,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect("preview");
@@ -745,6 +755,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect("preview");
@@ -773,6 +784,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect("preview");
@@ -813,6 +825,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect("preview");
@@ -829,7 +842,7 @@ mod tests {
         let pool = fresh_test_pool().await.expect("pool");
         let _fx = seed_report_fixture(&pool).await;
 
-        let data = preview_report(&pool, request_of(ReportType::Custom, None))
+        let data = preview_report(&pool, request_of(ReportType::Custom, None), Locale::En)
             .await
             .expect("preview");
 
@@ -844,9 +857,13 @@ mod tests {
         let pool = fresh_test_pool().await.expect("pool");
         let _fx = seed_report_fixture(&pool).await;
 
-        let data = preview_report(&pool, request_of(ReportType::Expired, empty_filters()))
-            .await
-            .expect("preview");
+        let data = preview_report(
+            &pool,
+            request_of(ReportType::Expired, empty_filters()),
+            Locale::En,
+        )
+        .await
+        .expect("preview");
 
         assert_eq!(data.metadata.report_type, "expired");
         assert!(!data.metadata.description.is_empty());
@@ -879,6 +896,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect("preview");
@@ -912,6 +930,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect_err("malformed date must be rejected");
@@ -935,6 +954,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect_err("inverted range must be rejected");

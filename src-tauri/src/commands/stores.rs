@@ -104,6 +104,13 @@ pub async fn update_settings(
     state: State<'_, AppState>,
     input: SettingsUpdate,
 ) -> Result<SettingsResponse, CommandError> {
+    if let Some(ref value) = input.language {
+        if value != "en" && value != "es" {
+            return Err(CommandError::Validation {
+                message: format!("language must be one of {{en, es}}, got `{value}`"),
+            });
+        }
+    }
     let pool = state.pool().await;
     settings_service::update_settings(&pool, input)
         .await

@@ -9,4 +9,5 @@
 //! summary pages, or template-based variants without disturbing the existing
 //! `render_report` contract.
 
+pub mod locale;
 pub mod report_pdf;

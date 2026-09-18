@@ -10,6 +10,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import type { DashboardLotRow } from "./dashboard.js";
+import type { SupportedLocale } from "../i18n/locale.js";
 
 // ─── DTOs (mirror Rust DTOs in src-tauri/src/dto/reports.rs) ──────────────────
 
@@ -88,8 +89,9 @@ export interface ReportData {
  */
 export async function previewReport(
  request: ReportRequest,
+ locale: SupportedLocale,
 ): Promise<ReportData> {
- return invoke<ReportData>("preview_report", { request });
+ return invoke<ReportData>("preview_report", { request, locale });
 }
 
 // ─── PDF export (Slice 11b) ───────────────────────────────────────────────
@@ -115,10 +117,12 @@ export interface PdfExportResult {
 export async function exportReportPdf(
  request: ReportRequest,
  file_path: string,
+ locale: SupportedLocale,
 ): Promise<PdfExportResult> {
  return invoke<PdfExportResult>("export_report_pdf", {
   request,
   filePath: file_path,
+  locale,
  });
 }
 
@@ -157,8 +161,9 @@ export async function pickPdfSavePath(
  */
 export async function exportReportPdfWithDialog(
  request: ReportRequest,
+ locale: SupportedLocale,
 ): Promise<PdfExportResult | null> {
  const path = await pickPdfSavePath(`caduxo-${request.kind}`);
  if (!path) return null;
- return exportReportPdf(request, path);
+ return exportReportPdf(request, path, locale);
 }
