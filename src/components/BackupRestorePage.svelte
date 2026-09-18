@@ -5,6 +5,7 @@
     restoreBackup,
     type RestoreValidation,
   } from "../lib/backup_restore.js";
+  import { LL } from "../i18n/i18n-svelte.js";
 
   // ─── State ────────────────────────────────────────────────────────────────
 
@@ -32,7 +33,11 @@
       const result = await exportBackupWithDialog();
       if (result) {
         const kb = (result.bytes / 1024).toFixed(1);
-        exportSuccess = `Backup saved to ${result.path} (${kb} KB, schema v${result.schemaVersion}).`;
+        exportSuccess = $LL.backupRestore.exportSuccess({
+          path: result.path,
+          kb,
+          schema: result.schemaVersion,
+        });
       }
       // null means cancelled
     } catch (e) {
@@ -97,15 +102,15 @@
 </script>
 
 <div class="page">
-  <h1>Backup &amp; Restore</h1>
+  <h1>{$LL.backupRestore.pageTitle()}</h1>
 
   <!-- ─── Export ─────────────────────────────────────────────────────────── -->
   <section class="card">
-    <h2>Export backup</h2>
-    <p>Creates a full copy of your database at a location you choose. The app remains open and usable during export.</p>
+    <h2>{$LL.backupRestore.exportSection()}</h2>
+    <p>{$LL.backupRestore.exportDesc()}</p>
 
     <button class="btn-primary" on:click={handleExport} disabled={exporting}>
-      {exporting ? "Exporting…" : "Export database"}
+      {exporting ? $LL.backupRestore.exporting() : $LL.backupRestore.exportButton()}
     </button>
 
     {#if exportSuccess}
@@ -119,19 +124,20 @@
 
   <!-- ─── Restore ───────────────────────────────────────────────────────── -->
   <section class="card">
-    <h2>Restore from backup</h2>
+    <h2>{$LL.backupRestore.restoreSection()}</h2>
     <p>
-      Restoring a backup replaces all current data with the contents of the backup file.
-      <strong>This is a destructive operation.</strong> Make sure you have an export of your current data before proceeding.
+      {$LL.backupRestore.restoreDesc()}
+      <strong>{$LL.backupRestore.destructiveOp()}</strong>
+      {$LL.backupRestore.restoreWarning()}
     </p>
 
     <div class="warning-banner">
-      ⚠️ Restoring a backup cannot be undone. Current data will be permanently replaced.
+      {$LL.backupRestore.restoreDangerBanner()}
     </div>
 
     {#if !validation}
       <button class="btn-secondary" on:click={handleValidate} disabled={validating}>
-        {validating ? "Selecting…" : "Select backup file to restore"}
+        {validating ? $LL.backupRestore.selecting() : $LL.backupRestore.selectBackupFile()}
       </button>
 
       {#if validationError}
@@ -140,7 +146,7 @@
     {:else if validation.canRestore}
       <!-- Validation passed — show summary -->
       <div class="validation-summary">
-        <h3>✅ Backup file validated</h3>
+        <h3>{$LL.backupRestore.backupValidated()}</h3>
         <ul class="checks-list">
           {#each validation.checks as check}
             <li>{check}</li>
@@ -149,18 +155,18 @@
 
         {#if !showRestoreConfirm}
           <button class="btn-danger" on:click={openRestoreConfirm}>
-            Restore from this backup
+            {$LL.backupRestore.restoreButton()}
           </button>
         {:else}
           <!-- Explicit destructive confirmation -->
           <div class="confirm-box">
-            <p><strong>Are you sure?</strong> This will permanently replace all current data with the backup.</p>
+            <p><strong>{$LL.common.confirm()}</strong> {$LL.backupRestore.restoreConfirmPrompt()}</p>
             <div class="confirm-actions">
               <button class="btn-danger" on:click={handleRestore} disabled={restoring}>
-                {restoring ? "Restoring…" : "Yes, replace my data"}
+                {restoring ? $LL.backupRestore.restoring() : $LL.backupRestore.restoreData()}
               </button>
               <button class="btn-secondary" on:click={() => { showRestoreConfirm = false; }}>
-                Cancel
+                {$LL.common.cancel()}
               </button>
             </div>
             {#if restoreError}
@@ -172,7 +178,7 @@
     {:else}
       <!-- Validation failed -->
       <div class="validation-summary">
-        <h3>❌ Backup file cannot be restored</h3>
+        <h3>{$LL.backupRestore.cannotRestore()}</h3>
         <ul class="checks-list">
           {#each validation.checks as check}
             <li>{check}</li>
@@ -181,7 +187,7 @@
 
         <p>
           <button class="btn-secondary" on:click={() => { validation = null; selectedBackupPath = ""; }}>
-            Choose a different file
+            {$LL.backupRestore.chooseDifferentFile()}
           </button>
         </p>
       </div>
@@ -190,19 +196,19 @@
 
   <!-- ─── Help ───────────────────────────────────────────────────────────── -->
   <section class="card">
-    <h2>About backups</h2>
+    <h2>{$LL.backupRestore.aboutSection()}</h2>
     <dl class="info-list">
-      <dt>What is included?</dt>
-      <dd>Full database copy including all stores, products, expiry lots, categories, settings, and history.</dd>
+      <dt>{$LL.backupRestore.includesQ()}</dt>
+      <dd>{$LL.backupRestore.includesA()}</dd>
 
-      <dt>How often should I back up?</dt>
-      <dd>Regular backups are recommended before major changes like CSV imports or bulk lot operations.</dd>
+      <dt>{$LL.backupRestore.howOftenQ()}</dt>
+      <dd>{$LL.backupRestore.howOftenA()}</dd>
 
-      <dt>Where should I save backups?</dt>
-      <dd>Any location you choose — external drive, cloud folder, or local directory. Standard SQLite files can be opened with most database tools.</dd>
+      <dt>{$LL.backupRestore.whereQ()}</dt>
+      <dd>{$LL.backupRestore.whereA()}</dd>
 
-      <dt>Current database location</dt>
-      <dd>The active database is stored in the app's local data directory. The backup export lets you choose where to save your copy.</dd>
+      <dt>{$LL.backupRestore.locationQ()}</dt>
+      <dd>{$LL.backupRestore.locationA()}</dd>
     </dl>
   </section>
 </div>

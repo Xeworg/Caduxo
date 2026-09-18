@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { LL } from "../i18n/i18n-svelte.js";
     import {
         archiveExpiryLot,
         ARCHIVE_REASONS,
@@ -38,15 +39,15 @@
     async function submit() {
         errorMsg = "";
         if (!reasonValid) {
-            errorMsg = "Select an archive reason";
+            errorMsg = $LL.lotMovements.archive.selectReasonError();
             return;
         }
         if (notesTooShort) {
-            errorMsg = `Notes must be at least ${ARCHIVE_NOTES_MIN_CHARS} characters`;
+            errorMsg = $LL.lotMovements.archive.notesMinError({ min: ARCHIVE_NOTES_MIN_CHARS });
             return;
         }
         if (notesTooLong) {
-            errorMsg = `Notes must be at most ${ARCHIVE_NOTES_MAX_CHARS} characters`;
+            errorMsg = $LL.lotMovements.archive.notesMaxError({ max: ARCHIVE_NOTES_MAX_CHARS });
             return;
         }
         submitting = true;
@@ -73,11 +74,11 @@
 <div class="overlay" role="dialog" aria-modal="true" aria-labelledby="archive-title">
     <div class="dialog">
         <header class="dialog-header">
-            <h3 id="archive-title">Archive expiry lot</h3>
+            <h3 id="archive-title">{$LL.lotMovements.archive.title()}</h3>
             <button
                 type="button"
                 class="btn-close"
-                title="Close"
+                title={$LL.lotMovements.modal.close()}
                 on:click={handleClose}
                 disabled={submitting}
             >
@@ -95,18 +96,17 @@
                 {#if lot.batch_code}
                     <span class="batch">{lot.batch_code}</span>
                 {/if}
-                <strong>{lot.quantity} {lot.unit || "unit(s)"}</strong>
-                &nbsp;·&nbsp; Expiry: <strong>{lot.expiry_date}</strong>
+                <strong>{$LL.lotMovements.archive.quantitySummary({ quantity: lot.quantity, unit: lot.unit || $LL.lotMovements.unitsFallback() })}</strong>
+                &nbsp;·&nbsp; {$LL.lotMovements.archive.expirySummary({ date: lot.expiry_date })}
             </span>
             <p class="hint">
-                Archiving hides the lot from active views. Pick a reason and
-                provide a short justification — both are recorded for audit.
+                {$LL.lotMovements.archive.hint()}
             </p>
         </div>
 
         <form on:submit|preventDefault={submit}>
             <label>
-                Reason *
+                {$LL.lotMovements.archive.reason()}
                 <select bind:value={reason} required disabled={submitting}>
                     {#each ARCHIVE_REASONS as option (option.value)}
                         <option value={option.value}>{option.label}</option>
@@ -115,7 +115,7 @@
             </label>
 
             <label>
-                Notes *
+                {$LL.lotMovements.archive.notes()}
                 <span class="char-counter">
                     <span
                         class:invalid={notesTooShort || notesTooLong}
@@ -124,7 +124,7 @@
                 </span>
                 <textarea
                     bind:value={notes}
-                    placeholder="Explain why this lot is being archived (e.g. container breach, vendor recall lot, end-of-season cleanup…)."
+                    placeholder={$LL.lotMovements.archive.notesPlaceholder()}
                     rows="3"
                     minlength={ARCHIVE_NOTES_MIN_CHARS}
                     maxlength={ARCHIVE_NOTES_MAX_CHARS + 200}
@@ -133,11 +133,11 @@
                 ></textarea>
                 {#if notesTooShort}
                     <span class="field-hint invalid">
-                        Notes must be at least {ARCHIVE_NOTES_MIN_CHARS} characters after trimming.
+                        {$LL.lotMovements.archive.notesMinHint({ min: ARCHIVE_NOTES_MIN_CHARS })}
                     </span>
                 {:else if notesTooLong}
                     <span class="field-hint invalid">
-                        Notes must be at most {ARCHIVE_NOTES_MAX_CHARS} characters.
+                        {$LL.lotMovements.archive.notesMaxHint({ max: ARCHIVE_NOTES_MAX_CHARS })}
                     </span>
                 {/if}
             </label>
@@ -148,7 +148,7 @@
                     class="btn-primary"
                     disabled={!canSubmit}
                 >
-                    {submitting ? "Archiving…" : "Archive lot"}
+                    {submitting ? $LL.lotMovements.archive.archiving() : $LL.lotMovements.archive.archiveLot()}
                 </button>
                 <button
                     type="button"
@@ -156,7 +156,7 @@
                     on:click={handleClose}
                     disabled={submitting}
                 >
-                    Cancel
+                    {$LL.lotMovements.modal.cancel()}
                 </button>
             </div>
         </form>

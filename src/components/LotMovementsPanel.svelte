@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { LL } from "../i18n/i18n-svelte.js";
   import {
     listLotMovements,
     getLotLocationBalances,
@@ -108,7 +109,7 @@
   <div class="panel-header">
     <div class="totals">
       <div class="total-item">
-        <span class="total-label">Total</span>
+        <span class="total-label">{$LL.lotMovements.total()}</span>
         <span class="total-value">{lotQuantity} {lotUnit}</span>
       </div>
       {#each balances as bal}
@@ -128,25 +129,25 @@
           type="button"
           class="btn-action btn-move"
           on:click={() => openActionForm("move")}
-          title="Mover stock entre ubicaciones"
+          title={$LL.lotMovements.actionTitles.moveStock()}
         >
-          Mover stock
+          {$LL.lotMovements.moveStock()}
         </button>
         <button
           type="button"
           class="btn-action btn-exit"
           on:click={() => openActionForm("exit")}
-          title="Registrar salida de stock"
+          title={$LL.lotMovements.actionTitles.registerExit()}
         >
-          Registrar salida
+          {$LL.lotMovements.registerExit()}
         </button>
         <button
           type="button"
           class="btn-action btn-adjust"
           on:click={() => openActionForm("adjust")}
-          title="Ajustar conteo de inventario"
+          title={$LL.lotMovements.actionTitles.adjustCount()}
         >
-          Ajustar conteo
+          {$LL.lotMovements.adjustCount()}
         </button>
       </div>
     {/if}
@@ -154,11 +155,11 @@
 
   <!-- ── Movements list ────────────────────────────────────────────────────── -->
   {#if loading}
-    <p class="loading">Cargando movimientos…</p>
+    <p class="loading">{$LL.lotMovements.loadingMovements()}</p>
   {:else if errorMsg}
     <div class="alert-error" role="alert">{errorMsg}</div>
   {:else if movements.length === 0}
-    <p class="empty-hint">Sin movimientos registrados.</p>
+    <p class="empty-hint">{$LL.lotMovements.noMovements()}</p>
   {:else}
     <ul class="movement-list">
       {#each movements as mov (mov.id)}
@@ -180,7 +181,7 @@
               </span>
             {:else}
               <span class="movement-locations">
-                desde <span class="loc-badge">{getLocationName(mov.source_location_id)}</span>
+                {$LL.lotMovements.fromLocation()} <span class="loc-badge">{getLocationName(mov.source_location_id)}</span>
               </span>
             {/if}
             <span class="movement-time">{formatDate(mov.created_at)}</span>

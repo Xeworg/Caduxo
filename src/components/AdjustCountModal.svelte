@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
+  import { LL } from "../i18n/i18n-svelte.js";
   import type { UnitKind } from "../lib/products.js";
 
   // ── Props ──────────────────────────────────────────────────────────────────
@@ -58,25 +59,25 @@
     errorMsg = "";
 
     if (!locationId) {
-      errorMsg = "Selecciona una ubicación";
+      errorMsg = $LL.lotMovements.modal.selectLocationError();
       return;
     }
     if (realQuantity < 0) {
-      errorMsg = "La cantidad no puede ser negativa";
+      errorMsg = $LL.lotMovements.modal.quantityNonNegativeError();
       return;
     }
     if (isFractionalForIntegerUnit(realQuantity)) {
-      errorMsg = `La unidad del producto es de tipo entero; no se permiten cantidades fraccionarias (${realQuantity})`;
+      errorMsg = $LL.lotMovements.modal.integerQuantityError({ quantity: realQuantity });
       return;
     }
     if (!notes.trim()) {
-      errorMsg = "Se requieren notas para un ajuste de inventario";
+      errorMsg = $LL.lotMovements.modal.adjustNotesRequiredError();
       return;
     }
 
     // No-op: nothing to adjust
     if (isNoOp) {
-      errorMsg = "La cantidad real coincide con el inventario actual. No hay ajuste que registrar.";
+      errorMsg = $LL.lotMovements.modal.noAdjustmentError();
       return;
     }
 
@@ -99,38 +100,37 @@
   }
 </script>
 
-<div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Ajustar conteo">
+<div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.lotMovements.adjustCount()}>
   <div class="modal-box">
     <div class="modal-header">
-      <h3>Ajustar conteo</h3>
+      <h3>{$LL.lotMovements.adjustCount()}</h3>
       <button class="modal-close" on:click={onClose}>✕</button>
     </div>
 
     <div class="modal-body">
       <div class="info-box">
         <p>
-          Inventario actual del lote: <strong>{lotQuantity} {lotUnit}</strong>
+          {$LL.lotMovements.modal.adjustCurrentLotInventory({ quantity: lotQuantity, unit: lotUnit })}
         </p>
         <p class="info-hint">
-          Ingresa la cantidad real de inventario en una ubicación específica.
-          El sistema calculará la diferencia y registrará el ajuste correspondiente.
+          {$LL.lotMovements.modal.adjustInstruction()}
         </p>
       </div>
 
       <div class="form-group">
-        <label for="adjust-location">Ubicación *</label>
+        <label for="adjust-location">{$LL.lotsDetail.location()}</label>
         <select id="adjust-location" bind:value={locationId} disabled={submitting}>
-          <option value="">Seleccionar ubicación…</option>
+          <option value="">{$LL.lotMovements.modal.selectLocation()}</option>
           {#each currentBalances as bal}
             <option value={bal.location_id}>
-              {bal.location_id} — Actual: {bal.balance}
+              {bal.location_id} — {$LL.lotMovements.modal.currentBalanceOption({ balance: bal.balance })}
             </option>
           {/each}
         </select>
       </div>
 
       <div class="form-group">
-        <label for="adjust-real">Cantidad real en inventario *</label>
+        <label for="adjust-real">{$LL.lotMovements.quantityToSet()}</label>
         <input
           id="adjust-real"
           type="number"
@@ -140,7 +140,7 @@
           bind:value={realQuantity}
           disabled={submitting}
         />
-        <span class="hint">Inventario actual en esta ubicación: {currentBalance}{isIntegerUnit ? " (solo enteros)" : ""}</span>
+        <span class="hint">{$LL.lotMovements.currentInventory({ current: currentBalance })}{isIntegerUnit ? $LL.lotMovements.integerNote() : ""}</span>
       </div>
 
       {#if locationId && realQuantity >= 0}
@@ -148,25 +148,25 @@
           {#if isIncrease}
             <span class="delta-sign">+</span>
             <span class="delta-value">{delta} {lotUnit}</span>
-            <span class="delta-label">Aumentará el inventario</span>
+            <span class="delta-label">{$LL.lotMovements.willIncrease()}</span>
           {:else if isDecrease}
             <span class="delta-sign">−</span>
             <span class="delta-value">{Math.abs(delta)} {lotUnit}</span>
-            <span class="delta-label">Disminuirá el inventario</span>
+            <span class="delta-label">{$LL.lotMovements.willDecrease()}</span>
           {:else}
-            <span class="delta-label no-change">Sin cambios — el inventario coincide</span>
+            <span class="delta-label no-change">{$LL.lotMovements.modal.noAdjustment()}</span>
           {/if}
         </div>
       {/if}
 
       <div class="form-group">
-        <label for="adjust-notes">Notas * (motivo del ajuste)</label>
+        <label for="adjust-notes">{$LL.lotMovements.modal.notesRequiredReason()}</label>
         <textarea
           id="adjust-notes"
           rows="3"
           bind:value={notes}
           disabled={submitting}
-          placeholder="Ej: Conteo físico durante auditoría, encontró unidades adicionales…"
+          placeholder={$LL.lotMovements.modal.adjustNotesPlaceholder()}
         ></textarea>
       </div>
 
@@ -177,7 +177,7 @@
 
     <div class="modal-footer">
       <button type="button" class="btn-secondary" on:click={onClose} disabled={submitting}>
-        Cancelar
+        {$LL.lotMovements.modal.cancel()}
       </button>
       <button
         type="button"
@@ -185,7 +185,7 @@
         on:click={submit}
         disabled={submitting || isNoOp}
       >
-        {submitting ? "Guardando…" : "Registrar ajuste"}
+        {submitting ? $LL.lotMovements.modal.saving() : $LL.lotMovements.modal.adjustSubmit()}
       </button>
     </div>
   </div>

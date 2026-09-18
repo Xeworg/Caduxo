@@ -3,6 +3,7 @@
     unitAuditBannerState,
     dismissUnitAuditBanner,
   } from "../lib/unit_definitions.js";
+  import { LL } from "../i18n/i18n-svelte.js";
 
   /** Called when the user clicks the "Review" button. */
   export let onReview: () => void;
@@ -11,6 +12,12 @@
   let showBanner = false;
   let unrecognizedCount = 0;
   let dismissing = false;
+
+  /** Plural-aware banner message — picks singular or plural form. */
+  $: bannerMessageFn = unrecognizedCount === 1
+    ? $LL.unitReview.unitCount_singular_alt
+    : $LL.unitReview.unitCount_plural_alt;
+  $: bannerMessage = bannerMessageFn({ n: unrecognizedCount });
 
   async function refresh() {
     loading = true;
@@ -47,25 +54,23 @@
   <div class="unit-banner" role="status">
     <span class="banner-icon">⚠️</span>
     <span class="banner-text">
-      <strong>{unrecognizedCount}</strong>
-      {unrecognizedCount === 1 ? "product has" : "products have"} units not
-      in the catalog.
+      {@html bannerMessage}
     </span>
     <button
       type="button"
       class="btn-primary btn-sm banner-btn"
       on:click={onReview}
     >
-      Review
+      {$LL.unitReview.review()}
     </button>
     <button
       type="button"
       class="btn-ghost btn-sm"
       disabled={dismissing}
       on:click={dismiss}
-      title="Hide this banner until new unrecognized units appear"
+      title={$LL.unitReview.dismiss()}
     >
-      {dismissing ? "…" : "Dismiss"}
+      {dismissing ? $LL.unitReview.inProgress() : $LL.unitReview.dismiss()}
     </button>
   </div>
 {/if}

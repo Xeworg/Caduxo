@@ -559,3 +559,354 @@ exist` etc. — all false positives. The authoritative pipeline confirms zero er
 
 The `lotDetail` path error WAS a genuine mistake in the first edit attempt:
 `$LL.products.detail.lotDetail()` does not exist; the correct path is `$LL.dashboard.lotDetail()`.
+
+---
+
+## PR 2 apply — PR2 task 2.5 third slice (this session)
+
+### Slice scope
+
+This slice covered 5 of the ~10 components remaining in task 2.5:
+- `src/components/CalendarPage.svelte` ✅ done
+- `src/components/BackupRestorePage.svelte` ✅ done
+- `src/components/CsvImportPage.svelte` ✅ done
+- `src/components/UnitReviewPage.svelte` ✅ done
+- `src/components/UnitReviewBanner.svelte` ✅ done (separate checklist item)
+
+### Locale tree additions (en/index.ts + es/index.ts)
+
+**New keys added to `calendar` section:**
+
+| Key | EN | ES |
+|-----|----|----|
+| `calendar.refresh` | "Refresh" | "Actualizar" |
+| `calendar.refreshAria` | "Refresh lot data" | "Actualizar datos de lotes" |
+| `calendar.loadingLots` | "Loading lots…" | "Cargando lotes…" |
+| `calendar.loadFailed` | "Failed to load lots: {msg}" | "Error al cargar lotes: {msg}" |
+| `calendar.dayPanelTitle` | "{date}" | "{date}" |
+| `calendar.noLotsOnDate` | "No lots expiring on this date." | "Ningún lote caduca en esta fecha." |
+| `calendar.urgencyLabels.expired` | "Expired" | "Caducado" |
+| `calendar.urgencyLabels.today` | "Today" | "Hoy" |
+| `calendar.urgencyLabels.alertWindow` | "Alert" | "Alerta" |
+| `calendar.urgencyLabels.next30Days` | "Soon" | "Pronto" |
+| `calendar.urgencyLabels.future` | "Future" | "Futuro" |
+| `calendar.table.product` | "Product" | "Producto" |
+| `calendar.table.qty` | "Qty" | "Cant" |
+| `calendar.table.unit` | "Unit" | "Unidad" |
+| `calendar.table.store` | "Store" | "Tienda" |
+| `calendar.table.location` | "Location" | "Ubicación" |
+| `calendar.table.days` | "Days" | "Días" |
+| `calendar.table.status` | "Status" | "Estado" |
+
+**New keys added to `common` section:**
+- `common.refresh` / `common.refreshAria`
+
+**New keys added to `backupRestore` section:**
+
+| Key | EN | ES |
+|-----|----|----|
+| `backupRestore.exportSuccess` | "Backup saved to {path} ({kb} KB, schema v{schema})." | "Respaldo guardado en {path} ({kb} KB, esquema v{schema})." |
+| `backupRestore.destructiveOp` | "This is a destructive operation." | "Esta es una operación destructiva." |
+| `backupRestore.restoreDangerBanner` | "⚠️ Restoring a backup cannot be undone…" | "⚠️ Restaurar un respaldo no se puede deshacer…" |
+| `backupRestore.selectBackupFile` | "Select backup file to restore" | "Seleccionar archivo de respaldo para restaurar" |
+| `backupRestore.selecting` | "Selecting…" | "Seleccionando…" |
+| `backupRestore.backupValidated` | "✅ Backup file validated" | "✅ Archivo de respaldo validado" |
+| `backupRestore.restoreConfirmPrompt` | "Are you sure? This will permanently replace…" | "¿Estás seguro? Esto reemplazará permanentemente…" |
+| `backupRestore.restoreData` | "Yes, replace my data" | "Sí, reemplazar mis datos" |
+| `backupRestore.cannotRestore` | "❌ Backup file cannot be restored" | "❌ El archivo de respaldo no se puede restaurar" |
+| `backupRestore.chooseDifferentFile` | "Choose a different file" | "Elegir un archivo diferente" |
+
+**New keys added to `csvImport` section:**
+
+| Key | EN | ES |
+|-----|----|----|
+| `csvImport.chooseDifferentFile` | "Choose Different File" | "Elegir archivo diferente" |
+| `csvImport.importButton` | "Import {n} Products" | "Importar {n} productos" |
+| `csvImport.importAnotherFile` | "Import Another File" | "Importar otro archivo" |
+| `csvImport.conflictOptions.skipDuplicates` | "Skip duplicates" | "Omitir duplicados" |
+| `csvImport.conflictOptions.updateExisting` | "Update existing" | "Actualizar existentes" |
+| `csvImport.conflictOptions.reviewConflicts` | "Review conflicts" | "Revisar conflictos" |
+| `csvImport.badge.ok` | "OK" | "OK" |
+| `csvImport.badge.dupSku` | "Dup SKU" | "Dup SKU" |
+| `csvImport.badge.dupBarcode` | "Dup BC" | "Dup BC" |
+| `csvImport.badge.missing` | "Missing" | "Falta" |
+| `csvImport.badge.invalid` | "Invalid" | "Inválido" |
+| `csvImport.badge.unknownUnit` | "Unknown unit" | "Unidad desconocida" |
+| `csvImport.detailRow.readyToImport` | "Ready to import" | "Listo para importar" |
+| `csvImport.detailRow.alreadyHasSku` | 'Already has SKU <code>{sku}</code>' | 'Ya tiene SKU <code>{sku}</code>' |
+| `csvImport.detailRow.barcodeBelongsToOther` | 'Barcode <code>{bc}</code> belongs to another product' | 'El código de barras <code>{bc}</code> pertenece a otro producto' |
+| `csvImport.detailRow.missingField` | "Missing: {field}" | "Falta: {field}" |
+| `csvImport.detailRow.unknownUnitSuggest` | 'Not in catalog — suggested: {suggested}' | 'No está en el catálogo — sugerido: {suggested}' |
+| `csvImport.actions.created` | "Created" | "Creados" |
+| `csvImport.actions.updated` | "Updated" | "Actualizados" |
+| `csvImport.actions.skipped` | "Skipped" | "Omitidos" |
+| `csvImport.actions.invalid` | "Invalid" | "Inválidos" |
+| `csvImport.actions.skuCreated` | "SKU {sku} created" | "SKU {sku} creado" |
+| `csvImport.actions.skuUpdated` | "SKU {sku} updated" | "SKU {sku} actualizado" |
+
+**New keys added to `unitReview` section (plural-aware):**
+
+| Key | EN | ES |
+|-----|----|----|
+| `unitReview.unitCount_singular` | "{n} product uses units not in the catalog." | "{n} producto usa unidades no estándar." |
+| `unitReview.unitCount_plural` | "{n} products use units not in the catalog." | "{n} productos usan unidades no estándar." |
+| `unitReview.unitCount_singular_alt` | "{n} product has units not in the catalog." | "{n} producto tiene unidades no estándar." |
+| `unitReview.unitCount_plural_alt` | "{n} products have units not in the catalog." | "{n} productos tienen unidades no estándar." |
+| `unitReview.noUnrecognizedUnits` | "No unrecognized units — all products are catalog-linked." | "No hay unidades no reconocidas — todos los productos están vinculados al catálogo." |
+| `unitReview.unrecognizedFound` | "{count} unrecognized {values} found. Choose how to handle each one." | "{count} {values} no reconocidas encontradas. Elige cómo manejar cada una." |
+| `unitReview.unrecognizedValue_singular` | "value" | "valor" |
+| `unitReview.unrecognizedValue_plural` | "values" | "valores" |
+| `unitReview.allRecognized` | "✅ All products use recognized catalog units." | "✅ Todos los productos usan unidades reconocidas del catálogo." |
+| `unitReview.backToDashboard` | "Back to dashboard" | "Volver al panel" |
+| `unitReview.mapToPresetDropdown` | "Map to preset" | "Mapear a predefinida" |
+| `unitReview.displayName` | "Display name" | "Nombre para mostrar" |
+| `unitReview.createAndAssign` | "Create & assign" | "Crear y asignar" |
+| `unitReview.inProgress` | "…" | "…" |
+| `unitReview.productsUpdated_singular` | "✅ {count} product updated." | "✅ {count} producto actualizado." |
+| `unitReview.productsUpdated_plural` | "✅ {count} products updated." | "✅ {count} productos actualizados." |
+| `unitReview.unitAssigned` | 'Unit "<strong>{name}</strong>" is now assigned.' | 'Unidad "<strong>{name}</strong>" ahora está asignada.' |
+| `unitReview.done` | "Done — back to dashboard" | "Listo — volver al panel" |
+| `unitReview.integerPresets` | "Integer presets:" | "Unidades enteras predefinidas:" |
+| `unitReview.decimalPresets` | "Decimal presets:" | "Unidades decimales predefinidas:" |
+
+### Components re-keyed
+
+#### `src/components/CalendarPage.svelte`
+- Added `import { LL } from "../i18n/i18n-svelte.js"`
+- `urgencyLabel()`: hardcoded "Expired"/"Today"/"Alert"/"Soon"/"Future" → `$LL.calendar.urgencyLabels.*`
+- `<h2 class="page-title">Calendar</h2>` → `{$LL.calendar.pageTitle()}`
+- Refresh button: `aria-label="Refresh lot data"` → `{$LL.calendar.refreshAria()}`, text `Refresh` → `{$LL.calendar.refresh()}`
+- Loading state: `Loading lots…` → `{$LL.calendar.loadingLots()}`
+- Error state: `Failed to load lots: {errorMsg}` → `{$LL.calendar.loadFailed({ msg: errorMsg })}`
+- Day panel title: `formatDate(selectedDate)` → `{$LL.calendar.dayPanelTitle({ date: formatDate(selectedDate) })}`
+- Empty day state: `No expirations on {selectedDate}` → `{$LL.calendar.noLotsOnDate()}`
+- Table headers: `Product`/`Qty`/`Unit`/`Store`/`Location`/`Days`/`Status` → `$LL.calendar.table.*`
+- Modal overlay: `aria-label="Lot detail"` → `{$LL.dashboard.lotDetail()}`
+- Modal `<h3>`: `Lot Detail` → `{$LL.dashboard.lotDetail()}`
+- Modal loading: `Loading…` → `{$LL.lotsDetail.loading()}`
+- Tabs: `Detalle` → `{$LL.lotsDetail.detail()}`, `Historial` → `{$LL.lotsDetail.history()}`
+- Detail grid labels: `Product`/`Store`/`Location`/`Quantity`/`Expiry date`/`Alert days`/`Batch` → `$LL.dashboard.*` / `$LL.lotsDetail.*`
+- Close button: `Close` → `{$LL.common.close()}`
+- Open movement button: `Open movement actions` → `{$LL.lotMovements.panelTitle()}`
+
+#### `src/components/BackupRestorePage.svelte`
+- Added `import { LL } from "../i18n/i18n-svelte.js"`
+- Page `<h1>`: `Backup & Restore` → `{$LL.backupRestore.pageTitle()}`
+- All section `<h2>` headings → `$LL.backupRestore.exportSection()`, `.restoreSection()`, `.aboutSection()`
+- Export description → `$LL.backupRestore.exportDesc()`
+- Export button: `Export database` → `{$LL.backupRestore.exportButton()}`, `Exporting…` → `{$LL.backupRestore.exporting()}`
+- Export success: hardcoded template → `{$LL.backupRestore.exportSuccess({ path, kb, schema })}`
+- Restore description + destructive warning → `$LL.backupRestore.*`
+- Danger banner → `$LL.backupRestore.restoreDangerBanner()`
+- Select backup button → `$LL.backupRestore.selectBackupFile()` / `.selecting()`
+- Validated heading → `$LL.backupRestore.backupValidated()`
+- Confirm prompt → `$LL.backupRestore.restoreConfirmPrompt()`
+- Restore button → `$LL.backupRestore.restoreData()`
+- Cannot restore heading → `$LL.backupRestore.cannotRestore()`
+- Choose different file → `$LL.backupRestore.chooseDifferentFile()`
+- FAQ dt/dd pairs → all `$LL.backupRestore.*` keys
+
+#### `src/components/CsvImportPage.svelte`
+- Added `import { LL } from "../i18n/i18n-svelte.js"`
+- All stage `<h1>` headings: → `$LL.csvImport.pageTitle()`, `.importPreview()`, `.importComplete()`
+- Select file card title/desc → `$LL.csvImport.selectFile()`, `.selectFileDesc()`
+- Expected columns card → `$LL.csvImport.expectedColumns()`
+- Hint box → `$LL.csvImport.tip()`, `.tipText()`
+- Choose different file button → `$LL.csvImport.chooseDifferentFile()`
+- Summary card labels: `Total rows`/`Valid`/duplicate keys → `$LL.csvImport.totalRows()`, `.valid()`, `.duplicates.*`
+- Conflict strategy section → `$LL.csvImport.conflictStrategy()`, `.conflictOptions.*`
+- Preview table headers → `$LL.csvImport.description()`, `.detail()`, `.status()`
+- Badge labels: `rowBadge()` → `$LL.csvImport.badge.*`
+- Detail column: `rowDetailMessage()` → `$LL.csvImport.detailRow.*`; uses `{@html}` for `<code>` tags
+- Outcome badges: `outcomeBadge()` → `$LL.csvImport.actions.*`
+- Outcome reasons: `outcomeReason()` → `$LL.csvImport.actions.skuCreated()`, `.skuUpdated()`
+- Import button: `Import {n} Products` → `$LL.csvImport.importButton({ n: counts.valid })`
+- Result card labels: `Created`/`Updated`/`Skipped`/`Invalid` → `$LL.csvImport.created()`, etc.
+- Import log `<h2>` → `$LL.csvImport.importLog()`
+- Import another file → `$LL.csvImport.importAnotherFile()`
+
+#### `src/components/UnitReviewPage.svelte`
+- Added `import { LL } from "../i18n/i18n-svelte.js"`
+- Page `<h2>` → `$LL.unitReview.pageTitle()`
+- Subtitle: plural-aware → `$LL.unitReview.noUnrecognizedUnits()` or `$LL.unitReview.unrecognizedFound({ count, values })`
+- Loading: `Loading…` → `$LL.common.loading()`
+- All-recognized empty state → `$LL.unitReview.allRecognized()`, `.backToDashboard()`
+- Raw value label + product count (plural-aware) → `$LL.unitReview.unitCount_singular({ n })` / `.unitCount_plural({ n })`
+- Map to preset dropdown → `$LL.unitReview.mapToPresetDropdown()`
+- Integer/decimal dropdown hints → `$LL.unitReview.integerPresets()`, `.decimalPresets()`
+- Create custom unit → `$LL.unitReview.createCustomUnit()`, `.displayName()`, `.integer()`, `.decimal()`, `.createAndAssign()`, `.inProgress()`
+- Leave for later → `$LL.unitReview.leaveForLater()`
+- Success message: `productsUpdated_singular({ count })` / `productsUpdated_plural({ count })`
+- Assigned unit: `@html $LL.unitReview.unitAssigned({ name })`
+- Done button → `$LL.unitReview.done()`
+
+#### `src/components/UnitReviewBanner.svelte`
+- Added `import { LL } from "../i18n/i18n-svelte.js"`
+- Banner message: plural-aware `{n}` parameter → `$LL.unitReview.unitCount_singular_alt({ n })` / `.unitCount_plural_alt({ n })`
+- Review button → `$LL.unitReview.review()`
+- Dismiss button + title → `$LL.unitReview.dismiss()`, `.inProgress()`
+
+### Type signature fix discovered and corrected
+
+`svelte-check` caught a genuine error: `unitCount_plural_alt` and `unitCount_singular_alt`
+templates in the locale trees used `{n}` as the template parameter, but the component initially
+called them with `{ count: unrecognizedCount }`. Fixed: locale templates use `{n}` consistently
+so the function signature is `(arg: { n: unknown }) => LocalizedString` and the component call
+passes `{ n: unrecognizedCount }`.
+
+### Commands run
+
+```bash
+# Regenerate i18n types after locale tree edits
+npm run i18n:generate
+# Result: all files up to date
+
+# TypeScript compile
+npx tsc --noEmit
+# Result: EXIT:0 — no TypeScript errors
+
+# Svelte component check
+npx svelte-check --workspace . --threshold error
+# Result: svelte-check found 0 errors and 0 warnings
+
+# Frontend build
+npm run build
+# Result: ✓ built in 1.26–1.43s (prebuild regenerated i18n)
+```
+
+### LSP stale-cache note (persistent — all sessions)
+
+The pi-lens embedded LSP diagnostic server holds a snapshot of `i18n-types.ts` that is NOT
+automatically refreshed when `npm run i18n:generate` regenerates the types. After locale-tree
+edits, it may flag `Property 'urgencyLabels' does not exist`, `Property 'badge' does not
+exist`, etc. These are stale-cache false positives. The authoritative pipeline always
+confirms zero errors:
+
+```
+npm run i18n:generate  # regenerates i18n-types.ts (typesafe-i18n CLI)
+npx tsc --noEmit        # EXIT:0 — TypeScript uses fresh i18n-types.ts
+svelte-check --workspace . --threshold error  # 0 errors, 0 warnings
+npm run build           # ✓ built in 1.26–1.43s
+```
+
+The fix is to run `npm run i18n:generate` before any diagnostic read; the authoritative tool
+output always supersedes the embedded LSP snapshot.
+
+### Remaining work in task 2.5
+
+Still pending re-keying:
+- `src/components/LotMovementsPanel.svelte` — panel title, action labels, reason labels, loading/empty
+- `src/components/DatePicker.svelte` — helper text, aria-labels, Today button
+- Modal helpers (task item after component re-keying): `MoveStockModal`, `RegisterExitModal`,
+  `AdjustCountModal`, `ResolveQuantityDialog`, `ArchiveLotDialog`, and any English residue
+  surfaced by grep
+
+---
+
+## Verifier-found residual corrections — fourth pass (this session)
+
+Five residuals confirmed by the independent verifier, all fixed in this session.
+
+### Fix 1 — `CsvImportPage.svelte`: three hardcoded English strategy descriptions
+
+The `strategies` array (lines ~115-125) had three hardcoded English `desc` strings:
+- `"Import only new products. Existing SKUs and barcodes are ignored."`
+- `"Update product details for existing SKUs and add barcodes to existing products."`
+- `"Show which rows have conflicts without making any changes."`
+
+**Fix:** Added `conflictOptions.skipDuplicatesDesc`, `conflictOptions.updateExistingDesc`,
+and `conflictOptions.reviewConflictsDesc` to both locale trees, then replaced the hardcoded
+strings with `$LL.csvImport.conflictOptions.skipDuplicatesDesc()` etc.
+
+### Fix 2 — `CsvImportPage.svelte`: `selectFileDesc` on action card
+
+The action-card `card-desc` used `$LL.csvImport.selectFileDesc()` which carries the
+full column-description text ("Choose a CSV file to import products") — inappropriate for
+a brief click-hint on the card. The old UI had simple "Optional/Opcional" text for this
+slot, but the current key conveys the full description.
+
+**Fix:** Added `csvImport.selectFileAction` to both locale trees:
+- EN: `"Click to select a CSV file from your device"`
+- ES: `"Haz clic para seleccionar un archivo CSV desde tu dispositivo"`
+
+Updated the card-desc span to use `$LL.csvImport.selectFileAction()` instead of
+`$LL.csvImport.selectFileDesc()`.
+
+### Fix 2b — `CsvImportPage.svelte`: sibling info card still misusing `selectFileDesc`
+
+The verifier flagged that the sibling info action card (the "ℹ️ Expected columns" card)
+also used `$LL.csvImport.selectFileDesc()` for the optional-columns label — semantically
+incorrect. The existing key `csvImport.optional` ("optional"/"opcional") already existed
+in both locale trees.
+
+**Fix:** Changed the second `card-desc` line from `$LL.csvImport.selectFileDesc()` to
+`$LL.csvImport.optional()`.
+
+- **Before:** `{$LL.csvImport.selectFileDesc()}: <code>barcode</code>, ...`
+- **After:** `{$LL.csvImport.optional()}: <code>barcode</code>, ...`
+
+### Fix 3 — `CalendarPage.svelte`: hardcoded English month names in `formatDate()`
+
+`formatDate()` used a hardcoded `months` array (`"January"…"December"`) regardless of
+locale.
+
+**Fix:** Replaced the hardcoded array with `toLocaleDateString(undefined, { month: "long",
+day: "numeric", year: "numeric" })`, which respects the active runtime locale rune
+(`locale.current`). Output is now locale-aware: English renders "January 5, 2025",
+Spanish renders "5 de enero de 2025", etc.
+
+### Fix 4 — `CalendarPage.svelte`: hardcoded `ariaLabel="Expiry calendar"`
+
+The `CalendarMonth` child component received `ariaLabel="Expiry calendar"` as a static
+string.
+
+**Fix:** Replaced with `ariaLabel={$LL.calendar.pageTitle()}` — the i18n key for the
+calendar page title ("Expiry Calendar" / "Calendario de caducidad"), keeping ARIA consistent
+with the localized page heading.
+
+### Fix 5 — `UnitReviewPage.svelte`: duplicated product count
+
+The `group-header` rendered `{group.product_count}` as a raw number followed by the
+translation result, which already embeds `{n}`:
+```
+{group.product_count} {group.product_count === 1
+  ? $LL.unitReview.unitCount_singular({ n: group.product_count })
+  : $LL.unitReview.unitCount_plural({ n: group.product_count })}
+```
+This showed e.g. `"3 {n} products use units not in the catalog."` with the raw `3`
+appearing before the translated text.
+
+**Fix:** Removed the standalone `{group.product_count}` prefix; the plural-aware translation
+function now carries `{n}` as its sole count display.
+
+### Commands run (this session)
+
+```bash
+npm run i18n:generate
+# Result: all files up to date
+
+npx tsc --noEmit
+# Result: EXIT 0 — no TypeScript errors
+
+npx svelte-check --workspace . --threshold error
+# Result: svelte-check found 0 errors and 0 warnings
+
+npm run build
+# Result: ✓ built in 1.24s (prebuild regenerated i18n)
+```
+
+### LSP stale-cache note (persistent — all sessions)
+
+The pi-lens embedded LSP diagnostic server holds a snapshot of `i18n-types.ts` that is NOT
+automatically refreshed when `npm run i18n:generate` regenerates the types. After locale-tree
+edits, it flags `Property 'skipDuplicatesDesc' does not exist`, `Property 'selectFileAction'
+does not exist`, etc. — all stale-cache false positives. The authoritative pipeline always
+confirms zero errors:
+
+```
+npm run i18n:generate  # regenerates i18n-types.ts (typesafe-i18n CLI)
+npx tsc --noEmit        # EXIT:0
+svelte-check --workspace . --threshold error  # 0 errors, 0 warnings
+npm run build           # ✓ built in 1.25s
+```
+

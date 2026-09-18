@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
+  import { LL } from "../i18n/i18n-svelte.js";
   import type { UnitKind } from "../lib/products.js";
 
   // ── Props ──────────────────────────────────────────────────────────────────
@@ -25,14 +26,14 @@
 
   // Exit reasons (the eight kinds from the spec)
   const EXIT_REASONS = [
-    { value: "exit:sale", label: "Venta" },
-    { value: "exit:waste", label: "Merma" },
-    { value: "exit:expired", label: "Vencido" },
-    { value: "exit:damaged", label: "Dañado" },
-    { value: "exit:internal_consumption", label: "Consumo interno" },
-    { value: "exit:return_to_supplier", label: "Devolución a proveedor" },
-    { value: "exit:inventory_adjustment", label: "Ajuste de inventario (salida)" },
-    { value: "exit:other", label: "Otro" },
+    { value: "exit:sale", label: () => $LL.lotMovements.exitReasons.sale() },
+    { value: "exit:waste", label: () => $LL.lotMovements.exitReasons.waste() },
+    { value: "exit:expired", label: () => $LL.lotMovements.exitReasons.expired() },
+    { value: "exit:damaged", label: () => $LL.lotMovements.exitReasons.damaged() },
+    { value: "exit:internal_consumption", label: () => $LL.lotMovements.exitReasons.internalConsumption() },
+    { value: "exit:return_to_supplier", label: () => $LL.lotMovements.exitReasons.returnToSupplier() },
+    { value: "exit:inventory_adjustment", label: () => $LL.lotMovements.exitReasons.inventoryAdjustmentExit() },
+    { value: "exit:other", label: () => $LL.lotMovements.exitReasons.other() },
   ];
 
   // Reasons that require notes
@@ -68,27 +69,27 @@
     errorMsg = "";
 
     if (!sourceLocationId) {
-      errorMsg = "Selecciona una ubicación de origen";
+      errorMsg = $LL.lotMovements.modal.selectSourceLocationError();
       return;
     }
     if (!exitReason) {
-      errorMsg = "Selecciona un motivo de salida";
+      errorMsg = $LL.lotMovements.modal.selectExitReasonError();
       return;
     }
     if (quantity <= 0) {
-      errorMsg = "La cantidad debe ser mayor a 0";
+      errorMsg = $LL.lotMovements.modal.quantityPositiveError();
       return;
     }
     if (isFractionalForIntegerUnit(quantity)) {
-      errorMsg = `La unidad del producto es de tipo entero; no se permiten cantidades fraccionarias (${quantity})`;
+      errorMsg = $LL.lotMovements.modal.integerQuantityError({ quantity });
       return;
     }
     if (quantity > availableQuantity) {
-      errorMsg = `Solo hay ${availableQuantity} unidades disponibles en esta ubicación`;
+      errorMsg = $LL.lotMovements.modal.availableQuantityError({ available: availableQuantity });
       return;
     }
     if (requiresNotes && !notes.trim()) {
-      errorMsg = "Se requieren notas para este tipo de salida";
+      errorMsg = $LL.lotMovements.modal.exitNotesRequiredError();
       return;
     }
 
@@ -111,38 +112,38 @@
   }
 </script>
 
-<div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Registrar salida">
+<div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.lotMovements.registerExit()}>
   <div class="modal-box">
     <div class="modal-header">
-      <h3>Registrar salida</h3>
+      <h3>{$LL.lotMovements.registerExit()}</h3>
       <button class="modal-close" on:click={onClose}>✕</button>
     </div>
 
     <div class="modal-body">
       <div class="form-group">
-        <label for="exit-source">Ubicación de origen *</label>
+        <label for="exit-source">{$LL.lotMovements.modal.sourceLocation()}</label>
         <select id="exit-source" bind:value={sourceLocationId} disabled={submitting}>
-          <option value="">Seleccionar ubicación…</option>
+          <option value="">{$LL.lotMovements.modal.selectLocation()}</option>
           {#each currentBalances as bal}
             {#if bal.balance > 0}
-              <option value={bal.location_id}>{bal.location_id} ({bal.balance} disponibles)</option>
+              <option value={bal.location_id}>{bal.location_id} ({$LL.lotMovements.modal.availableOption({ balance: bal.balance })})</option>
             {/if}
           {/each}
         </select>
       </div>
 
       <div class="form-group">
-        <label for="exit-reason">Motivo de salida *</label>
+        <label for="exit-reason">{$LL.lotMovements.modal.exitReason()}</label>
         <select id="exit-reason" bind:value={exitReason} disabled={submitting}>
-          <option value="">Seleccionar motivo…</option>
+          <option value="">{$LL.lotMovements.modal.selectExitReason()}</option>
           {#each EXIT_REASONS as reason}
-            <option value={reason.value}>{reason.label}</option>
+            <option value={reason.value}>{reason.label()}</option>
           {/each}
         </select>
       </div>
 
       <div class="form-group">
-        <label for="exit-qty">Cantidad *</label>
+        <label for="exit-qty">{$LL.lotMovements.modal.quantity()}</label>
         <input
           id="exit-qty"
           type="number"
@@ -153,19 +154,19 @@
           bind:value={quantity}
           disabled={submitting}
         />
-        <span class="hint">Disponibles: {availableQuantity}{isIntegerUnit ? " (solo enteros)" : ""}</span>
+        <span class="hint">{$LL.lotMovements.available({ available: availableQuantity })}{isIntegerUnit ? $LL.lotMovements.integerNote() : ""}</span>
       </div>
 
       <div class="form-group">
         <label for="exit-notes">
-          Notas {requiresNotes ? "*" : "(opcional)"}
+          {requiresNotes ? $LL.lotMovements.modal.notesRequired() : $LL.lotMovements.modal.notesOptional()}
         </label>
         <textarea
           id="exit-notes"
           rows="3"
           bind:value={notes}
           disabled={submitting}
-          placeholder={requiresNotes ? "Se requieren notas para este motivo" : "Notas adicionales…"}
+          placeholder={requiresNotes ? $LL.lotMovements.modal.notesRequiredPlaceholder() : $LL.lotMovements.modal.notesOptionalPlaceholder()}
         ></textarea>
       </div>
 
@@ -176,7 +177,7 @@
 
     <div class="modal-footer">
       <button type="button" class="btn-secondary" on:click={onClose} disabled={submitting}>
-        Cancelar
+        {$LL.lotMovements.modal.cancel()}
       </button>
       <button
         type="button"
@@ -184,7 +185,7 @@
         on:click={submit}
         disabled={submitting}
       >
-        {submitting ? "Guardando…" : "Registrar"}
+        {submitting ? $LL.lotMovements.modal.saving() : $LL.lotMovements.modal.registerExitSubmit()}
       </button>
     </div>
   </div>

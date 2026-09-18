@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
+  import { LL } from "../i18n/i18n-svelte.js";
   import type { UnitKind } from "../lib/products.js";
 
   // ── Props ──────────────────────────────────────────────────────────────────
@@ -83,23 +84,23 @@
     errorMsg = "";
 
     if (!sourceLocationId) {
-      errorMsg = "Selecciona una ubicación de origen";
+      errorMsg = $LL.lotMovements.modal.selectSourceLocationError();
       return;
     }
     if (!destinationLocationId) {
-      errorMsg = "Selecciona una ubicación de destino";
+      errorMsg = $LL.lotMovements.modal.selectDestinationLocationError();
       return;
     }
     if (quantity <= 0) {
-      errorMsg = "La cantidad debe ser mayor a 0";
+      errorMsg = $LL.lotMovements.modal.quantityPositiveError();
       return;
     }
     if (isFractionalForIntegerUnit(quantity)) {
-      errorMsg = `La unidad del producto es de tipo entero; no se permiten cantidades fraccionarias (${quantity})`;
+      errorMsg = $LL.lotMovements.modal.integerQuantityError({ quantity });
       return;
     }
     if (quantity > availableQuantity) {
-      errorMsg = `Solo hay ${availableQuantity} unidades disponibles en esta ubicación`;
+      errorMsg = $LL.lotMovements.modal.availableQuantityError({ available: availableQuantity });
       return;
     }
 
@@ -122,43 +123,43 @@
   }
 </script>
 
-<div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Mover stock">
+<div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.lotMovements.moveStock()}>
   <div class="modal-box">
     <div class="modal-header">
-      <h3>Mover stock</h3>
+      <h3>{$LL.lotMovements.moveStock()}</h3>
       <button class="modal-close" on:click={onClose}>✕</button>
     </div>
 
     <div class="modal-body">
       <label class="checkbox-row">
         <input type="checkbox" bind:checked={transferAcrossStores} disabled={submitting || sourceLocations.length === 0} />
-        Transferir a otra tienda
+        {$LL.lotMovements.modal.moveAcrossStores()}
       </label>
 
       {#if sourceLocations.length === 0 || filteredDestinations.length === 0}
         <p class="info-text">
           {sourceLocations.length === 0
-            ? "Se necesita stock disponible para realizar una transferencia."
+            ? $LL.lotMovements.modal.noSourceStock()
             : transferAcrossStores
-              ? "No hay ubicaciones disponibles en otras tiendas."
-              : "No hay otra ubicación disponible en la misma tienda. Marcá Transferir a otra tienda si corresponde."}
+              ? $LL.lotMovements.modal.noOtherStoreLocations()
+              : $LL.lotMovements.modal.noSameStoreLocations()}
         </p>
       {:else}
         <div class="form-group">
-          <label for="move-source">Ubicación de origen *</label>
+          <label for="move-source">{$LL.lotMovements.modal.sourceLocation()}</label>
           <select id="move-source" bind:value={sourceLocationId} disabled={submitting}>
-            <option value="">Seleccionar ubicación…</option>
+            <option value="">{$LL.lotMovements.modal.selectLocation()}</option>
             {#each sourceLocations as loc}
               {@const bal = currentBalances.find((b) => b.location_id === loc.id)?.balance ?? 0}
-              <option value={loc.id}>{locationLabel(loc)} ({bal} disponibles)</option>
+              <option value={loc.id}>{locationLabel(loc)} ({$LL.lotMovements.modal.availableOption({ balance: bal })})</option>
             {/each}
           </select>
         </div>
 
         <div class="form-group">
-          <label for="move-dest">Ubicación de destino *</label>
+          <label for="move-dest">{$LL.lotMovements.modal.destinationLocation()}</label>
           <select id="move-dest" bind:value={destinationLocationId} disabled={submitting}>
-            <option value="">Seleccionar ubicación…</option>
+            <option value="">{$LL.lotMovements.modal.selectLocation()}</option>
             {#each filteredDestinations as loc}
               <option value={loc.id}>{locationLabel(loc)}</option>
             {/each}
@@ -166,7 +167,7 @@
         </div>
 
         <div class="form-group">
-          <label for="move-qty">Cantidad *</label>
+          <label for="move-qty">{$LL.lotMovements.modal.quantity()}</label>
           <input
             id="move-qty"
             type="number"
@@ -177,7 +178,7 @@
             bind:value={quantity}
             disabled={submitting}
           />
-          <span class="hint">Disponibles: {availableQuantity}{isIntegerUnit ? " (solo enteros)" : ""}</span>
+          <span class="hint">{$LL.lotMovements.available({ available: availableQuantity })}{isIntegerUnit ? $LL.lotMovements.integerNote() : ""}</span>
         </div>
 
         {#if errorMsg}
@@ -188,7 +189,7 @@
 
     <div class="modal-footer">
       <button type="button" class="btn-secondary" on:click={onClose} disabled={submitting}>
-        Cancelar
+        {$LL.lotMovements.modal.cancel()}
       </button>
       <button
         type="button"
@@ -196,7 +197,7 @@
         on:click={submit}
         disabled={submitting || sourceLocations.length === 0 || filteredDestinations.length === 0}
       >
-        {submitting ? "Guardando…" : "Mover"}
+        {submitting ? $LL.lotMovements.modal.saving() : $LL.lotMovements.modal.moveSubmit()}
       </button>
     </div>
   </div>

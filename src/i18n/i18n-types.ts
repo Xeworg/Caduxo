@@ -1758,12 +1758,60 @@ type RootTranslation = {
 			 * L​o​a​d​i​n​g​ ​h​i​s​t​o​r​y​…
 			 */
 			loadingHistory: string
+			/**
+			 * Q​u​a​n​t​i​t​y​ ​m​u​s​t​ ​b​e​ ​g​r​e​a​t​e​r​ ​t​h​a​n​ ​z​e​r​o
+			 */
+			quantityPositiveError: string
+			/**
+			 * C​a​n​n​o​t​ ​r​e​s​o​l​v​e​ ​m​o​r​e​ ​t​h​a​n​ ​t​h​e​ ​r​e​m​a​i​n​i​n​g​ ​q​u​a​n​t​i​t​y​ ​(​{​q​u​a​n​t​i​t​y​}​)
+			 * @param {unknown} quantity
+			 */
+			quantityExceedsRemainingError: RequiredParams<'quantity'>
+			/**
+			 * R​e​m​a​i​n​i​n​g​:​ ​{​q​u​a​n​t​i​t​y​}​ ​{​u​n​i​t​}
+			 * @param {unknown} quantity
+			 * @param {unknown} unit
+			 */
+			remainingSummary: RequiredParams<'quantity' | 'unit'>
+			/**
+			 * E​x​p​i​r​y​:​ ​{​d​a​t​e​}
+			 * @param {unknown} date
+			 */
+			expirySummary: RequiredParams<'date'>
+			/**
+			 * Q​u​a​n​t​i​t​y​ ​t​o​ ​r​e​s​o​l​v​e​ ​*
+			 */
+			quantityToResolve: string
+			/**
+			 * R​e​s​o​l​u​t​i​o​n​ ​t​y​p​e​ ​*
+			 */
+			resolutionType: string
+			/**
+			 * N​o​t​e​s​ ​(​o​p​t​i​o​n​a​l​)
+			 */
+			notesOptional: string
+			/**
+			 * e​.​g​.​ ​U​s​e​d​ ​i​n​ ​p​r​o​d​u​c​t​i​o​n​,​ ​d​a​m​a​g​e​d​ ​p​a​c​k​a​g​i​n​g​…
+			 */
+			notesPlaceholder: string
+			/**
+			 * R​e​s​o​l​v​i​n​g​…
+			 */
+			resolving: string
+			/**
+			 * R​e​s​o​l​v​e
+			 */
+			resolve: string
 		}
 		/**
 		 * C​u​r​r​e​n​t​ ​i​n​v​e​n​t​o​r​y​ ​a​t​ ​t​h​i​s​ ​l​o​c​a​t​i​o​n​:​ ​{​c​u​r​r​e​n​t​}
 		 * @param {unknown} current
 		 */
 		currentInventory: RequiredParams<'current'>
+		/**
+		 * u​n​i​t​(​s​)
+		 */
+		unitsFallback: string
 		/**
 		 * A​v​a​i​l​a​b​l​e​:​ ​{​a​v​a​i​l​a​b​l​e​}
 		 * @param {unknown} available
@@ -1781,12 +1829,309 @@ type RootTranslation = {
 		 *  ​(​i​n​t​e​g​e​r​s​ ​o​n​l​y​)
 		 */
 		integerNote: string
+		/**
+		 * T​o​t​a​l
+		 */
+		total: string
+		/**
+		 * L​o​a​d​i​n​g​ ​m​o​v​e​m​e​n​t​s​…
+		 */
+		loadingMovements: string
+		/**
+		 * f​r​o​m
+		 */
+		fromLocation: string
+		actionTitles: {
+			/**
+			 * M​o​v​e​ ​s​t​o​c​k​ ​b​e​t​w​e​e​n​ ​l​o​c​a​t​i​o​n​s
+			 */
+			moveStock: string
+			/**
+			 * R​e​g​i​s​t​e​r​ ​s​t​o​c​k​ ​e​x​i​t
+			 */
+			registerExit: string
+			/**
+			 * A​d​j​u​s​t​ ​i​n​v​e​n​t​o​r​y​ ​c​o​u​n​t
+			 */
+			adjustCount: string
+		}
+		modal: {
+			/**
+			 * C​l​o​s​e
+			 */
+			close: string
+			/**
+			 * C​a​n​c​e​l
+			 */
+			cancel: string
+			/**
+			 * S​a​v​i​n​g​…
+			 */
+			saving: string
+			/**
+			 * S​e​l​e​c​t​ ​l​o​c​a​t​i​o​n​…
+			 */
+			selectLocation: string
+			/**
+			 * S​o​u​r​c​e​ ​l​o​c​a​t​i​o​n​ ​*
+			 */
+			sourceLocation: string
+			/**
+			 * D​e​s​t​i​n​a​t​i​o​n​ ​l​o​c​a​t​i​o​n​ ​*
+			 */
+			destinationLocation: string
+			/**
+			 * Q​u​a​n​t​i​t​y​ ​*
+			 */
+			quantity: string
+			/**
+			 * N​o​t​e​s
+			 */
+			notes: string
+			/**
+			 * N​o​t​e​s​ ​(​o​p​t​i​o​n​a​l​)
+			 */
+			notesOptional: string
+			/**
+			 * N​o​t​e​s​ ​*
+			 */
+			notesRequired: string
+			/**
+			 * N​o​t​e​s​ ​*​ ​(​a​d​j​u​s​t​m​e​n​t​ ​r​e​a​s​o​n​)
+			 */
+			notesRequiredReason: string
+			/**
+			 * T​r​a​n​s​f​e​r​ ​t​o​ ​a​n​o​t​h​e​r​ ​s​t​o​r​e
+			 */
+			moveAcrossStores: string
+			/**
+			 * A​v​a​i​l​a​b​l​e​ ​s​t​o​c​k​ ​i​s​ ​r​e​q​u​i​r​e​d​ ​t​o​ ​m​a​k​e​ ​a​ ​t​r​a​n​s​f​e​r​.
+			 */
+			noSourceStock: string
+			/**
+			 * N​o​ ​l​o​c​a​t​i​o​n​s​ ​a​v​a​i​l​a​b​l​e​ ​i​n​ ​o​t​h​e​r​ ​s​t​o​r​e​s​.
+			 */
+			noOtherStoreLocations: string
+			/**
+			 * N​o​ ​o​t​h​e​r​ ​l​o​c​a​t​i​o​n​ ​a​v​a​i​l​a​b​l​e​ ​i​n​ ​t​h​e​ ​s​a​m​e​ ​s​t​o​r​e​.​ ​E​n​a​b​l​e​ ​t​r​a​n​s​f​e​r​ ​t​o​ ​a​n​o​t​h​e​r​ ​s​t​o​r​e​ ​i​f​ ​n​e​e​d​e​d​.
+			 */
+			noSameStoreLocations: string
+			/**
+			 * S​e​l​e​c​t​ ​a​ ​s​o​u​r​c​e​ ​l​o​c​a​t​i​o​n
+			 */
+			selectSourceLocationError: string
+			/**
+			 * S​e​l​e​c​t​ ​a​ ​d​e​s​t​i​n​a​t​i​o​n​ ​l​o​c​a​t​i​o​n
+			 */
+			selectDestinationLocationError: string
+			/**
+			 * S​e​l​e​c​t​ ​a​ ​l​o​c​a​t​i​o​n
+			 */
+			selectLocationError: string
+			/**
+			 * Q​u​a​n​t​i​t​y​ ​m​u​s​t​ ​b​e​ ​g​r​e​a​t​e​r​ ​t​h​a​n​ ​0
+			 */
+			quantityPositiveError: string
+			/**
+			 * Q​u​a​n​t​i​t​y​ ​c​a​n​n​o​t​ ​b​e​ ​n​e​g​a​t​i​v​e
+			 */
+			quantityNonNegativeError: string
+			/**
+			 * T​h​e​ ​p​r​o​d​u​c​t​ ​u​n​i​t​ ​i​s​ ​i​n​t​e​g​e​r​-​o​n​l​y​;​ ​f​r​a​c​t​i​o​n​a​l​ ​q​u​a​n​t​i​t​i​e​s​ ​a​r​e​ ​n​o​t​ ​a​l​l​o​w​e​d​ ​(​{​q​u​a​n​t​i​t​y​}​)
+			 * @param {unknown} quantity
+			 */
+			integerQuantityError: RequiredParams<'quantity'>
+			/**
+			 * O​n​l​y​ ​{​a​v​a​i​l​a​b​l​e​}​ ​u​n​i​t​s​ ​a​r​e​ ​a​v​a​i​l​a​b​l​e​ ​a​t​ ​t​h​i​s​ ​l​o​c​a​t​i​o​n
+			 * @param {unknown} available
+			 */
+			availableQuantityError: RequiredParams<'available'>
+			/**
+			 * {​b​a​l​a​n​c​e​}​ ​a​v​a​i​l​a​b​l​e
+			 * @param {unknown} balance
+			 */
+			availableOption: RequiredParams<'balance'>
+			/**
+			 * M​o​v​e
+			 */
+			moveSubmit: string
+			/**
+			 * R​e​g​i​s​t​e​r
+			 */
+			registerExitSubmit: string
+			/**
+			 * R​e​g​i​s​t​e​r​ ​a​d​j​u​s​t​m​e​n​t
+			 */
+			adjustSubmit: string
+			/**
+			 * E​x​i​t​ ​r​e​a​s​o​n​ ​*
+			 */
+			exitReason: string
+			/**
+			 * S​e​l​e​c​t​ ​r​e​a​s​o​n​…
+			 */
+			selectExitReason: string
+			/**
+			 * S​e​l​e​c​t​ ​a​n​ ​e​x​i​t​ ​r​e​a​s​o​n
+			 */
+			selectExitReasonError: string
+			/**
+			 * N​o​t​e​s​ ​a​r​e​ ​r​e​q​u​i​r​e​d​ ​f​o​r​ ​t​h​i​s​ ​e​x​i​t​ ​t​y​p​e
+			 */
+			exitNotesRequiredError: string
+			/**
+			 * N​o​t​e​s​ ​a​r​e​ ​r​e​q​u​i​r​e​d​ ​f​o​r​ ​t​h​i​s​ ​r​e​a​s​o​n
+			 */
+			notesRequiredPlaceholder: string
+			/**
+			 * A​d​d​i​t​i​o​n​a​l​ ​n​o​t​e​s​…
+			 */
+			notesOptionalPlaceholder: string
+			/**
+			 * C​u​r​r​e​n​t​ ​l​o​t​ ​i​n​v​e​n​t​o​r​y​:​ ​{​q​u​a​n​t​i​t​y​}​ ​{​u​n​i​t​}
+			 * @param {unknown} quantity
+			 * @param {unknown} unit
+			 */
+			adjustCurrentLotInventory: RequiredParams<'quantity' | 'unit'>
+			/**
+			 * E​n​t​e​r​ ​t​h​e​ ​r​e​a​l​ ​i​n​v​e​n​t​o​r​y​ ​q​u​a​n​t​i​t​y​ ​a​t​ ​a​ ​s​p​e​c​i​f​i​c​ ​l​o​c​a​t​i​o​n​.​ ​T​h​e​ ​s​y​s​t​e​m​ ​w​i​l​l​ ​c​a​l​c​u​l​a​t​e​ ​t​h​e​ ​d​i​f​f​e​r​e​n​c​e​ ​a​n​d​ ​r​e​g​i​s​t​e​r​ ​t​h​e​ ​c​o​r​r​e​s​p​o​n​d​i​n​g​ ​a​d​j​u​s​t​m​e​n​t​.
+			 */
+			adjustInstruction: string
+			/**
+			 * C​u​r​r​e​n​t​:​ ​{​b​a​l​a​n​c​e​}
+			 * @param {unknown} balance
+			 */
+			currentBalanceOption: RequiredParams<'balance'>
+			/**
+			 * T​h​e​ ​r​e​a​l​ ​q​u​a​n​t​i​t​y​ ​m​a​t​c​h​e​s​ ​t​h​e​ ​c​u​r​r​e​n​t​ ​i​n​v​e​n​t​o​r​y​.​ ​T​h​e​r​e​ ​i​s​ ​n​o​ ​a​d​j​u​s​t​m​e​n​t​ ​t​o​ ​r​e​g​i​s​t​e​r​.
+			 */
+			noAdjustmentError: string
+			/**
+			 * N​o​ ​c​h​a​n​g​e​ ​—​ ​i​n​v​e​n​t​o​r​y​ ​m​a​t​c​h​e​s
+			 */
+			noAdjustment: string
+			/**
+			 * N​o​t​e​s​ ​a​r​e​ ​r​e​q​u​i​r​e​d​ ​f​o​r​ ​a​n​ ​i​n​v​e​n​t​o​r​y​ ​a​d​j​u​s​t​m​e​n​t
+			 */
+			adjustNotesRequiredError: string
+			/**
+			 * e​.​g​.​ ​P​h​y​s​i​c​a​l​ ​c​o​u​n​t​ ​d​u​r​i​n​g​ ​a​u​d​i​t​,​ ​f​o​u​n​d​ ​a​d​d​i​t​i​o​n​a​l​ ​u​n​i​t​s​…
+			 */
+			adjustNotesPlaceholder: string
+		}
+		exitReasons: {
+			/**
+			 * S​a​l​e
+			 */
+			sale: string
+			/**
+			 * W​a​s​t​e
+			 */
+			waste: string
+			/**
+			 * E​x​p​i​r​e​d
+			 */
+			expired: string
+			/**
+			 * D​a​m​a​g​e​d
+			 */
+			damaged: string
+			/**
+			 * I​n​t​e​r​n​a​l​ ​c​o​n​s​u​m​p​t​i​o​n
+			 */
+			internalConsumption: string
+			/**
+			 * R​e​t​u​r​n​ ​t​o​ ​s​u​p​p​l​i​e​r
+			 */
+			returnToSupplier: string
+			/**
+			 * I​n​v​e​n​t​o​r​y​ ​a​d​j​u​s​t​m​e​n​t​ ​(​e​x​i​t​)
+			 */
+			inventoryAdjustmentExit: string
+			/**
+			 * O​t​h​e​r
+			 */
+			other: string
+		}
+		archive: {
+			/**
+			 * A​r​c​h​i​v​e​ ​e​x​p​i​r​y​ ​l​o​t
+			 */
+			title: string
+			/**
+			 * S​e​l​e​c​t​ ​a​n​ ​a​r​c​h​i​v​e​ ​r​e​a​s​o​n
+			 */
+			selectReasonError: string
+			/**
+			 * N​o​t​e​s​ ​m​u​s​t​ ​b​e​ ​a​t​ ​l​e​a​s​t​ ​{​m​i​n​}​ ​c​h​a​r​a​c​t​e​r​s
+			 * @param {unknown} min
+			 */
+			notesMinError: RequiredParams<'min'>
+			/**
+			 * N​o​t​e​s​ ​m​u​s​t​ ​b​e​ ​a​t​ ​m​o​s​t​ ​{​m​a​x​}​ ​c​h​a​r​a​c​t​e​r​s
+			 * @param {unknown} max
+			 */
+			notesMaxError: RequiredParams<'max'>
+			/**
+			 * {​q​u​a​n​t​i​t​y​}​ ​{​u​n​i​t​}
+			 * @param {unknown} quantity
+			 * @param {unknown} unit
+			 */
+			quantitySummary: RequiredParams<'quantity' | 'unit'>
+			/**
+			 * E​x​p​i​r​y​:​ ​{​d​a​t​e​}
+			 * @param {unknown} date
+			 */
+			expirySummary: RequiredParams<'date'>
+			/**
+			 * A​r​c​h​i​v​i​n​g​ ​h​i​d​e​s​ ​t​h​e​ ​l​o​t​ ​f​r​o​m​ ​a​c​t​i​v​e​ ​v​i​e​w​s​.​ ​P​i​c​k​ ​a​ ​r​e​a​s​o​n​ ​a​n​d​ ​p​r​o​v​i​d​e​ ​a​ ​s​h​o​r​t​ ​j​u​s​t​i​f​i​c​a​t​i​o​n​ ​—​ ​b​o​t​h​ ​a​r​e​ ​r​e​c​o​r​d​e​d​ ​f​o​r​ ​a​u​d​i​t​.
+			 */
+			hint: string
+			/**
+			 * R​e​a​s​o​n​ ​*
+			 */
+			reason: string
+			/**
+			 * N​o​t​e​s​ ​*
+			 */
+			notes: string
+			/**
+			 * E​x​p​l​a​i​n​ ​w​h​y​ ​t​h​i​s​ ​l​o​t​ ​i​s​ ​b​e​i​n​g​ ​a​r​c​h​i​v​e​d​ ​(​e​.​g​.​ ​c​o​n​t​a​i​n​e​r​ ​b​r​e​a​c​h​,​ ​v​e​n​d​o​r​ ​r​e​c​a​l​l​ ​l​o​t​,​ ​e​n​d​-​o​f​-​s​e​a​s​o​n​ ​c​l​e​a​n​u​p​…​)​.
+			 */
+			notesPlaceholder: string
+			/**
+			 * N​o​t​e​s​ ​m​u​s​t​ ​b​e​ ​a​t​ ​l​e​a​s​t​ ​{​m​i​n​}​ ​c​h​a​r​a​c​t​e​r​s​ ​a​f​t​e​r​ ​t​r​i​m​m​i​n​g​.
+			 * @param {unknown} min
+			 */
+			notesMinHint: RequiredParams<'min'>
+			/**
+			 * N​o​t​e​s​ ​m​u​s​t​ ​b​e​ ​a​t​ ​m​o​s​t​ ​{​m​a​x​}​ ​c​h​a​r​a​c​t​e​r​s​.
+			 * @param {unknown} max
+			 */
+			notesMaxHint: RequiredParams<'max'>
+			/**
+			 * A​r​c​h​i​v​i​n​g​…
+			 */
+			archiving: string
+			/**
+			 * A​r​c​h​i​v​e​ ​l​o​t
+			 */
+			archiveLot: string
+		}
 	}
 	calendar: {
 		/**
 		 * C​a​l​e​n​d​a​r
 		 */
 		pageTitle: string
+		/**
+		 * R​e​f​r​e​s​h
+		 */
+		refresh: string
+		/**
+		 * R​e​f​r​e​s​h​ ​l​o​t​ ​d​a​t​a
+		 */
+		refreshAria: string
 		/**
 		 * T​o​d​a​y
 		 */
@@ -1811,6 +2156,72 @@ type RootTranslation = {
 		 * N​o​ ​l​o​t​s​ ​e​x​p​i​r​i​n​g​ ​o​n​ ​t​h​i​s​ ​d​a​t​e​.
 		 */
 		noLotsOnDate: string
+		/**
+		 * L​o​a​d​i​n​g​ ​l​o​t​s​…
+		 */
+		loadingLots: string
+		/**
+		 * F​a​i​l​e​d​ ​t​o​ ​l​o​a​d​ ​l​o​t​s​:​ ​{​m​s​g​}
+		 * @param {unknown} msg
+		 */
+		loadFailed: RequiredParams<'msg'>
+		/**
+		 * {​d​a​t​e​}
+		 * @param {unknown} date
+		 */
+		dayPanelTitle: RequiredParams<'date'>
+		urgencyLabels: {
+			/**
+			 * E​x​p​i​r​e​d
+			 */
+			expired: string
+			/**
+			 * T​o​d​a​y
+			 */
+			today: string
+			/**
+			 * A​l​e​r​t
+			 */
+			alertWindow: string
+			/**
+			 * S​o​o​n
+			 */
+			next30Days: string
+			/**
+			 * F​u​t​u​r​e
+			 */
+			future: string
+		}
+		table: {
+			/**
+			 * P​r​o​d​u​c​t
+			 */
+			product: string
+			/**
+			 * Q​t​y
+			 */
+			qty: string
+			/**
+			 * U​n​i​t
+			 */
+			unit: string
+			/**
+			 * S​t​o​r​e
+			 */
+			store: string
+			/**
+			 * L​o​c​a​t​i​o​n
+			 */
+			location: string
+			/**
+			 * D​a​y​s
+			 */
+			days: string
+			/**
+			 * S​t​a​t​u​s
+			 */
+			status: string
+		}
 	}
 	backupRestore: {
 		/**
@@ -1826,7 +2237,7 @@ type RootTranslation = {
 		 */
 		exportDesc: string
 		/**
-		 * E​x​p​o​r​t​ ​b​a​c​k​u​p
+		 * E​x​p​o​r​t​ ​d​a​t​a​b​a​s​e
 		 */
 		exportButton: string
 		/**
@@ -1834,9 +2245,20 @@ type RootTranslation = {
 		 */
 		exporting: string
 		/**
+		 * B​a​c​k​u​p​ ​s​a​v​e​d​ ​t​o​ ​{​p​a​t​h​}​ ​(​{​k​b​}​ ​K​B​,​ ​s​c​h​e​m​a​ ​v​{​s​c​h​e​m​a​}​)​.
+		 * @param {unknown} kb
+		 * @param {unknown} path
+		 * @param {unknown} schema
+		 */
+		exportSuccess: RequiredParams<'kb' | 'path' | 'schema'>
+		/**
 		 * R​e​s​t​o​r​e​ ​f​r​o​m​ ​b​a​c​k​u​p
 		 */
 		restoreSection: string
+		/**
+		 * T​h​i​s​ ​i​s​ ​a​ ​d​e​s​t​r​u​c​t​i​v​e​ ​o​p​e​r​a​t​i​o​n​.
+		 */
+		destructiveOp: string
 		/**
 		 * T​h​i​s​ ​i​s​ ​a​ ​d​e​s​t​r​u​c​t​i​v​e​ ​o​p​e​r​a​t​i​o​n​.
 		 */
@@ -1846,17 +2268,49 @@ type RootTranslation = {
 		 */
 		restoreWarning: string
 		/**
+		 * ⚠​️​ ​R​e​s​t​o​r​i​n​g​ ​a​ ​b​a​c​k​u​p​ ​c​a​n​n​o​t​ ​b​e​ ​u​n​d​o​n​e​.​ ​C​u​r​r​e​n​t​ ​d​a​t​a​ ​w​i​l​l​ ​b​e​ ​p​e​r​m​a​n​e​n​t​l​y​ ​r​e​p​l​a​c​e​d​.
+		 */
+		restoreDangerBanner: string
+		/**
+		 * S​e​l​e​c​t​ ​b​a​c​k​u​p​ ​f​i​l​e​ ​t​o​ ​r​e​s​t​o​r​e
+		 */
+		selectBackupFile: string
+		/**
+		 * S​e​l​e​c​t​i​n​g​…
+		 */
+		selecting: string
+		/**
+		 * ✅​ ​B​a​c​k​u​p​ ​f​i​l​e​ ​v​a​l​i​d​a​t​e​d
+		 */
+		backupValidated: string
+		/**
 		 * A​r​e​ ​y​o​u​ ​s​u​r​e​?​ ​T​h​i​s​ ​w​i​l​l​ ​p​e​r​m​a​n​e​n​t​l​y​ ​r​e​p​l​a​c​e​ ​a​l​l​ ​c​u​r​r​e​n​t​ ​d​a​t​a​ ​w​i​t​h​ ​t​h​e​ ​b​a​c​k​u​p​.
 		 */
 		restoreConfirm: string
 		/**
-		 * R​e​s​t​o​r​e​ ​f​r​o​m​ ​b​a​c​k​u​p
+		 * A​r​e​ ​y​o​u​ ​s​u​r​e​?​ ​T​h​i​s​ ​w​i​l​l​ ​p​e​r​m​a​n​e​n​t​l​y​ ​r​e​p​l​a​c​e​ ​a​l​l​ ​c​u​r​r​e​n​t​ ​d​a​t​a​ ​w​i​t​h​ ​t​h​e​ ​b​a​c​k​u​p​.
+		 */
+		restoreConfirmPrompt: string
+		/**
+		 * R​e​s​t​o​r​e​ ​f​r​o​m​ ​t​h​i​s​ ​b​a​c​k​u​p
 		 */
 		restoreButton: string
 		/**
 		 * R​e​s​t​o​r​i​n​g​…
 		 */
 		restoring: string
+		/**
+		 * Y​e​s​,​ ​r​e​p​l​a​c​e​ ​m​y​ ​d​a​t​a
+		 */
+		restoreData: string
+		/**
+		 * ❌​ ​B​a​c​k​u​p​ ​f​i​l​e​ ​c​a​n​n​o​t​ ​b​e​ ​r​e​s​t​o​r​e​d
+		 */
+		cannotRestore: string
+		/**
+		 * C​h​o​o​s​e​ ​a​ ​d​i​f​f​e​r​e​n​t​ ​f​i​l​e
+		 */
+		chooseDifferentFile: string
 		/**
 		 * A​b​o​u​t​ ​b​a​c​k​u​p​s
 		 */
@@ -1940,9 +2394,53 @@ type RootTranslation = {
 		 */
 		required: string
 		/**
+		 * o​p​t​i​o​n​a​l
+		 */
+		optional: string
+		/**
+		 * —​ ​n​o​t​ ​m​a​p​p​e​d​ ​—
+		 */
+		notMapped: string
+		/**
+		 * B​a​r​c​o​d​e
+		 */
+		barcode: string
+		/**
+		 * U​P​C​ ​/​ ​B​a​r​c​o​d​e
+		 */
+		upcBarcode: string
+		/**
+		 * C​a​t​e​g​o​r​y​ ​n​a​m​e
+		 */
+		categoryName: string
+		/**
+		 * U​n​i​t
+		 */
+		unit: string
+		/**
+		 * A​l​e​r​t​ ​d​a​y​s
+		 */
+		alertDays: string
+		/**
+		 * N​o​t​e​s
+		 */
+		notes: string
+		/**
+		 * T​e​l​l​ ​C​a​d​u​x​o​ ​w​h​i​c​h​ ​c​o​l​u​m​n​ ​c​o​n​t​a​i​n​s​ ​e​a​c​h​ ​f​i​e​l​d​.​ ​U​n​m​a​p​p​e​d​ ​o​p​t​i​o​n​a​l​ ​f​i​e​l​d​s​ ​u​s​e​ ​d​e​f​a​u​l​t​s​.
+		 */
+		mapColumnsSubtitle: string
+		/**
+		 * P​r​e​v​i​e​w​ ​I​m​p​o​r​t
+		 */
+		previewImport: string
+		/**
 		 * I​m​p​o​r​t​ ​P​r​e​v​i​e​w
 		 */
 		importPreview: string
+		/**
+		 * C​h​o​o​s​e​ ​D​i​f​f​e​r​e​n​t​ ​F​i​l​e
+		 */
+		chooseDifferentFile: string
 		/**
 		 * T​o​t​a​l​ ​r​o​w​s
 		 */
@@ -2010,26 +2508,139 @@ type RootTranslation = {
 		 */
 		importLog: string
 		/**
-		 * I​m​p​o​r​t
+		 * I​m​p​o​r​t​ ​{​n​}​ ​P​r​o​d​u​c​t​s
+		 * @param {unknown} n
 		 */
-		importButton: string
+		importButton: RequiredParams<'n'>
 		/**
 		 * I​m​p​o​r​t​i​n​g​…
 		 */
 		importing: string
+		/**
+		 * I​m​p​o​r​t​ ​A​n​o​t​h​e​r​ ​F​i​l​e
+		 */
+		importAnotherFile: string
+		/**
+		 * C​l​i​c​k​ ​t​o​ ​s​e​l​e​c​t​ ​a​ ​C​S​V​ ​f​i​l​e​ ​f​r​o​m​ ​y​o​u​r​ ​d​e​v​i​c​e
+		 */
+		selectFileAction: string
 		conflictOptions: {
 			/**
-			 * S​k​i​p​ ​e​x​i​s​t​i​n​g
+			 * S​k​i​p​ ​d​u​p​l​i​c​a​t​e​s
 			 */
 			skip: string
+			/**
+			 * S​k​i​p​ ​d​u​p​l​i​c​a​t​e​s
+			 */
+			skipDuplicates: string
+			/**
+			 * I​m​p​o​r​t​ ​o​n​l​y​ ​n​e​w​ ​p​r​o​d​u​c​t​s​.​ ​E​x​i​s​t​i​n​g​ ​S​K​U​s​ ​a​n​d​ ​b​a​r​c​o​d​e​s​ ​a​r​e​ ​i​g​n​o​r​e​d​.
+			 */
+			skipDuplicatesDesc: string
 			/**
 			 * O​v​e​r​w​r​i​t​e​ ​e​x​i​s​t​i​n​g
 			 */
 			overwrite: string
 			/**
-			 * S​k​i​p​ ​d​u​p​l​i​c​a​t​e​s
+			 * S​k​i​p​ ​e​x​i​s​t​i​n​g
 			 */
-			skipDuplicates: string
+			skipExisting: string
+			/**
+			 * U​p​d​a​t​e​ ​e​x​i​s​t​i​n​g
+			 */
+			updateExisting: string
+			/**
+			 * U​p​d​a​t​e​ ​p​r​o​d​u​c​t​ ​d​e​t​a​i​l​s​ ​f​o​r​ ​e​x​i​s​t​i​n​g​ ​S​K​U​s​ ​a​n​d​ ​a​d​d​ ​b​a​r​c​o​d​e​s​ ​t​o​ ​e​x​i​s​t​i​n​g​ ​p​r​o​d​u​c​t​s​.
+			 */
+			updateExistingDesc: string
+			/**
+			 * R​e​v​i​e​w​ ​c​o​n​f​l​i​c​t​s
+			 */
+			reviewConflicts: string
+			/**
+			 * S​h​o​w​ ​w​h​i​c​h​ ​r​o​w​s​ ​h​a​v​e​ ​c​o​n​f​l​i​c​t​s​ ​w​i​t​h​o​u​t​ ​m​a​k​i​n​g​ ​a​n​y​ ​c​h​a​n​g​e​s​.
+			 */
+			reviewConflictsDesc: string
+		}
+		badge: {
+			/**
+			 * O​K
+			 */
+			ok: string
+			/**
+			 * D​u​p​ ​S​K​U
+			 */
+			dupSku: string
+			/**
+			 * D​u​p​ ​B​C
+			 */
+			dupBarcode: string
+			/**
+			 * M​i​s​s​i​n​g
+			 */
+			missing: string
+			/**
+			 * I​n​v​a​l​i​d
+			 */
+			invalid: string
+			/**
+			 * U​n​k​n​o​w​n​ ​u​n​i​t
+			 */
+			unknownUnit: string
+		}
+		detailRow: {
+			/**
+			 * R​e​a​d​y​ ​t​o​ ​i​m​p​o​r​t
+			 */
+			readyToImport: string
+			/**
+			 * A​l​r​e​a​d​y​ ​h​a​s​ ​S​K​U​ ​<​c​o​d​e​>​{​s​k​u​}​<​/​c​o​d​e​>
+			 * @param {unknown} sku
+			 */
+			alreadyHasSku: RequiredParams<'sku'>
+			/**
+			 * B​a​r​c​o​d​e​ ​<​c​o​d​e​>​{​b​c​}​<​/​c​o​d​e​>​ ​b​e​l​o​n​g​s​ ​t​o​ ​a​n​o​t​h​e​r​ ​p​r​o​d​u​c​t
+			 * @param {unknown} bc
+			 */
+			barcodeBelongsToOther: RequiredParams<'bc'>
+			/**
+			 * M​i​s​s​i​n​g​:​ ​{​f​i​e​l​d​}
+			 * @param {unknown} field
+			 */
+			missingField: RequiredParams<'field'>
+			/**
+			 * N​o​t​ ​i​n​ ​c​a​t​a​l​o​g​ ​—​ ​s​u​g​g​e​s​t​e​d​:​ ​{​s​u​g​g​e​s​t​e​d​}
+			 * @param {unknown} suggested
+			 */
+			unknownUnitSuggest: RequiredParams<'suggested'>
+		}
+		actions: {
+			/**
+			 * C​r​e​a​t​e​d
+			 */
+			created: string
+			/**
+			 * U​p​d​a​t​e​d
+			 */
+			updated: string
+			/**
+			 * S​k​i​p​p​e​d
+			 */
+			skipped: string
+			/**
+			 * I​n​v​a​l​i​d
+			 */
+			invalid: string
+			/**
+			 * S​K​U​ ​{​s​k​u​}​ ​c​r​e​a​t​e​d
+			 * @param {unknown} sku
+			 */
+			skuCreated: RequiredParams<'sku'>
+			/**
+			 * S​K​U​ ​{​s​k​u​}​ ​u​p​d​a​t​e​d
+			 * @param {unknown} sku
+			 */
+			skuUpdated: RequiredParams<'sku'>
 		}
 	}
 	unitReview: {
@@ -2038,35 +2649,150 @@ type RootTranslation = {
 		 */
 		pageTitle: string
 		/**
-		 * {​c​o​u​n​t​}​ ​p​r​o​d​u​c​t​{​s​}​ ​u​s​e​ ​n​o​n​-​s​t​a​n​d​a​r​d​ ​u​n​i​t​s​.
+		 * {​c​o​u​n​t​}​ ​p​r​o​d​u​c​t​{​s​}​ ​u​s​e​{​s​}​ ​u​n​i​t​s​ ​n​o​t​ ​i​n​ ​t​h​e​ ​c​a​t​a​l​o​g​.
 		 * @param {unknown} count
 		 * @param {unknown} s
 		 */
-		unitCount: RequiredParams<'count' | 's'>
+		unitCount: RequiredParams<'count' | 's' | 's'>
 		/**
-		 * R​e​v​i​e​w​ ​u​n​i​t
+		 * {​n​}​ ​p​r​o​d​u​c​t​ ​u​s​e​s​ ​u​n​i​t​s​ ​n​o​t​ ​i​n​ ​t​h​e​ ​c​a​t​a​l​o​g​.
+		 * @param {unknown} n
 		 */
-		reviewUnit: string
+		unitCount_singular: RequiredParams<'n'>
 		/**
-		 * K​e​e​p
+		 * {​n​}​ ​p​r​o​d​u​c​t​s​ ​u​s​e​ ​u​n​i​t​s​ ​n​o​t​ ​i​n​ ​t​h​e​ ​c​a​t​a​l​o​g​.
+		 * @param {unknown} n
 		 */
-		keep: string
+		unitCount_plural: RequiredParams<'n'>
 		/**
-		 * K​e​e​p​ ​a​s​ ​c​u​s​t​o​m
+		 * {​n​}​ ​p​r​o​d​u​c​t​ ​h​a​s​ ​u​n​i​t​s​ ​n​o​t​ ​i​n​ ​t​h​e​ ​c​a​t​a​l​o​g​.
+		 * @param {unknown} n
 		 */
-		keepAsCustom: string
+		unitCount_singular_alt: RequiredParams<'n'>
 		/**
-		 * M​a​p​ ​t​o​ ​s​t​a​n​d​a​r​d
+		 * {​n​}​ ​p​r​o​d​u​c​t​s​ ​h​a​v​e​ ​u​n​i​t​s​ ​n​o​t​ ​i​n​ ​t​h​e​ ​c​a​t​a​l​o​g​.
+		 * @param {unknown} n
 		 */
-		mapToStandard: string
+		unitCount_plural_alt: RequiredParams<'n'>
 		/**
-		 * P​r​e​s​e​t​ ​u​n​i​t​s​:
+		 * D​i​s​m​i​s​s
 		 */
-		presetUnits: string
+		dismiss: string
 		/**
-		 * C​u​s​t​o​m​ ​u​n​i​t​s​:
+		 * R​e​v​i​e​w
 		 */
-		customUnits: string
+		review: string
+		/**
+		 * N​o​ ​u​n​r​e​c​o​g​n​i​z​e​d​ ​u​n​i​t​s​ ​—​ ​a​l​l​ ​p​r​o​d​u​c​t​s​ ​a​r​e​ ​c​a​t​a​l​o​g​-​l​i​n​k​e​d​.
+		 */
+		noUnrecognizedUnits: string
+		/**
+		 * {​c​o​u​n​t​}​ ​u​n​r​e​c​o​g​n​i​z​e​d​ ​{​v​a​l​u​e​s​}​ ​f​o​u​n​d​.​ ​C​h​o​o​s​e​ ​h​o​w​ ​t​o​ ​h​a​n​d​l​e​ ​e​a​c​h​ ​o​n​e​.
+		 * @param {unknown} count
+		 * @param {unknown} values
+		 */
+		unrecognizedFound: RequiredParams<'count' | 'values'>
+		/**
+		 * v​a​l​u​e
+		 */
+		unrecognizedValue_singular: string
+		/**
+		 * v​a​l​u​e​s
+		 */
+		unrecognizedValue_plural: string
+		/**
+		 * ✅​ ​A​l​l​ ​p​r​o​d​u​c​t​s​ ​u​s​e​ ​r​e​c​o​g​n​i​z​e​d​ ​c​a​t​a​l​o​g​ ​u​n​i​t​s​.
+		 */
+		allRecognized: string
+		/**
+		 * B​a​c​k​ ​t​o​ ​d​a​s​h​b​o​a​r​d
+		 */
+		backToDashboard: string
+		/**
+		 * M​a​p​ ​t​o​ ​p​r​e​s​e​t
+		 */
+		mapToPreset: string
+		/**
+		 * M​a​p​ ​t​o​ ​p​r​e​s​e​t
+		 */
+		mapToPresetDropdown: string
+		/**
+		 * C​r​e​a​t​e​ ​c​u​s​t​o​m​ ​u​n​i​t
+		 */
+		createCustomUnit: string
+		/**
+		 * L​e​a​v​e​ ​f​o​r​ ​l​a​t​e​r
+		 */
+		leaveForLater: string
+		/**
+		 * D​i​s​p​l​a​y​ ​n​a​m​e
+		 */
+		displayName: string
+		/**
+		 * I​n​t​e​g​e​r
+		 */
+		integer: string
+		/**
+		 * D​e​c​i​m​a​l
+		 */
+		decimal: string
+		/**
+		 * C​r​e​a​t​e​ ​&​ ​a​s​s​i​g​n
+		 */
+		createAndAssign: string
+		/**
+		 * …
+		 */
+		inProgress: string
+		/**
+		 * ✅​ ​{​c​o​u​n​t​}​ ​p​r​o​d​u​c​t​{​p​l​}​ ​u​p​d​a​t​e​d​.
+		 * @param {unknown} count
+		 * @param {unknown} pl
+		 */
+		productsUpdated: RequiredParams<'count' | 'pl'>
+		/**
+		 * ✅​ ​{​c​o​u​n​t​}​ ​p​r​o​d​u​c​t​ ​u​p​d​a​t​e​d​.
+		 * @param {unknown} count
+		 */
+		productsUpdated_singular: RequiredParams<'count'>
+		/**
+		 * ✅​ ​{​c​o​u​n​t​}​ ​p​r​o​d​u​c​t​s​ ​u​p​d​a​t​e​d​.
+		 * @param {unknown} count
+		 */
+		productsUpdated_plural: RequiredParams<'count'>
+		/**
+		 * U​n​i​t​ ​"​<​s​t​r​o​n​g​>​{​n​a​m​e​}​<​/​s​t​r​o​n​g​>​"​ ​i​s​ ​n​o​w​ ​a​s​s​i​g​n​e​d​.
+		 * @param {unknown} name
+		 */
+		unitAssigned: RequiredParams<'name'>
+		/**
+		 * D​o​n​e​ ​—​ ​b​a​c​k​ ​t​o​ ​d​a​s​h​b​o​a​r​d
+		 */
+		done: string
+		/**
+		 * I​n​t​e​g​e​r​ ​p​r​e​s​e​t​s​:
+		 */
+		integerPresets: string
+		/**
+		 * D​e​c​i​m​a​l​ ​p​r​e​s​e​t​s​:
+		 */
+		decimalPresets: string
+		/**
+		 * C​r​e​a​t​e​d
+		 */
+		actionCreated: string
+		/**
+		 * U​p​d​a​t​e​d
+		 */
+		actionUpdated: string
+		/**
+		 * S​k​i​p​p​e​d
+		 */
+		actionSkipped: string
+		/**
+		 * I​n​v​a​l​i​d
+		 */
+		actionInvalid: string
 	}
 	scan: {
 		/**
@@ -2251,6 +2977,14 @@ type RootTranslation = {
 		 * C​o​u​l​d​ ​n​o​t​ ​l​o​a​d​ ​d​a​t​a​.
 		 */
 		loadFailed: string
+		/**
+		 * R​e​f​r​e​s​h
+		 */
+		refresh: string
+		/**
+		 * R​e​f​r​e​s​h
+		 */
+		refreshAria: string
 		/**
 		 * C​o​u​l​d​ ​n​o​t​ ​s​a​v​e​.​ ​P​l​e​a​s​e​ ​t​r​y​ ​a​g​a​i​n​.
 		 */
@@ -3997,11 +4731,55 @@ export type TranslationFunctions = {
 			 * Loading history…
 			 */
 			loadingHistory: () => LocalizedString
+			/**
+			 * Quantity must be greater than zero
+			 */
+			quantityPositiveError: () => LocalizedString
+			/**
+			 * Cannot resolve more than the remaining quantity ({quantity})
+			 */
+			quantityExceedsRemainingError: (arg: { quantity: unknown }) => LocalizedString
+			/**
+			 * Remaining: {quantity} {unit}
+			 */
+			remainingSummary: (arg: { quantity: unknown, unit: unknown }) => LocalizedString
+			/**
+			 * Expiry: {date}
+			 */
+			expirySummary: (arg: { date: unknown }) => LocalizedString
+			/**
+			 * Quantity to resolve *
+			 */
+			quantityToResolve: () => LocalizedString
+			/**
+			 * Resolution type *
+			 */
+			resolutionType: () => LocalizedString
+			/**
+			 * Notes (optional)
+			 */
+			notesOptional: () => LocalizedString
+			/**
+			 * e.g. Used in production, damaged packaging…
+			 */
+			notesPlaceholder: () => LocalizedString
+			/**
+			 * Resolving…
+			 */
+			resolving: () => LocalizedString
+			/**
+			 * Resolve
+			 */
+			resolve: () => LocalizedString
 		}
 		/**
 		 * Current inventory at this location: {current}
 		 */
 		currentInventory: (arg: { current: unknown }) => LocalizedString
+		/**
+		 * unit(s)
+		 */
+		unitsFallback: () => LocalizedString
 		/**
 		 * Available: {available}
 		 */
@@ -4018,12 +4796,296 @@ export type TranslationFunctions = {
 		 *  (integers only)
 		 */
 		integerNote: () => LocalizedString
+		/**
+		 * Total
+		 */
+		total: () => LocalizedString
+		/**
+		 * Loading movements…
+		 */
+		loadingMovements: () => LocalizedString
+		/**
+		 * from
+		 */
+		fromLocation: () => LocalizedString
+		actionTitles: {
+			/**
+			 * Move stock between locations
+			 */
+			moveStock: () => LocalizedString
+			/**
+			 * Register stock exit
+			 */
+			registerExit: () => LocalizedString
+			/**
+			 * Adjust inventory count
+			 */
+			adjustCount: () => LocalizedString
+		}
+		modal: {
+			/**
+			 * Close
+			 */
+			close: () => LocalizedString
+			/**
+			 * Cancel
+			 */
+			cancel: () => LocalizedString
+			/**
+			 * Saving…
+			 */
+			saving: () => LocalizedString
+			/**
+			 * Select location…
+			 */
+			selectLocation: () => LocalizedString
+			/**
+			 * Source location *
+			 */
+			sourceLocation: () => LocalizedString
+			/**
+			 * Destination location *
+			 */
+			destinationLocation: () => LocalizedString
+			/**
+			 * Quantity *
+			 */
+			quantity: () => LocalizedString
+			/**
+			 * Notes
+			 */
+			notes: () => LocalizedString
+			/**
+			 * Notes (optional)
+			 */
+			notesOptional: () => LocalizedString
+			/**
+			 * Notes *
+			 */
+			notesRequired: () => LocalizedString
+			/**
+			 * Notes * (adjustment reason)
+			 */
+			notesRequiredReason: () => LocalizedString
+			/**
+			 * Transfer to another store
+			 */
+			moveAcrossStores: () => LocalizedString
+			/**
+			 * Available stock is required to make a transfer.
+			 */
+			noSourceStock: () => LocalizedString
+			/**
+			 * No locations available in other stores.
+			 */
+			noOtherStoreLocations: () => LocalizedString
+			/**
+			 * No other location available in the same store. Enable transfer to another store if needed.
+			 */
+			noSameStoreLocations: () => LocalizedString
+			/**
+			 * Select a source location
+			 */
+			selectSourceLocationError: () => LocalizedString
+			/**
+			 * Select a destination location
+			 */
+			selectDestinationLocationError: () => LocalizedString
+			/**
+			 * Select a location
+			 */
+			selectLocationError: () => LocalizedString
+			/**
+			 * Quantity must be greater than 0
+			 */
+			quantityPositiveError: () => LocalizedString
+			/**
+			 * Quantity cannot be negative
+			 */
+			quantityNonNegativeError: () => LocalizedString
+			/**
+			 * The product unit is integer-only; fractional quantities are not allowed ({quantity})
+			 */
+			integerQuantityError: (arg: { quantity: unknown }) => LocalizedString
+			/**
+			 * Only {available} units are available at this location
+			 */
+			availableQuantityError: (arg: { available: unknown }) => LocalizedString
+			/**
+			 * {balance} available
+			 */
+			availableOption: (arg: { balance: unknown }) => LocalizedString
+			/**
+			 * Move
+			 */
+			moveSubmit: () => LocalizedString
+			/**
+			 * Register
+			 */
+			registerExitSubmit: () => LocalizedString
+			/**
+			 * Register adjustment
+			 */
+			adjustSubmit: () => LocalizedString
+			/**
+			 * Exit reason *
+			 */
+			exitReason: () => LocalizedString
+			/**
+			 * Select reason…
+			 */
+			selectExitReason: () => LocalizedString
+			/**
+			 * Select an exit reason
+			 */
+			selectExitReasonError: () => LocalizedString
+			/**
+			 * Notes are required for this exit type
+			 */
+			exitNotesRequiredError: () => LocalizedString
+			/**
+			 * Notes are required for this reason
+			 */
+			notesRequiredPlaceholder: () => LocalizedString
+			/**
+			 * Additional notes…
+			 */
+			notesOptionalPlaceholder: () => LocalizedString
+			/**
+			 * Current lot inventory: {quantity} {unit}
+			 */
+			adjustCurrentLotInventory: (arg: { quantity: unknown, unit: unknown }) => LocalizedString
+			/**
+			 * Enter the real inventory quantity at a specific location. The system will calculate the difference and register the corresponding adjustment.
+			 */
+			adjustInstruction: () => LocalizedString
+			/**
+			 * Current: {balance}
+			 */
+			currentBalanceOption: (arg: { balance: unknown }) => LocalizedString
+			/**
+			 * The real quantity matches the current inventory. There is no adjustment to register.
+			 */
+			noAdjustmentError: () => LocalizedString
+			/**
+			 * No change — inventory matches
+			 */
+			noAdjustment: () => LocalizedString
+			/**
+			 * Notes are required for an inventory adjustment
+			 */
+			adjustNotesRequiredError: () => LocalizedString
+			/**
+			 * e.g. Physical count during audit, found additional units…
+			 */
+			adjustNotesPlaceholder: () => LocalizedString
+		}
+		exitReasons: {
+			/**
+			 * Sale
+			 */
+			sale: () => LocalizedString
+			/**
+			 * Waste
+			 */
+			waste: () => LocalizedString
+			/**
+			 * Expired
+			 */
+			expired: () => LocalizedString
+			/**
+			 * Damaged
+			 */
+			damaged: () => LocalizedString
+			/**
+			 * Internal consumption
+			 */
+			internalConsumption: () => LocalizedString
+			/**
+			 * Return to supplier
+			 */
+			returnToSupplier: () => LocalizedString
+			/**
+			 * Inventory adjustment (exit)
+			 */
+			inventoryAdjustmentExit: () => LocalizedString
+			/**
+			 * Other
+			 */
+			other: () => LocalizedString
+		}
+		archive: {
+			/**
+			 * Archive expiry lot
+			 */
+			title: () => LocalizedString
+			/**
+			 * Select an archive reason
+			 */
+			selectReasonError: () => LocalizedString
+			/**
+			 * Notes must be at least {min} characters
+			 */
+			notesMinError: (arg: { min: unknown }) => LocalizedString
+			/**
+			 * Notes must be at most {max} characters
+			 */
+			notesMaxError: (arg: { max: unknown }) => LocalizedString
+			/**
+			 * {quantity} {unit}
+			 */
+			quantitySummary: (arg: { quantity: unknown, unit: unknown }) => LocalizedString
+			/**
+			 * Expiry: {date}
+			 */
+			expirySummary: (arg: { date: unknown }) => LocalizedString
+			/**
+			 * Archiving hides the lot from active views. Pick a reason and provide a short justification — both are recorded for audit.
+			 */
+			hint: () => LocalizedString
+			/**
+			 * Reason *
+			 */
+			reason: () => LocalizedString
+			/**
+			 * Notes *
+			 */
+			notes: () => LocalizedString
+			/**
+			 * Explain why this lot is being archived (e.g. container breach, vendor recall lot, end-of-season cleanup…).
+			 */
+			notesPlaceholder: () => LocalizedString
+			/**
+			 * Notes must be at least {min} characters after trimming.
+			 */
+			notesMinHint: (arg: { min: unknown }) => LocalizedString
+			/**
+			 * Notes must be at most {max} characters.
+			 */
+			notesMaxHint: (arg: { max: unknown }) => LocalizedString
+			/**
+			 * Archiving…
+			 */
+			archiving: () => LocalizedString
+			/**
+			 * Archive lot
+			 */
+			archiveLot: () => LocalizedString
+		}
 	}
 	calendar: {
 		/**
 		 * Calendar
 		 */
 		pageTitle: () => LocalizedString
+		/**
+		 * Refresh
+		 */
+		refresh: () => LocalizedString
+		/**
+		 * Refresh lot data
+		 */
+		refreshAria: () => LocalizedString
 		/**
 		 * Today
 		 */
@@ -4048,6 +5110,70 @@ export type TranslationFunctions = {
 		 * No lots expiring on this date.
 		 */
 		noLotsOnDate: () => LocalizedString
+		/**
+		 * Loading lots…
+		 */
+		loadingLots: () => LocalizedString
+		/**
+		 * Failed to load lots: {msg}
+		 */
+		loadFailed: (arg: { msg: unknown }) => LocalizedString
+		/**
+		 * {date}
+		 */
+		dayPanelTitle: (arg: { date: unknown }) => LocalizedString
+		urgencyLabels: {
+			/**
+			 * Expired
+			 */
+			expired: () => LocalizedString
+			/**
+			 * Today
+			 */
+			today: () => LocalizedString
+			/**
+			 * Alert
+			 */
+			alertWindow: () => LocalizedString
+			/**
+			 * Soon
+			 */
+			next30Days: () => LocalizedString
+			/**
+			 * Future
+			 */
+			future: () => LocalizedString
+		}
+		table: {
+			/**
+			 * Product
+			 */
+			product: () => LocalizedString
+			/**
+			 * Qty
+			 */
+			qty: () => LocalizedString
+			/**
+			 * Unit
+			 */
+			unit: () => LocalizedString
+			/**
+			 * Store
+			 */
+			store: () => LocalizedString
+			/**
+			 * Location
+			 */
+			location: () => LocalizedString
+			/**
+			 * Days
+			 */
+			days: () => LocalizedString
+			/**
+			 * Status
+			 */
+			status: () => LocalizedString
+		}
 	}
 	backupRestore: {
 		/**
@@ -4063,7 +5189,7 @@ export type TranslationFunctions = {
 		 */
 		exportDesc: () => LocalizedString
 		/**
-		 * Export backup
+		 * Export database
 		 */
 		exportButton: () => LocalizedString
 		/**
@@ -4071,9 +5197,17 @@ export type TranslationFunctions = {
 		 */
 		exporting: () => LocalizedString
 		/**
+		 * Backup saved to {path} ({kb} KB, schema v{schema}).
+		 */
+		exportSuccess: (arg: { kb: unknown, path: unknown, schema: unknown }) => LocalizedString
+		/**
 		 * Restore from backup
 		 */
 		restoreSection: () => LocalizedString
+		/**
+		 * This is a destructive operation.
+		 */
+		destructiveOp: () => LocalizedString
 		/**
 		 * This is a destructive operation.
 		 */
@@ -4083,17 +5217,49 @@ export type TranslationFunctions = {
 		 */
 		restoreWarning: () => LocalizedString
 		/**
+		 * ⚠️ Restoring a backup cannot be undone. Current data will be permanently replaced.
+		 */
+		restoreDangerBanner: () => LocalizedString
+		/**
+		 * Select backup file to restore
+		 */
+		selectBackupFile: () => LocalizedString
+		/**
+		 * Selecting…
+		 */
+		selecting: () => LocalizedString
+		/**
+		 * ✅ Backup file validated
+		 */
+		backupValidated: () => LocalizedString
+		/**
 		 * Are you sure? This will permanently replace all current data with the backup.
 		 */
 		restoreConfirm: () => LocalizedString
 		/**
-		 * Restore from backup
+		 * Are you sure? This will permanently replace all current data with the backup.
+		 */
+		restoreConfirmPrompt: () => LocalizedString
+		/**
+		 * Restore from this backup
 		 */
 		restoreButton: () => LocalizedString
 		/**
 		 * Restoring…
 		 */
 		restoring: () => LocalizedString
+		/**
+		 * Yes, replace my data
+		 */
+		restoreData: () => LocalizedString
+		/**
+		 * ❌ Backup file cannot be restored
+		 */
+		cannotRestore: () => LocalizedString
+		/**
+		 * Choose a different file
+		 */
+		chooseDifferentFile: () => LocalizedString
 		/**
 		 * About backups
 		 */
@@ -4177,9 +5343,53 @@ export type TranslationFunctions = {
 		 */
 		required: () => LocalizedString
 		/**
+		 * optional
+		 */
+		optional: () => LocalizedString
+		/**
+		 * — not mapped —
+		 */
+		notMapped: () => LocalizedString
+		/**
+		 * Barcode
+		 */
+		barcode: () => LocalizedString
+		/**
+		 * UPC / Barcode
+		 */
+		upcBarcode: () => LocalizedString
+		/**
+		 * Category name
+		 */
+		categoryName: () => LocalizedString
+		/**
+		 * Unit
+		 */
+		unit: () => LocalizedString
+		/**
+		 * Alert days
+		 */
+		alertDays: () => LocalizedString
+		/**
+		 * Notes
+		 */
+		notes: () => LocalizedString
+		/**
+		 * Tell Caduxo which column contains each field. Unmapped optional fields use defaults.
+		 */
+		mapColumnsSubtitle: () => LocalizedString
+		/**
+		 * Preview Import
+		 */
+		previewImport: () => LocalizedString
+		/**
 		 * Import Preview
 		 */
 		importPreview: () => LocalizedString
+		/**
+		 * Choose Different File
+		 */
+		chooseDifferentFile: () => LocalizedString
 		/**
 		 * Total rows
 		 */
@@ -4247,26 +5457,132 @@ export type TranslationFunctions = {
 		 */
 		importLog: () => LocalizedString
 		/**
-		 * Import
+		 * Import {n} Products
 		 */
-		importButton: () => LocalizedString
+		importButton: (arg: { n: unknown }) => LocalizedString
 		/**
 		 * Importing…
 		 */
 		importing: () => LocalizedString
+		/**
+		 * Import Another File
+		 */
+		importAnotherFile: () => LocalizedString
+		/**
+		 * Click to select a CSV file from your device
+		 */
+		selectFileAction: () => LocalizedString
 		conflictOptions: {
 			/**
-			 * Skip existing
+			 * Skip duplicates
 			 */
 			skip: () => LocalizedString
+			/**
+			 * Skip duplicates
+			 */
+			skipDuplicates: () => LocalizedString
+			/**
+			 * Import only new products. Existing SKUs and barcodes are ignored.
+			 */
+			skipDuplicatesDesc: () => LocalizedString
 			/**
 			 * Overwrite existing
 			 */
 			overwrite: () => LocalizedString
 			/**
-			 * Skip duplicates
+			 * Skip existing
 			 */
-			skipDuplicates: () => LocalizedString
+			skipExisting: () => LocalizedString
+			/**
+			 * Update existing
+			 */
+			updateExisting: () => LocalizedString
+			/**
+			 * Update product details for existing SKUs and add barcodes to existing products.
+			 */
+			updateExistingDesc: () => LocalizedString
+			/**
+			 * Review conflicts
+			 */
+			reviewConflicts: () => LocalizedString
+			/**
+			 * Show which rows have conflicts without making any changes.
+			 */
+			reviewConflictsDesc: () => LocalizedString
+		}
+		badge: {
+			/**
+			 * OK
+			 */
+			ok: () => LocalizedString
+			/**
+			 * Dup SKU
+			 */
+			dupSku: () => LocalizedString
+			/**
+			 * Dup BC
+			 */
+			dupBarcode: () => LocalizedString
+			/**
+			 * Missing
+			 */
+			missing: () => LocalizedString
+			/**
+			 * Invalid
+			 */
+			invalid: () => LocalizedString
+			/**
+			 * Unknown unit
+			 */
+			unknownUnit: () => LocalizedString
+		}
+		detailRow: {
+			/**
+			 * Ready to import
+			 */
+			readyToImport: () => LocalizedString
+			/**
+			 * Already has SKU <code>{sku}</code>
+			 */
+			alreadyHasSku: (arg: { sku: unknown }) => LocalizedString
+			/**
+			 * Barcode <code>{bc}</code> belongs to another product
+			 */
+			barcodeBelongsToOther: (arg: { bc: unknown }) => LocalizedString
+			/**
+			 * Missing: {field}
+			 */
+			missingField: (arg: { field: unknown }) => LocalizedString
+			/**
+			 * Not in catalog — suggested: {suggested}
+			 */
+			unknownUnitSuggest: (arg: { suggested: unknown }) => LocalizedString
+		}
+		actions: {
+			/**
+			 * Created
+			 */
+			created: () => LocalizedString
+			/**
+			 * Updated
+			 */
+			updated: () => LocalizedString
+			/**
+			 * Skipped
+			 */
+			skipped: () => LocalizedString
+			/**
+			 * Invalid
+			 */
+			invalid: () => LocalizedString
+			/**
+			 * SKU {sku} created
+			 */
+			skuCreated: (arg: { sku: unknown }) => LocalizedString
+			/**
+			 * SKU {sku} updated
+			 */
+			skuUpdated: (arg: { sku: unknown }) => LocalizedString
 		}
 	}
 	unitReview: {
@@ -4275,33 +5591,137 @@ export type TranslationFunctions = {
 		 */
 		pageTitle: () => LocalizedString
 		/**
-		 * {count} product{s} use non-standard units.
+		 * {count} product{s} use{s} units not in the catalog.
 		 */
 		unitCount: (arg: { count: unknown, s: unknown }) => LocalizedString
 		/**
-		 * Review unit
+		 * {n} product uses units not in the catalog.
 		 */
-		reviewUnit: () => LocalizedString
+		unitCount_singular: (arg: { n: unknown }) => LocalizedString
 		/**
-		 * Keep
+		 * {n} products use units not in the catalog.
 		 */
-		keep: () => LocalizedString
+		unitCount_plural: (arg: { n: unknown }) => LocalizedString
 		/**
-		 * Keep as custom
+		 * {n} product has units not in the catalog.
 		 */
-		keepAsCustom: () => LocalizedString
+		unitCount_singular_alt: (arg: { n: unknown }) => LocalizedString
 		/**
-		 * Map to standard
+		 * {n} products have units not in the catalog.
 		 */
-		mapToStandard: () => LocalizedString
+		unitCount_plural_alt: (arg: { n: unknown }) => LocalizedString
 		/**
-		 * Preset units:
+		 * Dismiss
 		 */
-		presetUnits: () => LocalizedString
+		dismiss: () => LocalizedString
 		/**
-		 * Custom units:
+		 * Review
 		 */
-		customUnits: () => LocalizedString
+		review: () => LocalizedString
+		/**
+		 * No unrecognized units — all products are catalog-linked.
+		 */
+		noUnrecognizedUnits: () => LocalizedString
+		/**
+		 * {count} unrecognized {values} found. Choose how to handle each one.
+		 */
+		unrecognizedFound: (arg: { count: unknown, values: unknown }) => LocalizedString
+		/**
+		 * value
+		 */
+		unrecognizedValue_singular: () => LocalizedString
+		/**
+		 * values
+		 */
+		unrecognizedValue_plural: () => LocalizedString
+		/**
+		 * ✅ All products use recognized catalog units.
+		 */
+		allRecognized: () => LocalizedString
+		/**
+		 * Back to dashboard
+		 */
+		backToDashboard: () => LocalizedString
+		/**
+		 * Map to preset
+		 */
+		mapToPreset: () => LocalizedString
+		/**
+		 * Map to preset
+		 */
+		mapToPresetDropdown: () => LocalizedString
+		/**
+		 * Create custom unit
+		 */
+		createCustomUnit: () => LocalizedString
+		/**
+		 * Leave for later
+		 */
+		leaveForLater: () => LocalizedString
+		/**
+		 * Display name
+		 */
+		displayName: () => LocalizedString
+		/**
+		 * Integer
+		 */
+		integer: () => LocalizedString
+		/**
+		 * Decimal
+		 */
+		decimal: () => LocalizedString
+		/**
+		 * Create & assign
+		 */
+		createAndAssign: () => LocalizedString
+		/**
+		 * …
+		 */
+		inProgress: () => LocalizedString
+		/**
+		 * ✅ {count} product{pl} updated.
+		 */
+		productsUpdated: (arg: { count: unknown, pl: unknown }) => LocalizedString
+		/**
+		 * ✅ {count} product updated.
+		 */
+		productsUpdated_singular: (arg: { count: unknown }) => LocalizedString
+		/**
+		 * ✅ {count} products updated.
+		 */
+		productsUpdated_plural: (arg: { count: unknown }) => LocalizedString
+		/**
+		 * Unit "<strong>{name}</strong>" is now assigned.
+		 */
+		unitAssigned: (arg: { name: unknown }) => LocalizedString
+		/**
+		 * Done — back to dashboard
+		 */
+		done: () => LocalizedString
+		/**
+		 * Integer presets:
+		 */
+		integerPresets: () => LocalizedString
+		/**
+		 * Decimal presets:
+		 */
+		decimalPresets: () => LocalizedString
+		/**
+		 * Created
+		 */
+		actionCreated: () => LocalizedString
+		/**
+		 * Updated
+		 */
+		actionUpdated: () => LocalizedString
+		/**
+		 * Skipped
+		 */
+		actionSkipped: () => LocalizedString
+		/**
+		 * Invalid
+		 */
+		actionInvalid: () => LocalizedString
 	}
 	scan: {
 		/**
@@ -4476,6 +5896,14 @@ export type TranslationFunctions = {
 		 * Could not load data.
 		 */
 		loadFailed: () => LocalizedString
+		/**
+		 * Refresh
+		 */
+		refresh: () => LocalizedString
+		/**
+		 * Refresh
+		 */
+		refreshAria: () => LocalizedString
 		/**
 		 * Could not save. Please try again.
 		 */

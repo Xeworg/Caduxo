@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { LL } from "../i18n/i18n-svelte.js";
     import {
         resolveExpiryLot,
         listLotResolutionEvents,
@@ -49,11 +50,11 @@
     async function submit() {
         errorMsg = "";
         if (quantity <= 0) {
-            errorMsg = "Quantity must be greater than zero";
+            errorMsg = $LL.lotMovements.resolution.quantityPositiveError();
             return;
         }
         if (quantity > lot.quantity) {
-            errorMsg = `Cannot resolve more than the remaining quantity (${lot.quantity})`;
+            errorMsg = $LL.lotMovements.resolution.quantityExceedsRemainingError({ quantity: lot.quantity });
             return;
         }
         submitting = true;
@@ -76,11 +77,11 @@
 <div class="overlay" role="dialog" aria-modal="true" aria-labelledby="resolve-title">
     <div class="dialog">
         <header class="dialog-header">
-            <h3 id="resolve-title">Resolve quantity</h3>
+            <h3 id="resolve-title">{$LL.lotMovements.resolution.resolveQuantity()}</h3>
             <button
                 type="button"
                 class="btn-close"
-                title="Close"
+                title={$LL.lotMovements.modal.close()}
                 on:click={onClose}
             >
                 ✕
@@ -97,15 +98,15 @@
                 {#if lot.batch_code}
                     <span class="batch">{lot.batch_code}</span>
                 {/if}
-                Remaining: <strong>{lot.quantity} {lot.unit || "unit(s)"}</strong>
-                &nbsp;·&nbsp; Expiry: <strong>{lot.expiry_date}</strong>
+                {$LL.lotMovements.resolution.remainingSummary({ quantity: lot.quantity, unit: lot.unit || $LL.lotMovements.unitsFallback() })}
+                &nbsp;·&nbsp; {$LL.lotMovements.resolution.expirySummary({ date: lot.expiry_date })}
             </span>
         </div>
 
         <form on:submit|preventDefault={submit}>
             <div class="grid-2">
                 <label>
-                    Quantity to resolve *
+                    {$LL.lotMovements.resolution.quantityToResolve()}
                     <input
                         type="number"
                         bind:value={quantity}
@@ -117,22 +118,22 @@
                 </label>
 
                 <label>
-                    Resolution type *
+                    {$LL.lotMovements.resolution.resolutionType()}
                     <select bind:value={resolution}>
-                        <option value="consumed">Consumed</option>
-                        <option value="sold">Sold</option>
-                        <option value="discarded">Discarded</option>
-                        <option value="donated">Donated</option>
-                        <option value="other">Other</option>
+                        <option value="consumed">{$LL.lotMovements.resolution.consumed()}</option>
+                        <option value="sold">{$LL.lotMovements.resolution.sold()}</option>
+                        <option value="discarded">{$LL.lotMovements.resolution.discarded()}</option>
+                        <option value="donated">{$LL.lotMovements.resolution.donated()}</option>
+                        <option value="other">{$LL.lotMovements.resolution.other()}</option>
                     </select>
                 </label>
             </div>
 
             <label>
-                Notes (optional)
+                {$LL.lotMovements.resolution.notesOptional()}
                 <textarea
                     bind:value={notes}
-                    placeholder="e.g. Used in production, damaged packaging…"
+                    placeholder={$LL.lotMovements.resolution.notesPlaceholder()}
                     rows="2"
                 ></textarea>
             </label>
@@ -143,7 +144,7 @@
                     class="btn-primary"
                     disabled={submitting}
                 >
-                    {submitting ? "Resolving…" : "Resolve"}
+                    {submitting ? $LL.lotMovements.resolution.resolving() : $LL.lotMovements.resolution.resolve()}
                 </button>
                 <button
                     type="button"
@@ -151,17 +152,17 @@
                     on:click={onClose}
                     disabled={submitting}
                 >
-                    Cancel
+                    {$LL.lotMovements.modal.cancel()}
                 </button>
             </div>
         </form>
 
         <!-- Resolution history -->
         {#if loadingHistory}
-            <p class="loading">Loading history…</p>
+            <p class="loading">{$LL.lotMovements.resolution.loadingHistory()}</p>
         {:else if history.length > 0}
             <div class="history">
-                <h4>Resolution history</h4>
+                <h4>{$LL.lotMovements.resolution.resolutionHistory()}</h4>
                 <ul class="history-list">
                     {#each history as event (event.id)}
                         <li class="history-item">
@@ -182,7 +183,7 @@
                 </ul>
             </div>
         {:else}
-            <p class="no-history">No resolution events yet.</p>
+            <p class="no-history">{$LL.lotMovements.resolution.noHistory()}</p>
         {/if}
     </div>
 </div>

@@ -12,6 +12,7 @@
     pickCsvFile,
   } from "../lib/csv.js";
   import ColumnMapper from "./ColumnMapper.svelte";
+  import { LL } from "../i18n/i18n-svelte.js";
 
   // ── Stage machine ────────────────────────────────────────────────────────
 
@@ -94,46 +95,66 @@
   // ── Helpers ─────────────────────────────────────────────────────────────
 
   function rowBadge(status: CsvPreviewRowStatus): { label: string; cls: string } {
-    if (status.kind === "ok") return { label: "OK", cls: "badge-ok" };
-    if (status.kind === "duplicate_sku") return { label: "Dup SKU", cls: "badge-warn" };
-    if (status.kind === "duplicate_barcode") return { label: "Dup BC", cls: "badge-warn" };
-    if (status.kind === "missing_required") return { label: "Missing", cls: "badge-error" };
-    if (status.kind === "invalid") return { label: "Invalid", cls: "badge-error" };
-    if (status.kind === "unknown_unit") return { label: "Unknown unit", cls: "badge-warn" };
+    if (status.kind === "ok") return { label: $LL.csvImport.badge.ok(), cls: "badge-ok" };
+    if (status.kind === "duplicate_sku") return { label: $LL.csvImport.badge.dupSku(), cls: "badge-warn" };
+    if (status.kind === "duplicate_barcode") return { label: $LL.csvImport.badge.dupBarcode(), cls: "badge-warn" };
+    if (status.kind === "missing_required") return { label: $LL.csvImport.badge.missing(), cls: "badge-error" };
+    if (status.kind === "invalid") return { label: $LL.csvImport.badge.invalid(), cls: "badge-error" };
+    if (status.kind === "unknown_unit") return { label: $LL.csvImport.badge.unknownUnit(), cls: "badge-warn" };
     return { label: "?", cls: "badge-error" };
   }
 
   function outcomeBadge(outcome: CsvImportRowOutcome): { label: string; cls: string } {
-    if (outcome.action === "created") return { label: "Created", cls: "badge-ok" };
-    if (outcome.action === "updated") return { label: "Updated", cls: "badge-info" };
-    if (outcome.action === "skipped") return { label: "Skipped", cls: "badge-warn" };
-    if (outcome.action === "invalid") return { label: "Invalid", cls: "badge-error" };
+    if (outcome.action === "created") return { label: $LL.csvImport.actions.created(), cls: "badge-ok" };
+    if (outcome.action === "updated") return { label: $LL.csvImport.actions.updated(), cls: "badge-info" };
+    if (outcome.action === "skipped") return { label: $LL.csvImport.actions.skipped(), cls: "badge-warn" };
+    if (outcome.action === "invalid") return { label: $LL.csvImport.actions.invalid(), cls: "badge-error" };
     return { label: "?", cls: "badge-error" };
   }
 
   function outcomeReason(outcome: CsvImportRowOutcome): string {
     if (outcome.action === "skipped") return outcome.reason;
     if (outcome.action === "invalid") return outcome.reason;
-    if (outcome.action === "created") return `SKU ${outcome.sku} created`;
-    if (outcome.action === "updated") return `SKU ${outcome.sku} updated`;
+    if (outcome.action === "created") return $LL.csvImport.actions.skuCreated({ sku: outcome.sku });
+    if (outcome.action === "updated") return $LL.csvImport.actions.skuUpdated({ sku: outcome.sku });
     return "";
+  }
+
+  function rowDetailMessage(status: CsvPreviewRowStatus): string {
+    if (status.kind === "duplicate_sku") {
+      return $LL.csvImport.detailRow.alreadyHasSku({ sku: status.existing_sku });
+    }
+    if (status.kind === "duplicate_barcode") {
+      return $LL.csvImport.detailRow.barcodeBelongsToOther({ bc: status.existing_barcode });
+    }
+    if (status.kind === "missing_required") {
+      return $LL.csvImport.detailRow.missingField({ field: status.field });
+    }
+    if (status.kind === "invalid") {
+      return status.reason;
+    }
+    if (status.kind === "unknown_unit") {
+      const suggested = status.suggested_keys.join(", ");
+      return $LL.csvImport.detailRow.unknownUnitSuggest({ suggested: suggested || $LL.csvImport.badge.unknownUnit() });
+    }
+    return $LL.csvImport.detailRow.readyToImport();
   }
 
   const strategies: Array<{ value: ConflictStrategy; label: string; desc: string }> = [
     {
       value: "skip",
-      label: "Skip duplicates",
-      desc: "Import only new products. Existing SKUs and barcodes are ignored.",
+      label: $LL.csvImport.conflictOptions.skipDuplicates(),
+      desc: $LL.csvImport.conflictOptions.skipDuplicatesDesc(),
     },
     {
       value: "update",
-      label: "Update existing",
-      desc: "Update product details for existing SKUs and add barcodes to existing products.",
+      label: $LL.csvImport.conflictOptions.updateExisting(),
+      desc: $LL.csvImport.conflictOptions.updateExistingDesc(),
     },
     {
       value: "review",
-      label: "Review conflicts",
-      desc: "Show which rows have conflicts without making any changes.",
+      label: $LL.csvImport.conflictOptions.reviewConflicts(),
+      desc: $LL.csvImport.conflictOptions.reviewConflictsDesc(),
     },
   ];
 
@@ -155,10 +176,9 @@
 {#if stage.name === "select"}
   <div class="page">
     <div class="page-header">
-      <h1>Import Products from CSV</h1>
+      <h1>{$LL.csvImport.pageTitle()}</h1>
       <p class="page-desc">
-        Import products and barcodes from a CSV file. Required columns:
-        <strong>SKU</strong> and <strong>description</strong>.
+        {$LL.csvImport.selectFileDesc()}
       </p>
     </div>
 
@@ -169,26 +189,23 @@
     <div class="action-cards">
       <button class="action-card primary" on:click={selectAndPreview}>
         <span class="card-icon">📄</span>
-        <span class="card-title">Select CSV file</span>
-        <span class="card-desc">Choose a CSV file to import products</span>
+        <span class="card-title">{$LL.csvImport.selectFile()}</span>
+        <span class="card-desc">{$LL.csvImport.selectFileAction()}</span>
       </button>
 
       <div class="action-card info">
         <span class="card-icon">ℹ️</span>
-        <span class="card-title">Expected columns</span>
+        <span class="card-title">{$LL.csvImport.expectedColumns()}</span>
         <span class="card-desc">
-          Required: <code>sku</code>, <code>description</code><br />
-          Optional: <code>barcode</code>, <code>category</code>,
+          {$LL.csvImport.required()}: <code>sku</code>, <code>description</code><br />
+          {$LL.csvImport.optional()}: <code>barcode</code>, <code>category</code>,
           <code>unit</code>, <code>alert_days_before</code>, <code>notes</code>
         </span>
       </div>
     </div>
 
     <div class="hint-box">
-      <strong>Tip:</strong> Column headers are auto-detected. Common aliases are
-      <code>sku</code>, <code>code</code>, <code>reference</code> for SKU;
-      <code>name</code>, <code>product</code>, <code>item</code> for description;
-      <code>barcode</code>, <code>upc</code>, <code>ean</code> for barcode.
+      <strong>{$LL.csvImport.tip()}</strong> {$LL.csvImport.tipText()}
     </div>
   </div>
 
@@ -207,10 +224,10 @@
   {@const preview = stage.preview}
   <div class="page">
     <div class="page-header">
-      <h1>Import Preview</h1>
+      <h1>{$LL.csvImport.importPreview()}</h1>
       <div class="header-actions">
         <button class="btn-secondary" on:click={() => selectAndPreview()}>
-          Choose Different File
+          {$LL.csvImport.chooseDifferentFile()}
         </button>
       </div>
     </div>
@@ -223,35 +240,35 @@
     <div class="summary-cards">
       <div class="summary-card">
         <span class="summary-num">{counts.total}</span>
-        <span class="summary-label">Total rows</span>
+        <span class="summary-label">{$LL.csvImport.totalRows()}</span>
       </div>
       <div class="summary-card ok">
         <span class="summary-num">{counts.valid}</span>
-        <span class="summary-label">Valid</span>
+        <span class="summary-label">{$LL.csvImport.valid()}</span>
       </div>
       {#if counts.dupSku > 0}
         <div class="summary-card warn">
           <span class="summary-num">{counts.dupSku}</span>
-          <span class="summary-label">Duplicate SKU</span>
+          <span class="summary-label">{$LL.csvImport.duplicates.sku()}</span>
         </div>
       {/if}
       {#if counts.dupBc > 0}
         <div class="summary-card warn">
           <span class="summary-num">{counts.dupBc}</span>
-          <span class="summary-label">Duplicate barcode</span>
+          <span class="summary-label">{$LL.csvImport.duplicates.barcode()}</span>
         </div>
       {/if}
       {#if counts.missing > 0}
         <div class="summary-card error">
           <span class="summary-num">{counts.missing}</span>
-          <span class="summary-label">Missing required</span>
+          <span class="summary-label">{$LL.csvImport.missing()}</span>
         </div>
       {/if}
     </div>
 
     <!-- Conflict strategy -->
     <section class="section">
-      <h2>Conflict Strategy</h2>
+      <h2>{$LL.csvImport.conflictStrategy()}</h2>
       <div class="strategy-cards">
         {#each strategies as s}
           <label class="strategy-card" class:selected={selectedStrategy === s.value}>
@@ -266,43 +283,30 @@
     <!-- Row detail table -->
     {#if preview.rows.length > 0}
       <section class="section">
-        <h2>Row Details</h2>
+        <h2>{$LL.csvImport.rowDetails()}</h2>
         <div class="table-wrap">
           <table class="preview-table">
             <thead>
               <tr>
                 <th>#</th>
                 <th>SKU</th>
-                <th>Description</th>
-                <th>Barcode</th>
-                <th>Status</th>
-                <th>Detail</th>
+                <th>{$LL.csvImport.description()}</th>
+                <th>{$LL.csvImport.barcode()}</th>
+                <th>{$LL.csvImport.status()}</th>
+                <th>{$LL.csvImport.detail()}</th>
               </tr>
             </thead>
             <tbody>
               {#each preview.rows as row}
                 {@const badge = rowBadge(row.status)}
+                {@const detailMsg = rowDetailMessage(row.status)}
                 <tr class={badge.cls}>
                   <td class="row-num">{row.row_index}</td>
                   <td class="cell-mono">{row.sku ?? "—"}</td>
                   <td>{row.description ?? "—"}</td>
                   <td class="cell-mono cell-muted">{row.barcode ?? "—"}</td>
                   <td><span class="badge {badge.cls}">{badge.label}</span></td>
-                  <td class="detail-cell">
-                    {#if row.status.kind === "duplicate_sku"}
-                      Already has SKU <code>{row.status.existing_sku}</code>
-                    {:else if row.status.kind === "duplicate_barcode"}
-                      Barcode <code>{row.status.existing_barcode}</code> belongs to another product
-                    {:else if row.status.kind === "missing_required"}
-                      Missing: {row.status.field}
-                    {:else if row.status.kind === "invalid"}
-                      {row.status.reason}
-                    {:else if row.status.kind === "unknown_unit"}
-                      Not in catalog — suggested: {row.status.suggested_keys.join(", ") || "(none, will be created on first review)"}
-                    {:else}
-                      Ready to import
-                    {/if}
-                  </td>
+                  <td class="detail-cell">{@html detailMsg}</td>
                 </tr>
               {/each}
             </tbody>
@@ -318,7 +322,7 @@
         disabled={importingCommit || counts.valid === 0}
         on:click={handleImport}
       >
-        {importingCommit ? "Importing…" : `Import ${counts.valid} Products`}
+        {importingCommit ? $LL.csvImport.importing() : $LL.csvImport.importButton({ n: counts.valid })}
       </button>
     </div>
   </div>
@@ -328,7 +332,7 @@
   {@const result = stage.result}
   <div class="page">
     <div class="page-header">
-      <h1>Import Complete</h1>
+      <h1>{$LL.csvImport.importComplete()}</h1>
     </div>
 
     {#if errorMsg}
@@ -338,41 +342,41 @@
     <div class="result-cards">
       <div class="result-card ok">
         <span class="result-num">{result.created}</span>
-        <span class="result-label">Created</span>
+        <span class="result-label">{$LL.csvImport.created()}</span>
       </div>
       {#if stage.strategy === "update" && result.updated > 0}
         <div class="result-card info">
           <span class="result-num">{result.updated}</span>
-          <span class="result-label">Updated</span>
+          <span class="result-label">{$LL.csvImport.updated()}</span>
         </div>
       {/if}
       {#if result.skipped > 0}
         <div class="result-card warn">
           <span class="result-num">{result.skipped}</span>
-          <span class="result-label">Skipped</span>
+          <span class="result-label">{$LL.csvImport.skipped()}</span>
         </div>
       {/if}
       {#if result.invalid > 0}
         <div class="result-card error">
           <span class="result-num">{result.invalid}</span>
-          <span class="result-label">Invalid</span>
+          <span class="result-label">{$LL.csvImport.invalid()}</span>
         </div>
       {/if}
     </div>
 
     {#if result.rows.length > 0}
       <section class="section">
-        <h2>Import Log</h2>
+        <h2>{$LL.csvImport.importLog()}</h2>
         <div class="table-wrap">
           <table class="preview-table">
             <thead>
               <tr>
                 <th>#</th>
                 <th>SKU</th>
-                <th>Description</th>
-                <th>Barcode</th>
-                <th>Result</th>
-                <th>Detail</th>
+                <th>{$LL.csvImport.description()}</th>
+                <th>{$LL.csvImport.barcode()}</th>
+                <th>{$LL.csvImport.status()}</th>
+                <th>{$LL.csvImport.detail()}</th>
               </tr>
             </thead>
             <tbody>
@@ -395,7 +399,7 @@
 
     <div class="import-actions">
       <button class="btn-secondary" on:click={() => (stage = { name: "select" })}>
-        Import Another File
+        {$LL.csvImport.importAnotherFile()}
       </button>
     </div>
   </div>
