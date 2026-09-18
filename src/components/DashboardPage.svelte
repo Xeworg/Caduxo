@@ -38,6 +38,7 @@
   import UnitReviewBanner from "./UnitReviewBanner.svelte";
   import UnitReviewPage from "./UnitReviewPage.svelte";
   import LotMovementsPanel from "./LotMovementsPanel.svelte";
+  import { LL } from "../i18n/i18n-svelte.js";
 
   // ─── State ──────────────────────────────────────────────────────────────────
 
@@ -70,12 +71,12 @@
 
   // Quick filter presets mapping
   const PRESET_LABELS: Record<DashboardPreset, string> = {
-    all: "All",
-    expired: "Expired",
-    today: "Today",
-    alert_window: "Alert window",
-    next_7_days: "Next 7 days",
-    next_30_days: "Next 30 days",
+    all: "all",
+    expired: "expired",
+    today: "today",
+    alert_window: "alertWindow",
+    next_7_days: "next7Days",
+    next_30_days: "next30Days",
   };
   const PRESET_ORDER: DashboardPreset[] = [
     "all",
@@ -364,11 +365,11 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
 
   function urgencyLabel(urgency: string): string {
     switch (urgency) {
-      case "expired": return "Expired";
-      case "today": return "Today";
-      case "alert_window": return "Alert window";
-      case "next_30_days": return "Next 30 days";
-      default: return "Future";
+      case "expired": return $LL.dashboard.urgency.expired();
+      case "today": return $LL.dashboard.urgency.today();
+      case "alert_window": return $LL.dashboard.urgency.alertWindow();
+      case "next_30_days": return $LL.dashboard.urgency.next30Days();
+      default: return $LL.dashboard.urgency.future();
     }
   }
 
@@ -397,23 +398,23 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
       <!-- ── Header ─────────────────────────────────────────────────────────── -->
       <header class="dash-header">
         <div class="dash-title-row">
-          <h2>Dashboard</h2>
+          <h2>{$LL.dashboard.pageTitle()}</h2>
           <div class="dash-title-actions">
             <button
               class="btn-secondary btn-small"
               on:click={exportReport}
               disabled={exporting}
-              title="Export the current dashboard report to a CSV file"
+              title={$LL.dashboard.actions.exportCsvTitle()}
             >
-              {exporting ? "Exporting…" : "Export CSV"}
+              {exporting ? $LL.dashboard.actions.exporting() : $LL.dashboard.actions.exportCsv()}
             </button>
             {#if selectedStoreId}
               <span class="store-chip">
-                {stores.find((s) => s.id === selectedStoreId)?.name ?? "Store"}
-                <button class="chip-clear" on:click={clearStoreFilter} title="Clear store filter">✕</button>
+                {stores.find((s) => s.id === selectedStoreId)?.name ?? $LL.dashboard.store()}
+                <button class="chip-clear" on:click={clearStoreFilter} title={$LL.dashboard.clearStoreFilter()}>✕</button>
               </span>
             {:else}
-              <span class="store-chip store-chip-all">All stores</span>
+              <span class="store-chip store-chip-all">{$LL.dashboard.allStores()}</span>
             {/if}
           </div>
         </div>
@@ -421,7 +422,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
         <!-- Always-visible scan/search input -->
         <div class="scan-row">
           <ScanSearchBox
-            placeholder="Scan barcode or type SKU, then press Enter…"
+            placeholder={$LL.scan.placeholder()}
             onFound={handleScanFound}
             onNotFound={handleScanNotFound}
           />
@@ -445,9 +446,9 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
     <!-- Store / location filter -->
     <div class="filter-row">
       <label>
-        Store:
+        {$LL.dashboard.store()}:
         <select bind:value={selectedStoreId}>
-          <option value={null}>All stores</option>
+          <option value={null}>{$LL.dashboard.allStores()}</option>
           {#each stores as store}
             <option value={store.id}>{store.name}</option>
           {/each}
@@ -456,9 +457,9 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
 
       {#if selectedStoreId && locations.length > 0}
         <label>
-          Location:
+          {$LL.dashboard.location()}:
           <select bind:value={selectedLocationId}>
-            <option value={null}>All locations</option>
+            <option value={null}>{$LL.dashboard.allLocations()}</option>
             {#each locations as loc}
               <option value={loc.id}>{loc.name}</option>
             {/each}
@@ -470,7 +471,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
         bind:value={categoryIds}
         {categories}
         includeUncategorized={true}
-        placeholder="Filter by category…"
+        placeholder={$LL.categoryPicker.placeholder()}
       />
     </div>
   </header>
@@ -478,19 +479,19 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
   <!-- ── Urgency cards ────────────────────────────────────────────────────── -->
   <section class="urgency-cards" aria-label="Urgency summary">
     <article class="urgency-card urgency-card-expired" class:has-count={counts.expired > 0}>
-      <span class="urgency-label">Expired</span>
+      <span class="urgency-label">{$LL.dashboard.urgencyCard.expired()}</span>
       <strong class="urgency-count">{counts.expired}</strong>
     </article>
     <article class="urgency-card urgency-card-today" class:has-count={counts.today > 0}>
-      <span class="urgency-label">Today</span>
+      <span class="urgency-label">{$LL.dashboard.urgencyCard.today()}</span>
       <strong class="urgency-count">{counts.today}</strong>
     </article>
     <article class="urgency-card urgency-card-alert" class:has-count={counts.alert_window > 0}>
-      <span class="urgency-label">Alert window</span>
+      <span class="urgency-label">{$LL.dashboard.urgencyCard.alertWindow()}</span>
       <strong class="urgency-count">{counts.alert_window}</strong>
     </article>
     <article class="urgency-card urgency-card-soon" class:has-count={counts.next_30_days > 0}>
-      <span class="urgency-label">Next 30 days</span>
+      <span class="urgency-label">{$LL.dashboard.urgencyCard.next30Days()}</span>
       <strong class="urgency-count">{counts.next_30_days}</strong>
     </article>
   </section>
@@ -503,7 +504,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
         class:active={activePreset === preset}
         on:click={() => (activePreset = preset)}
       >
-        {PRESET_LABELS[preset]}
+        {$LL.dashboard.presets[PRESET_LABELS[preset] as keyof typeof $LL.dashboard.presets]()}
       </button>
     {/each}
   </div>
@@ -512,19 +513,19 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
   {#if errorMsg}
     <div class="error-banner" role="alert">
       {errorMsg}
-      <button on:click={() => (errorMsg = "")}>Dismiss</button>
+      <button on:click={() => (errorMsg = "")}>{$LL.common.dismiss()}</button>
     </div>
   {/if}
 
   <!-- ── Lot table ──────────────────────────────────────────────────────── -->
   {#if loading}
-    <div class="loading-row">Loading dashboard…</div>
+    <div class="loading-row">{$LL.common.loading()}</div>
   {:else if lots.length === 0}
     <div class="empty-state">
-      <p>No lots match the current filters.</p>
+      <p>{$LL.dashboard.emptyState.title()}</p>
       <p>
         <button class="link-btn" on:click={() => { activePreset = "all"; selectedStoreId = null; selectedLocationId = null; }}>
-          Clear all filters
+          {$LL.dashboard.actions.clearFilters()}
         </button>
       </p>
     </div>
@@ -533,15 +534,15 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
       <table class="lot-table">
         <thead>
           <tr>
-            <th>SKU</th>
-            <th>Description</th>
-            <th>Store / Location</th>
-            <th>Qty</th>
-            <th>Expiry</th>
-            <th>Days left</th>
-            <th>Urgency</th>
-            <th>Batch</th>
-            <th>Actions</th>
+            <th>{$LL.dashboard.sku()}</th>
+            <th>{$LL.dashboard.description()}</th>
+            <th>{$LL.dashboard.store()} / {$LL.dashboard.location()}</th>
+            <th>{$LL.dashboard.qty()}</th>
+            <th>{$LL.dashboard.expiryDate()}</th>
+            <th>{$LL.dashboard.daysLeft()}</th>
+            <th>{$LL.dashboard.urgencyLabel()}</th>
+            <th>{$LL.dashboard.batch()}</th>
+            <th>{$LL.common.actions()}</th>
           </tr>
         </thead>
         <tbody>
@@ -558,7 +559,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
               <td class="cell-qty">{lot.quantity} {getUnitDisplayName(lot)}</td>
               <td class="cell-date">{formatDate(lot.expiry_date)}</td>
               <td class="cell-days" class:days-negative={lot.days_remaining < 0}>
-                {lot.days_remaining >= 0 ? lot.days_remaining : `+${Math.abs(lot.days_remaining)} ago`}
+                {lot.days_remaining >= 0 ? lot.days_remaining : $LL.pdf.daysAgo({ n: Math.abs(lot.days_remaining) })}
               </td>
               <td>
                 <span class="urgency-badge {urgencyClass(lot.urgency)}">
@@ -569,12 +570,12 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
               <td class="cell-actions">
                 <button
                   class="action-btn"
-                  title="Edit lot"
+                  title={$LL.common.edit()}
                   on:click={() => editLot(lot)}
                 >✏️</button>
                 <button
                   class="action-btn action-btn-lot-actions"
-                  title="View product and lot movements"
+                  title={$LL.dashboard.viewProductAndMovements()}
                   on:click={() => viewProduct(lot, lot.lot_id)}
                 >↓</button>
               </td>
@@ -591,21 +592,21 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
       <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Product detail">
         <div class="modal-box modal-box-wide">
           <div class="modal-header">
-            <h3>Product Detail</h3>
+            <h3>{$LL.products.pageTitle()}</h3>
             <button class="modal-close" on:click={closeProductDetail}>✕</button>
           </div>
           {#if detailLoading}
-            <p class="modal-loading">Loading…</p>
+            <p class="modal-loading">{$LL.common.loadingWithDots()}</p>
           {:else if detailProduct}
             <dl class="detail-grid">
-              <dt>SKU</dt><dd>{detailProduct.product.sku}</dd>
-              <dt>Description</dt><dd>{detailProduct.product.description}</dd>
-              <dt>Category</dt><dd>{detailProduct.categories.length > 0 ? detailProduct.categories.map(c => c.name).join(", ") : "—"}</dd>
-              <dt>Default unit</dt><dd>{detailProduct.product.default_unit ?? "—"}</dd>
-              <dt>Alert days</dt><dd>{detailProduct.product.default_alert_days_before}</dd>
-              <dt>Status</dt><dd>{detailProduct.product.is_active ? "Active" : "Archived"}</dd>
+              <dt>{$LL.dashboard.sku()}</dt><dd>{detailProduct.product.sku}</dd>
+              <dt>{$LL.dashboard.description()}</dt><dd>{detailProduct.product.description}</dd>
+              <dt>{$LL.dashboard.category()}</dt><dd>{detailProduct.categories.length > 0 ? detailProduct.categories.map(c => c.name).join(", ") : "—"}</dd>
+              <dt>{$LL.dashboard.unit()}</dt><dd>{detailProduct.product.default_unit ?? "—"}</dd>
+              <dt>{$LL.dashboard.alertDaysBefore()}</dt><dd>{detailProduct.product.default_alert_days_before}</dd>
+              <dt>{$LL.dashboard.status()}</dt><dd>{detailProduct.product.is_active ? $LL.dashboard.active() : $LL.dashboard.archived()}</dd>
               {#if detailProduct.barcodes.length > 0}
-                <dt>Barcodes</dt>
+                <dt>{$LL.dashboard.barcode}s</dt>
                 <dd>
                   {#each detailProduct.barcodes as bc}
                     <span class="barcode-chip" class:primary={bc.is_primary}>
@@ -619,19 +620,19 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
             <!-- ── Expiry lots + per-lot movement history ───────────────────── -->
             <section class="lots-section" aria-label="Expiry lots and movement history">
               <div class="lots-section-header">
-                <h4>Expiry lots</h4>
+                <h4>{$LL.dashboard.expiryLots()}</h4>
                 {#if detailLotsLoading}
-                  <span class="lots-loading-hint">Loading…</span>
+                  <span class="lots-loading-hint">{$LL.dashboard.loading()}</span>
                 {:else}
                   <span class="lots-count">
-                    {detailLots.length} lot{detailLots.length === 1 ? "" : "s"}
+                    {$LL.dashboard.emptyState.lots({ n: detailLots.length })}
                   </span>
                 {/if}
               </div>
 
               {#if !detailLotsLoading && detailLots.length === 0}
                 <p class="empty-hint">
-                  This product has no expiry lots yet.
+                  {$LL.dashboard.emptyState.noExpiryLots()}
                 </p>
               {:else if detailLots.length > 0}
                 <ul class="lot-picker" role="listbox" aria-label="Product expiry lots">
@@ -690,12 +691,12 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
   <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Lot detail">
     <div class="modal-box modal-box-wide">
       <div class="modal-header">
-        <h3>Lot Detail</h3>
+        <h3>{$LL.dashboard.lotDetail()}</h3>
         <button class="modal-close" on:click={() => (showLotDetail = false)}>✕</button>
       </div>
 
       {#if detailLotLoading}
-        <p class="modal-loading">Loading…</p>
+        <p class="modal-loading">{$LL.dashboard.loading()}</p>
       {:else if detailLot}
         <!-- Tabs -->
         <div class="detail-tabs">
@@ -705,7 +706,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
             class:active={lotDetailTab === "detail"}
             on:click={() => (lotDetailTab = "detail")}
           >
-            Detalle
+            {$LL.dashboard.detail()}
           </button>
           <button
             type="button"
@@ -713,23 +714,23 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
             class:active={lotDetailTab === "history"}
             on:click={() => (lotDetailTab = "history")}
           >
-            Historial
+            {$LL.lotMovements.history()}
           </button>
         </div>
 
         {#if lotDetailTab === "detail"}
-          <dl class="detail-grid">
-            <dt>Lot ID</dt><dd class="cell-sku">{detailLot.id.slice(0, 8)}…</dd>
-            <dt>Quantity</dt><dd>{detailLot.quantity} {detailLot.unit}</dd>
-            <dt>Expiry</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
-            <dt>Alert days</dt><dd>{detailLot.alert_days_before}</dd>
-            <dt>Batch</dt><dd>{detailLot.batch_code ?? "—"}</dd>
-            <dt>Status</dt><dd>{detailLot.status}</dd>
+            <dl class="detail-grid">
+            <dt>{$LL.dashboard.lotId()}</dt><dd class="cell-sku">{detailLot.id.slice(0, 8)}…</dd>
+            <dt>{$LL.dashboard.qty()}</dt><dd>{detailLot.quantity} {detailLot.unit}</dd>
+            <dt>{$LL.dashboard.expiryDate()}</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
+            <dt>{$LL.dashboard.alertDaysBefore()}</dt><dd>{detailLot.alert_days_before}</dd>
+            <dt>{$LL.dashboard.batch()}</dt><dd>{detailLot.batch_code ?? "—"}</dd>
+            <dt>{$LL.dashboard.status()}</dt><dd>{detailLot.status}</dd>
             {#if detailLot.resolution}
-              <dt>Resolution</dt><dd>{detailLot.resolution}</dd>
+              <dt>{$LL.lotMovements.resolution.resolveQuantity()}</dt><dd>{detailLot.resolution}</dd>
             {/if}
 {#if detailLot.notes}
-              <dt>Notes</dt><dd>{detailLot.notes}</dd>
+              <dt>{$LL.lotForm.notes()}</dt><dd>{detailLot.notes}</dd>
             {/if}
           </dl>
         {:else}
@@ -755,17 +756,16 @@ detailLot = await getExpiryLot(detailLot!.id);
   </div>
 {/if}
 
-<!-- ── Quick-create product modal ──────────────────────────────────────────── -->
+    <!-- ── Quick-create product modal ──────────────────────────────────────────── -->
     {#if showQuickCreate}
       <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Quick product create">
         <div class="modal-box modal-box-wide">
           <div class="modal-header">
-            <h3>Quick product create</h3>
+            <h3>{$LL.products.createProduct()}</h3>
             <button class="modal-close" on:click={() => (showQuickCreate = false)}>✕</button>
           </div>
           <p class="scan-hint">
-            No product matched <strong>{quickCreateScannedValue}</strong>.
-            Create it now — the scanned value has been pre-filled into the Barcode field. Type a SKU and submit.
+            {$LL.scan.noMatch()}
           </p>
           {#await listCategories() then cats}
             <ProductForm

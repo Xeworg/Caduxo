@@ -284,6 +284,10 @@ type RootTranslation = {
 			 */
 			today: string
 			/**
+			 * N​e​x​t​ ​7​ ​d​a​y​s
+			 */
+			next7Days: string
+			/**
 			 * N​e​x​t​ ​3​0​ ​d​a​y​s
 			 */
 			next30Days: string
@@ -313,6 +317,15 @@ type RootTranslation = {
 			 * A​d​j​u​s​t​ ​y​o​u​r​ ​f​i​l​t​e​r​s​ ​o​r​ ​c​r​e​a​t​e​ ​s​o​m​e​ ​e​x​p​i​r​y​ ​l​o​t​s​.
 			 */
 			subtitle: string
+			/**
+			 * T​h​i​s​ ​p​r​o​d​u​c​t​ ​h​a​s​ ​n​o​ ​e​x​p​i​r​y​ ​l​o​t​s​ ​y​e​t​.
+			 */
+			noExpiryLots: string
+			/**
+			 * {​n​}​ ​l​o​t
+			 * @param {unknown} n
+			 */
+			lots: RequiredParams<'n'>
 		}
 		unitReviewPanel: {
 			/**
@@ -374,6 +387,78 @@ type RootTranslation = {
 			 */
 			future: string
 		}
+		/**
+		 * U​r​g​e​n​c​y
+		 */
+		urgencyLabel: string
+		/**
+		 * L​o​t​ ​D​e​t​a​i​l
+		 */
+		lotDetail: string
+		/**
+		 * D​e​t​a​i​l
+		 */
+		detail: string
+		/**
+		 * L​o​t​ ​I​D
+		 */
+		lotId: string
+		/**
+		 * V​i​e​w​ ​p​r​o​d​u​c​t​ ​a​n​d​ ​l​o​t​ ​m​o​v​e​m​e​n​t​s
+		 */
+		viewProductAndMovements: string
+		/**
+		 * E​x​p​i​r​y​ ​l​o​t​s
+		 */
+		expiryLots: string
+		/**
+		 * L​o​a​d​i​n​g​…
+		 */
+		loading: string
+		urgencyCard: {
+			/**
+			 * E​x​p​i​r​e​d
+			 */
+			expired: string
+			/**
+			 * T​o​d​a​y
+			 */
+			today: string
+			/**
+			 * A​l​e​r​t​ ​w​i​n​d​o​w
+			 */
+			alertWindow: string
+			/**
+			 * N​e​x​t​ ​3​0​ ​d​a​y​s
+			 */
+			next30Days: string
+		}
+		actions: {
+			/**
+			 * E​x​p​o​r​t​ ​C​S​V
+			 */
+			exportCsv: string
+			/**
+			 * E​x​p​o​r​t​ ​t​h​e​ ​c​u​r​r​e​n​t​ ​d​a​s​h​b​o​a​r​d​ ​r​e​p​o​r​t​ ​t​o​ ​a​ ​C​S​V​ ​f​i​l​e
+			 */
+			exportCsvTitle: string
+			/**
+			 * E​x​p​o​r​t​i​n​g​…
+			 */
+			exporting: string
+			/**
+			 * C​l​e​a​r​ ​a​l​l​ ​f​i​l​t​e​r​s
+			 */
+			clearFilters: string
+			/**
+			 * D​i​s​m​i​s​s
+			 */
+			dismiss: string
+		}
+		/**
+		 * C​l​e​a​r​ ​s​t​o​r​e​ ​f​i​l​t​e​r
+		 */
+		clearStoreFilter: string
 		/**
 		 * A​l​e​r​t​:​ ​{​d​a​y​s​}​ ​d​a​y​s
 		 * @param {unknown} days
@@ -518,6 +603,38 @@ type RootTranslation = {
 		 * P​r​e​v​i​e​w
 		 */
 		previewTitle: string
+		actions: {
+			/**
+			 * ←​ ​E​d​i​t​ ​f​i​l​t​e​r​s
+			 */
+			editFilters: string
+			/**
+			 * P​r​e​v​i​e​w​ ​r​e​p​o​r​t
+			 */
+			preview: string
+			/**
+			 * G​e​n​e​r​a​t​i​n​g​ ​p​r​e​v​i​e​w​…
+			 */
+			generating: string
+			/**
+			 * E​x​p​o​r​t​i​n​g​…
+			 */
+			exporting: string
+			/**
+			 * E​x​p​o​r​t​ ​P​D​F
+			 */
+			exportPdf: string
+		}
+		emptyState: {
+			/**
+			 * N​o​ ​l​o​t​s​ ​m​a​t​c​h​ ​t​h​e​ ​c​u​r​r​e​n​t​ ​r​e​p​o​r​t​ ​f​i​l​t​e​r​s​.
+			 */
+			noRowsMatch: string
+			/**
+			 * A​d​j​u​s​t​ ​t​h​e​ ​f​i​l​t​e​r​s​ ​a​b​o​v​e​ ​a​n​d​ ​r​u​n​ ​t​h​e​ ​p​r​e​v​i​e​w​ ​a​g​a​i​n​.
+			 */
+			adjustFilters: string
+		}
 		/**
 		 * N​o​ ​l​o​t​s​ ​m​a​t​c​h​ ​t​h​e​ ​c​u​r​r​e​n​t​ ​r​e​p​o​r​t​ ​f​i​l​t​e​r​s​.
 		 */
@@ -585,6 +702,10 @@ type RootTranslation = {
 			 * D​a​t​e​ ​t​o
 			 */
 			dateTo: string
+			/**
+			 * Y​Y​Y​Y​-​M​M​-​D​D
+			 */
+			datePlaceholder: string
 		}
 		urgencyOptions: {
 			/**
@@ -1559,6 +1680,22 @@ type RootTranslation = {
 		 * @param {unknown} value
 		 */
 		invalidDateFormat: RequiredParams<'label' | 'value'>
+		/**
+		 * U​s​e​ ​Y​Y​Y​Y​-​M​M​-​D​D
+		 */
+		dateUseIsoFormat: string
+		/**
+		 * Y​e​a​r​ ​m​u​s​t​ ​b​e​ ​1​9​0​0​–​2​1​0​0
+		 */
+		dateYearRange: string
+		/**
+		 * T​h​i​s​ ​f​i​e​l​d​ ​i​s​ ​r​e​q​u​i​r​e​d
+		 */
+		dateFieldRequired: string
+		/**
+		 * I​n​v​a​l​i​d​ ​d​a​t​e
+		 */
+		dateInvalid: string
 	}
 }
 
@@ -1830,6 +1967,10 @@ export type TranslationFunctions = {
 			 */
 			today: () => LocalizedString
 			/**
+			 * Next 7 days
+			 */
+			next7Days: () => LocalizedString
+			/**
 			 * Next 30 days
 			 */
 			next30Days: () => LocalizedString
@@ -1857,6 +1998,14 @@ export type TranslationFunctions = {
 			 * Adjust your filters or create some expiry lots.
 			 */
 			subtitle: () => LocalizedString
+			/**
+			 * This product has no expiry lots yet.
+			 */
+			noExpiryLots: () => LocalizedString
+			/**
+			 * {n} lot
+			 */
+			lots: (arg: { n: unknown }) => LocalizedString
 		}
 		unitReviewPanel: {
 			/**
@@ -1914,6 +2063,78 @@ export type TranslationFunctions = {
 			 */
 			future: () => LocalizedString
 		}
+		/**
+		 * Urgency
+		 */
+		urgencyLabel: () => LocalizedString
+		/**
+		 * Lot Detail
+		 */
+		lotDetail: () => LocalizedString
+		/**
+		 * Detail
+		 */
+		detail: () => LocalizedString
+		/**
+		 * Lot ID
+		 */
+		lotId: () => LocalizedString
+		/**
+		 * View product and lot movements
+		 */
+		viewProductAndMovements: () => LocalizedString
+		/**
+		 * Expiry lots
+		 */
+		expiryLots: () => LocalizedString
+		/**
+		 * Loading…
+		 */
+		loading: () => LocalizedString
+		urgencyCard: {
+			/**
+			 * Expired
+			 */
+			expired: () => LocalizedString
+			/**
+			 * Today
+			 */
+			today: () => LocalizedString
+			/**
+			 * Alert window
+			 */
+			alertWindow: () => LocalizedString
+			/**
+			 * Next 30 days
+			 */
+			next30Days: () => LocalizedString
+		}
+		actions: {
+			/**
+			 * Export CSV
+			 */
+			exportCsv: () => LocalizedString
+			/**
+			 * Export the current dashboard report to a CSV file
+			 */
+			exportCsvTitle: () => LocalizedString
+			/**
+			 * Exporting…
+			 */
+			exporting: () => LocalizedString
+			/**
+			 * Clear all filters
+			 */
+			clearFilters: () => LocalizedString
+			/**
+			 * Dismiss
+			 */
+			dismiss: () => LocalizedString
+		}
+		/**
+		 * Clear store filter
+		 */
+		clearStoreFilter: () => LocalizedString
 		/**
 		 * Alert: {days} days
 		 */
@@ -2056,6 +2277,38 @@ export type TranslationFunctions = {
 		 * Preview
 		 */
 		previewTitle: () => LocalizedString
+		actions: {
+			/**
+			 * ← Edit filters
+			 */
+			editFilters: () => LocalizedString
+			/**
+			 * Preview report
+			 */
+			preview: () => LocalizedString
+			/**
+			 * Generating preview…
+			 */
+			generating: () => LocalizedString
+			/**
+			 * Exporting…
+			 */
+			exporting: () => LocalizedString
+			/**
+			 * Export PDF
+			 */
+			exportPdf: () => LocalizedString
+		}
+		emptyState: {
+			/**
+			 * No lots match the current report filters.
+			 */
+			noRowsMatch: () => LocalizedString
+			/**
+			 * Adjust the filters above and run the preview again.
+			 */
+			adjustFilters: () => LocalizedString
+		}
 		/**
 		 * No lots match the current report filters.
 		 */
@@ -2123,6 +2376,10 @@ export type TranslationFunctions = {
 			 * Date to
 			 */
 			dateTo: () => LocalizedString
+			/**
+			 * YYYY-MM-DD
+			 */
+			datePlaceholder: () => LocalizedString
 		}
 		urgencyOptions: {
 			/**
@@ -3078,6 +3335,22 @@ export type TranslationFunctions = {
 		 * Invalid {label} format: `{value}` (expected YYYY-MM-DD)
 		 */
 		invalidDateFormat: (arg: { label: unknown, value: unknown }) => LocalizedString
+		/**
+		 * Use YYYY-MM-DD
+		 */
+		dateUseIsoFormat: () => LocalizedString
+		/**
+		 * Year must be 1900–2100
+		 */
+		dateYearRange: () => LocalizedString
+		/**
+		 * This field is required
+		 */
+		dateFieldRequired: () => LocalizedString
+		/**
+		 * Invalid date
+		 */
+		dateInvalid: () => LocalizedString
 	}
 }
 

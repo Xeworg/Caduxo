@@ -82,6 +82,7 @@ const es: BaseTranslation = {
       all: "Todos",
       alertWindow: "Ventana de alerta",
       today: "Hoy",
+      next7Days: "Próximos 7 días",
       next30Days: "Próximos 30 días",
       future: "Futuros",
     },
@@ -93,6 +94,8 @@ const es: BaseTranslation = {
     emptyState: {
       title: "Ningún lote coincide con este filtro",
       subtitle: "Ajusta los filtros o crea algunos lotes de caducidad.",
+      noExpiryLots: "Este producto aún no tiene lotes de caducidad.",
+      lots: "{n} lote",
     },
     unitReviewPanel: {
       unitReview: "Revisión de unidades",
@@ -111,6 +114,27 @@ const es: BaseTranslation = {
       next30Days: "Próximos 30d",
       future: "Futuro",
     },
+    urgencyLabel: "Urgencia",
+    lotDetail: "Detalle del lote",
+    detail: "Detalle",
+    lotId: "ID de lote",
+    viewProductAndMovements: "Ver producto y movimientos de lote",
+    expiryLots: "Lotes de caducidad",
+    loading: "Cargando…",
+    urgencyCard: {
+      expired: "Vencido",
+      today: "Hoy",
+      alertWindow: "Ventana de alerta",
+      next30Days: "Próximos 30 días",
+    },
+    actions: {
+      exportCsv: "Exportar CSV",
+      exportCsvTitle: "Exportar el reporte actual del panel a un archivo CSV",
+      exporting: "Exportando…",
+      clearFilters: "Limpiar todos los filtros",
+      dismiss: "Descartar",
+    },
+    clearStoreFilter: "Limpiar filtro de tienda",
     alertDays: "Alerta: {days} días",
     daysLeft: "Días restantes",
     exp: "Cad: {date}",
@@ -149,8 +173,17 @@ const es: BaseTranslation = {
     exportPdf: "Exportar PDF",
     editFilters: "← Editar filtros",
     previewTitle: "Vista previa",
-    noRowsMatch: "Ningún lote coincide con los filtros actuales del reporte.",
-    adjustFilters: "Ajusta los filtros arriba y ejecuta la vista previa de nuevo.",
+    actions: {
+      editFilters: "← Editar filtros",
+      preview: "Vista previa",
+      generating: "Generando vista previa…",
+      exporting: "Exportando…",
+      exportPdf: "Exportar PDF",
+    },
+    emptyState: {
+      noRowsMatch: "Ningún lote coincide con los filtros actuales del reporte.",
+      adjustFilters: "Ajusta los filtros arriba y ejecuta la vista previa de nuevo.",
+    },
     reportTypes: {
       inAlertWindow: "En ventana de alerta",
       inAlertWindowDesc: "Lotes dentro de su umbral de alerta por lote.",
@@ -168,6 +201,7 @@ const es: BaseTranslation = {
       urgency: "Urgencia",
       dateFrom: "Fecha desde",
       dateTo: "Fecha hasta",
+      datePlaceholder: "AAAA-MM-DD",
     },
     urgencyOptions: {
       all: "Todas las urgencias",
@@ -452,6 +486,10 @@ const es: BaseTranslation = {
     saveFailed: "No se pudo guardar. Por favor, inténtalo de nuevo.",
     notFound: "No encontrado.",
     invalidDateFormat: "Formato de {label} no válido: `{value}` (se esperaba AAAA-MM-DD)",
+    dateUseIsoFormat: "Usa AAAA-MM-DD",
+    dateYearRange: "El año debe estar entre 1900 y 2100",
+    dateFieldRequired: "Este campo es obligatorio",
+    dateInvalid: "Fecha no válida",
   },
 };
 

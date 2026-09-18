@@ -244,11 +244,7 @@
 
   function formatDays(days: number): string {
     if (days < 0) {
-      const abs = Math.abs(days);
-      if (locale.current === "es") {
-        return $LL.pdf.daysAgo({ n: abs });
-      }
-      return `${abs} ago`;
+      return $LL.pdf.daysAgo({ n: Math.abs(days) });
     }
     return days.toString();
   }
@@ -315,18 +311,18 @@
 
 <div class="page">
   <header class="page-header">
-    <h1>Reports</h1>
+    <h1>{$LL.reports.pageTitle()}</h1>
     {#if view === "preview" && preview}
       <div class="page-header-actions">
         <button class="btn-secondary" on:click={backToConfigure}>
-          ← Edit filters
+          {$LL.reports.actions.editFilters()}
         </button>
         <button
           class="btn-primary"
           on:click={exportPdf}
           disabled={exporting || preview.lots.length === 0}
         >
-          {exporting ? "Exporting…" : "Export PDF"}
+          {exporting ? $LL.reports.actions.exporting() : $LL.reports.actions.exportPdf()}
         </button>
       </div>
     {/if}
@@ -342,7 +338,7 @@
   {#if view === "configure"}
     <!-- ── Configure view ─────────────────────────────────────────── -->
     <section class="panel">
-      <h2 class="panel-title">1. Choose a report</h2>
+      <h2 class="panel-title">{$LL.reports.chooseReport()}</h2>
       <div class="report-types">
         {#each REPORT_TYPES as opt}
           <button
@@ -359,12 +355,12 @@
     </section>
 
     <section class="panel">
-      <h2 class="panel-title">2. Filters</h2>
+      <h2 class="panel-title">{$LL.reports.configureFilters()}</h2>
       <div class="filters-grid">
         <label class="filter-field">
-          <span>Store</span>
+          <span>{$LL.dashboard.store()}</span>
           <select bind:value={storeId}>
-            <option value={null}>All stores</option>
+            <option value={null}>{$LL.dashboard.allStores()}</option>
             {#each stores as s}
               <option value={s.id}>{s.name}</option>
             {/each}
@@ -372,9 +368,9 @@
         </label>
 
         <label class="filter-field" class:disabled={!storeId || locations.length === 0}>
-          <span>Location</span>
+          <span>{$LL.dashboard.location()}</span>
           <select bind:value={locationId} disabled={!storeId || locations.length === 0}>
-            <option value={null}>All locations</option>
+            <option value={null}>{$LL.dashboard.allLocations()}</option>
             {#each locations as loc}
               <option value={loc.id}>{loc.name}</option>
             {/each}
@@ -382,17 +378,17 @@
         </label>
 
         <div class="filter-field">
-          <span>Category</span>
+          <span>{$LL.dashboard.category()}</span>
           <CategoryPicker
             bind:value={categoryIds}
             {categories}
             includeUncategorized={true}
-            placeholder="Filter by category…"
+            placeholder={$LL.categoryPicker.placeholder()}
           />
         </div>
 
         <label class="filter-field" class:disabled={selectedReportType !== "custom"}>
-          <span>Urgency</span>
+          <span>{$LL.reports.fields.urgency()}</span>
           <select
             bind:value={urgency}
             disabled={selectedReportType !== "custom"}
@@ -404,22 +400,22 @@
         </label>
 
         <label class="filter-field">
-          <span>Date from</span>
+          <span>{$LL.reports.fields.dateFrom()}</span>
           <DatePicker
             bind:value={dateFrom}
-            ariaLabel="Date from"
-            placeholder="YYYY-MM-DD"
+            ariaLabel={$LL.reports.fields.dateFrom()}
+            placeholder={$LL.reports.fields.datePlaceholder()}
             clearable={true}
             todayDate={todayIso()}
           />
         </label>
 
         <label class="filter-field">
-          <span>Date to</span>
+          <span>{$LL.reports.fields.dateTo()}</span>
           <DatePicker
             bind:value={dateTo}
-            ariaLabel="Date to"
-            placeholder="YYYY-MM-DD"
+            ariaLabel={$LL.reports.fields.dateTo()}
+            placeholder={$LL.reports.fields.datePlaceholder()}
             clearable={true}
             todayDate={todayIso()}
           />
@@ -433,7 +429,7 @@
         on:click={runPreview}
         disabled={loading}
       >
-        {loading ? "Generating preview…" : "Preview report"}
+        {loading ? $LL.reports.actions.generating() : $LL.reports.actions.preview()}
       </button>
     </div>
   {:else if preview}
@@ -444,33 +440,33 @@
         <span class="muted">— {preview.metadata.description}</span>
       </h2>
       <dl class="meta-grid">
-        <dt>Generated at</dt>
+        <dt>{$LL.reports.table.generatedAt()}</dt>
         <dd>{formatGeneratedAt(preview.metadata.generated_at)}</dd>
-        <dt>Rows</dt>
+        <dt>{$LL.reports.table.rows()}</dt>
         <dd><strong>{preview.metadata.row_count}</strong></dd>
-        <dt>Filters</dt>
+        <dt>{$LL.reports.table.filters()}</dt>
         <dd class="meta-filters">{filterSummary(preview.metadata)}</dd>
       </dl>
     </section>
 
     {#if preview.lots.length === 0}
       <div class="empty-state">
-        <p>No lots match the current report filters.</p>
-        <p class="hint">Adjust the filters above and run the preview again.</p>
+        <p>{$LL.reports.emptyState.noRowsMatch()}</p>
+        <p class="hint">{$LL.reports.emptyState.adjustFilters()}</p>
       </div>
     {:else}
       <div class="table-wrapper" role="region" aria-label="Report rows">
         <table class="report-table">
           <thead>
             <tr>
-              <th>SKU</th>
-              <th>Description</th>
-              <th>Store / Location</th>
-              <th class="num">Qty</th>
-              <th>Expiry</th>
-              <th class="num">Days</th>
-              <th>Urgency</th>
-              <th>Batch</th>
+              <th>{$LL.reports.table.sku()}</th>
+              <th>{$LL.reports.table.description()}</th>
+              <th>{$LL.reports.table.storeLocation()}</th>
+              <th class="num">{$LL.reports.table.qty()}</th>
+              <th>{$LL.reports.table.expiry()}</th>
+              <th class="num">{$LL.reports.table.days()}</th>
+              <th>{$LL.reports.table.urgency()}</th>
+              <th>{$LL.reports.table.batch()}</th>
             </tr>
           </thead>
           <tbody>

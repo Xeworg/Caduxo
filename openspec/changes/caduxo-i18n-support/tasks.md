@@ -91,8 +91,8 @@ The chain-strategy selection is `deferred` in the session preflight and the desi
 
 - [x] Replace hard-coded nav button labels in `src/App.svelte` with `$LL.nav.*` (`dashboard`, `stores`, `products`, `calendar`, `reports`, `import`, `backup`, `settings`). <!-- sdd-owner: implementation -->
 - [x] Re-key `src/components/ConfigurationPage.svelte`: add the new "Idioma" / "Language" section above the existing toggle; render the `<select>` listing `English` and `Español` (bound to `locale.current`); render the `$LL.configuration.language.detectedHint` paragraph above the selector when `translationSource.current === "detected"`; on change call `setLocale(next)` with optimistic update and rollback on `updateSettings` failure; re-key the existing `Configuración` / `Ubicación inicial obligatoria al crear lote` copy through `$LL.configuration.pageTitle` and `$LL.configuration.locationRequired.{label,description}`. <!-- sdd-owner: implementation -->
-- [ ] Re-key `src/components/DashboardPage.svelte` presets + banner copy through `$LL.dashboard.*`. <!-- sdd-owner: implementation -->
-- [ ] Re-key `src/components/ReportsPage.svelte`: report-type labels, urgency options, success / error messages through `$LL.reports.*`; read `locale.current` from the rune and pass it to `previewReport` and `exportReportPdfWithDialog`. <!-- sdd-owner: implementation -->
+- [x] Re-key `src/components/DashboardPage.svelte` presets + banner copy through `$LL.dashboard.*`. <!-- sdd-owner: implementation -->
+- [x] Re-key `src/components/ReportsPage.svelte`: report-type labels, urgency options, success / error messages through `$LL.reports.*`; read `locale.current` from the rune and pass it to `previewReport` and `exportReportPdfWithDialog`. <!-- sdd-owner: implementation -->
 - [x] Re-key `src/lib/notifications.ts`: `formatNotificationBody` uses `$LL.notification.bodyTemplate({ qty, expiry_date, location })`; the title is composed as `${$LL.notification.titlePrefix()}${lot.sku}`; `LL` is accessed inside the functions (not at module load). <!-- sdd-owner: implementation -->
 
 ### 2.5 Re-key remaining components

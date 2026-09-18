@@ -82,6 +82,7 @@ const en: BaseTranslation = {
       all: "All",
       alertWindow: "Alert window",
       today: "Today",
+      next7Days: "Next 7 days",
       next30Days: "Next 30 days",
       future: "Future",
     },
@@ -93,6 +94,8 @@ const en: BaseTranslation = {
     emptyState: {
       title: "No lots match this filter",
       subtitle: "Adjust your filters or create some expiry lots.",
+      noExpiryLots: "This product has no expiry lots yet.",
+      lots: "{n} lot",
     },
     unitReviewPanel: {
       unitReview: "Unit review",
@@ -111,6 +114,27 @@ const en: BaseTranslation = {
       next30Days: "Next 30d",
       future: "Future",
     },
+    urgencyLabel: "Urgency",
+    lotDetail: "Lot Detail",
+    detail: "Detail",
+    lotId: "Lot ID",
+    viewProductAndMovements: "View product and lot movements",
+    expiryLots: "Expiry lots",
+    loading: "Loading…",
+    urgencyCard: {
+      expired: "Expired",
+      today: "Today",
+      alertWindow: "Alert window",
+      next30Days: "Next 30 days",
+    },
+    actions: {
+      exportCsv: "Export CSV",
+      exportCsvTitle: "Export the current dashboard report to a CSV file",
+      exporting: "Exporting…",
+      clearFilters: "Clear all filters",
+      dismiss: "Dismiss",
+    },
+    clearStoreFilter: "Clear store filter",
     alertDays: "Alert: {days} days",
     daysLeft: "Days left",
     exp: "Exp: {date}",
@@ -149,6 +173,17 @@ const en: BaseTranslation = {
     exportPdf: "Export PDF",
     editFilters: "← Edit filters",
     previewTitle: "Preview",
+    actions: {
+      editFilters: "← Edit filters",
+      preview: "Preview report",
+      generating: "Generating preview…",
+      exporting: "Exporting…",
+      exportPdf: "Export PDF",
+    },
+    emptyState: {
+      noRowsMatch: "No lots match the current report filters.",
+      adjustFilters: "Adjust the filters above and run the preview again.",
+    },
     noRowsMatch: "No lots match the current report filters.",
     adjustFilters: "Adjust the filters above and run the preview again.",
     reportTypes: {
@@ -168,6 +203,7 @@ const en: BaseTranslation = {
       urgency: "Urgency",
       dateFrom: "Date from",
       dateTo: "Date to",
+      datePlaceholder: "YYYY-MM-DD",
     },
     urgencyOptions: {
       all: "All urgencies",
@@ -452,6 +488,10 @@ const en: BaseTranslation = {
     saveFailed: "Could not save. Please try again.",
     notFound: "Not found.",
     invalidDateFormat: "Invalid {label} format: `{value}` (expected YYYY-MM-DD)",
+    dateUseIsoFormat: "Use YYYY-MM-DD",
+    dateYearRange: "Year must be 1900–2100",
+    dateFieldRequired: "This field is required",
+    dateInvalid: "Invalid date",
   },
 };
 
