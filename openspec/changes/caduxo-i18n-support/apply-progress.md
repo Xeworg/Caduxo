@@ -1198,3 +1198,24 @@ npm run build
 ```
 
 Note: `pi-lens` LSP still reports stale missing-key diagnostics for newly generated `typesafe-i18n` keys, matching the known Caduxo stale snapshot issue. `svelte-check` and `vite build` both read the regenerated types and pass cleanly.
+
+## PR 1 task reconciliation — backend i18n plumbing
+
+The backend PR 1 implementation was already present in the branch but `tasks.md` still had stale unchecked boxes. Reconciled task evidence against source files and reran backend gates.
+
+### Evidence
+
+- Settings language DTO/repository/service/command wiring exists in `src-tauri/src/dto/stores.rs`, `src-tauri/src/db/repositories/settings.rs`, `src-tauri/src/services/settings.rs`, and `src-tauri/src/commands/stores.rs`.
+- PDF locale table and parser exist in `src-tauri/src/pdf/locale.rs`; renderer/report service/command locale threading exists in `src-tauri/src/pdf/report_pdf.rs`, `src-tauri/src/services/reports.rs`, and `src-tauri/src/commands/reports.rs`.
+- User-visible backend validation localization exists in `src-tauri/src/services/user_messages.rs` and is wired through the relevant command/service paths.
+- Tauri OS plugin is registered in `src-tauri/src/lib.rs`; `os:default` is present in `src-tauri/capabilities/default.json`.
+
+### Verification
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml --lib
+# Result: ok. 431 passed; 0 failed
+
+cargo build --manifest-path src-tauri/Cargo.toml
+# Result: finished dev profile successfully
+```
