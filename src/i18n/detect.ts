@@ -4,7 +4,7 @@
  */
 
 import { locale as osLocale } from "@tauri-apps/plugin-os";
-import type { SupportedLocale } from "./locale.js";
+import type { SupportedLocale } from "./locale.svelte.js";
 
 /**
  * Detect the best-supported locale from the OS or WebView.

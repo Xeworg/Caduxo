@@ -26,7 +26,7 @@
     type StoreResponse,
     type StoreLocationResponse,
   } from "../lib/stores.js";
-  import { locale } from "../i18n/locale.js";
+  import { locale } from "../i18n/locale.svelte.js";
   import { LL } from "../i18n/i18n-svelte.js";
 
   // ─── View state ──────────────────────────────────────────────────────────

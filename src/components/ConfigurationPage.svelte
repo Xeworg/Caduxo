@@ -10,7 +10,7 @@
         translationSource,
         setLocale,
         type SupportedLocale,
-    } from "../i18n/locale.js";
+    } from "../i18n/locale.svelte.js";
     import { LL } from "../i18n/i18n-svelte.js";
 
     // ─── State ───────────────────────────────────────────────────────────────────

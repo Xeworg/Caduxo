@@ -10,7 +10,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import type { DashboardLotRow } from "./dashboard.js";
-import type { SupportedLocale } from "../i18n/locale.js";
+import type { SupportedLocale } from "../i18n/locale.svelte.js";
 
 // ─── DTOs (mirror Rust DTOs in src-tauri/src/dto/reports.rs) ──────────────────
 

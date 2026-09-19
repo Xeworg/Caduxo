@@ -1,6 +1,6 @@
 <script lang="ts">
     import { LL } from "../i18n/i18n-svelte.js";
-    import { locale } from "../i18n/locale.js";
+    import { locale } from "../i18n/locale.svelte.js";
     import {
         resolveExpiryLot,
         listLotResolutionEvents,

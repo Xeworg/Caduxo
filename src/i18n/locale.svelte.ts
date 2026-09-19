@@ -12,12 +12,18 @@
  */
 
 import { setLocale as i18nSetLocale } from "./i18n-svelte.js";
+import { loadAllLocales } from "./i18n-util.sync.js";
 import { detectSupportedLocale } from "./detect.js";
 import { getSettings, updateSettings } from "../lib/stores.js";
 
 export type SupportedLocale = "en" | "es";
 
 const DEFAULT: SupportedLocale = "en";
+
+// The generated Svelte i18n store is backed by the in-memory `loadedLocales`
+// registry. In dev/prod startup we use the synchronous dictionaries, so load
+// them once before any component evaluates `$LL.*`.
+loadAllLocales();
 
 /** Active locale; read from templates via `$LL.*` or directly when needed. */
 export const locale = $state<{ current: SupportedLocale }>({
