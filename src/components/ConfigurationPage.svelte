@@ -34,8 +34,14 @@
         try {
             settings = await getSettings();
             requireLocation = settings.require_initial_location_on_lot_create;
-            // Sync the locale rune from the persisted setting.
-            currentLocale = settings.language;
+            // When the user has a persisted preference, mirror it. On a fresh
+            // install the backend returns `"en"` as a fallback with
+            // `language_configured: false`; in that case the active locale is
+            // already held by the rune (set by `initLocale()` via OS detection),
+            // so keep the dropdown in sync with what the user actually sees.
+            currentLocale = settings.language_configured
+                ? settings.language
+                : locale.current;
         } catch (e) {
             errorMsg = $LL.configuration.language.loadErrorPrefix() + String(e);
         } finally {
@@ -53,8 +59,15 @@
 
         try {
             await setLocale(next);
-            // Update the persisted settings reference
-            if (settings) settings = { ...settings, language: next };
+            // Update the persisted settings reference; after a successful
+            // `setLocale` the backend will report the language as configured.
+            if (settings) {
+                settings = {
+                    ...settings,
+                    language: next,
+                    language_configured: true,
+                };
+            }
         } catch {
             // Roll back on failure
             currentLocale = prev;

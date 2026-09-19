@@ -47,7 +47,8 @@ export const translationSource = $state<{
  * Initialise the locale rune.
  *
  * 1. Try to read `app_settings.language` from the backend.
- *    If it is `"en"` or `"es"`, use it and mark the source as `"manual"`.
+ *    If `language_configured` is true (the user persisted a manual pick),
+ *    honour `s.language` and mark the source as `"manual"`.
  * 2. Otherwise detect from the OS / WebView and mark the source as `"detected"`.
  *
  * Must be called and awaited in `main.ts` before `mount(App, …)`.
@@ -55,14 +56,11 @@ export const translationSource = $state<{
 export async function initLocale(): Promise<SupportedLocale> {
   try {
     const s = await getSettings();
-    // The backend returns `"en"` as the fallback when the row is absent or invalid,
-    // but we treat that as "manual" only when the frontend also wrote it.
-    // We disambiguate by checking whether `s.language` is a known non-default
-    // value that proves the user explicitly picked it — or simply trust the
-    // backend's presence signal encoded in the response.
-    // For simplicity: when getSettings() succeeds without throwing, the row
-    // is considered present, so source = manual.
-    if (s.language === "en" || s.language === "es") {
+    // `language_configured` is the single source of truth: the backend
+    // reports false when the row is absent, empty, or holds a tag outside
+    // {"en", "es"}. On fresh installs we therefore fall through to OS /
+    // WebView detection instead of locking the UI to the `"en"` fallback.
+    if (s.language_configured && (s.language === "en" || s.language === "es")) {
       i18nSetLocale(s.language);
       locale.current = s.language;
       translationSource.current = "manual";

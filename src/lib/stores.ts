@@ -57,8 +57,15 @@ export interface SettingsResponse {
  last_selected_store_id: string | null;
  /** When true, lot creation requires a location to be chosen. */
  require_initial_location_on_lot_create: boolean;
- /** Active interface locale; one of {"en", "es"}. */
+ /** Effective interface locale; one of {"en", "es"}. Falls back to "en"
+  *  on fresh installs when no `app_settings.language` row exists. Use
+  *  `language_configured` to disambiguate the fallback from a manual pick. */
  language: "en" | "es";
+ /** True only when the user persisted a language preference via
+  *  `updateSettings({ language })`. False on fresh installs so the
+  *  frontend can run OS / WebView detection instead of treating the
+  *  `"en"` fallback as a manual choice. */
+ language_configured: boolean;
 }
 
 export interface SettingsUpdate {
