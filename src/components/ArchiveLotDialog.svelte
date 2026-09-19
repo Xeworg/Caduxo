@@ -69,6 +69,21 @@
         if (submitting) return;
         onClose();
     }
+
+    function archiveReasonLabel(value: string): string {
+        const labels: Record<string, () => string> = {
+            expired_unsold: $LL.lotMovements.archive.reasons.expiredUnsold,
+            damaged: $LL.lotMovements.archive.reasons.damaged,
+            returned_to_supplier: $LL.lotMovements.archive.reasons.returnedToSupplier,
+            recall: $LL.lotMovements.archive.reasons.recall,
+            lost: $LL.lotMovements.archive.reasons.lost,
+            internal_use: $LL.lotMovements.archive.reasons.internalUse,
+            administrative: $LL.lotMovements.archive.reasons.administrative,
+            other: $LL.lotMovements.archive.reasons.other,
+        };
+
+        return labels[value]?.() ?? value;
+    }
 </script>
 
 <div class="overlay" role="dialog" aria-modal="true" aria-labelledby="archive-title">
@@ -109,7 +124,7 @@
                 {$LL.lotMovements.archive.reason()}
                 <select bind:value={reason} required disabled={submitting}>
                     {#each ARCHIVE_REASONS as option (option.value)}
-                        <option value={option.value}>{option.label}</option>
+                        <option value={option.value}>{archiveReasonLabel(option.value)}</option>
                     {/each}
                 </select>
             </label>

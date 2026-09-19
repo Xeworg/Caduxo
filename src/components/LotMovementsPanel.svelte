@@ -5,7 +5,6 @@
     listLotMovements,
     getLotLocationBalances,
     formatMovementQuantity,
-    getKindLabel,
     type LotMovementResponse,
     type LotLocationBalance,
   } from "../lib/lot_movements.js";
@@ -93,6 +92,30 @@
     return loc?.name ?? id.slice(0, 8) + "…";
   }
 
+  function getMovementKindLabel(kind: string, direction?: string | null): string {
+    if (kind === "inventory_adjustment" && direction) {
+      return direction === "increase"
+        ? $LL.lotMovements.movementKinds.inventoryAdjustmentIncrease()
+        : $LL.lotMovements.movementKinds.inventoryAdjustmentDecrease();
+    }
+
+    const movementKindLabels: Record<string, () => string> = {
+      "entry:initial": $LL.lotMovements.movementKinds.initialEntry,
+      transfer: $LL.lotMovements.movementKinds.transfer,
+      "exit:sale": $LL.lotMovements.exitReasons.sale,
+      "exit:waste": $LL.lotMovements.exitReasons.waste,
+      "exit:expired": $LL.lotMovements.exitReasons.expired,
+      "exit:damaged": $LL.lotMovements.exitReasons.damaged,
+      "exit:internal_consumption": $LL.lotMovements.exitReasons.internalConsumption,
+      "exit:return_to_supplier": $LL.lotMovements.exitReasons.returnToSupplier,
+      "exit:inventory_adjustment": $LL.lotMovements.exitReasons.inventoryAdjustmentExit,
+      "exit:other": $LL.lotMovements.exitReasons.other,
+      inventory_adjustment: $LL.lotMovements.movementKinds.inventoryAdjustment,
+    };
+
+    return movementKindLabels[kind]?.() ?? kind;
+  }
+
   function handleMovementCreated() {
     showMoveStock = false;
     showRegisterExit = false;
@@ -163,7 +186,7 @@
   {:else}
     <ul class="movement-list">
       {#each movements as mov (mov.id)}
-        {@const label = getKindLabel(mov.movement_kind, mov.direction)}
+        {@const label = getMovementKindLabel(mov.movement_kind, mov.direction)}
         {@const qty = formatMovementQuantity(mov.quantity, mov.movement_kind, mov.direction)}
         <li class="movement-item">
           <div class="movement-main">

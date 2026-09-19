@@ -1048,3 +1048,30 @@ The pi-lens embedded LSP diagnostic server held a stale snapshot of `i18n-types.
 edits showed `Property 'datePicker' does not exist` errors in pi-lens; the authoritative pipeline
 confirmed zero errors after `npm run i18n:generate` regenerated the types file.
 
+
+---
+
+## PR 2 apply — Lot movements residue correction (current session)
+
+- Replaced the last Spanish-only movement history label mapper in `LotMovementsPanel.svelte` with locale-backed `$LL.lotMovements.movementKinds.*` / `$LL.lotMovements.exitReasons.*` calls.
+- Replaced archive reason option labels in `ArchiveLotDialog.svelte` so UI labels no longer come from hardcoded English `ARCHIVE_REASONS.label` values.
+- Added matching EN/ES keys for `lotMovements.movementKinds.*` and `lotMovements.archive.reasons.*`.
+- Regenerated `src/i18n/i18n-types.ts`.
+
+Verification run:
+
+```bash
+npm run i18n:generate
+# Result: all files up to date
+
+npx tsc --noEmit
+# Result: exit 0
+
+npx svelte-check --workspace . --threshold error
+# Result: 0 errors, 0 warnings
+
+npm run build
+# Result: ✓ built in 1.32s
+```
+
+Note: pi-lens may still report stale missing-key diagnostics for these newly generated i18n keys; `tsc`, `svelte-check`, and `vite build` are authoritative for this slice and are clean.

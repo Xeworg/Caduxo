@@ -1855,6 +1855,28 @@ type RootTranslation = {
 			 */
 			adjustCount: string
 		}
+		movementKinds: {
+			/**
+			 * I​n​i​t​i​a​l​ ​e​n​t​r​y
+			 */
+			initialEntry: string
+			/**
+			 * T​r​a​n​s​f​e​r
+			 */
+			transfer: string
+			/**
+			 * I​n​v​e​n​t​o​r​y​ ​a​d​j​u​s​t​m​e​n​t
+			 */
+			inventoryAdjustment: string
+			/**
+			 * I​n​v​e​n​t​o​r​y​ ​a​d​j​u​s​t​m​e​n​t​ ​(​+​)
+			 */
+			inventoryAdjustmentIncrease: string
+			/**
+			 * I​n​v​e​n​t​o​r​y​ ​a​d​j​u​s​t​m​e​n​t​ ​(​−​)
+			 */
+			inventoryAdjustmentDecrease: string
+		}
 		modal: {
 			/**
 			 * C​l​o​s​e
@@ -2117,6 +2139,40 @@ type RootTranslation = {
 			 * A​r​c​h​i​v​e​ ​l​o​t
 			 */
 			archiveLot: string
+			reasons: {
+				/**
+				 * E​x​p​i​r​e​d​ ​(​u​n​s​o​l​d​)
+				 */
+				expiredUnsold: string
+				/**
+				 * D​a​m​a​g​e​d
+				 */
+				damaged: string
+				/**
+				 * R​e​t​u​r​n​e​d​ ​t​o​ ​s​u​p​p​l​i​e​r
+				 */
+				returnedToSupplier: string
+				/**
+				 * M​a​n​u​f​a​c​t​u​r​e​r​ ​r​e​c​a​l​l
+				 */
+				recall: string
+				/**
+				 * L​o​s​t​ ​/​ ​u​n​a​c​c​o​u​n​t​e​d
+				 */
+				lost: string
+				/**
+				 * I​n​t​e​r​n​a​l​ ​u​s​e
+				 */
+				internalUse: string
+				/**
+				 * A​d​m​i​n​i​s​t​r​a​t​i​v​e​ ​c​l​e​a​n​u​p
+				 */
+				administrative: string
+				/**
+				 * O​t​h​e​r
+				 */
+				other: string
+			}
 		}
 	}
 	calendar: {
@@ -4952,6 +5008,28 @@ export type TranslationFunctions = {
 			 */
 			adjustCount: () => LocalizedString
 		}
+		movementKinds: {
+			/**
+			 * Initial entry
+			 */
+			initialEntry: () => LocalizedString
+			/**
+			 * Transfer
+			 */
+			transfer: () => LocalizedString
+			/**
+			 * Inventory adjustment
+			 */
+			inventoryAdjustment: () => LocalizedString
+			/**
+			 * Inventory adjustment (+)
+			 */
+			inventoryAdjustmentIncrease: () => LocalizedString
+			/**
+			 * Inventory adjustment (−)
+			 */
+			inventoryAdjustmentDecrease: () => LocalizedString
+		}
 		modal: {
 			/**
 			 * Close
@@ -5201,6 +5279,40 @@ export type TranslationFunctions = {
 			 * Archive lot
 			 */
 			archiveLot: () => LocalizedString
+			reasons: {
+				/**
+				 * Expired (unsold)
+				 */
+				expiredUnsold: () => LocalizedString
+				/**
+				 * Damaged
+				 */
+				damaged: () => LocalizedString
+				/**
+				 * Returned to supplier
+				 */
+				returnedToSupplier: () => LocalizedString
+				/**
+				 * Manufacturer recall
+				 */
+				recall: () => LocalizedString
+				/**
+				 * Lost / unaccounted
+				 */
+				lost: () => LocalizedString
+				/**
+				 * Internal use
+				 */
+				internalUse: () => LocalizedString
+				/**
+				 * Administrative cleanup
+				 */
+				administrative: () => LocalizedString
+				/**
+				 * Other
+				 */
+				other: () => LocalizedString
+			}
 		}
 	}
 	calendar: {

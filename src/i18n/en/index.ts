@@ -521,6 +521,13 @@ const en: BaseTranslation = {
       registerExit: "Register stock exit",
       adjustCount: "Adjust inventory count",
     },
+    movementKinds: {
+      initialEntry: "Initial entry",
+      transfer: "Transfer",
+      inventoryAdjustment: "Inventory adjustment",
+      inventoryAdjustmentIncrease: "Inventory adjustment (+)",
+      inventoryAdjustmentDecrease: "Inventory adjustment (−)",
+    },
     modal: {
       close: "Close",
       cancel: "Cancel",
@@ -587,6 +594,16 @@ const en: BaseTranslation = {
       notesMaxHint: "Notes must be at most {max} characters.",
       archiving: "Archiving…",
       archiveLot: "Archive lot",
+      reasons: {
+        expiredUnsold: "Expired (unsold)",
+        damaged: "Damaged",
+        returnedToSupplier: "Returned to supplier",
+        recall: "Manufacturer recall",
+        lost: "Lost / unaccounted",
+        internalUse: "Internal use",
+        administrative: "Administrative cleanup",
+        other: "Other",
+      },
     },
   },
 

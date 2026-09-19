@@ -518,6 +518,13 @@ const es: BaseTranslation = {
       registerExit: "Registrar salida de stock",
       adjustCount: "Ajustar conteo de inventario",
     },
+    movementKinds: {
+      initialEntry: "Entrada inicial",
+      transfer: "Transferencia",
+      inventoryAdjustment: "Ajuste de inventario",
+      inventoryAdjustmentIncrease: "Ajuste de inventario (+)",
+      inventoryAdjustmentDecrease: "Ajuste de inventario (−)",
+    },
     modal: {
       close: "Cerrar",
       cancel: "Cancelar",
@@ -584,6 +591,16 @@ const es: BaseTranslation = {
       notesMaxHint: "Las notas deben tener como máximo {max} caracteres.",
       archiving: "Archivando…",
       archiveLot: "Archivar lote",
+      reasons: {
+        expiredUnsold: "Caducado sin vender",
+        damaged: "Dañado",
+        returnedToSupplier: "Devuelto al proveedor",
+        recall: "Retiro del fabricante",
+        lost: "Perdido / no contabilizado",
+        internalUse: "Uso interno",
+        administrative: "Limpieza administrativa",
+        other: "Otro",
+      },
     },
   },
 
