@@ -476,7 +476,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
   </header>
 
   <!-- ── Urgency cards ────────────────────────────────────────────────────── -->
-  <section class="urgency-cards" aria-label="Urgency summary">
+  <section class="urgency-cards" aria-label={$LL.dashboard.aria.urgencySummary()}>
     <article class="urgency-card urgency-card-expired" class:has-count={counts.expired > 0}>
       <span class="urgency-label">{$LL.dashboard.urgencyCard.expired()}</span>
       <strong class="urgency-count">{counts.expired}</strong>
@@ -496,7 +496,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
   </section>
 
   <!-- ── Quick filters ───────────────────────────────────────────────────── -->
-  <div class="quick-filters" role="group" aria-label="Quick filters">
+  <div class="quick-filters" role="group" aria-label={$LL.dashboard.aria.quickFilters()}>
     {#each PRESET_ORDER as preset}
       <button
         class="filter-btn"
@@ -529,7 +529,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
       </p>
     </div>
   {:else}
-    <div class="table-wrapper" role="region" aria-label="Lot table">
+    <div class="table-wrapper" role="region" aria-label={$LL.dashboard.aria.lotTable()}>
       <table class="lot-table">
         <thead>
           <tr>
@@ -588,7 +588,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
 
     <!-- ── Product detail modal ─────────────────────────────────────────────────── -->
     {#if showProductDetail}
-      <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Product detail">
+      <div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.products.pageTitle()}>
         <div class="modal-box modal-box-wide">
           <div class="modal-header">
             <h3>{$LL.products.pageTitle()}</h3>
@@ -617,7 +617,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
             </dl>
 
             <!-- ── Expiry lots + per-lot movement history ───────────────────── -->
-            <section class="lots-section" aria-label="Expiry lots and movement history">
+            <section class="lots-section" aria-label={$LL.dashboard.aria.expiryLots()}>
               <div class="lots-section-header">
                 <h4>{$LL.dashboard.expiryLots()}</h4>
                 {#if detailLotsLoading}
@@ -634,7 +634,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
                   {$LL.dashboard.emptyState.noExpiryLots()}
                 </p>
               {:else if detailLots.length > 0}
-                <ul class="lot-picker" role="listbox" aria-label="Product expiry lots">
+                <ul class="lot-picker" role="listbox" aria-label={$LL.dashboard.aria.productExpiryLots()}>
                   {#each detailLots as lot (lot.id)}
                     <li>
                       <button
@@ -687,7 +687,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
 
 <!-- ── Lot detail modal ─────────────────────────────────────────────────────── -->
 {#if showLotDetail}
-  <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Lot detail">
+  <div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.dashboard.aria.lotDetail()}>
     <div class="modal-box modal-box-wide">
       <div class="modal-header">
         <h3>{$LL.dashboard.lotDetail()}</h3>
@@ -757,7 +757,7 @@ detailLot = await getExpiryLot(detailLot!.id);
 
     <!-- ── Quick-create product modal ──────────────────────────────────────────── -->
     {#if showQuickCreate}
-      <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Quick product create">
+      <div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.dashboard.aria.quickProductCreate()}>
         <div class="modal-box modal-box-wide">
           <div class="modal-header">
             <h3>{$LL.products.createProduct()}</h3>

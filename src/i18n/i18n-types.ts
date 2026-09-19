@@ -200,6 +200,10 @@ type RootTranslation = {
 		 * N​o​ ​l​o​c​a​t​i​o​n
 		 */
 		noLocation: string
+		/**
+		 * M​a​i​n​ ​n​a​v​i​g​a​t​i​o​n
+		 */
+		mainNav: string
 	}
 	configuration: {
 		/**
@@ -399,6 +403,40 @@ type RootTranslation = {
 		 * D​e​t​a​i​l
 		 */
 		detail: string
+		aria: {
+			/**
+			 * U​r​g​e​n​c​y​ ​s​u​m​m​a​r​y
+			 */
+			urgencySummary: string
+			/**
+			 * Q​u​i​c​k​ ​f​i​l​t​e​r​s
+			 */
+			quickFilters: string
+			/**
+			 * L​o​t​ ​t​a​b​l​e
+			 */
+			lotTable: string
+			/**
+			 * P​r​o​d​u​c​t​ ​d​e​t​a​i​l
+			 */
+			productDetail: string
+			/**
+			 * E​x​p​i​r​y​ ​l​o​t​s​ ​a​n​d​ ​m​o​v​e​m​e​n​t​ ​h​i​s​t​o​r​y
+			 */
+			expiryLots: string
+			/**
+			 * P​r​o​d​u​c​t​ ​e​x​p​i​r​y​ ​l​o​t​s
+			 */
+			productExpiryLots: string
+			/**
+			 * L​o​t​ ​d​e​t​a​i​l
+			 */
+			lotDetail: string
+			/**
+			 * Q​u​i​c​k​ ​p​r​o​d​u​c​t​ ​c​r​e​a​t​e
+			 */
+			quickProductCreate: string
+		}
 		/**
 		 * L​o​t​ ​I​D
 		 */
@@ -782,6 +820,10 @@ type RootTranslation = {
 			 * B​a​t​c​h
 			 */
 			batch: string
+			/**
+			 * R​e​p​o​r​t​ ​r​o​w​s
+			 */
+			reportRows: string
 		}
 		filterSummary: {
 			/**
@@ -3053,6 +3095,10 @@ type RootTranslation = {
 		 * @param {unknown} name
 		 */
 		createOption: RequiredParams<'name'>
+		/**
+		 * C​a​t​e​g​o​r​y​ ​r​e​s​u​l​t​s
+		 */
+		results: string
 	}
 	notification: {
 		/**
@@ -3388,6 +3434,10 @@ export type TranslationFunctions = {
 		 * No location
 		 */
 		noLocation: () => LocalizedString
+		/**
+		 * Main navigation
+		 */
+		mainNav: () => LocalizedString
 	}
 	configuration: {
 		/**
@@ -3580,6 +3630,40 @@ export type TranslationFunctions = {
 		 * Detail
 		 */
 		detail: () => LocalizedString
+		aria: {
+			/**
+			 * Urgency summary
+			 */
+			urgencySummary: () => LocalizedString
+			/**
+			 * Quick filters
+			 */
+			quickFilters: () => LocalizedString
+			/**
+			 * Lot table
+			 */
+			lotTable: () => LocalizedString
+			/**
+			 * Product detail
+			 */
+			productDetail: () => LocalizedString
+			/**
+			 * Expiry lots and movement history
+			 */
+			expiryLots: () => LocalizedString
+			/**
+			 * Product expiry lots
+			 */
+			productExpiryLots: () => LocalizedString
+			/**
+			 * Lot detail
+			 */
+			lotDetail: () => LocalizedString
+			/**
+			 * Quick product create
+			 */
+			quickProductCreate: () => LocalizedString
+		}
 		/**
 		 * Lot ID
 		 */
@@ -3961,6 +4045,10 @@ export type TranslationFunctions = {
 			 * Batch
 			 */
 			batch: () => LocalizedString
+			/**
+			 * Report rows
+			 */
+			reportRows: () => LocalizedString
 		}
 		filterSummary: {
 			/**
@@ -6160,6 +6248,10 @@ export type TranslationFunctions = {
 		 * Create "{name}"
 		 */
 		createOption: (arg: { name: unknown }) => LocalizedString
+		/**
+		 * Category results
+		 */
+		results: () => LocalizedString
 	}
 	notification: {
 		/**

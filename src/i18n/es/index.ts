@@ -50,6 +50,7 @@ const es: BaseTranslation = {
     confirmArchive: "Confirmar archivado",
     confirmRestore: "Confirmar restauración",
     noLocation: "Sin ubicación",
+    mainNav: "Navegación principal",
   },
 
   configuration: {
@@ -117,6 +118,16 @@ const es: BaseTranslation = {
     urgencyLabel: "Urgencia",
     lotDetail: "Detalle del lote",
     detail: "Detalle",
+    aria: {
+      urgencySummary: "Resumen de urgencia",
+      quickFilters: "Filtros rápidos",
+      lotTable: "Tabla de lotes",
+      productDetail: "Detalle del producto",
+      expiryLots: "Lotes de caducidad e historial de movimientos",
+      productExpiryLots: "Lotes de caducidad del producto",
+      lotDetail: "Detalle del lote",
+      quickProductCreate: "Crear producto rápido",
+    },
     lotId: "ID de lote",
     viewProductAndMovements: "Ver producto y movimientos de lote",
     expiryLots: "Lotes de caducidad",
@@ -224,6 +235,7 @@ const es: BaseTranslation = {
       days: "Días",
       urgency: "Urgencia",
       batch: "Lote",
+      reportRows: "Filas del reporte",
     },
     filterSummary: {
       store: "tienda=",
@@ -831,6 +843,7 @@ const es: BaseTranslation = {
     noCategory: "Sin categoría",
     alreadyExists: '"{name}" ya existe',
     createOption: 'Crear "{name}"',
+    results: "Resultados de categoría",
   },
 
   notification: {

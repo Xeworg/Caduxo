@@ -454,7 +454,7 @@
         <p class="hint">{$LL.reports.emptyState.adjustFilters()}</p>
       </div>
     {:else}
-      <div class="table-wrapper" role="region" aria-label="Report rows">
+      <div class="table-wrapper" role="region" aria-label={$LL.reports.table.reportRows()}>
         <table class="report-table">
           <thead>
             <tr>

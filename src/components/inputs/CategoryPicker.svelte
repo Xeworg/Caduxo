@@ -481,7 +481,7 @@
             id="cp-listbox"
             class="cp-popover"
             role="listbox"
-            aria-label="Category results"
+            aria-label={$LL.categoryPicker.results()}
             aria-multiselectable="true"
         >
             <!-- Loading state -->

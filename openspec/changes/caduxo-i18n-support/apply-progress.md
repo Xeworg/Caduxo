@@ -1075,3 +1075,100 @@ npm run build
 ```
 
 Note: pi-lens may still report stale missing-key diagnostics for these newly generated i18n keys; `tsc`, `svelte-check`, and `vite build` are authoritative for this slice and are clean.
+
+---
+
+## Residual frontend aria/visible-label i18n slice (this session)
+
+### Scope: 6 files, 8 new keys
+
+This slice replaced hardcoded `aria-label` and visible English literals surfaced by the parent grep.
+
+### Locale tree additions (en/index.ts + es/index.ts)
+
+**New keys in `common`:**
+| Key | EN | ES |
+|-----|----|----|
+| `common.mainNav` | "Main navigation" | "Navegación principal" |
+
+**New keys in `dashboard.aria`:**
+| Key | EN | ES |
+|-----|----|----|
+| `dashboard.aria.urgencySummary` | "Urgency summary" | "Resumen de urgencia" |
+| `dashboard.aria.quickFilters` | "Quick filters" | "Filtros rápidos" |
+| `dashboard.aria.lotTable` | "Lot table" | "Tabla de lotes" |
+| `dashboard.aria.productDetail` | "Product detail" | "Detalle del producto" |
+| `dashboard.aria.expiryLots` | "Expiry lots and movement history" | "Lotes de caducidad e historial de movimientos" |
+| `dashboard.aria.productExpiryLots` | "Product expiry lots" | "Lotes de caducidad del producto" |
+| `dashboard.aria.lotDetail` | "Lot detail" | "Detalle del lote" |
+| `dashboard.aria.quickProductCreate` | "Quick product create" | "Crear producto rápido" |
+
+**New key in `reports.table`:**
+| Key | EN | ES |
+|-----|----|----|
+| `reports.table.reportRows` | "Report rows" | "Filas del reporte" |
+
+**New key in `categoryPicker`:**
+| Key | EN | ES |
+|-----|----|----|
+| `categoryPicker.results` | "Category results" | "Resultados de categoría" |
+
+### Components updated
+
+#### `src/App.svelte`
+- `aria-label="Main navigation"` → `aria-label={$LL.common.mainNav()}`
+
+#### `src/components/ReportsPage.svelte`
+- `aria-label="Report rows"` on table-wrapper → `$LL.reports.table.reportRows()`
+
+#### `src/components/inputs/CategoryPicker.svelte`
+- `aria-label="Category results"` on popover listbox → `$LL.categoryPicker.results()`
+
+#### `src/components/DashboardPage.svelte` (8 aria-labels)
+- `aria-label="Urgency summary"` → `$LL.dashboard.aria.urgencySummary()`
+- `aria-label="Quick filters"` → `$LL.dashboard.aria.quickFilters()`
+- `aria-label="Lot table"` → `$LL.dashboard.aria.lotTable()`
+- `aria-label="Product detail"` on modal → `$LL.products.pageTitle()` (existing key "Products")
+- `aria-label="Expiry lots and movement history"` → `$LL.dashboard.aria.expiryLots()`
+- `aria-label="Product expiry lots"` on lot picker listbox → `$LL.dashboard.aria.productExpiryLots()`
+- `aria-label="Lot detail"` on modal → `$LL.dashboard.aria.lotDetail()`
+- `aria-label="Quick product create"` on modal → `$LL.dashboard.aria.quickProductCreate()`
+
+### Non-issues confirmed
+
+- **`ColumnMapper.svelte`**: visible `SKU` field label already uses `$LL.csvImport.sku()` (EN: "SKU", ES: "SKU"). No change needed — domain acronym is correctly i18n'd.
+- **`CsvImportPage.svelte`**: preview table `SKU` header already uses `$LL.csvImport.sku()`. No change needed.
+
+### Commands run
+
+```bash
+npm run i18n:generate
+# Result: all files up to date (types regenerated with new aria keys)
+
+npx tsc --noEmit
+# Result: EXIT:0 — no TypeScript errors
+
+npx svelte-check --workspace . --threshold error
+# Result: svelte-check found 0 errors and 0 warnings
+
+npm run build
+# Result: ✓ built in 1.25s (prebuild regenerated i18n)
+```
+
+### LSP stale-cache note (persistent — all sessions)
+
+The pi-lens embedded LSP diagnostic server holds a snapshot of `i18n-types.ts` that is NOT
+automatically refreshed when `npm run i18n:generate` regenerates the types. After locale-tree
+edits it flags `Property 'mainNav' does not exist`, `Property 'reportRows' does not exist`,
+`Property 'results' does not exist`, `Property 'aria' does not exist`, etc. — all stale-cache
+false positives. The authoritative pipeline confirms zero errors:
+
+```
+npm run i18n:generate  # regenerates i18n-types.ts from en/index.ts + es/index.ts
+npx tsc --noEmit        # EXIT:0 — TypeScript uses fresh i18n-types.ts
+svelte-check --workspace . --threshold error  # 0 errors, 0 warnings
+npm run build           # ✓ built in 1.25s
+```
+
+The fix is to re-run `npm run i18n:generate` before any diagnostic read; the authoritative tool
+output always supersedes the embedded LSP snapshot.

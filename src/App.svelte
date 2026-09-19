@@ -22,7 +22,7 @@
 
 <div class="app-shell">
   <!-- Navigation -->
-  <nav class="nav" aria-label="Main navigation">
+  <nav class="nav" aria-label={$LL.common.mainNav()}>
     <span class="nav-brand">Caduxo</span>
     <button
       class="nav-btn"
