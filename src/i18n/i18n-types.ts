@@ -1186,6 +1186,24 @@ type RootTranslation = {
 		 * A​r​c​h​i​v​e​d
 		 */
 		archived: string
+		placeholders: {
+			/**
+			 * e​.​g​.​ ​M​I​L​K​-​1​L
+			 */
+			sku: string
+			/**
+			 * e​.​g​.​ ​W​h​o​l​e​ ​M​i​l​k​ ​1​L
+			 */
+			description: string
+			/**
+			 * e​.​g​.​ ​7​5​0​1​2​3​4​5​6​7​8​9​0
+			 */
+			barcode: string
+			/**
+			 * e​.​g​.​ ​k​g​,​ ​L​,​ ​p​c​s
+			 */
+			unit: string
+		}
 		catalog: {
 			/**
 			 * P​r​o​d​u​c​t​s
@@ -1558,6 +1576,16 @@ type RootTranslation = {
 		 * Y​Y​Y​Y​-​M​M​-​D​D
 		 */
 		dateFormat: string
+		placeholders: {
+			/**
+			 * e​.​g​.​ ​k​g​,​ ​L​,​ ​p​c​s
+			 */
+			unit: string
+			/**
+			 * e​.​g​.​ ​B​2​0​2​4​-​0​0​1
+			 */
+			batchCode: string
+		}
 		/**
 		 * Q​u​a​n​t​i​t​y
 		 */
@@ -2616,6 +2644,10 @@ type RootTranslation = {
 		 */
 		notMapped: string
 		/**
+		 * S​K​U
+		 */
+		sku: string
+		/**
 		 * B​a​r​c​o​d​e
 		 */
 		barcode: string
@@ -3195,6 +3227,11 @@ type RootTranslation = {
 		 * C​l​e​a​r​ ​d​a​t​e
 		 */
 		ariaClearDate: string
+		/**
+		 * {​l​a​b​e​l​}​ ​c​a​l​e​n​d​a​r
+		 * @param {unknown} label
+		 */
+		calendarDialog: RequiredParams<'label'>
 		/**
 		 * T​o​d​a​y
 		 */
@@ -4404,6 +4441,24 @@ export type TranslationFunctions = {
 		 * Archived
 		 */
 		archived: () => LocalizedString
+		placeholders: {
+			/**
+			 * e.g. MILK-1L
+			 */
+			sku: () => LocalizedString
+			/**
+			 * e.g. Whole Milk 1L
+			 */
+			description: () => LocalizedString
+			/**
+			 * e.g. 7501234567890
+			 */
+			barcode: () => LocalizedString
+			/**
+			 * e.g. kg, L, pcs
+			 */
+			unit: () => LocalizedString
+		}
 		catalog: {
 			/**
 			 * Products
@@ -4766,6 +4821,16 @@ export type TranslationFunctions = {
 		 * YYYY-MM-DD
 		 */
 		dateFormat: () => LocalizedString
+		placeholders: {
+			/**
+			 * e.g. kg, L, pcs
+			 */
+			unit: () => LocalizedString
+			/**
+			 * e.g. B2024-001
+			 */
+			batchCode: () => LocalizedString
+		}
 		/**
 		 * Quantity
 		 */
@@ -5793,6 +5858,10 @@ export type TranslationFunctions = {
 		 */
 		notMapped: () => LocalizedString
 		/**
+		 * SKU
+		 */
+		sku: () => LocalizedString
+		/**
 		 * Barcode
 		 */
 		barcode: () => LocalizedString
@@ -6342,6 +6411,10 @@ export type TranslationFunctions = {
 		 * Clear date
 		 */
 		ariaClearDate: () => LocalizedString
+		/**
+		 * {label} calendar
+		 */
+		calendarDialog: (arg: { label: unknown }) => LocalizedString
 		/**
 		 * Today
 		 */

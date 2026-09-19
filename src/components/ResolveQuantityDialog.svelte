@@ -1,5 +1,6 @@
 <script lang="ts">
     import { LL } from "../i18n/i18n-svelte.js";
+    import { locale } from "../i18n/locale.js";
     import {
         resolveExpiryLot,
         listLotResolutionEvents,
@@ -46,6 +47,22 @@
     loadHistory();
 
     // ── Submit ─────────────────────────────────────────────────────────────────
+
+    function resolutionLabel(value: LotResolutionEventResponse["resolution"]): string {
+        const labels: Record<string, () => string> = {
+            consumed: $LL.lotMovements.resolution.consumed,
+            sold: $LL.lotMovements.resolution.sold,
+            discarded: $LL.lotMovements.resolution.discarded,
+            donated: $LL.lotMovements.resolution.donated,
+            other: $LL.lotMovements.resolution.other,
+        };
+
+        return labels[value]?.() ?? value;
+    }
+
+    function formatDateTime(value: string): string {
+        return new Date(value).toLocaleString(locale.current === "es" ? "es-MX" : "en-US");
+    }
 
     async function submit() {
         errorMsg = "";
@@ -170,13 +187,13 @@
                                 {event.quantity} {lot.unit || ""}
                             </span>
                             <span class="event-type badge-{event.resolution}">
-                                {event.resolution}
+                                {resolutionLabel(event.resolution)}
                             </span>
                             {#if event.notes}
                                 <span class="event-notes">{event.notes}</span>
                             {/if}
                             <span class="event-date">
-                                {new Date(event.created_at).toLocaleString()}
+                                {formatDateTime(event.created_at)}
                             </span>
                         </li>
                     {/each}

@@ -289,7 +289,7 @@
             <thead>
               <tr>
                 <th>#</th>
-                <th>SKU</th>
+                <th>{$LL.csvImport.sku()}</th>
                 <th>{$LL.csvImport.description()}</th>
                 <th>{$LL.csvImport.barcode()}</th>
                 <th>{$LL.csvImport.status()}</th>
@@ -372,7 +372,7 @@
             <thead>
               <tr>
                 <th>#</th>
-                <th>SKU</th>
+                <th>{$LL.csvImport.sku()}</th>
                 <th>{$LL.csvImport.description()}</th>
                 <th>{$LL.csvImport.barcode()}</th>
                 <th>{$LL.csvImport.status()}</th>

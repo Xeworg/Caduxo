@@ -1172,3 +1172,29 @@ npm run build           # ✓ built in 1.25s
 
 The fix is to re-run `npm run i18n:generate` before any diagnostic read; the authoritative tool
 output always supersedes the embedded LSP snapshot.
+
+## PR 2 apply — residual placeholders and dialog labels slice
+
+### Completed residue pass
+
+- Re-keyed remaining product and lot form example placeholders through `$LL.products.placeholders.*` and `$LL.lotForm.placeholders.*`.
+- Re-keyed barcode example placeholders in `ProductForm.svelte` and `ProductDetailPage.svelte`.
+- Re-keyed CSV SKU table/header labels in `CsvImportPage.svelte` and `ColumnMapper.svelte` through `$LL.csvImport.sku()`.
+- Re-keyed `DatePicker.svelte` calendar dialog labels through `$LL.datePicker.calendarDialog()`.
+- Localized `ResolveQuantityDialog.svelte` resolution history labels and date-time formatting by active locale.
+- Removed the final actionable hardcoded residue from the component grep pass; remaining matches are false positives (`CategoryPicker` TypeScript signature, `ArchiveLotDialog` constant name) or product brand text (`Caduxo`).
+
+### Verification
+
+```bash
+npm run i18n:generate
+# Result: generated files up to date
+
+npx svelte-check --workspace . --threshold error
+# Result: 0 errors, 0 warnings
+
+npm run build
+# Result: ✓ built in 1.29s (prebuild regenerated i18n)
+```
+
+Note: `pi-lens` LSP still reports stale missing-key diagnostics for newly generated `typesafe-i18n` keys, matching the known Caduxo stale snapshot issue. `svelte-check` and `vite build` both read the regenerated types and pass cleanly.

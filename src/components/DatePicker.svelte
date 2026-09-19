@@ -347,7 +347,7 @@
       bind:this={popoverEl}
       class="dp-popover"
       role="dialog"
-      aria-label="{ariaLabel} calendar"
+      aria-label={$LL.datePicker.calendarDialog({ label: ariaLabel })}
     >
       <CalendarMonth
         viewYear={popoverYear}
@@ -356,7 +356,7 @@
         {todayDate}
         {minDate}
         {maxDate}
-        ariaLabel="{ariaLabel} calendar"
+        ariaLabel={$LL.datePicker.calendarDialog({ label: ariaLabel })}
         on:daySelect={onDaySelect}
         on:monthChange={onMonthChange}
         on:viewYearChange={onViewYearChange}

@@ -338,6 +338,12 @@ const en: BaseTranslation = {
     subtract: "Subtract",
     setCount: "Set count",
     archived: "Archived",
+    placeholders: {
+      sku: "e.g. MILK-1L",
+      description: "e.g. Whole Milk 1L",
+      barcode: "e.g. 7501234567890",
+      unit: "e.g. kg, L, pcs",
+    },
     // Catalog page
     catalog: {
       pageTitle: "Products",
@@ -439,6 +445,10 @@ const en: BaseTranslation = {
     locationOptional: "(optional)",
     internalLocation: "Internal location",
     dateFormat: "YYYY-MM-DD",
+    placeholders: {
+      unit: "e.g. kg, L, pcs",
+      batchCode: "e.g. B2024-001",
+    },
     // Edit-mode read-only quantity
     quantityReadonly: "Quantity",
     quantityUseMovementHint: "Use movement / adjustment / resolve actions to change it.",
@@ -710,6 +720,7 @@ const en: BaseTranslation = {
     required: "Required",
     optional: "optional",
     notMapped: "— not mapped —",
+    sku: "SKU",
     barcode: "Barcode",
     upcBarcode: "UPC / Barcode",
     categoryName: "Category name",
@@ -877,6 +888,7 @@ const en: BaseTranslation = {
   datePicker: {
     ariaOpenCalendar: "Open calendar",
     ariaClearDate: "Clear date",
+    calendarDialog: "{label} calendar",
     today: "Today",
   },
 

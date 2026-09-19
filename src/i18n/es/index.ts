@@ -335,6 +335,12 @@ const es: BaseTranslation = {
     subtract: "Restar",
     setCount: "Fijar cantidad",
     archived: "Archivado",
+    placeholders: {
+      sku: "p. ej. LECHE-1L",
+      description: "p. ej. Leche entera 1L",
+      barcode: "p. ej. 7501234567890",
+      unit: "p. ej. kg, L, pzas",
+    },
     // Catalog page
     catalog: {
       pageTitle: "Productos",
@@ -436,6 +442,10 @@ const es: BaseTranslation = {
     locationOptional: "(opcional)",
     internalLocation: "Ubicación interna",
     dateFormat: "AAAA-MM-DD",
+    placeholders: {
+      unit: "p. ej. kg, L, pzas",
+      batchCode: "p. ej. B2024-001",
+    },
     // Edit-mode read-only quantity
     quantityReadonly: "Cantidad",
     quantityUseMovementHint: "Usa las acciones de movimiento, ajuste o resolución para cambiarla.",
@@ -708,6 +718,7 @@ const es: BaseTranslation = {
     required: "Obligatorio",
     optional: "opcional",
     notMapped: "— sin mapear —",
+    sku: "SKU",
     barcode: "Código de barras",
     upcBarcode: "UPC / Código de barras",
     categoryName: "Nombre de categoría",
@@ -874,6 +885,7 @@ const es: BaseTranslation = {
   datePicker: {
     ariaOpenCalendar: "Abrir calendario",
     ariaClearDate: "Borrar fecha",
+    calendarDialog: "Calendario de {label}",
     today: "Hoy",
   },
 

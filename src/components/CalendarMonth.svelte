@@ -28,6 +28,7 @@
   $: WEEKDAY_NAMES = $LL.calendar.weekdayShort
     ? Array.from({ length: 7 }, (_, i) => ($LL.calendar.weekdayShort as Record<string, () => string>)[String(i)]())
     : [];
+  $: monthGridLabel = `${MONTH_NAMES[viewMonth - 1] ?? ""} ${viewYear}`;
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -424,7 +425,7 @@
   <div
     class="cal-grid"
     role="grid"
-    aria-label="{MONTH_NAMES[viewMonth - 1] ?? ""} {viewYear}"
+    aria-label={monthGridLabel}
     tabindex="0"
     on:keydown={onKeydown}
   >

@@ -98,7 +98,7 @@ The chain-strategy selection is `deferred` in the session preflight and the desi
 ### 2.5 Re-key remaining components
 
 - [x] Re-key `src/components/ScanSearchBox.svelte` placeholder + error through `$LL.scan.*`. <!-- sdd-owner: implementation -->
-- [ ] Re-key titles, buttons, placeholders, modals through `$LL.*` in `src/components/ProductCatalogPage.svelte`, `src/components/ProductForm.svelte`, `src/components/ProductDetailPage.svelte`, `src/components/LotForm.svelte`, `src/components/CalendarPage.svelte`, `src/components/BackupRestorePage.svelte`, `src/components/CsvImportPage.svelte`, `src/components/UnitReviewPage.svelte`, `src/components/LotMovementsPanel.svelte`. <!-- sdd-owner: implementation -->
+- [x] Re-key titles, buttons, placeholders, modals through `$LL.*` in `src/components/ProductCatalogPage.svelte`, `src/components/ProductForm.svelte`, `src/components/ProductDetailPage.svelte`, `src/components/LotForm.svelte`, `src/components/CalendarPage.svelte`, `src/components/BackupRestorePage.svelte`, `src/components/CsvImportPage.svelte`, `src/components/UnitReviewPage.svelte`, `src/components/LotMovementsPanel.svelte`. <!-- sdd-owner: implementation -->
 - [x] Re-key `src/components/CalendarPage.svelte` — titles, table headers, modal tabs/labels, urgency labels, loading/error states (done this session). <!-- sdd-owner: implementation -->
 - [x] Re-key `src/components/BackupRestorePage.svelte` — all section titles, buttons, success/error messages, FAQ (done this session). <!-- sdd-owner: implementation -->
 - [x] Re-key `src/components/CsvImportPage.svelte` — all stage copy, strategy labels, badge labels, detail messages, import button (done this session). <!-- sdd-owner: implementation -->
@@ -106,12 +106,12 @@ The chain-strategy selection is `deferred` in the session preflight and the desi
 - [x] Re-key titles, buttons, placeholders, modals through `$LL.*` in `src/components/StoresPage.svelte`. <!-- sdd-owner: implementation -->
 - [x] Re-key plural-aware copy in `src/components/UnitReviewBanner.svelte` through `$LL.unitReview.*`. <!-- sdd-owner: implementation -->
 - [x] Re-key placeholder + helper text in `src/components/inputs/CategoryPicker.svelte` through `$LL.categoryPicker.*`. <!-- sdd-owner: implementation -->
-- [ ] Re-key modal helpers (`MoveStockModal`, `RegisterExitModal`, `AdjustCountModal`, `ResolveQuantityDialog`, `ArchiveLotDialog`, `LotMovementsPanel` dialogs) and any other user-visible English residue surfaced by `grep -RIn '>[A-Z][a-z]' src/components src/App.svelte | grep -v '\$LL'` after the per-component re-keying pass. <!-- sdd-owner: implementation -->
+- [x] Re-key modal helpers (`MoveStockModal`, `RegisterExitModal`, `AdjustCountModal`, `ResolveQuantityDialog`, `ArchiveLotDialog`, `LotMovementsPanel` dialogs) and any other user-visible English residue surfaced by `grep -RIn '>[A-Z][a-z]' src/components src/App.svelte | grep -v '\$LL'` after the per-component re-keying pass. <!-- sdd-owner: implementation -->
 
 ### 2.6 PR 2 verify gate
 
-- [ ] Run `npx svelte-check --workspace . --threshold error`; resolve any missing-key diagnostics emitted by `typesafe-i18n` (the CLI itself fails the build when a key is absent from `es/index.ts`). <!-- sdd-owner: implementation -->
-- [ ] Run `npm run build`; confirm `prebuild` regenerates `src/i18n/i18n.ts` and `vite build` exits green. <!-- sdd-owner: implementation -->
+- [x] Run `npx svelte-check --workspace . --threshold error`; resolve any missing-key diagnostics emitted by `typesafe-i18n` (the CLI itself fails the build when a key is absent from `es/index.ts`). <!-- sdd-owner: implementation -->
+- [x] Run `npm run build`; confirm `prebuild` regenerates `src/i18n/i18n.ts` and `vite build` exits green. <!-- sdd-owner: implementation -->
 - [ ] Manual smoke — Configuration page: locale selector shows `English` / `Español`; selecting one triggers `updateSettings({ language })` and the dropdown re-renders on success; first run with Spanish OS locale renders `Detectado: Español` above the selector and the hint disappears after a manual pick; restarting the app retains the manual pick; clearing the `language` row in `app_settings` and restarting re-shows the hint. <!-- sdd-owner: implementation -->
 - [ ] Manual smoke — PDF: with active locale `es`, export a PDF from the Reports page and verify the PDF body, filter line, column headers, and metadata title render the spec's Spanish strings; with active locale `en`, verify the English baseline is unchanged. <!-- sdd-owner: implementation -->
 - [ ] Manual smoke — notifications: trigger a daily alert in both locales and verify the title is `${prefix}${sku}` with the Spanish / English prefix from `$LL.notification.titlePrefix()` and the body uses the Spanish / English `bodyTemplate`; confirm the SKU is visible in both locales. <!-- sdd-owner: implementation -->

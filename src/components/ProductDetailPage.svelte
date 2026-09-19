@@ -359,7 +359,7 @@ on:click={() => (confirmingArchive = false)}
                             <input
                                 type="text"
                                 bind:value={barcodeValue}
-                                placeholder="e.g. 7501234567890"
+                                placeholder={$LL.products.placeholders.barcode()}
                                 required
                                 autocomplete="off"
                             />

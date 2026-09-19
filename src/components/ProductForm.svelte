@@ -305,7 +305,7 @@
     <input
       type="text"
       bind:value={sku}
-      placeholder="e.g. MILK-1L"
+      placeholder={$LL.products.placeholders.sku()}
       required
       autocomplete="off"
     />
@@ -316,7 +316,7 @@
     <input
       type="text"
       bind:value={description}
-      placeholder="e.g. Whole Milk 1L"
+      placeholder={$LL.products.placeholders.description()}
       required
     />
   </label>
@@ -340,7 +340,7 @@
               <input
                 type="text"
                 bind:value={upcValue}
-                placeholder="e.g. 7501234567890"
+                placeholder={$LL.products.placeholders.barcode()}
                 autocomplete="off"
               />
             </label>
@@ -380,7 +380,7 @@
               type="text"
               bind:value={defaultUnit}
               list="unit-definitions-list"
-              placeholder="e.g. kg, L, pcs"
+              placeholder={$LL.products.placeholders.unit()}
               on:input={() => {
                 // When the user edits the text, clear the FK so the backend
                 // resolves the text fresh on save.

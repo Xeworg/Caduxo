@@ -294,7 +294,7 @@
                             <input
                                 type="text"
                                 bind:value={unit}
-                                placeholder="e.g. kg, L, pcs"
+                                placeholder={$LL.lotForm.placeholders.unit()}
                                 autocomplete="off"
                             />
                         </label>
@@ -340,7 +340,7 @@
                 <input
                     type="text"
                     bind:value={batchCode}
-                    placeholder="e.g. B2024-001"
+                    placeholder={$LL.lotForm.placeholders.batchCode()}
                     autocomplete="off"
                 />
             </label>

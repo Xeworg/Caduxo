@@ -103,7 +103,7 @@
           <!-- SKU -->
           <tr class={selectedSku === "" ? "req-row" : ""}>
             <td>
-              <span class="field-label">SKU</span>
+              <span class="field-label">{$LL.csvImport.sku()}</span>
               <span class="req-badge">{$LL.csvImport.required()}</span>
             </td>
             <td>
