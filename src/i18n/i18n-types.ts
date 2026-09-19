@@ -280,6 +280,10 @@ type RootTranslation = {
 			 */
 			all: string
 			/**
+			 * E​x​p​i​r​e​d
+			 */
+			expired: string
+			/**
 			 * A​l​e​r​t​ ​w​i​n​d​o​w
 			 */
 			alertWindow: string
@@ -3550,6 +3554,10 @@ export type TranslationFunctions = {
 			 * All
 			 */
 			all: () => LocalizedString
+			/**
+			 * Expired
+			 */
+			expired: () => LocalizedString
 			/**
 			 * Alert window
 			 */

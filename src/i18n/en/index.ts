@@ -81,6 +81,7 @@ const en: BaseTranslation = {
     pageTitle: "Dashboard",
     presets: {
       all: "All",
+      expired: "Expired",
       alertWindow: "Alert window",
       today: "Today",
       next7Days: "Next 7 days",

@@ -81,6 +81,7 @@ const es: BaseTranslation = {
     pageTitle: "Panel",
     presets: {
       all: "Todos",
+      expired: "Vencidos",
       alertWindow: "Ventana de alerta",
       today: "Hoy",
       next7Days: "Próximos 7 días",
