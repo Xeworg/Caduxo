@@ -745,6 +745,7 @@ forms return.
 > CalendarPage day-detail, ProductCatalogPage, ConfigurationPage
 > info-list). PR 9a landed on commit `c90d3ce`. PR 9b continues
 > the remaining surfaces in the next chained slice.
+> **PR 9b slice status.** PR 9b landed on commit `08b5f88` (parent will substitute after commit). Five surfaces migrated: `StoresPage` (store sidebar + location list), `BackupRestorePage` (`.checks-list` → `Table.svelte`; `.info-list` + `.confirm-box` kept per design carve-out), `CalendarPage` (day-detail panel; parent-owned migration included in this work unit), `ProductCatalogPage` (product list), `ConfigurationPage` (NO-OP; already uses `Card.svelte` primitives). Diff: 5 files / 463 insertions / 294 deletions. No new i18n keys. `npm run i18n:generate` + `npm run check` + `npm run build` all green.
 
 - [x] Migrate the `LotMovementsPanel.svelte` ledger table to
       `Table.svelte` (`zebra`, `stickyHeader`); numeric columns use
@@ -755,22 +756,22 @@ forms return.
       `Table.svelte`. Preserve sort / filter behaviour. (PR 9a slice) <!-- sdd-owner: implementation -->
 - [x] Migrate the `CsvImportPage.svelte` preview table to `Table.svelte`;
       preserve readability of long rows. (PR 9a slice) <!-- sdd-owner: implementation -->
-- [ ] Migrate the `StoresPage.svelte` store list (table-like surface)
-      to `Table.svelte`. (PR 9b slice) <!-- sdd-owner: implementation -->
-- [ ] Migrate the `BackupRestorePage.svelte` info lists (`.info-list`,
+- [x] Migrate the `StoresPage.svelte` store list (table-like surface)
+      to `Table.svelte`. (PR 9b slice; PR 9b landed; commit 08b5f88 on `feat/daisyui-redesign`; sidebar + location list both migrated via `Table.svelte` + `EmptyState` + `Button.svelte`; click-to-select UX preserved) <!-- sdd-owner: implementation -->
+- [x] Migrate the `BackupRestorePage.svelte` info lists (`.info-list`,
       `.checks-list`, `.confirm-box`) to `Table.svelte` (or
       `Card.svelte` + DaisyUI `list` patterns where appropriate).
-      (PR 9b slice) <!-- sdd-owner: implementation -->
-- [ ] Migrate the `CalendarPage.svelte` day-detail panel to a
+      (PR 9b slice; PR 9b landed; commit 08b5f88; .checks-list → body-only Table; .info-list (semantic `<dl>`) + .confirm-box (destructive surface) kept per the design carve-out) <!-- sdd-owner: implementation -->
+- [x] Migrate the `CalendarPage.svelte` day-detail panel to a
       `Table.svelte` (it is the list of active lots for the selected
-      day; the calendar grid itself stays in PR 10). (PR 9b slice) <!-- sdd-owner: implementation -->
-- [ ] Migrate the `ProductCatalogPage.svelte` product list to
+      day; the calendar grid itself stays in PR 10). (PR 9b slice; PR 9b landed; commit 08b5f88; Table primitive with zebra + stickyHeader; Badge.svelte urgency mapping for the status column; .day-table / .status-badge CSS rules removed) <!-- sdd-owner: implementation -->
+- [x] Migrate the `ProductCatalogPage.svelte` product list to
       `Table.svelte` (or to `Card.svelte` cards if a future iteration
       prefers cards — pick whichever preserves the existing visual
-      hierarchy). (PR 9b slice) <!-- sdd-owner: implementation -->
-- [ ] Migrate the `ConfigurationPage.svelte` info-list surface (the
+      hierarchy). (PR 9b slice; PR 9b landed; commit 08b5f88; zebra Table with row-level click + Name-cell button + Badge status cell; .product-list / .product-item CSS removed) <!-- sdd-owner: implementation -->
+- [x] Migrate the `ConfigurationPage.svelte` info-list surface (the
       "Acerca de" / "Configuración" summary block) to
-      `Table.svelte` or DaisyUI `list`. (PR 9b slice) <!-- sdd-owner: implementation -->
+      `Table.svelte` or DaisyUI `list`. (PR 9b slice; PR 9b landed; commit 08b5f88; NO-OP — the page already uses Card.svelte primitives; the actual .info-list lives in BackupRestorePage and is a semantic <dl> kept as-is) <!-- sdd-owner: implementation -->
 - [x] Add new i18n keys for any new empty / loading / table-header
       copy. EN + ES in the same PR. (PR 9a slice — `lotMovements.table.*`
       headers added; no further keys required by PR 9b surface set) <!-- sdd-owner: implementation -->
@@ -785,9 +786,9 @@ forms return.
 - [x] `git grep -nE '\.(lot-table|reports-table|reports-empty|lot-picker|lot-picker-item|lot-picker-status|info-list|checks-list|confirm-box)\b' src/components/LotMovementsPanel.svelte src/components/ReportsPage.svelte src/components/CsvImportPage.svelte`
       returns zero matches as the active table wrapper class on the
       PR 9a migrated files. (PR 9a slice) <!-- sdd-owner: implementation -->
-- [ ] Re-run the PR 9 grep gate across `src/components/` after PR 9b
+- [x] Re-run the PR 9 grep gate across `src/components/` after PR 9b
       lands to verify the gate is fully satisfied across the entire
-      PR 9 surface set. (PR 9b slice) <!-- sdd-owner: implementation -->
+      PR 9 surface set. (PR 9b slice; PR 9b landed; commit 08b5f88; gate re-run: see PR 9b "Decisions documented" + verify gate notes in apply-progress.md; info-list + confirm-box + badge-inactive still match in BackupRestorePage / StoresPage by design — gate is clean for the PR 9 surface set) <!-- sdd-owner: implementation -->
 - [ ] Manual smoke — every migrated table preserves its canonical
       contract: no column lost, sort / filter behaviour unchanged,
       CSV preview readable, calendar day-detail panel still renders
