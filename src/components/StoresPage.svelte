@@ -626,6 +626,33 @@
     align-items: start;
   }
 
+  /* Grid items default to `min-width: auto`, which prevents them from
+     shrinking below the natural width of their content. The sidebar's
+     `Table.svelte` contains long store names / codes that would push
+     the column past 240 px; `min-width: 0` lets the grid track keep
+     its declared 240 px. */
+  .store-list {
+    min-width: 0;
+  }
+
+  /* The Table primitive renders a native `<table>` (class `table`).
+     Native tables auto-size to their content; force them to fill the
+     sidebar's 240 px and use `table-layout: fixed` so columns share
+     the width instead of competing for it. The `:global()` is required
+     because Svelte CSS scoping does not reach into the Table
+     primitive's rendered HTML. */
+  .store-list :global(table) {
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  .store-list :global(table th),
+  .store-list :global(table td) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: break-word;
+  }
+
   /* ── Store sidebar (Table primitive hosts the table; only the
      row-level hover / focus / active states stay local because
      the Table primitive does not own row-state styling) ──────── */
