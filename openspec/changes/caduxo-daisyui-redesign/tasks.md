@@ -632,6 +632,19 @@ continue the remaining forms as PR 8b.
 > (`ReportsPage` filters, `BackupRestorePage`,
 > `CsvImportPage`) continue as **PR 8b** in the next chained
 > slice.
+>
+> **PR 8b slice status.** PR 8b landed on commit
+> `b1e2daf`. Three form-bearing surfaces migrated
+> (`ReportsPage` filters, `BackupRestorePage`,
+> `CsvImportPage`). Diff: 3 component files / 378 insertions /
+> 419 deletions — well under the 400-line review budget (the
+> migration shrinks the source because every CSS rule was
+> inlined before PR 8b and is now obsolete; DaisyUI emits the
+> equivalents natively). No `Input.svelte` / `Toggle.svelte` /
+> checkbox migration was needed on these surfaces — only
+> `Select.svelte` / `Button.svelte` / `Alert.svelte` / radio
+> wrappers. PR 9 (tables) and PR 10 (calendar) are the next
+> chained slices.
 
 ### 8.1 Per-form migration
 
