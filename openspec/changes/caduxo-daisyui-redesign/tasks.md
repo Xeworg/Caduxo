@@ -622,11 +622,16 @@ pages. Same apply-time budget discipline as PR 7.
 Apply-time gate: if `git diff --stat` after PR 8a exceeds 400 lines,
 continue the remaining forms as PR 8b.
 
-> **PR 8a slice status.** PR 8a is in flight on
-> `feat/daisyui-redesign`. Three form-bearing surfaces migrated
-> (`ProductForm`, `LotForm`, `ConfigurationPage` finish). The
-> three `ReportsPage` / `BackupRestorePage` / `CsvImportPage`
-> targets continue as **PR 8b** in the next chained slice.
+> **PR 8a slice status.** PR 8a landed on commit
+> `e1a660a`. Three form-bearing surfaces migrated
+> (`ProductForm`, `LotForm`, `ConfigurationPage` finish). Diff:
+> 3 component files / 793 insertions / 925 deletions — over the
+> 400-line review budget (driven by the `<style>` block rewrites
+> that migrated every hex literal to `var(--color-…, #fallback)`
+> + `color-mix()`), so the remaining three form surfaces
+> (`ReportsPage` filters, `BackupRestorePage`,
+> `CsvImportPage`) continue as **PR 8b** in the next chained
+> slice.
 
 ### 8.1 Per-form migration
 
