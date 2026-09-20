@@ -67,13 +67,17 @@ const es: BaseTranslation = {
     language: {
       sectionTitle: "Idioma",
       label: "Idioma de la interfaz",
-      detectedHintEn: "Detectado: Inglés",
-      detectedHintEs: "Detectado: Español",
+      detectedHint: "Detectado: {locale}",
       saving: "Guardando…",
       loadErrorPrefix: "No se pudieron cargar los ajustes: ",
       saveErrorPrefix: "No se pudo guardar el ajuste: ",
-      english: "English",
-      spanish: "Español",
+      // Per-locale display names, keyed by SupportedLocale code. Adding a new
+      // entry to `AVAILABLE_LOCALES` only requires adding the matching key
+      // here (and in every other locale dictionary).
+      names: {
+        en: "Inglés",
+        es: "Español",
+      },
     },
   },
 

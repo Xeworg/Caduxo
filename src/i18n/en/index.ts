@@ -67,13 +67,17 @@ const en: BaseTranslation = {
     language: {
       sectionTitle: "Language",
       label: "Interface language",
-      detectedHintEn: "Detected: English",
-      detectedHintEs: "Detected: Spanish",
+      detectedHint: "Detected: {locale}",
       saving: "Saving…",
       loadErrorPrefix: "Could not load settings: ",
       saveErrorPrefix: "Could not save setting: ",
-      english: "English",
-      spanish: "Español",
+      // Per-locale display names, keyed by SupportedLocale code. Adding a new
+      // entry to `AVAILABLE_LOCALES` only requires adding the matching key
+      // here (and in every other locale dictionary).
+      names: {
+        en: "English",
+        es: "Español",
+      },
     },
   },
 

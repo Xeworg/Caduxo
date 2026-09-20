@@ -9,9 +9,22 @@
         locale,
         translationSource,
         setLocale,
+        AVAILABLE_LOCALES,
         type SupportedLocale,
     } from "../i18n/locale.svelte.js";
     import { LL } from "../i18n/i18n-svelte.js";
+
+    // Per-locale display names. The dictionary keys live in
+    // `configuration.language.names` keyed by `SupportedLocale` code, so
+    // adding a new locale to `AVAILABLE_LOCALES` only requires a matching
+    // entry in each locale dictionary — no component branching.
+    function languageLabel(code: SupportedLocale): string {
+        const names = $LL.configuration.language.names as unknown as Record<
+            SupportedLocale,
+            () => string
+        >;
+        return names[code]?.() ?? code;
+    }
 
     // ─── State ───────────────────────────────────────────────────────────────────
 
@@ -120,11 +133,9 @@
                     <!-- Shown next to the selector only while the value comes from OS/browser detection. -->
                     {#if translationSource.current === "detected"}
                         <span class="detected-hint">
-                            {#if currentLocale === "es"}
-                                {$LL.configuration.language.detectedHintEs()}
-                            {:else}
-                                {$LL.configuration.language.detectedHintEn()}
-                            {/if}
+                            {$LL.configuration.language.detectedHint({
+                                locale: languageLabel(currentLocale),
+                            })}
                         </span>
                     {/if}
                 </div>
@@ -135,8 +146,9 @@
                     on:change={(e) => handleLocaleChange(e.currentTarget.value as SupportedLocale)}
                     aria-label={$LL.configuration.language.label()}
                 >
-                    <option value="en">{$LL.configuration.language.english()}</option>
-                    <option value="es">{$LL.configuration.language.spanish()}</option>
+                    {#each AVAILABLE_LOCALES as localeCode (localeCode)}
+                        <option value={localeCode}>{languageLabel(localeCode)}</option>
+                    {/each}
                 </select>
             </div>
 

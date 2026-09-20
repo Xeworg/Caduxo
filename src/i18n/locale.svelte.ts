@@ -12,13 +12,16 @@
  */
 
 import { setLocale as i18nSetLocale } from "./i18n-svelte.js";
+import { baseLocale, isLocale, locales } from "./i18n-util.js";
 import { loadAllLocales } from "./i18n-util.sync.js";
 import { detectSupportedLocale } from "./detect.js";
 import { getSettings, updateSettings } from "../lib/stores.js";
+import type { Locales } from "./i18n-types.js";
 
-export type SupportedLocale = "en" | "es";
+export type SupportedLocale = Locales;
 
-const DEFAULT: SupportedLocale = "en";
+export const AVAILABLE_LOCALES = locales;
+export const DEFAULT_LOCALE: SupportedLocale = baseLocale;
 
 // The generated Svelte i18n store is backed by the in-memory `loadedLocales`
 // registry. In dev/prod startup we use the synchronous dictionaries, so load
@@ -27,7 +30,7 @@ loadAllLocales();
 
 /** Active locale; read from templates via `$LL.*` or directly when needed. */
 export const locale = $state<{ current: SupportedLocale }>({
-  current: DEFAULT,
+  current: DEFAULT_LOCALE,
 });
 
 /**
@@ -57,10 +60,10 @@ export async function initLocale(): Promise<SupportedLocale> {
   try {
     const s = await getSettings();
     // `language_configured` is the single source of truth: the backend
-    // reports false when the row is absent, empty, or holds a tag outside
-    // {"en", "es"}. On fresh installs we therefore fall through to OS /
-    // WebView detection instead of locking the UI to the `"en"` fallback.
-    if (s.language_configured && (s.language === "en" || s.language === "es")) {
+    // reports false when the row is absent, empty, or holds an unsupported
+    // locale tag. On fresh installs we therefore fall through to OS /
+    // WebView detection instead of locking the UI to the fallback locale.
+    if (s.language_configured && isLocale(s.language)) {
       i18nSetLocale(s.language);
       locale.current = s.language;
       translationSource.current = "manual";

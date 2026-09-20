@@ -240,13 +240,10 @@ type RootTranslation = {
 			 */
 			label: string
 			/**
-			 * D​e​t​e​c​t​e​d​:​ ​E​n​g​l​i​s​h
+			 * D​e​t​e​c​t​e​d​:​ ​{​l​o​c​a​l​e​}
+			 * @param {unknown} locale
 			 */
-			detectedHintEn: string
-			/**
-			 * D​e​t​e​c​t​e​d​:​ ​S​p​a​n​i​s​h
-			 */
-			detectedHintEs: string
+			detectedHint: RequiredParams<'locale'>
 			/**
 			 * S​a​v​i​n​g​…
 			 */
@@ -259,14 +256,16 @@ type RootTranslation = {
 			 * C​o​u​l​d​ ​n​o​t​ ​s​a​v​e​ ​s​e​t​t​i​n​g​:​ 
 			 */
 			saveErrorPrefix: string
-			/**
-			 * E​n​g​l​i​s​h
-			 */
-			english: string
-			/**
-			 * E​s​p​a​ñ​o​l
-			 */
-			spanish: string
+			names: {
+				/**
+				 * E​n​g​l​i​s​h
+				 */
+				en: string
+				/**
+				 * E​s​p​a​ñ​o​l
+				 */
+				es: string
+			}
 		}
 	}
 	dashboard: {
@@ -3515,13 +3514,9 @@ export type TranslationFunctions = {
 			 */
 			label: () => LocalizedString
 			/**
-			 * Detected: English
+			 * Detected: {locale}
 			 */
-			detectedHintEn: () => LocalizedString
-			/**
-			 * Detected: Spanish
-			 */
-			detectedHintEs: () => LocalizedString
+			detectedHint: (arg: { locale: unknown }) => LocalizedString
 			/**
 			 * Saving…
 			 */
@@ -3534,14 +3529,16 @@ export type TranslationFunctions = {
 			 * Could not save setting: 
 			 */
 			saveErrorPrefix: () => LocalizedString
-			/**
-			 * English
-			 */
-			english: () => LocalizedString
-			/**
-			 * Español
-			 */
-			spanish: () => LocalizedString
+			names: {
+				/**
+				 * English
+				 */
+				en: () => LocalizedString
+				/**
+				 * Español
+				 */
+				es: () => LocalizedString
+			}
 		}
 	}
 	dashboard: {
