@@ -322,7 +322,7 @@ independently; no surface consumes them yet so no consumer breaks.
 `docs/daisyui-redesign-plan.md` Phase 2 batch B. Heavier primitives
 that need positioning logic and ARIA wiring.
 
-- [ ] Create `src/components/ui/Modal.svelte` per design §2.3: backed
+- [x] Create `src/components/ui/Modal.svelte` per design §2.3: backed
       by `<dialog class="modal">`; `open` rune, `size: sm | md | wide`,
       `closeOnBackdrop`, `closeOnEscape`, `showClose`, `returnFocusTo`,
       `titleId`, `descriptionId`; default-slot body, `footer` slot.
@@ -330,28 +330,28 @@ that need positioning logic and ARIA wiring.
       back inside; listen for `cancel` event, surface cancellation
       callback), focus restoration to `returnFocusTo` on close (no-op
       when `document.body.contains(returnFocusTo) === false`). <!-- sdd-owner: implementation -->
-- [ ] Add scoped CSS in `Modal.svelte` for `<dialog>::backdrop` so a
+- [x] Add scoped CSS in `Modal.svelte` for `<dialog>::backdrop` so a
       `backdrop-blur-sm` is applied when
       `@media (prefers-reduced-motion: no-preference)` is set (the
       blur render itself triggers a paint transition on some
       platforms). <!-- sdd-owner: implementation -->
-- [ ] Create `src/components/ui/Table.svelte`: `zebra`, `stickyHeader`,
+- [x] Create `src/components/ui/Table.svelte`: `zebra`, `stickyHeader`,
       `size: dense | default`, optional `caption`, `describedBy`,
       mutually exclusive `empty` / `loading` slots. Composes
       `table table-zebra`, `table-pin-rows`, `table-sm`. Numeric
       columns use `<td class="num">` from the PR 1 utility. <!-- sdd-owner: implementation -->
-- [ ] Create `src/components/ui/Tabs.svelte`: `items: TabItem[]`,
+- [x] Create `src/components/ui/Tabs.svelte`: `items: TabItem[]`,
       `activeId`, `style: bordered | lifted | boxed`, `onchange`,
       `aria-label`. Handles ArrowLeft / ArrowRight / Home / End /
       Enter / Space. Renders `role="tablist"` on the wrapper, each tab
       `role="tab"`, each panel `role="tabpanel"` with `aria-labelledby`. <!-- sdd-owner: implementation -->
-- [ ] Create `src/components/ui/Select.svelte`: `value`, `options:
+- [x] Create `src/components/ui/Select.svelte`: `value`, `options:
       Option[]`, `size: sm | md`, `disabled`, `invalid`,
       `aria-label` / `aria-labelledby`. Composes DaisyUI
       `select select-bordered select-{size}` and `select-error` when
       `invalid`. Native `<select>` stays in the DOM for form
       semantics; the visible surface is the DaisyUI wrapper. <!-- sdd-owner: implementation -->
-- [ ] Create `src/components/ui/Input.svelte`: `value`, `type: text |
+- [x] Create `src/components/ui/Input.svelte`: `value`, `type: text |
       search | number | email | url | password`, `label`, `required`,
       `helper`, `invalid`, `list`, `size: sm | md | lg`, `disabled`,
       `aria-label` / `aria-describedby`. Composes DaisyUI
