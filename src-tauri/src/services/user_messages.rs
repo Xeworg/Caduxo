@@ -40,6 +40,10 @@
 //! | `NameTooLong { max }` | `Name exceeds maximum length of {max} characters` | `El nombre excede la longitud máxima de {max} caracteres` |
 //! | `ScanValueEmpty` | `Scan value cannot be empty` | `El valor escaneado no puede estar vacío` |
 //! | `LanguageNotAllowed { value }` | `language must be one of {en, es}, got \`{value}\`` | `el idioma debe ser uno de {en, es}, se recibió \`{value}\`` |
+//! | `ProductArchivedForBarcode` | `Cannot add barcode to an archived product` | `No se puede agregar un código de barras a un producto archivado` |
+//! | `InactiveStoreLocation` | `Cannot add location to an inactive store` | `No se puede agregar una ubicación a una tienda inactiva` |
+//! | `RestoreRequiresConfirmation` | `Restore requires explicit user confirmation.` | `La restauración requiere confirmación explícita del usuario.` |
+//! | `UnitStillReferenced` | `Unit is still referenced by product(s) and cannot be archived` | `La unidad todavía está referenciada por producto(s) y no se puede archivar` |
 
 use crate::error::AppError;
 use crate::pdf::locale::Locale;
@@ -109,6 +113,18 @@ pub enum UserMessage {
     LanguageNotAllowed {
         value: String,
     },
+    /// Product catalog business rule: a barcode cannot be added to a
+    /// product that has been soft-archived.
+    ProductArchivedForBarcode,
+    /// Store management business rule: an internal location cannot be
+    /// added under a store that has been deactivated.
+    InactiveStoreLocation,
+    /// Backup/restore business rule: explicit user confirmation is
+    /// required before a destructive restore proceeds.
+    RestoreRequiresConfirmation,
+    /// Unit catalog business rule: a unit cannot be archived while at
+    /// least one product still references it.
+    UnitStillReferenced,
 }
 
 /// Returns the user-visible message string for the given kind in the given locale.
@@ -217,6 +233,30 @@ pub fn user_message(kind: UserMessage, locale: Locale) -> String {
         }
         (UserMessage::LanguageNotAllowed { value }, L::Es) => {
             format!("el idioma debe ser uno de {{en, es}}, se recibió `{value}`")
+        }
+        (UserMessage::ProductArchivedForBarcode, L::En) => {
+            "Cannot add barcode to an archived product".to_string()
+        }
+        (UserMessage::ProductArchivedForBarcode, L::Es) => {
+            "No se puede agregar un código de barras a un producto archivado".to_string()
+        }
+        (UserMessage::InactiveStoreLocation, L::En) => {
+            "Cannot add location to an inactive store".to_string()
+        }
+        (UserMessage::InactiveStoreLocation, L::Es) => {
+            "No se puede agregar una ubicación a una tienda inactiva".to_string()
+        }
+        (UserMessage::RestoreRequiresConfirmation, L::En) => {
+            "Restore requires explicit user confirmation.".to_string()
+        }
+        (UserMessage::RestoreRequiresConfirmation, L::Es) => {
+            "La restauración requiere confirmación explícita del usuario.".to_string()
+        }
+        (UserMessage::UnitStillReferenced, L::En) => {
+            "Unit is still referenced by product(s) and cannot be archived".to_string()
+        }
+        (UserMessage::UnitStillReferenced, L::Es) => {
+            "La unidad todavía está referenciada por producto(s) y no se puede archivar".to_string()
         }
     }
 }
@@ -338,6 +378,22 @@ pub fn parse_user_message_kind(message: &str) -> Option<UserMessage> {
         return Some(UserMessage::LanguageNotAllowed { value });
     }
 
+    if message == "Cannot add barcode to an archived product" {
+        return Some(UserMessage::ProductArchivedForBarcode);
+    }
+
+    if message == "Cannot add location to an inactive store" {
+        return Some(UserMessage::InactiveStoreLocation);
+    }
+
+    if message == "Restore requires explicit user confirmation." {
+        return Some(UserMessage::RestoreRequiresConfirmation);
+    }
+
+    if message == "Unit is still referenced by product(s) and cannot be archived" {
+        return Some(UserMessage::UnitStillReferenced);
+    }
+
     None
 }
 
@@ -377,6 +433,26 @@ pub fn localize_validation(err: AppError, locale: Locale) -> AppError {
         });
     }
     crate::error::AppError::Domain(crate::error::DomainError::Validation { message })
+}
+
+/// Wraps a business-rule error with locale-aware text if the message is one of
+/// the known user-facing strings. Otherwise returns the original error
+/// unchanged. Mirrors [`localize_validation`] but only matches
+/// [`DomainError::BusinessRule`]; chained after `localize_validation` at the
+/// command boundary so simple constant BusinessRule messages reach the UI in
+/// the active locale while dynamic BusinessRule messages (e.g. expiry lots
+/// with status/quantity/unit) keep their canonical English form.
+pub fn localize_business_rule(err: AppError, locale: Locale) -> AppError {
+    let crate::error::AppError::Domain(crate::error::DomainError::BusinessRule { message }) = err
+    else {
+        return err;
+    };
+    if let Some(kind) = parse_user_message_kind(&message) {
+        return crate::error::AppError::Domain(crate::error::DomainError::BusinessRule {
+            message: user_message(kind, locale),
+        });
+    }
+    crate::error::AppError::Domain(crate::error::DomainError::BusinessRule { message })
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -906,5 +982,224 @@ mod tests {
             message,
             "el idioma debe ser uno de {en, es}, se recibió `fr`"
         );
+    }
+
+    // ─── Simple constant BusinessRule catalog ──────────────────────────────
+
+    #[test]
+    fn product_archived_for_barcode_en() {
+        let got = en(UserMessage::ProductArchivedForBarcode);
+        assert_eq!(got, "Cannot add barcode to an archived product");
+    }
+
+    #[test]
+    fn product_archived_for_barcode_es() {
+        let got = es(UserMessage::ProductArchivedForBarcode);
+        assert_eq!(
+            got,
+            "No se puede agregar un código de barras a un producto archivado"
+        );
+    }
+
+    #[test]
+    fn inactive_store_location_en() {
+        let got = en(UserMessage::InactiveStoreLocation);
+        assert_eq!(got, "Cannot add location to an inactive store");
+    }
+
+    #[test]
+    fn inactive_store_location_es() {
+        let got = es(UserMessage::InactiveStoreLocation);
+        assert_eq!(
+            got,
+            "No se puede agregar una ubicación a una tienda inactiva"
+        );
+    }
+
+    #[test]
+    fn restore_requires_confirmation_en() {
+        let got = en(UserMessage::RestoreRequiresConfirmation);
+        assert_eq!(got, "Restore requires explicit user confirmation.");
+    }
+
+    #[test]
+    fn restore_requires_confirmation_es() {
+        let got = es(UserMessage::RestoreRequiresConfirmation);
+        assert_eq!(
+            got,
+            "La restauración requiere confirmación explícita del usuario."
+        );
+    }
+
+    #[test]
+    fn unit_still_referenced_en() {
+        let got = en(UserMessage::UnitStillReferenced);
+        assert_eq!(
+            got,
+            "Unit is still referenced by product(s) and cannot be archived"
+        );
+    }
+
+    #[test]
+    fn unit_still_referenced_es() {
+        let got = es(UserMessage::UnitStillReferenced);
+        assert_eq!(
+            got,
+            "La unidad todavía está referenciada por producto(s) y no se puede archivar"
+        );
+    }
+
+    // ─── Parser roundtrips for simple BusinessRule ──────────────────────────
+
+    #[test]
+    fn parse_product_archived_for_barcode_roundtrips() {
+        let en_msg = en(UserMessage::ProductArchivedForBarcode);
+        let parsed = parse_user_message_kind(&en_msg);
+        assert!(matches!(
+            parsed,
+            Some(UserMessage::ProductArchivedForBarcode)
+        ));
+        // Round-trip: re-formatting the parsed variant must yield the same EN string.
+        assert_eq!(en_msg, en(parsed.unwrap()));
+    }
+
+    #[test]
+    fn parse_inactive_store_location_roundtrips() {
+        let en_msg = en(UserMessage::InactiveStoreLocation);
+        let parsed = parse_user_message_kind(&en_msg);
+        assert!(matches!(parsed, Some(UserMessage::InactiveStoreLocation)));
+        assert_eq!(en_msg, en(parsed.unwrap()));
+    }
+
+    #[test]
+    fn parse_restore_requires_confirmation_roundtrips() {
+        let en_msg = en(UserMessage::RestoreRequiresConfirmation);
+        let parsed = parse_user_message_kind(&en_msg);
+        assert!(matches!(
+            parsed,
+            Some(UserMessage::RestoreRequiresConfirmation)
+        ));
+        assert_eq!(en_msg, en(parsed.unwrap()));
+    }
+
+    #[test]
+    fn parse_unit_still_referenced_roundtrips() {
+        let en_msg = en(UserMessage::UnitStillReferenced);
+        let parsed = parse_user_message_kind(&en_msg);
+        assert!(matches!(parsed, Some(UserMessage::UnitStillReferenced)));
+        assert_eq!(en_msg, en(parsed.unwrap()));
+    }
+
+    // ─── localize_business_rule integration ────────────────────────────────
+
+    #[test]
+    fn localize_business_rule_translates_known_message() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::BusinessRule {
+            message: "Cannot add barcode to an archived product".into(),
+        });
+        let localized = localize_business_rule(err, Locale::Es);
+        let AppError::Domain(DomainError::BusinessRule { message }) = localized else {
+            panic!("expected BusinessRule");
+        };
+        assert_eq!(
+            message,
+            "No se puede agregar un código de barras a un producto archivado"
+        );
+    }
+
+    #[test]
+    fn localize_business_rule_translates_restore_confirmation() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::BusinessRule {
+            message: "Restore requires explicit user confirmation.".into(),
+        });
+        let localized = localize_business_rule(err, Locale::Es);
+        let AppError::Domain(DomainError::BusinessRule { message }) = localized else {
+            panic!("expected BusinessRule");
+        };
+        assert_eq!(
+            message,
+            "La restauración requiere confirmación explícita del usuario."
+        );
+    }
+
+    #[test]
+    fn localize_business_rule_preserves_unknown_business_rule_message() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::BusinessRule {
+            message: "some dynamic business rule with status=active qty=5".into(),
+        });
+        let localized = localize_business_rule(err, Locale::Es);
+        let AppError::Domain(DomainError::BusinessRule { message }) = localized else {
+            panic!("expected BusinessRule");
+        };
+        // Unknown BusinessRule strings stay English so dynamic messages keep their canonical form.
+        assert_eq!(
+            message,
+            "some dynamic business rule with status=active qty=5"
+        );
+    }
+
+    #[test]
+    fn localize_business_rule_ignores_non_business_rule_error() {
+        // Validation errors must NOT be touched by localize_business_rule — that
+        // is localize_validation's responsibility. This guards against accidental
+        // cross-contamination between the two helpers.
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::Validation {
+            message: "SKU cannot be empty".into(),
+        });
+        let result = localize_business_rule(err, Locale::Es);
+        let AppError::Domain(DomainError::Validation { message }) = result else {
+            panic!("expected Validation untouched");
+        };
+        assert_eq!(message, "SKU cannot be empty");
+    }
+
+    #[test]
+    fn localize_business_rule_ignores_infrastructure_error() {
+        // Infrastructure errors are not UserMessage-shaped and must pass through.
+        // Mirrors `localize_validation_ignores_non_validation_error` by exercising
+        // both a non-BusinessRule Domain variant (NotFound) and a non-Domain
+        // variant (Infrastructure) to assert that `localize_business_rule` only
+        // touches `DomainError::BusinessRule`.
+        use crate::error::{AppError, DomainError, InfrastructureError};
+        let err = AppError::Domain(DomainError::NotFound {
+            resource: "product",
+            id: "missing".into(),
+        });
+        let result = localize_business_rule(err, Locale::Es);
+        match result {
+            AppError::Domain(DomainError::NotFound { resource, id }) => {
+                assert_eq!(resource, "product");
+                assert_eq!(id, "missing");
+            }
+            other => panic!("expected NotFound unchanged, got {other:?}"),
+        }
+        // Also exercise the non-Domain variant path (Infrastructure error) for completeness.
+        let err = AppError::Infrastructure(InfrastructureError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "io",
+        )));
+        let _ = localize_business_rule(err, Locale::Es);
+    }
+
+    #[test]
+    fn localize_validation_still_ignores_non_validation_error() {
+        // Companion to the BusinessRule guard: confirm that the existing
+        // helper continues to ignore non-Validation domain errors after the
+        // addition of `localize_business_rule`.
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::BusinessRule {
+            message: "Cannot add barcode to an archived product".into(),
+        });
+        let result = localize_validation(err, Locale::Es);
+        let AppError::Domain(DomainError::BusinessRule { message }) = result else {
+            panic!("expected BusinessRule untouched by localize_validation");
+        };
+        // The English BusinessRule string must be preserved untouched — only
+        // `localize_business_rule` knows how to translate it.
+        assert_eq!(message, "Cannot add barcode to an archived product");
     }
 }

@@ -10,7 +10,9 @@ use crate::error::{AppError, CommandError};
 use crate::pdf::locale::Locale;
 use crate::services::settings as settings_service;
 use crate::services::stores as store_service;
-use crate::services::user_messages::{localize_validation, user_message, UserMessage};
+use crate::services::user_messages::{
+    localize_business_rule, localize_validation, user_message, UserMessage,
+};
 use crate::state::AppState;
 
 /// Resolves an optional BCP-47 locale tag into a [`Locale`], falling back to
@@ -18,10 +20,7 @@ use crate::state::AppState;
 /// settings command boundary so the catalog validation messages stay
 /// frontend-compatible (no required caller-side argument).
 fn resolve_locale(locale: Option<String>) -> Locale {
-    locale
-        .as_deref()
-        .map(Locale::parse)
-        .unwrap_or(Locale::En)
+    locale.as_deref().map(Locale::parse).unwrap_or(Locale::En)
 }
 
 /// Returns true if this is a first-run (no active stores exist).
@@ -93,9 +92,11 @@ pub async fn list_store_locations(
 
 /// Creates a new internal location under a store.
 ///
-/// `locale` (BCP-47 tag) is forwarded to `localize_validation` so the
-/// location `Name` validation surfaced by the service reaches the UI in the
-/// active locale. Unknown tags fall back to English via `Locale::parse`.
+/// `locale` (BCP-47 tag) is forwarded to `localize_validation` and
+/// `localize_business_rule` so both the location `Name` validation and the
+/// simple constant BusinessRule rejection for an inactive store reach the UI
+/// in the active locale. Unknown tags fall back to English via
+/// `Locale::parse`.
 #[tauri::command]
 pub async fn create_store_location(
     state: State<'_, AppState>,
@@ -107,6 +108,7 @@ pub async fn create_store_location(
     store_service::create_location(&pool, input)
         .await
         .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
         .map_err(AppError::into)
 }
 

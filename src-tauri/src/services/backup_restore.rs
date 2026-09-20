@@ -22,6 +22,8 @@ use tokio::task;
 use crate::db::DbPool;
 use crate::dto::backup_restore::{BackupResult, RestoreInput, RestoreResult, RestoreValidation};
 use crate::error::{AppError, DomainError, InfrastructureError};
+use crate::pdf::locale::Locale;
+use crate::services::user_messages::{user_message, UserMessage};
 
 /// The list of tables that a valid Caduxo backup must contain.
 /// If any of these are missing, the backup is not a valid Caduxo database.
@@ -196,7 +198,7 @@ pub async fn restore_backup(
 ) -> Result<RestoreResult, AppError> {
     if !input.confirmed {
         return Err(AppError::Domain(DomainError::BusinessRule {
-            message: "Restore requires explicit user confirmation.".to_string(),
+            message: user_message(UserMessage::RestoreRequiresConfirmation, Locale::En),
         }));
     }
 

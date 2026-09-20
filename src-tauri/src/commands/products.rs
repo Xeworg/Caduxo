@@ -13,7 +13,7 @@ use crate::error::{AppError, CommandError};
 use crate::pdf::locale::Locale;
 use crate::services::categories as categories_service;
 use crate::services::products as service;
-use crate::services::user_messages::localize_validation;
+use crate::services::user_messages::{localize_business_rule, localize_validation};
 use crate::state::AppState;
 
 /// Resolves an optional BCP-47 locale tag into a [`Locale`], falling back to
@@ -21,10 +21,7 @@ use crate::state::AppState;
 /// command boundary so the catalog validation messages stay
 /// frontend-compatible (no required caller-side argument).
 fn resolve_locale(locale: Option<String>) -> Locale {
-    locale
-        .as_deref()
-        .map(Locale::parse)
-        .unwrap_or(Locale::En)
+    locale.as_deref().map(Locale::parse).unwrap_or(Locale::En)
 }
 
 // ============================================================
@@ -205,9 +202,11 @@ pub fn suggested_product_alert_days() -> i32 {
 
 /// Adds a barcode to a product.
 ///
-/// `locale` (BCP-47 tag) is forwarded to `localize_validation` so the
-/// barcode validation surfaced by the service reaches the UI in the active
-/// locale. Unknown tags fall back to English via `Locale::parse`.
+/// `locale` (BCP-47 tag) is forwarded to `localize_validation` and
+/// `localize_business_rule` so both the barcode validation (empty / too long
+/// / invalid chars) and the simple constant BusinessRule rejection for an
+/// archived product reach the UI in the active locale. Unknown tags fall
+/// back to English via `Locale::parse`.
 #[tauri::command]
 pub async fn add_product_barcode(
     state: State<'_, AppState>,
@@ -219,6 +218,7 @@ pub async fn add_product_barcode(
     service::add_barcode(&pool, input)
         .await
         .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
         .map_err(AppError::into)
 }
 

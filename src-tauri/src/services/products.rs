@@ -451,7 +451,7 @@ pub async fn add_barcode(
 
     if !product.is_active {
         return Err(DomainError::BusinessRule {
-            message: "Cannot add barcode to an archived product".to_string(),
+            message: user_message(UserMessage::ProductArchivedForBarcode, Locale::En),
         }
         .into());
     }
