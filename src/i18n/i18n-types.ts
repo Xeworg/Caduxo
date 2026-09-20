@@ -3396,6 +3396,51 @@ type RootTranslation = {
 		 */
 		dateInvalid: string
 	}
+	theme: {
+		/**
+		 * C​a​d​u​x​o​ ​L​i​g​h​t
+		 */
+		caduxoLight: string
+		/**
+		 * D​a​r​k
+		 */
+		dark: string
+		source: {
+			/**
+			 * M​a​n​u​a​l
+			 */
+			manual: string
+			/**
+			 * P​e​r​s​i​s​t​e​d
+			 */
+			persisted: string
+			/**
+			 * O​S​ ​p​r​e​f​e​r​e​n​c​e
+			 */
+			os: string
+			/**
+			 * D​e​f​a​u​l​t
+			 */
+			fallback: string
+		}
+	}
+	settings: {
+		theme: {
+			/**
+			 * T​h​e​m​e
+			 */
+			title: string
+			/**
+			 * C​h​o​o​s​e​ ​t​h​e​ ​a​c​t​i​v​e​ ​t​h​e​m​e​.​ ​Y​o​u​r​ ​c​h​o​i​c​e​ ​i​s​ ​p​e​r​s​i​s​t​e​d​ ​a​c​r​o​s​s​ ​r​e​s​t​a​r​t​s​.​ ​I​f​ ​u​n​s​e​t​,​ ​t​h​e​ ​a​p​p​ ​f​o​l​l​o​w​s​ ​y​o​u​r​ ​o​p​e​r​a​t​i​n​g​-​s​y​s​t​e​m​ ​p​r​e​f​e​r​e​n​c​e​.
+			 */
+			description: string
+			/**
+			 * C​o​u​l​d​ ​n​o​t​ ​c​h​a​n​g​e​ ​t​h​e​ ​t​h​e​m​e​:​ ​{​m​s​g​}
+			 * @param {unknown} msg
+			 */
+			error: RequiredParams<'msg'>
+		}
+	}
 }
 
 export type TranslationFunctions = {
@@ -6682,6 +6727,50 @@ export type TranslationFunctions = {
 		 * Invalid date
 		 */
 		dateInvalid: () => LocalizedString
+	}
+	theme: {
+		/**
+		 * Caduxo Light
+		 */
+		caduxoLight: () => LocalizedString
+		/**
+		 * Dark
+		 */
+		dark: () => LocalizedString
+		source: {
+			/**
+			 * Manual
+			 */
+			manual: () => LocalizedString
+			/**
+			 * Persisted
+			 */
+			persisted: () => LocalizedString
+			/**
+			 * OS preference
+			 */
+			os: () => LocalizedString
+			/**
+			 * Default
+			 */
+			fallback: () => LocalizedString
+		}
+	}
+	settings: {
+		theme: {
+			/**
+			 * Theme
+			 */
+			title: () => LocalizedString
+			/**
+			 * Choose the active theme. Your choice is persisted across restarts. If unset, the app follows your operating-system preference.
+			 */
+			description: () => LocalizedString
+			/**
+			 * Could not change the theme: {msg}
+			 */
+			error: (arg: { msg: unknown }) => LocalizedString
+		}
 	}
 }
 

@@ -951,6 +951,38 @@ const es: BaseTranslation = {
     dateFieldRequired: "Este campo es obligatorio",
     dateInvalid: "Fecha no válida",
   },
+
+  // Nombres visibles de tema y etiquetas de origen. Consumido por el
+  // selector de tema en la página de Configuración (PR 5 de
+  // caduxo-daisyui-redesign) y por cualquier futura superficie
+  // vinculada al tema. Mantener los valores de origen sincronizados
+  // con `ThemeSource` en
+  // `src/components/ui/theme/themeStore.svelte.ts`.
+  theme: {
+    caduxoLight: "Caduxo Claro",
+    dark: "Oscuro",
+    source: {
+      manual: "Manual",
+      persisted: "Persistido",
+      os: "Preferencia del sistema",
+      fallback: "Predeterminado",
+    },
+  },
+
+  // Namespace de ajustes: copia de cada sección de ajustes. Convive
+  // con el namespace `configuration` existente (que contiene
+  // etiquetas de página como `pageTitle` y `section.*`). Las
+  // etiquetas de la sección de tema siguen la instrucción explícita
+  // del PR 5 para introducir el árbol de claves `settings.theme.*`
+  // en el selector de la página de Configuración.
+  settings: {
+    theme: {
+      title: "Tema",
+      description:
+        "Elegí el tema activo. Tu elección se persiste entre reinicios. Si no está definido, la aplicación sigue la preferencia de tu sistema operativo.",
+      error: "No se pudo cambiar el tema: {msg}",
+    },
+  },
 };
 
 export default es;

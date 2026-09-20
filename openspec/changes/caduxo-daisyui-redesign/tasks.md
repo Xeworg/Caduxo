@@ -379,51 +379,51 @@ lands the theme switcher next to the language selector.
 
 ### 5.1 App shell
 
-- [ ] Migrate `src/App.svelte` top nav to DaisyUI `navbar bg-base-200`
+- [x] Migrate `src/App.svelte` top nav to DaisyUI `navbar bg-base-200`
       with `navbar-start` (brand), `navbar-center` (tab buttons via the
       `Button.svelte` `ghost` variant), `navbar-end` (overflow actions
       on narrow viewports). The active-tab state stays on the existing
       `activeTab` rune; tab buttons become DaisyUI-themed buttons. <!-- sdd-owner: implementation -->
-- [ ] On viewports ≤ 720 px, collapse the tab buttons behind a
+- [x] On viewports ≤ 720 px, collapse the tab buttons behind a
       DaisyUI `dropdown` trigger; every tab remains reachable via
       keyboard, active tab stays obvious. <!-- sdd-owner: implementation -->
-- [ ] Render the subtle dashboard gradient band
+- [x] Render the subtle dashboard gradient band
       (`bg-gradient-to-br from-primary/5 to-base-100`) behind the
       brand area on the Dashboard landing tab only. No animation; no
       reduced-motion gate needed. <!-- sdd-owner: implementation -->
 
 ### 5.2 Theme switcher on Configuration page
 
-- [ ] Migrate `src/components/ConfigurationPage.svelte` to use the
+- [x] Migrate `src/components/ConfigurationPage.svelte` to use the
       `Select.svelte` primitive for the language selector (preserves
       every existing locale behaviour from the i18n-support change,
       including the detected-hint copy and rollback on IPC failure). <!-- sdd-owner: implementation -->
-- [ ] Migrate the bespoke `toggle-wrap / toggle-track / toggle-thumb`
+- [x] Migrate the bespoke `toggle-wrap / toggle-track / toggle-thumb`
       controls on `ConfigurationPage.svelte` to the `Toggle.svelte`
       primitive (preserves the existing "Ubicación inicial obligatoria"
       toggle behaviour). <!-- sdd-owner: implementation -->
-- [ ] Add a new "Tema / Theme" section to `ConfigurationPage.svelte`
+- [x] Add a new "Tema / Theme" section to `ConfigurationPage.svelte`
       that renders the theme switcher: lists `AVAILABLE_THEMES` (from
       `themeStore.svelte.ts`) in the active locale via
       `$LL.theme.caduxoLight()` / `$LL.theme.dark()`, marks the
       currently active theme, and surfaces the active source via
       `$LL.theme.source.{manual,persisted,os,fallback}()` next to the
       active entry. <!-- sdd-owner: implementation -->
-- [ ] Wire the switcher to `setTheme(next)` from the theme store;
+- [x] Wire the switcher to `setTheme(next)` from the theme store;
       ensure the
       "failed theme persistence rolls back the optimistic switch"
       scenario from the spec renders an inline error in the switcher
       section (use the `Alert.svelte` primitive, `variant="error"`). <!-- sdd-owner: implementation -->
-- [ ] Add new i18n keys under `settings.theme.title`,
+- [x] Add new i18n keys under `settings.theme.title`,
       `settings.theme.description`, and `settings.theme.error` to
       `src/i18n/en/index.ts` and `src/i18n/es/index.ts`. <!-- sdd-owner: implementation -->
-- [ ] Run `npm run i18n:generate`; commit the regenerated catalogue. <!-- sdd-owner: implementation -->
+- [x] Run `npm run i18n:generate`; commit the regenerated catalogue. <!-- sdd-owner: implementation -->
 
 ### 5.3 PR 5 verify gate
 
-- [ ] `npm run i18n:generate` green. <!-- sdd-owner: implementation -->
-- [ ] `npm run check` green. <!-- sdd-owner: implementation -->
-- [ ] `npm run build` green. <!-- sdd-owner: implementation -->
+- [x] `npm run i18n:generate` green. <!-- sdd-owner: implementation -->
+- [x] `npm run check` green. <!-- sdd-owner: implementation -->
+- [x] `npm run build` green. <!-- sdd-owner: implementation -->
 - [ ] Manual smoke — `caduxo-light` and `dark` themes render correctly
       app-wide; theme switcher shows the active theme + source;
       switching persists across restart; failed IPC rolls back the

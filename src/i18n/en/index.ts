@@ -953,6 +953,36 @@ const en: BaseTranslation = {
     dateFieldRequired: "This field is required",
     dateInvalid: "Invalid date",
   },
+
+  // Top-level theme display names and source labels. Consumed by the
+  // Configuration page theme switcher (PR 5 of caduxo-daisyui-redesign)
+  // and any future cross-page theme affordance. Keep the source values
+  // in lockstep with `ThemeSource` in
+  // `src/components/ui/theme/themeStore.svelte.ts`.
+  theme: {
+    caduxoLight: "Caduxo Light",
+    dark: "Dark",
+    source: {
+      manual: "Manual",
+      persisted: "Persisted",
+      os: "OS preference",
+      fallback: "Default",
+    },
+  },
+
+  // Settings namespace — individual setting-section copy. Lives
+  // alongside the existing `configuration` namespace (which holds
+  // page-level labels like `pageTitle` and `section.*`). Theme-section
+  // labels follow the explicit PR 5 instruction to introduce the
+  // `settings.theme.*` key tree for the Configuration page switcher.
+  settings: {
+    theme: {
+      title: "Theme",
+      description:
+        "Choose the active theme. Your choice is persisted across restarts. If unset, the app follows your operating-system preference.",
+      error: "Could not change the theme: {msg}",
+    },
+  },
 };
 
 export default en;

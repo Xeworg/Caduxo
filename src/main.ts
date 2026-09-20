@@ -8,15 +8,20 @@ import { mount } from "svelte";
 import "./app.css";
 import App from "./App.svelte";
 import { initLocale } from "./i18n/locale.svelte.js";
+import { initTheme } from "./components/ui/theme/themeStore.svelte.js";
 
 let app: ReturnType<typeof mount> | undefined;
 
 async function bootstrap() {
-  // Initialise the locale rune before the first paint so that $LL.* helpers
-  // resolve to the correct language on mount. Avoid top-level await here:
-  // older WebKitGTK builds used by Tauri can fail to evaluate modules that
-  // contain it, leaving the dev window blank even though Vite is running.
-  await initLocale();
+  // Initialise the locale + theme runes before the first paint so that
+  // $LL.* helpers resolve to the correct language and the navbar /
+  // dashboard gradient band render with the right theme on mount.
+  // Avoid top-level await here: older WebKitGTK builds used by Tauri
+  // can fail to evaluate modules that contain it, leaving the dev
+  // window blank even though Vite is running. `initTheme()` mirrors
+  // the `initLocale()` precedence (persisted > OS > fallback) and is
+  // idempotent, so a second call from HMR or route changes is safe.
+  await Promise.all([initLocale(), initTheme()]);
 
   app = mount(App, {
     target: document.getElementById("app")!,
