@@ -39,7 +39,7 @@
   import UnitReviewPage from "./UnitReviewPage.svelte";
   import LotMovementsPanel from "./LotMovementsPanel.svelte";
   // PR 6 — shared UI primitives from caduxo-daisyui-redesign.
-  import Card from "./ui/Card.svelte";
+
   import Badge, {
     type BadgeUrgency,
     type BadgeSemantic,
@@ -572,43 +572,38 @@
   </header>
 
   <!-- ── Urgency cards ────────────────────────────────────────────────────── -->
-  <section class="urgency-cards" aria-label={$LL.dashboard.aria.urgencySummary()}>
-    <Card tone="error">
-      <div class="stat">
-        <div class="stat-title">
-          <Badge urgency="expired" dot />
-          <span class="ml-1">{$LL.dashboard.urgencyCard.expired()}</span>
-        </div>
-        <div class="stat-value num">{counts.expired}</div>
+  <section
+    class="stats stats-vertical lg:stats-horizontal shadow w-full overflow-hidden border-base-300"
+    aria-label={$LL.dashboard.aria.urgencySummary()}
+  >
+    <div class="stat border-t-4 border-error">
+      <div class="stat-figure">
+        <Badge semantic="error" dot size="md" />
       </div>
-    </Card>
-    <Card tone="warning">
-      <div class="stat">
-        <div class="stat-title">
-          <Badge urgency="today" dot />
-          <span class="ml-1">{$LL.dashboard.urgencyCard.today()}</span>
-        </div>
-        <div class="stat-value num">{counts.today}</div>
+      <div class="stat-title">{$LL.dashboard.urgencyCard.expired()}</div>
+      <div class="stat-value text-error">{counts.expired}</div>
+    </div>
+    <div class="stat border-t-4 border-warning">
+      <div class="stat-figure">
+        <Badge semantic="warning" dot size="md" />
       </div>
-    </Card>
-    <Card tone="info">
-      <div class="stat">
-        <div class="stat-title">
-          <Badge urgency="alert" dot />
-          <span class="ml-1">{$LL.dashboard.urgencyCard.alertWindow()}</span>
-        </div>
-        <div class="stat-value num">{counts.alert_window}</div>
+      <div class="stat-title">{$LL.dashboard.urgencyCard.today()}</div>
+      <div class="stat-value text-warning">{counts.today}</div>
+    </div>
+    <div class="stat border-t-4 border-info">
+      <div class="stat-figure">
+        <Badge semantic="info" dot size="md" />
       </div>
-    </Card>
-    <Card tone="muted">
-      <div class="stat">
-        <div class="stat-title">
-          <Badge urgency="soon" dot />
-          <span class="ml-1">{$LL.dashboard.urgencyCard.next30Days()}</span>
-        </div>
-        <div class="stat-value num">{counts.next_30_days}</div>
+      <div class="stat-title">{$LL.dashboard.urgencyCard.alertWindow()}</div>
+      <div class="stat-value text-info">{counts.alert_window}</div>
+    </div>
+    <div class="stat border-t-4 border-success">
+      <div class="stat-figure">
+        <Badge semantic="success" dot size="md" />
       </div>
-    </Card>
+      <div class="stat-title">{$LL.dashboard.urgencyCard.next30Days()}</div>
+      <div class="stat-value text-success">{counts.next_30_days}</div>
+    </div>
   </section>
 
   <!-- ── Quick filters ───────────────────────────────────────────────────── -->
@@ -969,13 +964,6 @@
     gap: 6px;
     font-size: 0.85rem;
     color: #475569;
-  }
-
-  /* ── Urgency cards grid ───────────────────────────────────────────────── */
-  .urgency-cards {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
   }
 
   /* ── Quick filters ────────────────────────────────────────────────────── */
