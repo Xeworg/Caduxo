@@ -1,26 +1,32 @@
 <!--
   Input.svelte — shared primitive (PR 4 of caduxo-daisyui-redesign).
 
-  Composes DaisyUI `input input-bordered input-{size}` with
-  `input-error` when `invalid`, paired with `label`,
-  `label-text-alt`, and an optional helper / error description. The
+  Composes DaisyUI `input input-{size}` with `input-error` when
+  `invalid`, wrapped in DaisyUI v5's `fieldset` + `fieldset-legend`
+  pattern (the v4-era `form-control` / `label` / `label-text` /
+  `label-text-alt` classes are NOT emitted by DaisyUI v5). The
   primitive renders the visible label + required marker + helper
-  text via DaisyUI's field pattern (the DaisyUI form-control
-  layout) so consumers do not have to hand-roll the spacing.
+  text via the fieldset pattern so consumers do not have to hand-
+  roll the spacing.
 
   When the consumer supplies a `list` prop, the primitive renders
   a `<datalist id={list}>` slot the consumer fills — used by
   `ProductForm` to keep its barcode-type and unit-definition
-  autocomplete semantics verbatim (per design §4.2 / spec).
+  autocomplete semantics verbatim (per design §4.2 / spec). The
+  datalist is rendered as a sibling of the fieldset (HTML5 datalist
+  is associated by id, not by DOM containment).
 
   No hardcoded user-facing copy: every visible string enters
   through props (`label`, `helper`) or slots (`leading`, `trailing`).
 
+  Note: DaisyUI v5 emits `input` with a default border — the v4-era
+  `input-bordered` modifier is dead and is intentionally NOT emitted.
+
   Tailwind classes referenced here (for the JIT scanner):
-    input input-bordered input-sm input-md input-lg
+    input input-sm input-md input-lg
     input-error
-    label label-text label-text-alt
-    form-control
+    fieldset fieldset-legend
+    label
     motion-reduce:transition-none
 -->
 <script lang="ts">
@@ -42,7 +48,9 @@
     type?: InputType;
     /** Visible label rendered above the input. */
     label: string;
-    /** When true, surfaces a `*` after the label (via `label-text-alt`). */
+    /** When true, surfaces a `*` after the legend (visible marker) plus an
+     *  sr-only `(required)` annotation so screen readers announce the
+     *  required state. */
     required?: boolean;
     /** Optional helper text rendered below the input. */
     helper?: string;
@@ -138,16 +146,14 @@
   }
 </script>
 
-<label class="form-control w-full" for={id}>
-  <div class="label">
-    <span class="label-text">
-      {label}
-      {#if required}
-        <span class="text-error" aria-hidden="true">*</span>
-        <span class="sr-only">(required)</span>
-      {/if}
-    </span>
-  </div>
+<fieldset class="fieldset">
+  <legend class="fieldset-legend">
+    {label}
+    {#if required}
+      <span class="text-error" aria-hidden="true">*</span>
+      <span class="sr-only">(required)</span>
+    {/if}
+  </legend>
   <input
     {id}
     {name}
@@ -157,7 +163,7 @@
     {maxlength}
     {minlength}
     {list}
-    class="input input-bordered {sizeClass} {invalidClass} motion-reduce:transition-none w-full"
+    class="input {sizeClass} {invalidClass} motion-reduce:transition-none w-full"
     aria-label={ariaLabel}
     aria-describedby={effectiveDescribedBy}
     aria-invalid={invalid ? "true" : undefined}
@@ -167,13 +173,9 @@
     {onblur}
   />
   {#if helper}
-    <div class="label">
-      <span class="label-text-alt text-sm opacity-70" id={helperId}>
-        {helper}
-      </span>
-    </div>
+    <p class="label" id={helperId}>{helper}</p>
   {/if}
-  {#if datalist}
-    {@render datalist()}
-  {/if}
-</label>
+</fieldset>
+{#if datalist}
+  {@render datalist()}
+{/if}

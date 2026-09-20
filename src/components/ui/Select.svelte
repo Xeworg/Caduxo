@@ -1,11 +1,13 @@
 <!--
   Select.svelte — shared primitive (PR 4 of caduxo-daisyui-redesign).
 
-  Composes DaisyUI `select select-bordered select-{size}` and
-  `select-error` when `invalid`. The native `<select>` element stays
-  in the DOM for form semantics (keyboard navigation, mobile OS
-  sheet, screen-reader announcements) — the DaisyUI wrapper is a
-  visual overlay.
+  Composes DaisyUI `select select-{size}` and `select-error` when
+  `invalid`. The native `<select>` element stays in the DOM for form
+  semantics (keyboard navigation, mobile OS sheet, screen-reader
+  announcements) — the DaisyUI wrapper is a visual overlay.
+
+  Note: DaisyUI v5 emits `select` with a default border — the v4-era
+  `select-bordered` modifier is dead and is intentionally NOT emitted.
 
   No hardcoded user-facing copy: the `options` array supplies the
   `label` for every option (typically bound to `$LL.*` keys), the
@@ -14,9 +16,8 @@
   or wrapping markup.
 
   Tailwind classes referenced here (for the JIT scanner):
-    select select-bordered select-sm select-md select-lg
+    select select-sm select-md select-lg
     select-error
-    label label-text label-text-alt
     motion-reduce:transition-none
 -->
 <script lang="ts">
@@ -88,7 +89,7 @@
 <select
   {id}
   {name}
-  class="select select-bordered {sizeClass} {invalidClass} motion-reduce:transition-none w-full"
+  class="select {sizeClass} {invalidClass} motion-reduce:transition-none w-full"
   {disabled}
   {required}
   aria-label={ariaLabel}

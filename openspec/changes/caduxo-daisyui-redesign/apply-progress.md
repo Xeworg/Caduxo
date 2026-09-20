@@ -498,9 +498,9 @@ branch. No feature branch is cut.
 |------|--------|
 | `src/components/ui/Modal.svelte` | New primitive — native `<dialog class="modal">` shell. `open` is `$bindable()` so consumers `bind:open={visible}`. `size: sm \| md \| wide` maps to `max-w-sm \| max-w-md \| max-w-3xl`. `closeOnBackdrop` (default true) and `closeOnEscape` (default true) gate the click-outside and Escape paths. `showClose` + `closeLabel` render a trailing close button (consumer-supplied label — no default string). `returnFocusTo` is restored on close, no-op when the element is no longer in the DOM (per spec's "focus restoration edge cases" mitigation). `oncancel` fires when the user presses Escape (the dialog is still open — the consumer can confirm before discarding edits per the canonical "discard in-progress edits on Escape" semantic). `onclose` fires after the dialog has actually closed and is where the parent flips its own visibility state. The focus-trap lifecycle listens for `focusin` on the document and bounces focus back inside the dialog when it strays (Tab past last, Shift+Tab before first, programmatic moves). Scoped CSS targets `<dialog>::backdrop` with a `backdrop-blur-sm` only inside `@media (prefers-reduced-motion: no-preference)` (per design §5.10) and a solid backdrop colour via `color-mix(in oklch, black 40%, transparent)`. |
 | `src/components/ui/Table.svelte` | New primitive — DaisyUI `table` + `table-zebra` / `table-pin-rows` / `table-sm` variants via the `zebra`, `stickyHeader`, `size` props. Optional `caption` renders inside `<caption>`; `describedBy` forwards `aria-describedby` to the `<tbody>` so the empty / loading state description is announced. The mutually-exclusive body contract is implemented as three named slots (`body`, `empty`, `loading`) with priority `body > empty > loading` so the consumer provides exactly one per render. Optional `scrollable` wraps the table in `overflow-x-auto` for narrow surfaces (per design §4.10). Numeric column alignment uses the PR 1 `num` utility directly on `<td>` per design §4.4. |
-| `src/components/ui/Tabs.svelte` | New primitive — DaisyUI `tabs tabs-{style}` with `bordered \| lifted \| boxed` styles. `items: TabItem[]` carries each tab's `id`, `label`, optional `disabled`, and `panel: Snippet`. `activeId` is `$bindable()`. Roving-tabindex focus model: only the active tab has `tabindex=0` (others `-1`) per the WAI-ARIA Authoring Practices guide. Full keyboard handling on the tablist wrapper: `ArrowLeft` / `ArrowRight` cycle focus with wrap-around (disabled tabs are skipped), `Home` / `End` jump to the first / last enabled tab, `Enter` / `Space` are `preventDefault`-ed to suppress page scroll. Each tab carries `role="tab"` + `aria-selected` + `aria-controls`; each panel is a `<div role="tabpanel">` with `aria-labelledby` pointing at its tab and `hidden` toggling visibility. `aria-label` is required for the `role="tablist"` wrapper. |
-| `src/components/ui/Select.svelte` | New primitive — DaisyUI `select select-bordered select-{size}` + `select-error` when `invalid`. Native `<select>` stays in the DOM for form semantics (keyboard nav, mobile OS sheet, screen-reader announcement). `value` is `$bindable()`; `options: Option[]` carries `value \| label \| disabled` per option. `size: sm \| md`, `disabled`, `invalid`, `name`, `required` follow the DaisyUI form-control pattern. `aria-label` / `aria-labelledby` / `aria-describedby` / `aria-invalid` are forwarded to the native select. Optional `leading` snippet renders before the options (typically a `<option value="" disabled selected>` placeholder). |
-| `src/components/ui/Input.svelte` | New primitive — DaisyUI `input input-bordered input-{size}` + `input-error` when `invalid`, wrapped in the DaisyUI `form-control` + `label` / `label-text` / `label-text-alt` pattern. `value` is `$bindable()`. `type: text \| search \| number \| email \| url \| password`, `label`, `required` (renders an accessible `*` + a `(required)` sr-only annotation), `helper` (auto-binds `aria-describedby` to the helper text), `invalid`, `disabled`, `placeholder`, `name`, `maxlength`, `minlength`. When the consumer supplies `list`, the primitive renders a `<datalist id={list}>` slot (`datalist?: Snippet`) the consumer fills — preserves the native autocomplete wiring used by `ProductForm` (per design §4.2). |
+| `src/components/ui/Tabs.svelte` | New primitive — DaisyUI `tabs tabs-{style}` with `bordered \| lifted \| boxed` public prop values (mapped internally to DaisyUI v5 classes `tabs-border \| tabs-lift \| tabs-box` because the v4-era names `tabs-bordered`, `tabs-lifted`, `tabs-boxed` are NOT emitted by DaisyUI v5.7.42 — the public API stays v4-named for task-contract stability). `items: TabItem[]` carries each tab's `id`, `label`, optional `disabled`, and `panel: Snippet`. `activeId` is `$bindable()`. Roving-tabindex focus model: only the active tab has `tabindex=0` (others `-1`) per the WAI-ARIA Authoring Practices guide. Full keyboard handling on the tablist wrapper: `ArrowLeft` / `ArrowRight` cycle focus with wrap-around (disabled tabs are skipped), `Home` / `End` jump to the first / last enabled tab, `Enter` / `Space` are `preventDefault`-ed to suppress page scroll. Each tab carries `role="tab"` + `aria-selected` + `aria-controls`; each panel is a `<div role="tabpanel">` with `aria-labelledby` pointing at its tab and `hidden` toggling visibility. `aria-label` is required for the `role="tablist"` wrapper. |
+| `src/components/ui/Select.svelte` | New primitive — DaisyUI `select select-{size}` + `select-error` when `invalid`. Native `<select>` stays in the DOM for form semantics (keyboard nav, mobile OS sheet, screen-reader announcement). `value` is `$bindable()`; `options: Option[]` carries `value \| label \| disabled` per option. `size: sm \| md`, `disabled`, `invalid`, `name`, `required` follow the DaisyUI v5 pattern (the v4-era `select-bordered` modifier is dead — DaisyUI v5 selects are bordered by default). `aria-label` / `aria-labelledby` / `aria-describedby` / `aria-invalid` are forwarded to the native select. Optional `leading` snippet renders before the options (typically a `<option value="" disabled selected>` placeholder). |
+| `src/components/ui/Input.svelte` | New primitive — DaisyUI `input input-{size}` + `input-error` when `invalid`, wrapped in the DaisyUI v5 `fieldset` + `fieldset-legend` pattern (the v4-era `form-control` / `label` / `label-text` / `label-text-alt` classes are NOT emitted by DaisyUI v5 — `label` is only a nested-element utility in v5, not a layout wrapper; `fieldset-legend` is the canonical visible-label utility). `value` is `$bindable()`. `type: text \| search \| number \| email \| url \| password`, `label`, `required` (renders an accessible `*` + a `(required)` sr-only annotation next to the legend), `helper` (renders as `<p class="label">` inside the fieldset, auto-binds `aria-describedby` to the helper text), `invalid`, `disabled`, `placeholder`, `name`, `maxlength`, `minlength`. When the consumer supplies `list`, the primitive renders a `<datalist id={list}>` slot (`datalist?: Snippet`) the consumer fills as a sibling of the fieldset — preserves the native autocomplete wiring used by `ProductForm` (per design §4.2). |
 
 ### Tasks completed (PR 4)
 
@@ -510,8 +510,8 @@ branch. No feature branch is cut.
 | 4.0.2 Scoped CSS for `<dialog>::backdrop` blur under `prefers-reduced-motion: no-preference` | ✅ done | Both `backdrop-filter: blur(4px)` and `-webkit-backdrop-filter` are emitted inside the no-preference media query; a sibling `reduce` block disables both explicitly. |
 | 4.0.3 Table.svelte per design §2.3 | ✅ done | `zebra`, `stickyHeader`, `size`, `caption`, `describedBy`, mutually-exclusive `body / empty / loading` slots (priority order), DaisyUI table classes, optional `overflow-x-auto` wrapper. |
 | 4.0.4 Tabs.svelte per design §2.3 | ✅ done | `items: TabItem[]`, `activeId` bindable, `style: bordered \| lifted \| boxed`, `onchange`, required `aria-label`; ArrowLeft / ArrowRight / Home / End / Enter / Space keyboard handling; `role="tablist"` / `role="tab"` / `role="tabpanel"` with `aria-labelledby`; roving tabindex. |
-| 4.0.5 Select.svelte per design §2.3 | ✅ done | `value` bindable, `options: Option[]`, `size: sm \| md`, `disabled`, `invalid`, `aria-label` / `aria-labelledby`, DaisyUI `select select-bordered select-{size}` + `select-error`. Native `<select>` stays in DOM. |
-| 4.0.6 Input.svelte per design §2.3 | ✅ done | `value` bindable, `type: text \| search \| number \| email \| url \| password`, `label`, `required`, `helper`, `invalid`, `list`, `size: sm \| md \| lg`, `disabled`, `aria-label` / `aria-describedby`. DaisyUI `input input-bordered input-{size}` + `input-error` + `label` / `label-text` / `label-text-alt`. Renders `<datalist id={list}>` slot when `list` is supplied. |
+| 4.0.5 Select.svelte per design §2.3 | ✅ done | `value` bindable, `options: Option[]`, `size: sm \| md`, `disabled`, `invalid`, `aria-label` / `aria-labelledby`, DaisyUI `select select-{size}` + `select-error`. Native `<select>` stays in DOM. The v4-era `select-bordered` modifier is intentionally NOT emitted (DaisyUI v5 selects are bordered by default). |
+| 4.0.6 Input.svelte per design §2.3 | ✅ done | `value` bindable, `type: text \| search \| number \| email \| url \| password`, `label`, `required`, `helper`, `invalid`, `list`, `size: sm \| md \| lg`, `disabled`, `aria-label` / `aria-describedby`. DaisyUI v5 `input input-{size}` + `input-error` + the canonical `fieldset` / `fieldset-legend` field pattern (the v4-era `form-control` / `label` / `label-text` / `label-text-alt` and `input-bordered` are intentionally NOT emitted). Renders `<datalist id={list}>` slot when `list` is supplied. |
 
 ### Cross-cutting requirements
 
@@ -568,15 +568,21 @@ dist/assets/index-CE294XdS.js   327.36 kB │ gzip: 94.47 kB
   referenced classes (sample greps against
   `dist/assets/index-*.css`):
   `modal modal-box modal-bottom modal-action` /
-  `tabs tabs-bordered tabs-lifted tabs-boxed tab tab-active` /
-  `select select-bordered select-sm select-md select-error` /
-  `input input-bordered input-sm input-md input-lg input-error` /
-  `form-control label label-text label-text-alt` /
+  `tabs tabs-border tabs-lift tabs-box tab tab-active` /
+  `select select-sm select-md select-error` /
+  `input input-sm input-md input-lg input-error` /
+  `fieldset fieldset-legend label` /
   `table table-zebra table-pin-rows table-sm` /
   `overflow-x-auto` /
   `max-w-sm max-w-md max-w-3xl`. Tailwind v4 + DaisyUI v5 emitted
   every class that appears as a literal in the source — the JIT
-  scanner saw them during the build pass.
+  scanner saw them during the build pass. (Note: the original PR 4
+  commit claimed `tabs-bordered tabs-lifted tabs-boxed` /
+  `select-bordered` / `input-bordered` / `form-control` /
+  `label-text label-text-alt` were emitted. They were not — DaisyUI
+  v5 does not ship those classes. The remediation below corrects
+  the source to emit the v5 names without changing the public
+  task contract.)
 - **No migration of existing surfaces.** PR 4 owns primitive
   creation only; the modal / table / tabs / select / input
   migration of existing pages lives in PR 7+ per the task plan.
@@ -657,10 +663,10 @@ dist/assets/index-CE294XdS.js   327.36 kB │ gzip: 94.47 kB
 
 ### Bundle size
 
-| Asset | Before PR 4 | After PR 4 | Delta |
-|-------|-------------|-------------|-------|
-| `dist/assets/index-*.css` | 228.88 kB (33.65 kB gzip) | 229.94 kB (33.85 kB gzip) | +1.06 kB (+0.5%) |
-| `dist/assets/index-*.js`  | 327.36 kB (94.47 kB gzip) | 327.36 kB (94.47 kB gzip) | 0 |
+| Asset | Before PR 4 | After PR 4 | After PR 4 remediation | Delta vs. pre-remediation |
+|-------|-------------|-------------|------------------------|-----------------------------|
+| `dist/assets/index-*.css` | 228.88 kB (33.65 kB gzip) | 229.94 kB (33.85 kB gzip) | 231.87 kB (34.11 kB gzip) | +1.93 kB (+0.8%) — the dead v4 classes never produced CSS, so the bundle grew after switching to the actually-emitted v5 classes (`tabs-border`, `tabs-lift`, `tabs-box`, `fieldset`, `fieldset-legend`, `label`). The size is still well within the design's 20 % regression gate. |
+| `dist/assets/index-*.js`  | 327.36 kB (94.47 kB gzip) | 327.36 kB (94.47 kB gzip) | 327.36 kB (94.47 kB gzip) | 0 |
 
 CSS growth is 0.5 % — well within the design's 20 % regression
 gate (risk #8 in the proposal). The growth covers the 23 new
@@ -692,4 +698,131 @@ DaisyUI v5 class families introduced by the primitives.
   ("Keep the work on the existing branch `feat/daisyui-redesign`"),
   PR 4 also stacks onto `feat/daisyui-redesign`. No feature
   branch is cut for this slice.
+
+### PR 4 remediation — DaisyUI v4 → v5 class name alignment
+
+**Status:** Applied on `feat/daisyui-redesign`. Not pushed per
+session preflight.
+
+**Triggered by:** PR 4 independent verifier warning — the bundled
+CSS did NOT contain `tabs-bordered`, `tabs-lifted`, `tabs-boxed`,
+`input-bordered`, `select-bordered`, `form-control`, `label-text`,
+or `label-text-alt` because DaisyUI v5.7.42 does not emit those
+classes. The original PR 4 commit's emission evidence was wrong;
+it listed the v4-era names as if they had been emitted. The
+bundled CSS only carries the v5 names: `tabs-border`, `tabs-lift`,
+`tabs-box`, `fieldset`, `fieldset-legend`, `label`, `input`,
+`select`, etc.
+
+**Strategy:** Use installed DaisyUI v5. Do NOT downgrade or pin
+DaisyUI v4. Keep the public task contract stable — the `Tabs`
+`TabStyle` union (`"bordered" | "lifted" | "boxed"`) is preserved;
+only the internal class emission changes. The Input/Select public
+props are unchanged.
+
+**Fix:**
+
+| File | Change |
+|------|--------|
+| `src/components/ui/Tabs.svelte` | `styleClass` now maps `bordered → "tabs-border"`, `lifted → "tabs-lift"`, `boxed → "tabs-box"` (DaisyUI v5 names). The `tabs-bordered tabs-lifted tabs-boxed` literals were dead — they were replaced at the emission site and the JIT-hint comment was updated. |
+| `src/components/ui/Input.svelte` | Replaced `<label class="form-control">` + nested `<div class="label"><span class="label-text">` + `<div class="label"><span class="label-text-alt">` with DaisyUI v5's canonical `<fieldset class="fieldset">` + `<legend class="fieldset-legend">` + `<p class="label">` pattern. Removed dead `input-bordered` modifier (v5 fields are bordered by default). `<datalist>` snippet still rendered as a sibling of the fieldset so `ProductForm`'s native autocomplete wiring is preserved verbatim (per design §4.2). Helper text now uses `<p class="label" id={helperId}>` so `aria-describedby` keeps working. |
+| `src/components/ui/Select.svelte` | Removed dead `select-bordered` modifier (v5 selects are bordered by default). Size + `select-error` + ARIA wiring unchanged. |
+
+**Checks run + results:**
+
+```text
+$ npm run check
+svelte-check found 0 errors and 0 warnings
+✅ green
+
+$ npm run build
+✓ 205 modules transformed.
+dist/assets/index-DQ0VfkNF.css  231.87 kB │ gzip: 34.11 kB
+dist/assets/index-B_6iu54U.js   327.36 kB │ gzip: 94.47 kB
+✓ built in 1.64s
+✅ green
+
+$ grep -oE '\.(tabs-(border|lift|box)|tabs|tab-active)\b' dist/assets/index-*.css | sort -u
+.tab
+.tab-active
+.tabs
+.tabs-border
+.tabs-box
+.tabs-lift
+
+$ grep -oE '\.(fieldset|fieldset-legend|input|input-(sm|md|lg)|input-error|label)\b' dist/assets/index-*.css | sort -u
+.fieldset
+.fieldset-legend
+.input
+.input-error
+.input-lg
+.input-md
+.input-sm
+.label
+
+$ grep -oE '\.(select|select-(sm|md|lg)|select-error)\b' dist/assets/index-*.css | sort -u
+.select
+.select-error
+.select-lg
+.select-md
+.select-sm
+
+$ grep -oE '\.(tabs-bordered|tabs-lifted|tabs-boxed|input-bordered|select-bordered|form-control|label-text|label-text-alt)\b' dist/assets/index-*.css | sort -u
+(no output — all eight v4 dead classes are absent from the bundle)
+```
+
+**Workload / PR boundary:**
+
+- **Remediation diff:** 3 component files + `apply-progress.md`
+  changed. ~58 insertions / ~40 deletions across the source; the
+  apply-progress update is a documentation correction. Well under
+  the 400-line review budget; no need for a chained split.
+- **Public task contract preserved:** `Tabs.TabStyle` union is
+  unchanged (`"bordered" | "lifted" | "boxed"`); Input/Select
+  props are unchanged; consumers downstream see identical prop
+  surfaces.
+- **CSS bundle delta:** +1.93 kB (+0.8 %) — the dead v4 classes
+  produced zero bytes of CSS, so swapping to the actually-emitted
+  v5 classes (`tabs-border`, `tabs-lift`, `tabs-box`, `fieldset`,
+  `fieldset-legend`, `label`) added the bytes those rules take up
+  in the DaisyUI component CSS. The new total (231.87 kB / 34.11
+  kB gzip) is still well within the design's 20 % CSS regression
+  gate (risk #8 in the proposal).
+
+**Residual risks:**
+
+1. **Visual parity is not yet re-verified.** This remediation
+   fixes the dead-class bug; a follow-up verify pass should boot
+   `npm run dev` (or `npm run tauri dev`) in a desktop environment
+   and confirm the `Tabs`, `Input`, and `Select` primitives render
+   visually correctly across `caduxo-light` and `dark` themes. The
+   PR 4 commit shipped without that visual pass; the remediation
+   inherits that gap.
+2. **`spec.md` / `design.md` / `tasks.md` still mention the v4-era
+   class names in prose.** This remediation only updated the
+   allowed edit surfaces (3 component files + `apply-progress.md`).
+   The spec/design/tasks reference `tabs-bordered | tabs-lifted |
+   tabs-boxed`, `form-control`, `label-text`, `label-text-alt`,
+   `input-bordered`, `select-bordered` — those documents should be
+   refreshed in a follow-up slice (parent-scoped prose update, not
+   implementation work) so the implementation and the prose agree.
+3. **`Tabs` style=`"boxed"` and style=`"lifted"` were never visually
+   exercised before this remediation.** Both styles now resolve to
+   real DaisyUI v5 classes (`tabs-box` and `tabs-lift`), but no
+   consumer has been migrated yet, so the visual outcome will only
+   be confirmed when a consumer (PR 6 dashboard, PR 10 calendar)
+   actually uses them.
+4. **The `Input.svelte` wrapper switched from `<label for={id}>` to
+   `<fieldset><legend>`.** The visible label association still
+   works (legend labels by containment), and the input still carries
+   `id={id}` for external targeting. No consumer exists yet, so the
+   contract change is safe today; if any test or external library
+   was relying on `<label>` wrapper semantics, that would surface
+   only when PR 8 lands the form migrations.
+5. **`tabs-bordered` and friends were referenced in `src/components/ui/Tabs.svelte` source as a
+   literal before this remediation, which means Tailwind's v4 JIT
+   scanner SAW them as candidate class names but DaisyUI emitted
+   nothing — the browser silently dropped them. The remediation
+   removes the dead literals so the scanner and the bundled CSS
+   now agree.
 

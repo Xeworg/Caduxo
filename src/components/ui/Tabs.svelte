@@ -18,7 +18,7 @@
       item is rendered when the item is active).
 
   Tailwind classes referenced here (for the JIT scanner):
-    tabs tabs-bordered tabs-lifted tabs-boxed
+    tabs tabs-border tabs-lift tabs-box
     tab tab-active
 -->
 <script lang="ts">
@@ -61,7 +61,22 @@
 
   let tablist: HTMLDivElement | undefined = $state();
 
-  const styleClass = $derived(`tabs-${style}`);
+  // DaisyUI v5 renamed the style modifiers: `tabs-bordered` → `tabs-border`,
+  // `tabs-lifted` → `tabs-lift`, `tabs-boxed` → `tabs-box`. The public
+  // `TabStyle` union keeps the v4-era names so the PR 4 task contract
+  // (`bordered | lifted | boxed`) is preserved — we only change the
+  // emitted class.
+  const styleClass = $derived.by((): string => {
+    switch (style) {
+      case "lifted":
+        return "tabs-lift";
+      case "boxed":
+        return "tabs-box";
+      case "bordered":
+      default:
+        return "tabs-border";
+    }
+  });
 
   // Base id for each tab / panel pair. Per ARIA, tabs and panels
   // share an id namespace; we expose `{id}-tab` and `{id}-panel` so
