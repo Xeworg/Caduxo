@@ -845,7 +845,7 @@ file at the breakpoint layer.
 ### 11.x PR 11 verify gate
 
 - [ ] `npm run check` green. <!-- sdd-owner: implementation -->
-- [ ] `npm run build` green. <!-- sld-owner: implementation -->
+- [ ] `npm run build` green. <!-- sdd-owner: implementation -->
 - [ ] Manual smoke — resize the viewport to 1024, 720, and 480 px in
       turn across every migrated main surface; no horizontal page
       overflow appears; every primary action remains reachable;
