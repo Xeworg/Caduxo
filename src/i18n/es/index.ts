@@ -559,6 +559,13 @@ const es: BaseTranslation = {
       inventoryAdjustmentIncrease: "Ajuste de inventario (+)",
       inventoryAdjustmentDecrease: "Ajuste de inventario (−)",
     },
+    // Encabezados de columna del libro mayor de movimientos (PR 9a).
+    table: {
+      kind: "Tipo",
+      quantity: "Cant.",
+      locations: "Ubicaciones",
+      time: "Hora",
+    },
     modal: {
       close: "Cerrar",
       cancel: "Cancelar",

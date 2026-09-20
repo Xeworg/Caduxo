@@ -1961,6 +1961,24 @@ type RootTranslation = {
 			 */
 			inventoryAdjustmentDecrease: string
 		}
+		table: {
+			/**
+			 * T​y​p​e
+			 */
+			kind: string
+			/**
+			 * Q​t​y
+			 */
+			quantity: string
+			/**
+			 * L​o​c​a​t​i​o​n​s
+			 */
+			locations: string
+			/**
+			 * T​i​m​e
+			 */
+			time: string
+		}
 		modal: {
 			/**
 			 * C​l​o​s​e
@@ -5352,6 +5370,24 @@ export type TranslationFunctions = {
 			 * Inventory adjustment (−)
 			 */
 			inventoryAdjustmentDecrease: () => LocalizedString
+		}
+		table: {
+			/**
+			 * Type
+			 */
+			kind: () => LocalizedString
+			/**
+			 * Qty
+			 */
+			quantity: () => LocalizedString
+			/**
+			 * Locations
+			 */
+			locations: () => LocalizedString
+			/**
+			 * Time
+			 */
+			time: () => LocalizedString
 		}
 		modal: {
 			/**

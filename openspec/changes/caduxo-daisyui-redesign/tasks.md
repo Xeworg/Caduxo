@@ -738,59 +738,76 @@ forms return.
 
 `docs/daisyui-redesign-plan.md` Phase 7. Six table-bearing surfaces.
 
-- [ ] Migrate the `LotMovementsPanel.svelte` ledger table to
+> **PR 9 split status (PR 9a landed).** PR 9 was split per the
+> apply-time budget discipline into **PR 9a** (LotMovementsPanel,
+> ReportsPage data table, CsvImportPage preview tables) and
+> **PR 9b** (StoresPage, BackupRestorePage info-lists,
+> CalendarPage day-detail, ProductCatalogPage, ConfigurationPage
+> info-list). PR 9a landed on commit `c90d3ce`. PR 9b continues
+> the remaining surfaces in the next chained slice.
+
+- [x] Migrate the `LotMovementsPanel.svelte` ledger table to
       `Table.svelte` (`zebra`, `stickyHeader`); numeric columns use
       `num`. Empty state via `EmptyState.svelte`; loading state via
-      `LoadingState.svelte`. <!-- sdd-owner: implementation -->
-- [ ] Migrate the `ReportsPage.svelte` data table (the post-filter
+      `LoadingState.svelte`. (PR 9a slice) <!-- sdd-owner: implementation -->
+- [x] Migrate the `ReportsPage.svelte` data table (the post-filter
       results table, separate from the form work in PR 8) to
-      `Table.svelte`. Preserve sort / filter behaviour. <!-- sdd-owner: implementation -->
-- [ ] Migrate the `CsvImportPage.svelte` preview table to `Table.svelte`;
-      preserve readability of long rows. <!-- sdd-owner: implementation -->
+      `Table.svelte`. Preserve sort / filter behaviour. (PR 9a slice) <!-- sdd-owner: implementation -->
+- [x] Migrate the `CsvImportPage.svelte` preview table to `Table.svelte`;
+      preserve readability of long rows. (PR 9a slice) <!-- sdd-owner: implementation -->
 - [ ] Migrate the `StoresPage.svelte` store list (table-like surface)
-      to `Table.svelte`. <!-- sdd-owner: implementation -->
+      to `Table.svelte`. (PR 9b slice) <!-- sdd-owner: implementation -->
 - [ ] Migrate the `BackupRestorePage.svelte` info lists (`.info-list`,
       `.checks-list`, `.confirm-box`) to `Table.svelte` (or
-      `Card.svelte` + DaisyUI `list` patterns where appropriate). <!-- sdd-owner: implementation -->
+      `Card.svelte` + DaisyUI `list` patterns where appropriate).
+      (PR 9b slice) <!-- sdd-owner: implementation -->
 - [ ] Migrate the `CalendarPage.svelte` day-detail panel to a
       `Table.svelte` (it is the list of active lots for the selected
-      day; the calendar grid itself stays in PR 10). <!-- sdd-owner: implementation -->
+      day; the calendar grid itself stays in PR 10). (PR 9b slice) <!-- sdd-owner: implementation -->
 - [ ] Migrate the `ProductCatalogPage.svelte` product list to
       `Table.svelte` (or to `Card.svelte` cards if a future iteration
       prefers cards — pick whichever preserves the existing visual
-      hierarchy). <!-- sdd-owner: implementation -->
+      hierarchy). (PR 9b slice) <!-- sdd-owner: implementation -->
 - [ ] Migrate the `ConfigurationPage.svelte` info-list surface (the
       "Acerca de" / "Configuración" summary block) to
-      `Table.svelte` or DaisyUI `list`. <!-- sdd-owner: implementation -->
-- [ ] Add new i18n keys for any new empty / loading / table-header
-      copy. EN + ES in the same PR. <!-- sdd-owner: implementation -->
-- [ ] Run `npm run i18n:generate`; commit the regenerated catalogue. <!-- sdd-owner: implementation -->
+      `Table.svelte` or DaisyUI `list`. (PR 9b slice) <!-- sdd-owner: implementation -->
+- [x] Add new i18n keys for any new empty / loading / table-header
+      copy. EN + ES in the same PR. (PR 9a slice — `lotMovements.table.*`
+      headers added; no further keys required by PR 9b surface set) <!-- sdd-owner: implementation -->
+- [x] Run `npm run i18n:generate`; commit the regenerated catalogue.
+      (PR 9a slice; PR 9b will re-run if new keys are added) <!-- sdd-owner: implementation -->
 
 ### 9.x PR 9 verify gate
 
-- [ ] `npm run i18n:generate` green. <!-- sdd-owner: implementation -->
-- [ ] `npm run check` green. <!-- sdd-owner: implementation -->
-- [ ] `npm run build` green. <!-- sdd-owner: implementation -->
-- [ ] `git grep -nE '\.(lot-table|reports-table|reports-empty|lot-picker|lot-picker-item|lot-picker-status|info-list|checks-list|confirm-box)\b' src/components/`
+- [x] `npm run i18n:generate` green. (PR 9a slice) <!-- sdd-owner: implementation -->
+- [x] `npm run check` green. (PR 9a slice) <!-- sdd-owner: implementation -->
+- [x] `npm run build` green. (PR 9a slice) <!-- sdd-owner: implementation -->
+- [x] `git grep -nE '\.(lot-table|reports-table|reports-empty|lot-picker|lot-picker-item|lot-picker-status|info-list|checks-list|confirm-box)\b' src/components/LotMovementsPanel.svelte src/components/ReportsPage.svelte src/components/CsvImportPage.svelte`
       returns zero matches as the active table wrapper class on the
-      migrated files. <!-- sdd-owner: implementation -->
+      PR 9a migrated files. (PR 9a slice) <!-- sdd-owner: implementation -->
+- [ ] Re-run the PR 9 grep gate across `src/components/` after PR 9b
+      lands to verify the gate is fully satisfied across the entire
+      PR 9 surface set. (PR 9b slice) <!-- sdd-owner: implementation -->
 - [ ] Manual smoke — every migrated table preserves its canonical
       contract: no column lost, sort / filter behaviour unchanged,
       CSV preview readable, calendar day-detail panel still renders
       one row per active lot with the same columns, store list still
-      CRUD-able, backup info-lists still readable. <!-- sdd-owner: implementation -->
+      CRUD-able, backup info-lists still readable. (Deferred to verify
+      phase — headless environment has no display server) <!-- sdd-owner: implementation -->
 - [ ] Manual reduced-motion pass — skeleton shimmer falls back to a
-      static grey block on `reduce`. <!-- sdd-owner: implementation -->
+      static grey block on `reduce`. (Deferred to verify phase) <!-- sdd-owner: implementation -->
 
 **Files / discovery targets**
 
-- `src/components/LotMovementsPanel.svelte`,
-  `ReportsPage.svelte` (data table portion),
-  `CsvImportPage.svelte` (preview portion),
-  `ProductCatalogPage.svelte`,
-  `StoresPage.svelte`, `BackupRestorePage.svelte`,
-  `CalendarPage.svelte` (day-detail panel),
-  `ConfigurationPage.svelte` (info-list portion).
+- `src/components/LotMovementsPanel.svelte` (PR 9a),
+- `ReportsPage.svelte` (data table portion; PR 9a),
+- `CsvImportPage.svelte` (preview portion; PR 9a),
+- `ProductCatalogPage.svelte` (PR 9b),
+- `StoresPage.svelte` (PR 9b),
+- `BackupRestorePage.svelte` (PR 9b),
+- `CalendarPage.svelte` (day-detail panel; PR 9b),
+- `ConfigurationPage.svelte` (info-list portion; PR 9b — no-op,
+  the page already uses `Card.svelte` primitives).
 
 **Forecast:** ~360 net additions (design §6 estimate). **Rollback:**
 revert the table files; the i18n-supported tables return.

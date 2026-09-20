@@ -561,6 +561,13 @@ const en: BaseTranslation = {
       inventoryAdjustmentIncrease: "Inventory adjustment (+)",
       inventoryAdjustmentDecrease: "Inventory adjustment (−)",
     },
+    // Column headers for the tabular movement ledger (PR 9a).
+    table: {
+      kind: "Type",
+      quantity: "Qty",
+      locations: "Locations",
+      time: "Time",
+    },
     modal: {
       close: "Close",
       cancel: "Cancel",

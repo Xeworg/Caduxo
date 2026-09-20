@@ -1,6 +1,6 @@
 <!--
-  ReportsPage.svelte — reports configurator + preview (PR 8b of
-  caduxo-daisyui-redesign).
+  ReportsPage.svelte — reports configurator + preview
+  (PR 8b forms + PR 9a tables of caduxo-daisyui-redesign).
 
   Filter chrome migration to shared UI primitives:
     - Select.svelte for the store / location / urgency filter selects.
@@ -14,10 +14,25 @@
       urgency filter select in `custom` mode; the page has no plain
       `<input type="radio">` controls to migrate.
 
+  Result table migration (PR 9a):
+    - Table.svelte (zebra, stickyHeader, scrollable) hosts the
+      post-filter result rows; numeric columns use the `num`
+      utility from PR 1.
+    - EmptyState.svelte replaces the bespoke `.empty-state` block
+      when no rows match the active filters.
+    - The per-row urgency tinting (`.row-expired` / `.row-today` /
+      `.row-alert` / `.row-soon`) is preserved on the migrated
+      `<tr>` elements so the canonical Dashboard urgency UX
+      transfers verbatim. The `.urgency-badge` chip stays inline
+      (PR 9 does not migrate it to `Badge.svelte` — the page-level
+      styling is unique to Reports).
+
   Tailwind classes referenced here (for the JIT scanner):
     select select-md select-error
     btn btn-primary btn-secondary btn-ghost btn-lg
     alert alert-error alert-success alert-soft
+    table table-zebra table-pin-rows
+    overflow-x-auto
     flex items-center gap-2
 -->
 <script lang="ts">
@@ -26,6 +41,8 @@
   import Select from "./ui/Select.svelte";
   import Button from "./ui/Button.svelte";
   import Alert from "./ui/Alert.svelte";
+  import Table from "./ui/Table.svelte";
+  import EmptyState from "./ui/EmptyState.svelte";
   import {
     previewReport,
     exportReportPdfWithDialog,
@@ -484,50 +501,49 @@
     </section>
 
     {#if preview.lots.length === 0}
-      <div class="empty-state">
-        <p>{$LL.reports.emptyState.noRowsMatch()}</p>
-        <p class="hint">{$LL.reports.emptyState.adjustFilters()}</p>
-      </div>
+      <EmptyState
+        title={$LL.reports.emptyState.noRowsMatch()}
+        body={$LL.reports.emptyState.adjustFilters()}
+        icon="search"
+      />
     {:else}
-      <div class="table-wrapper" role="region" aria-label={$LL.reports.table.reportRows()}>
-        <table class="report-table">
-          <thead>
-            <tr>
-              <th>{$LL.reports.table.sku()}</th>
-              <th>{$LL.reports.table.description()}</th>
-              <th>{$LL.reports.table.storeLocation()}</th>
-              <th class="num">{$LL.reports.table.qty()}</th>
-              <th>{$LL.reports.table.expiry()}</th>
-              <th class="num">{$LL.reports.table.days()}</th>
-              <th>{$LL.reports.table.urgency()}</th>
-              <th>{$LL.reports.table.batch()}</th>
+      <Table zebra stickyHeader scrollable aria-label={$LL.reports.table.reportRows()}>
+        {#snippet head()}
+          <tr>
+            <th>{$LL.reports.table.sku()}</th>
+            <th>{$LL.reports.table.description()}</th>
+            <th>{$LL.reports.table.storeLocation()}</th>
+            <th class="num">{$LL.reports.table.qty()}</th>
+            <th>{$LL.reports.table.expiry()}</th>
+            <th class="num">{$LL.reports.table.days()}</th>
+            <th>{$LL.reports.table.urgency()}</th>
+            <th>{$LL.reports.table.batch()}</th>
+          </tr>
+        {/snippet}
+        {#snippet body()}
+          {#each preview!.lots as lot (lot.lot_id)}
+            <tr class={urgencyClass(lot.urgency)}>
+              <td class="cell-sku">{lot.sku}</td>
+              <td class="cell-desc">{lot.description}</td>
+              <td class="cell-store">
+                {lot.store_name}
+                {#if lot.location_name}
+                  <span class="loc-name">/ {lot.location_name}</span>
+                {/if}
+              </td>
+              <td class="cell-qty num">{formatQty(lot.quantity)} {getUnitDisplayName(lot)}</td>
+              <td class="cell-date num">{formatDate(lot.expiry_date)}</td>
+              <td class="cell-days num">{formatDays(lot.days_remaining)}</td>
+              <td>
+                <span class="urgency-badge {urgencyClass(lot.urgency)}">
+                  {urgencyLabel(lot.urgency)}
+                </span>
+              </td>
+              <td class="cell-batch">{lot.batch_code ?? "—"}</td>
             </tr>
-          </thead>
-          <tbody>
-            {#each preview.lots as lot (lot.lot_id)}
-              <tr class={urgencyClass(lot.urgency)}>
-                <td class="cell-sku">{lot.sku}</td>
-                <td class="cell-desc">{lot.description}</td>
-                <td class="cell-store">
-                  {lot.store_name}
-                  {#if lot.location_name}
-                    <span class="loc-name">/ {lot.location_name}</span>
-                  {/if}
-                </td>
-                <td class="cell-qty">{formatQty(lot.quantity)} {getUnitDisplayName(lot)}</td>
-                <td class="cell-date">{formatDate(lot.expiry_date)}</td>
-                <td class="cell-days">{formatDays(lot.days_remaining)}</td>
-                <td>
-                  <span class="urgency-badge {urgencyClass(lot.urgency)}">
-                    {urgencyLabel(lot.urgency)}
-                  </span>
-                </td>
-                <td class="cell-batch">{lot.batch_code ?? "—"}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
+          {/each}
+        {/snippet}
+      </Table>
     {/if}
   {/if}
 </div>
@@ -678,79 +694,6 @@
   .meta-filters {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.78rem;
-  }
-
-  /* ── Empty state ──────────────────────────────────────────────────── */
-  .empty-state {
-    background: var(--color-base-100);
-    border: 1px dashed color-mix(in oklch, var(--color-base-300) 70%, transparent);
-    border-radius: 10px;
-    padding: 40px 20px;
-    text-align: center;
-  }
-
-  .empty-state p {
-    margin: 0 0 6px;
-    color: var(--color-secondary);
-  }
-
-  .empty-state .hint {
-    font-size: 0.85rem;
-    color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
-  }
-
-  /* ── Table ────────────────────────────────────────────────────────── */
-  .table-wrapper {
-    overflow-x: auto;
-    border-radius: 8px;
-    border: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
-    background: var(--color-base-100);
-  }
-
-  .report-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.85rem;
-  }
-
-  .report-table thead {
-    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
-  }
-
-  .report-table th {
-    text-align: left;
-    padding: 8px 10px;
-    font-weight: 600;
-    color: var(--color-secondary);
-    border-bottom: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
-    white-space: nowrap;
-  }
-
-  .report-table th.num,
-  .report-table td.cell-qty,
-  .report-table td.cell-days {
-    text-align: right;
-  }
-
-  .report-table td {
-    padding: 7px 10px;
-    border-bottom: 1px solid color-mix(in oklch, var(--color-base-200) 90%, transparent);
-    vertical-align: middle;
-    color: var(--color-base-content);
-  }
-
-  .report-table tr:last-child td {
-    border-bottom: none;
-  }
-
-  .report-table tr:hover td {
-    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
-  }
-
-  .cell-sku {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.8rem;
-    color: var(--color-secondary);
   }
 
   .cell-desc {

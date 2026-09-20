@@ -1,6 +1,6 @@
 <!--
-  CsvImportPage.svelte — CSV import stage machine (PR 8b of
-  caduxo-daisyui-redesign).
+  CsvImportPage.svelte — CSV import stage machine (PR 8b forms +
+  PR 9a tables of caduxo-daisyui-redesign).
 
   Migration to shared UI primitives:
     - Button.svelte for every stage button (select file / choose
@@ -13,15 +13,20 @@
     - The action-card clickable surface (`.action-card.primary` +
       `.action-card.info`) becomes a Card.svelte clickable surface
       with DaisyUI primitives.
-    - The summary / result card grids keep their bespoke layout —
-      PR 9 owns the data-table migration for the preview + import
-      log tables.
+    - Table.svelte (zebra, scrollable) hosts the per-row preview +
+      import-log tables; numeric column alignment uses the `num`
+      utility. The row-tint classes (`.badge-ok` / `.badge-warn` /
+      `.badge-error`) preserve their bespoke colour mapping because
+      the canonical CSV-import UX expects per-status row tinting
+      that DaisyUI’s table-zebra alone does not provide.
 
   Tailwind classes referenced here (for the JIT scanner):
     btn btn-primary btn-secondary btn-ghost btn-sm
     card card-body bg-base-100 bg-base-200
     alert alert-error alert-info alert-warning alert-success alert-soft
     radio radio-primary radio-sm
+    table table-zebra
+    overflow-x-auto
     flex items-center gap-2
 -->
 <script lang="ts">
@@ -42,6 +47,7 @@
   import ColumnMapper from "./ColumnMapper.svelte";
   import Button from "./ui/Button.svelte";
   import Alert from "./ui/Alert.svelte";
+  import Table from "./ui/Table.svelte";
   import { LL } from "../i18n/i18n-svelte.js";
   import { humanizeError } from "../lib/errors.js";
 
@@ -405,34 +411,32 @@
     {#if preview.rows.length > 0}
       <section class="section">
         <h2>{$LL.csvImport.rowDetails()}</h2>
-        <div class="table-wrap">
-          <table class="preview-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>{$LL.csvImport.sku()}</th>
-                <th>{$LL.csvImport.description()}</th>
-                <th>{$LL.csvImport.barcode()}</th>
-                <th>{$LL.csvImport.status()}</th>
-                <th>{$LL.csvImport.detail()}</th>
+        <Table zebra scrollable aria-label={$LL.csvImport.rowDetails()}>
+          {#snippet head()}
+            <tr>
+              <th>#</th>
+              <th>{$LL.csvImport.sku()}</th>
+              <th>{$LL.csvImport.description()}</th>
+              <th>{$LL.csvImport.barcode()}</th>
+              <th>{$LL.csvImport.status()}</th>
+              <th>{$LL.csvImport.detail()}</th>
+            </tr>
+          {/snippet}
+          {#snippet body()}
+            {#each preview.rows as row}
+              {@const badge = rowBadge(row.status)}
+              {@const detailMsg = rowDetailMessage(row)}
+              <tr class={badge.cls}>
+                <td class="row-num">{row.row_index}</td>
+                <td class="cell-mono">{row.sku ?? "—"}</td>
+                <td>{row.description ?? "—"}</td>
+                <td class="cell-mono cell-muted">{row.barcode ?? "—"}</td>
+                <td><span class="badge {badge.cls}">{badge.label}</span></td>
+                <td class="detail-cell">{@html detailMsg}</td>
               </tr>
-            </thead>
-            <tbody>
-              {#each preview.rows as row}
-                {@const badge = rowBadge(row.status)}
-                {@const detailMsg = rowDetailMessage(row)}
-                <tr class={badge.cls}>
-                  <td class="row-num">{row.row_index}</td>
-                  <td class="cell-mono">{row.sku ?? "—"}</td>
-                  <td>{row.description ?? "—"}</td>
-                  <td class="cell-mono cell-muted">{row.barcode ?? "—"}</td>
-                  <td><span class="badge {badge.cls}">{badge.label}</span></td>
-                  <td class="detail-cell">{@html detailMsg}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
+            {/each}
+          {/snippet}
+        </Table>
       </section>
     {/if}
 
@@ -490,33 +494,31 @@
     {#if result.rows.length > 0}
       <section class="section">
         <h2>{$LL.csvImport.importLog()}</h2>
-        <div class="table-wrap">
-          <table class="preview-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>{$LL.csvImport.sku()}</th>
-                <th>{$LL.csvImport.description()}</th>
-                <th>{$LL.csvImport.barcode()}</th>
-                <th>{$LL.csvImport.status()}</th>
-                <th>{$LL.csvImport.detail()}</th>
+        <Table zebra scrollable aria-label={$LL.csvImport.importLog()}>
+          {#snippet head()}
+            <tr>
+              <th>#</th>
+              <th>{$LL.csvImport.sku()}</th>
+              <th>{$LL.csvImport.description()}</th>
+              <th>{$LL.csvImport.barcode()}</th>
+              <th>{$LL.csvImport.status()}</th>
+              <th>{$LL.csvImport.detail()}</th>
+            </tr>
+          {/snippet}
+          {#snippet body()}
+            {#each result.rows as row}
+              {@const badge = outcomeBadge(row.outcome)}
+              <tr class={badge.cls}>
+                <td class="row-num">{row.row_index}</td>
+                <td class="cell-mono">{row.sku || "—"}</td>
+                <td>{row.description || "—"}</td>
+                <td class="cell-mono cell-muted">{row.barcode || "—"}</td>
+                <td><span class="badge {badge.cls}">{badge.label}</span></td>
+                <td class="detail-cell">{outcomeReason(row)}</td>
               </tr>
-            </thead>
-            <tbody>
-              {#each result.rows as row}
-                {@const badge = outcomeBadge(row.outcome)}
-                <tr class={badge.cls}>
-                  <td class="row-num">{row.row_index}</td>
-                  <td class="cell-mono">{row.sku || "—"}</td>
-                  <td>{row.description || "—"}</td>
-                  <td class="cell-mono cell-muted">{row.barcode || "—"}</td>
-                  <td><span class="badge {badge.cls}">{badge.label}</span></td>
-                  <td class="detail-cell">{outcomeReason(row)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
+            {/each}
+          {/snippet}
+        </Table>
       </section>
     {/if}
 
@@ -729,53 +731,6 @@
     font-size: 0.8rem;
     color: var(--color-secondary);
     line-height: 1.4;
-  }
-
-  /* Preview table */
-  .table-wrap {
-    overflow-x: auto;
-    border: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
-    border-radius: 8px;
-    margin-bottom: 20px;
-  }
-
-  .preview-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.85rem;
-  }
-
-  .preview-table th {
-    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
-    padding: 8px 10px;
-    text-align: left;
-    font-weight: 500;
-    color: var(--color-secondary);
-    border-bottom: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
-    white-space: nowrap;
-  }
-
-  .preview-table td {
-    padding: 7px 10px;
-    border-bottom: 1px solid color-mix(in oklch, var(--color-base-200) 90%, transparent);
-    vertical-align: middle;
-    color: var(--color-base-content);
-  }
-
-  .preview-table tr:last-child td {
-    border-bottom: none;
-  }
-
-  .preview-table tr.badge-ok {
-    background: color-mix(in oklch, var(--color-success) 6%, transparent);
-  }
-
-  .preview-table tr.badge-warn {
-    background: color-mix(in oklch, var(--color-warning) 10%, transparent);
-  }
-
-  .preview-table tr.badge-error {
-    background: color-mix(in oklch, var(--color-error) 8%, transparent);
   }
 
   .row-num {
