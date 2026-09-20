@@ -305,7 +305,7 @@
       <button
         type="button"
         class="action-card action-card-primary"
-        on:click={selectAndPreview}
+        onclick={selectAndPreview}
       >
         <span class="card-icon" aria-hidden="true">📄</span>
         <span class="card-title">{$LL.csvImport.selectFile()}</span>
