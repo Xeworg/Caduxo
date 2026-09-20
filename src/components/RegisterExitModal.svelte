@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
   import { LL } from "../i18n/i18n-svelte.js";
+  import { locale } from "../i18n/locale.svelte.js";
   import type { UnitKind } from "../lib/products.js";
 
   // ── Props ──────────────────────────────────────────────────────────────────
@@ -103,7 +104,7 @@
         source_location_id: sourceLocationId,
         destination_location_id: null,
         notes: notes.trim() || null,
-      });
+      }, locale.current);
       onCreated();
     } catch (e) {
       errorMsg = String(e);

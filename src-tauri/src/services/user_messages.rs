@@ -166,6 +166,92 @@ pub enum UserMessage {
         unit: String,
         available: f64,
     },
+    /// Lot movement validation: the requested movement kind is not one of
+    /// the known values. Carries the raw input string so the parser can
+    /// round-trip and the localised message can name it. Used by
+    /// `services::lot_movements::validate_kind` at the command boundary.
+    UnknownMovementKind {
+        kind: String,
+    },
+    /// Lot movement validation: an `inventory_adjustment` was submitted
+    /// without a `direction` (`increase` / `decrease`). Constant text.
+    DirectionRequiredForInventoryAdjustment,
+    /// Lot movement validation: a non-`inventory_adjustment` kind was
+    /// submitted with a `direction`. Carries the offending kind so the
+    /// parser can round-trip and the localised message can name it.
+    DirectionOnlyForInventoryAdjustment {
+        kind: String,
+    },
+    /// Lot movement validation: `entry:initial` was submitted with a
+    /// source location. Constant text.
+    EntryInitialNoSource,
+    /// Lot movement validation: `entry:initial` was submitted without a
+    /// destination location. Constant text.
+    EntryInitialRequiresDestination,
+    /// Lot movement validation: `transfer` was submitted without a source
+    /// location. Constant text.
+    TransferRequiresSource,
+    /// Lot movement validation: `transfer` was submitted without a
+    /// destination location. Constant text.
+    TransferRequiresDestination,
+    /// Lot movement validation: `transfer` was submitted with the same
+    /// source and destination location. Constant text.
+    TransferSourceAndDestinationDiffer,
+    /// Lot movement validation: `inventory_adjustment` with
+    /// `direction=increase` was submitted with a source location. The
+    /// increase kind only writes to a destination; a source is rejected
+    /// at the command boundary. Constant text.
+    InventoryAdjustmentIncreaseNoSource,
+    /// Lot movement validation: `inventory_adjustment` with
+    /// `direction=increase` was submitted without a destination location.
+    /// Constant text.
+    InventoryAdjustmentIncreaseRequiresDestination,
+    /// Lot movement validation: `inventory_adjustment` with
+    /// `direction=decrease` was submitted with a destination location.
+    /// The decrease kind only writes from a source; a destination is
+    /// rejected at the command boundary. Constant text.
+    InventoryAdjustmentDecreaseNoDestination,
+    /// Lot movement validation: `inventory_adjustment` with
+    /// `direction=decrease` was submitted without a source location.
+    /// Constant text.
+    InventoryAdjustmentDecreaseRequiresSource,
+    /// Lot movement validation: an exit kind (e.g. `exit:sale`) was
+    /// submitted without a source location. Carries the offending kind
+    /// so the parser can round-trip and the localised message can name it.
+    ExitRequiresSource {
+        kind: String,
+    },
+    /// Lot movement validation: an exit kind (e.g. `exit:sale`) was
+    /// submitted with a destination location. Carries the offending kind
+    /// so the parser can round-trip and the localised message can name it.
+    ExitNoDestination {
+        kind: String,
+    },
+    /// Lot movement validation: a kind that requires notes
+    /// (`exit:other`, `exit:inventory_adjustment`, `inventory_adjustment`)
+    /// was submitted without notes. Carries the offending kind so the
+    /// parser can round-trip and the localised message can name it.
+    NotesRequiredForMovement {
+        kind: String,
+    },
+    /// Lot movement validation: an integer-unit product received a
+    /// fractional quantity. Carries the offending value so the parser
+    /// can round-trip and the localised message can name it. Decimal
+    /// units and legacy `None` units are not affected.
+    QuantityIntegerFractional {
+        value: f64,
+    },
+    /// Lot movement business rule: the requested quantity exceeds the
+    /// available balance at the source location. Both available and
+    /// requested are carried so the parser can round-trip and the
+    /// localised message can name them.
+    InsufficientBalance {
+        available: f64,
+        requested: f64,
+    },
+    /// Lot movement business rule: the source or destination location is
+    /// inactive. Constant text.
+    LocationInactive,
 }
 
 /// Returns the user-visible message string for the given kind in the given locale.
@@ -363,6 +449,145 @@ pub fn user_message(kind: UserMessage, locale: Locale) -> String {
                 "No se pueden resolver {requested:.2} {unit}: solo quedan {available:.2} {unit}"
             )
         }
+        (UserMessage::UnknownMovementKind { kind }, L::En) => {
+            format!("Unknown movement kind: `{kind}`")
+        }
+        (UserMessage::UnknownMovementKind { kind }, L::Es) => {
+            format!("Tipo de movimiento desconocido: `{kind}`")
+        }
+        (UserMessage::DirectionRequiredForInventoryAdjustment, L::En) => {
+            "direction is required for inventory_adjustment".to_string()
+        }
+        (UserMessage::DirectionRequiredForInventoryAdjustment, L::Es) => {
+            "direction es obligatorio para inventory_adjustment".to_string()
+        }
+        (UserMessage::DirectionOnlyForInventoryAdjustment { kind }, L::En) => {
+            format!("direction is only valid for inventory_adjustment, not `{kind}`")
+        }
+        (UserMessage::DirectionOnlyForInventoryAdjustment { kind }, L::Es) => {
+            format!(
+                "direction solo es válido para inventory_adjustment, no para `{kind}`"
+            )
+        }
+        (UserMessage::EntryInitialNoSource, L::En) => {
+            "entry:initial must not have a source location".to_string()
+        }
+        (UserMessage::EntryInitialNoSource, L::Es) => {
+            "entry:initial no debe tener ubicación de origen".to_string()
+        }
+        (UserMessage::EntryInitialRequiresDestination, L::En) => {
+            "entry:initial requires a destination location".to_string()
+        }
+        (UserMessage::EntryInitialRequiresDestination, L::Es) => {
+            "entry:initial requiere una ubicación de destino".to_string()
+        }
+        (UserMessage::TransferRequiresSource, L::En) => {
+            "transfer requires a source location".to_string()
+        }
+        (UserMessage::TransferRequiresSource, L::Es) => {
+            "transfer requiere una ubicación de origen".to_string()
+        }
+        (UserMessage::TransferRequiresDestination, L::En) => {
+            "transfer requires a destination location".to_string()
+        }
+        (UserMessage::TransferRequiresDestination, L::Es) => {
+            "transfer requiere una ubicación de destino".to_string()
+        }
+        (UserMessage::TransferSourceAndDestinationDiffer, L::En) => {
+            "transfer source and destination must differ".to_string()
+        }
+        (UserMessage::TransferSourceAndDestinationDiffer, L::Es) => {
+            "el origen y el destino de transfer deben ser distintos".to_string()
+        }
+        (UserMessage::InventoryAdjustmentIncreaseNoSource, L::En) => {
+            "inventory_adjustment with direction=increase must not have a source location"
+                .to_string()
+        }
+        (UserMessage::InventoryAdjustmentIncreaseNoSource, L::Es) => {
+            "inventory_adjustment con direction=increase no debe tener ubicación de origen"
+                .to_string()
+        }
+        (
+            UserMessage::InventoryAdjustmentIncreaseRequiresDestination,
+            L::En,
+        ) => {
+            "inventory_adjustment with direction=increase requires a destination location"
+                .to_string()
+        }
+        (
+            UserMessage::InventoryAdjustmentIncreaseRequiresDestination,
+            L::Es,
+        ) => {
+            "inventory_adjustment con direction=increase requiere una ubicación de destino"
+                .to_string()
+        }
+        (UserMessage::InventoryAdjustmentDecreaseNoDestination, L::En) => {
+            "inventory_adjustment with direction=decrease must not have a destination location"
+                .to_string()
+        }
+        (UserMessage::InventoryAdjustmentDecreaseNoDestination, L::Es) => {
+            "inventory_adjustment con direction=decrease no debe tener ubicación de destino"
+                .to_string()
+        }
+        (UserMessage::InventoryAdjustmentDecreaseRequiresSource, L::En) => {
+            "inventory_adjustment with direction=decrease requires a source location".to_string()
+        }
+        (UserMessage::InventoryAdjustmentDecreaseRequiresSource, L::Es) => {
+            "inventory_adjustment con direction=decrease requiere una ubicación de origen"
+                .to_string()
+        }
+        (UserMessage::ExitRequiresSource { kind }, L::En) => {
+            format!("`{kind}` requires a source location")
+        }
+        (UserMessage::ExitRequiresSource { kind }, L::Es) => {
+            format!("`{kind}` requiere una ubicación de origen")
+        }
+        (UserMessage::ExitNoDestination { kind }, L::En) => {
+            format!("`{kind}` must not have a destination location")
+        }
+        (UserMessage::ExitNoDestination { kind }, L::Es) => {
+            format!("`{kind}` no debe tener ubicación de destino")
+        }
+        (UserMessage::NotesRequiredForMovement { kind }, L::En) => {
+            format!("Notes are required for movement kind `{kind}`")
+        }
+        (UserMessage::NotesRequiredForMovement { kind }, L::Es) => {
+            format!("Las notas son obligatorias para el tipo de movimiento `{kind}`")
+        }
+        (UserMessage::QuantityIntegerFractional { value }, L::En) => {
+            format!(
+                "Quantity must be a whole number for integer-unit products, got {value}"
+            )
+        }
+        (UserMessage::QuantityIntegerFractional { value }, L::Es) => {
+            format!(
+                "La cantidad debe ser un número entero para productos con unidad entera, se recibió {value}"
+            )
+        }
+        (
+            UserMessage::InsufficientBalance {
+                available,
+                requested,
+            },
+            L::En,
+        ) => {
+            format!(
+                "Insufficient balance at source location: available={available}, requested={requested}"
+            )
+        }
+        (
+            UserMessage::InsufficientBalance {
+                available,
+                requested,
+            },
+            L::Es,
+        ) => {
+            format!(
+                "Saldo insuficiente en la ubicación de origen: disponible={available}, solicitado={requested}"
+            )
+        }
+        (UserMessage::LocationInactive, L::En) => "Location is inactive".to_string(),
+        (UserMessage::LocationInactive, L::Es) => "La ubicación está inactiva".to_string(),
     }
 }
 
@@ -529,6 +754,90 @@ pub fn parse_user_message_kind(message: &str) -> Option<UserMessage> {
         });
     }
 
+    // ─── Lot movement dynamic + constant messages ────────────────────────────
+    //
+    // Order matters: the longer / more specific prefixes must come before
+    // their shorter relatives so the prefix dispatcher does not greedily
+    // match a more general shape. The constant-text matches are exact-equality
+    // so order is irrelevant for them; the dynamic matches use shared helpers
+    // that respect their own boundaries.
+
+    if let Some(kind) = parse_backticked_suffix(message, "Unknown movement kind: `") {
+        return Some(UserMessage::UnknownMovementKind { kind });
+    }
+
+    if message == "direction is required for inventory_adjustment" {
+        return Some(UserMessage::DirectionRequiredForInventoryAdjustment);
+    }
+
+    if let Some(kind) = parse_backticked_suffix(
+        message,
+        "direction is only valid for inventory_adjustment, not `",
+    ) {
+        return Some(UserMessage::DirectionOnlyForInventoryAdjustment { kind });
+    }
+
+    if message == "entry:initial must not have a source location" {
+        return Some(UserMessage::EntryInitialNoSource);
+    }
+    if message == "entry:initial requires a destination location" {
+        return Some(UserMessage::EntryInitialRequiresDestination);
+    }
+    if message == "transfer requires a source location" {
+        return Some(UserMessage::TransferRequiresSource);
+    }
+    if message == "transfer requires a destination location" {
+        return Some(UserMessage::TransferRequiresDestination);
+    }
+    if message == "transfer source and destination must differ" {
+        return Some(UserMessage::TransferSourceAndDestinationDiffer);
+    }
+    if message == "inventory_adjustment with direction=increase must not have a source location" {
+        return Some(UserMessage::InventoryAdjustmentIncreaseNoSource);
+    }
+    if message == "inventory_adjustment with direction=increase requires a destination location" {
+        return Some(UserMessage::InventoryAdjustmentIncreaseRequiresDestination);
+    }
+    if message
+        == "inventory_adjustment with direction=decrease must not have a destination location"
+    {
+        return Some(UserMessage::InventoryAdjustmentDecreaseNoDestination);
+    }
+    if message == "inventory_adjustment with direction=decrease requires a source location" {
+        return Some(UserMessage::InventoryAdjustmentDecreaseRequiresSource);
+    }
+
+    // Exit-kind dynamic messages: both shapes share the `parse_exit_kind_message`
+    // helper. The kind is captured between backticks and the upstream service
+    // uses `MovementKind::Display` strings that never contain backticks, so
+    // the helper's guard against inner backticks is sufficient.
+    if let Some(kind) = parse_exit_kind_message(message, " requires a source location") {
+        return Some(UserMessage::ExitRequiresSource { kind });
+    }
+
+    if let Some(kind) = parse_exit_kind_message(message, " must not have a destination location") {
+        return Some(UserMessage::ExitNoDestination { kind });
+    }
+
+    if let Some(kind) = parse_backticked_suffix(message, "Notes are required for movement kind `") {
+        return Some(UserMessage::NotesRequiredForMovement { kind });
+    }
+
+    if let Some(value) = parse_integer_fractional(message) {
+        return Some(UserMessage::QuantityIntegerFractional { value });
+    }
+
+    if let Some((available, requested)) = parse_insufficient_balance(message) {
+        return Some(UserMessage::InsufficientBalance {
+            available,
+            requested,
+        });
+    }
+
+    if message == "Location is inactive" {
+        return Some(UserMessage::LocationInactive);
+    }
+
     None
 }
 
@@ -623,6 +932,61 @@ fn parse_language_not_allowed(message: &str) -> Option<String> {
     }
     let inner = message.strip_prefix(PREFIX)?.strip_suffix('`')?;
     Some(inner.to_string())
+}
+
+/// Parses a lot-movement exit-kind dynamic message that has the shape
+/// `` `{kind}` {suffix} ``. Returns the captured `kind` on success.
+///
+/// Used for both `ExitRequiresSource { kind }` (`` `{kind}` requires a source
+/// location``) and `ExitNoDestination { kind }` (`` `{kind}` must not have a
+/// destination location``). The kind is the upstream service's
+/// `MovementKind::Display` output (e.g. `exit:sale`, `exit:waste`,
+/// `exit:expired`, `exit:damaged`, `exit:internal_consumption`,
+/// `exit:return_to_supplier`, `exit:inventory_adjustment`, `exit:other`) and
+/// never contains backticks, so the inner-backtick guard is sufficient.
+///
+/// Returns `None` when the message doesn't match the surrounding template,
+/// the kind segment is empty, or the kind contains backticks.
+fn parse_exit_kind_message(message: &str, suffix: &str) -> Option<String> {
+    if !message.ends_with(suffix) {
+        return None;
+    }
+    let stripped = message.strip_suffix(suffix)?;
+    // Expected: `` `{kind}` `` at the front (a leading backtick, kind, and
+    // closing backtick, no other characters before/after on this side).
+    if !stripped.starts_with('`') || !stripped.ends_with('`') {
+        return None;
+    }
+    let inner = stripped.strip_prefix('`')?.strip_suffix('`')?;
+    if inner.is_empty() || inner.contains('`') {
+        return None;
+    }
+    Some(inner.to_string())
+}
+
+/// Parses a `Quantity must be a whole number for integer-unit products,
+/// got {value}` message back into the captured value. Returns `None` for
+/// malformed input.
+fn parse_integer_fractional(message: &str) -> Option<f64> {
+    const PREFIX: &str = "Quantity must be a whole number for integer-unit products, got ";
+    let val_str = message.strip_prefix(PREFIX)?;
+    val_str.parse::<f64>().ok()
+}
+
+/// Parses an `Insufficient balance at source location: available={available},
+/// requested={requested}` message back into the captured pair. Returns `None`
+/// for malformed input.
+fn parse_insufficient_balance(message: &str) -> Option<(f64, f64)> {
+    const PREFIX: &str = "Insufficient balance at source location: available=";
+    const MIDDLE: &str = ", requested=";
+    if !message.starts_with(PREFIX) || !message.contains(MIDDLE) {
+        return None;
+    }
+    let inner = message.strip_prefix(PREFIX)?;
+    let (avail_str, req_str) = inner.split_once(MIDDLE)?;
+    let available = avail_str.parse::<f64>().ok()?;
+    let requested = req_str.parse::<f64>().ok()?;
+    Some((available, requested))
 }
 
 /// Wraps a validation error with locale-aware text if the message is one of the
@@ -1841,5 +2205,680 @@ mod tests {
             panic!("expected BusinessRule untouched by localize_validation");
         };
         assert_eq!(message, "Cannot update lot: status is `archived`");
+    }
+
+    // ─── Lot movement dynamic + constant messages ────────────────────────
+    //
+    // EN/ES literal assertions per variant, parser roundtrips, prefix
+    // disambiguation guards, and `localize_*` integration for the new
+    // Validation / BusinessRule surfaces that
+    // `services::lot_movements::create_lot_movement` emits through the
+    // command boundary.
+
+    #[test]
+    fn unknown_movement_kind_en() {
+        let got = en(UserMessage::UnknownMovementKind {
+            kind: "bogus".into(),
+        });
+        assert_eq!(got, "Unknown movement kind: `bogus`");
+    }
+
+    #[test]
+    fn unknown_movement_kind_es() {
+        let got = es(UserMessage::UnknownMovementKind {
+            kind: "bogus".into(),
+        });
+        assert_eq!(got, "Tipo de movimiento desconocido: `bogus`");
+    }
+
+    #[test]
+    fn direction_required_for_inventory_adjustment_en() {
+        let got = en(UserMessage::DirectionRequiredForInventoryAdjustment);
+        assert_eq!(got, "direction is required for inventory_adjustment");
+    }
+
+    #[test]
+    fn direction_required_for_inventory_adjustment_es() {
+        let got = es(UserMessage::DirectionRequiredForInventoryAdjustment);
+        assert_eq!(got, "direction es obligatorio para inventory_adjustment");
+    }
+
+    #[test]
+    fn direction_only_for_inventory_adjustment_en() {
+        let got = en(UserMessage::DirectionOnlyForInventoryAdjustment {
+            kind: "exit:sale".into(),
+        });
+        assert_eq!(
+            got,
+            "direction is only valid for inventory_adjustment, not `exit:sale`"
+        );
+    }
+
+    #[test]
+    fn direction_only_for_inventory_adjustment_es() {
+        let got = es(UserMessage::DirectionOnlyForInventoryAdjustment {
+            kind: "transfer".into(),
+        });
+        assert_eq!(
+            got,
+            "direction solo es válido para inventory_adjustment, no para `transfer`"
+        );
+    }
+
+    #[test]
+    fn entry_initial_no_source_en() {
+        let got = en(UserMessage::EntryInitialNoSource);
+        assert_eq!(got, "entry:initial must not have a source location");
+    }
+
+    #[test]
+    fn entry_initial_no_source_es() {
+        let got = es(UserMessage::EntryInitialNoSource);
+        assert_eq!(got, "entry:initial no debe tener ubicación de origen");
+    }
+
+    #[test]
+    fn entry_initial_requires_destination_en() {
+        let got = en(UserMessage::EntryInitialRequiresDestination);
+        assert_eq!(got, "entry:initial requires a destination location");
+    }
+
+    #[test]
+    fn entry_initial_requires_destination_es() {
+        let got = es(UserMessage::EntryInitialRequiresDestination);
+        assert_eq!(got, "entry:initial requiere una ubicación de destino");
+    }
+
+    #[test]
+    fn transfer_requires_source_en() {
+        let got = en(UserMessage::TransferRequiresSource);
+        assert_eq!(got, "transfer requires a source location");
+    }
+
+    #[test]
+    fn transfer_requires_source_es() {
+        let got = es(UserMessage::TransferRequiresSource);
+        assert_eq!(got, "transfer requiere una ubicación de origen");
+    }
+
+    #[test]
+    fn transfer_requires_destination_en() {
+        let got = en(UserMessage::TransferRequiresDestination);
+        assert_eq!(got, "transfer requires a destination location");
+    }
+
+    #[test]
+    fn transfer_requires_destination_es() {
+        let got = es(UserMessage::TransferRequiresDestination);
+        assert_eq!(got, "transfer requiere una ubicación de destino");
+    }
+
+    #[test]
+    fn transfer_source_and_destination_differ_en() {
+        let got = en(UserMessage::TransferSourceAndDestinationDiffer);
+        assert_eq!(got, "transfer source and destination must differ");
+    }
+
+    #[test]
+    fn transfer_source_and_destination_differ_es() {
+        let got = es(UserMessage::TransferSourceAndDestinationDiffer);
+        assert_eq!(
+            got,
+            "el origen y el destino de transfer deben ser distintos"
+        );
+    }
+
+    #[test]
+    fn inventory_adjustment_increase_no_source_en() {
+        let got = en(UserMessage::InventoryAdjustmentIncreaseNoSource);
+        assert_eq!(
+            got,
+            "inventory_adjustment with direction=increase must not have a source location"
+        );
+    }
+
+    #[test]
+    fn inventory_adjustment_increase_no_source_es() {
+        let got = es(UserMessage::InventoryAdjustmentIncreaseNoSource);
+        assert_eq!(
+            got,
+            "inventory_adjustment con direction=increase no debe tener ubicación de origen"
+        );
+    }
+
+    #[test]
+    fn inventory_adjustment_increase_requires_destination_en() {
+        let got = en(UserMessage::InventoryAdjustmentIncreaseRequiresDestination);
+        assert_eq!(
+            got,
+            "inventory_adjustment with direction=increase requires a destination location"
+        );
+    }
+
+    #[test]
+    fn inventory_adjustment_increase_requires_destination_es() {
+        let got = es(UserMessage::InventoryAdjustmentIncreaseRequiresDestination);
+        assert_eq!(
+            got,
+            "inventory_adjustment con direction=increase requiere una ubicación de destino"
+        );
+    }
+
+    #[test]
+    fn inventory_adjustment_decrease_no_destination_en() {
+        let got = en(UserMessage::InventoryAdjustmentDecreaseNoDestination);
+        assert_eq!(
+            got,
+            "inventory_adjustment with direction=decrease must not have a destination location"
+        );
+    }
+
+    #[test]
+    fn inventory_adjustment_decrease_no_destination_es() {
+        let got = es(UserMessage::InventoryAdjustmentDecreaseNoDestination);
+        assert_eq!(
+            got,
+            "inventory_adjustment con direction=decrease no debe tener ubicación de destino"
+        );
+    }
+
+    #[test]
+    fn inventory_adjustment_decrease_requires_source_en() {
+        let got = en(UserMessage::InventoryAdjustmentDecreaseRequiresSource);
+        assert_eq!(
+            got,
+            "inventory_adjustment with direction=decrease requires a source location"
+        );
+    }
+
+    #[test]
+    fn inventory_adjustment_decrease_requires_source_es() {
+        let got = es(UserMessage::InventoryAdjustmentDecreaseRequiresSource);
+        assert_eq!(
+            got,
+            "inventory_adjustment con direction=decrease requiere una ubicación de origen"
+        );
+    }
+
+    #[test]
+    fn exit_requires_source_en() {
+        let got = en(UserMessage::ExitRequiresSource {
+            kind: "exit:sale".into(),
+        });
+        assert_eq!(got, "`exit:sale` requires a source location");
+    }
+
+    #[test]
+    fn exit_requires_source_es() {
+        let got = es(UserMessage::ExitRequiresSource {
+            kind: "exit:waste".into(),
+        });
+        assert_eq!(got, "`exit:waste` requiere una ubicación de origen");
+    }
+
+    #[test]
+    fn exit_no_destination_en() {
+        let got = en(UserMessage::ExitNoDestination {
+            kind: "exit:sale".into(),
+        });
+        assert_eq!(got, "`exit:sale` must not have a destination location");
+    }
+
+    #[test]
+    fn exit_no_destination_es() {
+        let got = es(UserMessage::ExitNoDestination {
+            kind: "exit:damaged".into(),
+        });
+        assert_eq!(got, "`exit:damaged` no debe tener ubicación de destino");
+    }
+
+    #[test]
+    fn notes_required_for_movement_en() {
+        let got = en(UserMessage::NotesRequiredForMovement {
+            kind: "exit:other".into(),
+        });
+        assert_eq!(got, "Notes are required for movement kind `exit:other`");
+    }
+
+    #[test]
+    fn notes_required_for_movement_es() {
+        let got = es(UserMessage::NotesRequiredForMovement {
+            kind: "inventory_adjustment".into(),
+        });
+        assert_eq!(
+            got,
+            "Las notas son obligatorias para el tipo de movimiento `inventory_adjustment`"
+        );
+    }
+
+    #[test]
+    fn quantity_integer_fractional_en() {
+        let got = en(UserMessage::QuantityIntegerFractional { value: 1.5 });
+        assert_eq!(
+            got,
+            "Quantity must be a whole number for integer-unit products, got 1.5"
+        );
+    }
+
+    #[test]
+    fn quantity_integer_fractional_es() {
+        let got = es(UserMessage::QuantityIntegerFractional { value: 0.25 });
+        assert_eq!(
+            got,
+            "La cantidad debe ser un número entero para productos con unidad entera, se recibió 0.25"
+        );
+    }
+
+    #[test]
+    fn insufficient_balance_en() {
+        let got = en(UserMessage::InsufficientBalance {
+            available: 2.0,
+            requested: 5.0,
+        });
+        assert_eq!(
+            got,
+            "Insufficient balance at source location: available=2, requested=5"
+        );
+    }
+
+    #[test]
+    fn insufficient_balance_es() {
+        let got = es(UserMessage::InsufficientBalance {
+            available: 1.5,
+            requested: 3.0,
+        });
+        assert_eq!(
+            got,
+            "Saldo insuficiente en la ubicación de origen: disponible=1.5, solicitado=3"
+        );
+    }
+
+    #[test]
+    fn location_inactive_en() {
+        let got = en(UserMessage::LocationInactive);
+        assert_eq!(got, "Location is inactive");
+    }
+
+    #[test]
+    fn location_inactive_es() {
+        let got = es(UserMessage::LocationInactive);
+        assert_eq!(got, "La ubicación está inactiva");
+    }
+
+    // ─── Parser roundtrips for lot movement messages ────────────────────
+
+    #[test]
+    fn parse_unknown_movement_kind_roundtrips() {
+        let en_msg = en(UserMessage::UnknownMovementKind {
+            kind: "weird".into(),
+        });
+        match parse_user_message_kind(&en_msg) {
+            Some(UserMessage::UnknownMovementKind { kind }) => assert_eq!(kind, "weird"),
+            other => panic!("expected UnknownMovementKind, got {other:?}"),
+        }
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_direction_required_roundtrips() {
+        let en_msg = en(UserMessage::DirectionRequiredForInventoryAdjustment);
+        assert!(matches!(
+            parse_user_message_kind(&en_msg),
+            Some(UserMessage::DirectionRequiredForInventoryAdjustment)
+        ));
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_direction_only_for_inventory_adjustment_roundtrips() {
+        let en_msg = en(UserMessage::DirectionOnlyForInventoryAdjustment {
+            kind: "exit:sale".into(),
+        });
+        match parse_user_message_kind(&en_msg) {
+            Some(UserMessage::DirectionOnlyForInventoryAdjustment { kind }) => {
+                assert_eq!(kind, "exit:sale")
+            }
+            other => panic!("expected DirectionOnlyForInventoryAdjustment, got {other:?}"),
+        }
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_entry_initial_constant_roundtrips() {
+        let en_msg = en(UserMessage::EntryInitialNoSource);
+        assert!(matches!(
+            parse_user_message_kind(&en_msg),
+            Some(UserMessage::EntryInitialNoSource)
+        ));
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_entry_initial_requires_destination_roundtrips() {
+        let en_msg = en(UserMessage::EntryInitialRequiresDestination);
+        assert!(matches!(
+            parse_user_message_kind(&en_msg),
+            Some(UserMessage::EntryInitialRequiresDestination)
+        ));
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_transfer_constant_roundtrips() {
+        let en_msg = en(UserMessage::TransferRequiresSource);
+        assert!(matches!(
+            parse_user_message_kind(&en_msg),
+            Some(UserMessage::TransferRequiresSource)
+        ));
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_transfer_requires_destination_roundtrips() {
+        let en_msg = en(UserMessage::TransferRequiresDestination);
+        assert!(matches!(
+            parse_user_message_kind(&en_msg),
+            Some(UserMessage::TransferRequiresDestination)
+        ));
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_transfer_source_and_destination_differ_roundtrips() {
+        let en_msg = en(UserMessage::TransferSourceAndDestinationDiffer);
+        assert!(matches!(
+            parse_user_message_kind(&en_msg),
+            Some(UserMessage::TransferSourceAndDestinationDiffer)
+        ));
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_inventory_adjustment_increase_no_source_roundtrips() {
+        let en_msg = en(UserMessage::InventoryAdjustmentIncreaseNoSource);
+        assert!(matches!(
+            parse_user_message_kind(&en_msg),
+            Some(UserMessage::InventoryAdjustmentIncreaseNoSource)
+        ));
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_inventory_adjustment_increase_requires_destination_roundtrips() {
+        let en_msg = en(UserMessage::InventoryAdjustmentIncreaseRequiresDestination);
+        assert!(matches!(
+            parse_user_message_kind(&en_msg),
+            Some(UserMessage::InventoryAdjustmentIncreaseRequiresDestination)
+        ));
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_inventory_adjustment_decrease_no_destination_roundtrips() {
+        let en_msg = en(UserMessage::InventoryAdjustmentDecreaseNoDestination);
+        assert!(matches!(
+            parse_user_message_kind(&en_msg),
+            Some(UserMessage::InventoryAdjustmentDecreaseNoDestination)
+        ));
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_inventory_adjustment_decrease_requires_source_roundtrips() {
+        let en_msg = en(UserMessage::InventoryAdjustmentDecreaseRequiresSource);
+        assert!(matches!(
+            parse_user_message_kind(&en_msg),
+            Some(UserMessage::InventoryAdjustmentDecreaseRequiresSource)
+        ));
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_exit_requires_source_roundtrips() {
+        let en_msg = en(UserMessage::ExitRequiresSource {
+            kind: "exit:sale".into(),
+        });
+        match parse_user_message_kind(&en_msg) {
+            Some(UserMessage::ExitRequiresSource { kind }) => assert_eq!(kind, "exit:sale"),
+            other => panic!("expected ExitRequiresSource, got {other:?}"),
+        }
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_exit_no_destination_roundtrips() {
+        let en_msg = en(UserMessage::ExitNoDestination {
+            kind: "exit:waste".into(),
+        });
+        match parse_user_message_kind(&en_msg) {
+            Some(UserMessage::ExitNoDestination { kind }) => assert_eq!(kind, "exit:waste"),
+            other => panic!("expected ExitNoDestination, got {other:?}"),
+        }
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_notes_required_for_movement_roundtrips() {
+        let en_msg = en(UserMessage::NotesRequiredForMovement {
+            kind: "exit:other".into(),
+        });
+        match parse_user_message_kind(&en_msg) {
+            Some(UserMessage::NotesRequiredForMovement { kind }) => {
+                assert_eq!(kind, "exit:other")
+            }
+            other => panic!("expected NotesRequiredForMovement, got {other:?}"),
+        }
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_quantity_integer_fractional_roundtrips() {
+        let en_msg = en(UserMessage::QuantityIntegerFractional { value: 1.5 });
+        match parse_user_message_kind(&en_msg) {
+            Some(UserMessage::QuantityIntegerFractional { value }) => {
+                assert_eq!(value, 1.5)
+            }
+            other => panic!("expected QuantityIntegerFractional, got {other:?}"),
+        }
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_insufficient_balance_roundtrips() {
+        let en_msg = en(UserMessage::InsufficientBalance {
+            available: 2.0,
+            requested: 5.0,
+        });
+        match parse_user_message_kind(&en_msg) {
+            Some(UserMessage::InsufficientBalance {
+                available,
+                requested,
+            }) => {
+                assert_eq!(available, 2.0);
+                assert_eq!(requested, 5.0);
+            }
+            other => panic!("expected InsufficientBalance, got {other:?}"),
+        }
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_location_inactive_roundtrips() {
+        let en_msg = en(UserMessage::LocationInactive);
+        assert!(matches!(
+            parse_user_message_kind(&en_msg),
+            Some(UserMessage::LocationInactive)
+        ));
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    // ─── Parser prefix disambiguation guards ─────────────────────────────
+
+    #[test]
+    fn parse_lot_movement_transfer_does_not_collide_with_inventory_adjustment() {
+        // The two constant-text TransferRequiresSource and
+        // InventoryAdjustmentIncreaseNoSource have different surface shapes.
+        // A typo in the parser must not let one match the other.
+        let transfer_msg = en(UserMessage::TransferRequiresSource);
+        let inc_no_source_msg = en(UserMessage::InventoryAdjustmentIncreaseNoSource);
+        assert!(matches!(
+            parse_user_message_kind(&transfer_msg),
+            Some(UserMessage::TransferRequiresSource)
+        ));
+        assert!(matches!(
+            parse_user_message_kind(&inc_no_source_msg),
+            Some(UserMessage::InventoryAdjustmentIncreaseNoSource)
+        ));
+    }
+
+    #[test]
+    fn parse_exit_kind_message_rejects_missing_backticks() {
+        // Missing backticks around the captured kind must not parse.
+        let msg = "exit:sale requires a source location";
+        assert!(parse_user_message_kind(msg).is_none());
+    }
+
+    #[test]
+    fn parse_exit_kind_message_rejects_inner_backtick() {
+        // An inner backtick in the kind would be ambiguous; the helper
+        // rejects it to keep the round-trip deterministic.
+        let msg = "`exit`weird` requires a source location";
+        assert!(parse_user_message_kind(msg).is_none());
+    }
+
+    #[test]
+    fn parse_exit_kind_message_rejects_empty_kind() {
+        // Empty kind must not parse — the upstream service always emits
+        // a non-empty `MovementKind::Display` value.
+        let msg = "`` requires a source location";
+        assert!(parse_user_message_kind(msg).is_none());
+    }
+
+    #[test]
+    fn parse_quantity_integer_fractional_rejects_non_numeric_value() {
+        let msg = "Quantity must be a whole number for integer-unit products, got many";
+        assert!(parse_user_message_kind(msg).is_none());
+    }
+
+    #[test]
+    fn parse_insufficient_balance_rejects_missing_middle() {
+        let msg = "Insufficient balance at source location: available=2 requested=5";
+        assert!(parse_user_message_kind(msg).is_none());
+    }
+
+    #[test]
+    fn parse_insufficient_balance_rejects_non_numeric_pair() {
+        let msg = "Insufficient balance at source location: available=many, requested=5";
+        assert!(parse_user_message_kind(msg).is_none());
+    }
+
+    // ─── localize_validation / localize_business_rule integration ────────
+
+    #[test]
+    fn localize_validation_translates_unknown_movement_kind() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::Validation {
+            message: "Unknown movement kind: `bogus`".into(),
+        });
+        let localized = localize_validation(err, Locale::Es);
+        let AppError::Domain(DomainError::Validation { message }) = localized else {
+            panic!("expected Validation");
+        };
+        assert_eq!(message, "Tipo de movimiento desconocido: `bogus`");
+    }
+
+    #[test]
+    fn localize_validation_translates_entry_initial_no_source() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::Validation {
+            message: "entry:initial must not have a source location".into(),
+        });
+        let localized = localize_validation(err, Locale::Es);
+        let AppError::Domain(DomainError::Validation { message }) = localized else {
+            panic!("expected Validation");
+        };
+        assert_eq!(message, "entry:initial no debe tener ubicación de origen");
+    }
+
+    #[test]
+    fn localize_validation_transfers_quantity_integer_fractional() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::Validation {
+            message: "Quantity must be a whole number for integer-unit products, got 1.5".into(),
+        });
+        let localized = localize_validation(err, Locale::Es);
+        let AppError::Domain(DomainError::Validation { message }) = localized else {
+            panic!("expected Validation");
+        };
+        assert_eq!(
+            message,
+            "La cantidad debe ser un número entero para productos con unidad entera, se recibió 1.5"
+        );
+    }
+
+    #[test]
+    fn localize_business_rule_translates_insufficient_balance() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::BusinessRule {
+            message: "Insufficient balance at source location: available=2, requested=5".into(),
+        });
+        let localized = localize_business_rule(err, Locale::Es);
+        let AppError::Domain(DomainError::BusinessRule { message }) = localized else {
+            panic!("expected BusinessRule");
+        };
+        assert_eq!(
+            message,
+            "Saldo insuficiente en la ubicación de origen: disponible=2, solicitado=5"
+        );
+    }
+
+    #[test]
+    fn localize_business_rule_translates_location_inactive() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::BusinessRule {
+            message: "Location is inactive".into(),
+        });
+        let localized = localize_business_rule(err, Locale::Es);
+        let AppError::Domain(DomainError::BusinessRule { message }) = localized else {
+            panic!("expected BusinessRule");
+        };
+        assert_eq!(message, "La ubicación está inactiva");
+    }
+
+    #[test]
+    fn localize_validation_preserves_unknown_lot_movement_message() {
+        // A Validation message the parser does not own must pass through
+        // untouched. Guard against accidental over-eager prefix matching in
+        // the new dispatcher arms.
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::Validation {
+            message: "Failed to resolve product unit kind: some internal issue".into(),
+        });
+        let result = localize_validation(err, Locale::Es);
+        let AppError::Domain(DomainError::Validation { message }) = result else {
+            panic!("expected Validation untouched");
+        };
+        assert_eq!(
+            message,
+            "Failed to resolve product unit kind: some internal issue"
+        );
     }
 }

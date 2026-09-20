@@ -4,6 +4,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import type { Locales } from "../i18n/i18n-types.js";
 
 // ─── DTOs ────────────────────────────────────────────────────────────────────
 
@@ -68,12 +69,18 @@ export interface LotLocationBalance {
  * Creates a new lot movement and updates the lot total atomically.
  *
  * @param input - Movement creation input
+ * @param locale - Active BCP-47 locale tag (e.g. `"en"`, `"es"`, `"es-MX"`)
+ *   forwarded to the Rust command so user-facing Validation and
+ *   BusinessRule messages reach the UI in the active locale. Unknown tags
+ *   fall back to English at the backend. Omitting the argument preserves
+ *   the previous English-only behaviour.
  * @returns The created movement response
  */
 export async function createLotMovement(
  input: LotMovementCreate,
+ locale?: Locales,
 ): Promise<LotMovementResponse> {
- return invoke<LotMovementResponse>("create_lot_movement", { input });
+ return invoke<LotMovementResponse>("create_lot_movement", { input, locale });
 }
 
 /**

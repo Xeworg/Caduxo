@@ -17,15 +17,29 @@ use crate::dto::lot_movements::{
 };
 use crate::dto::unit_definitions::UnitKind;
 use crate::error::{AppError, DomainError};
+use crate::pdf::locale::Locale;
+use crate::services::user_messages::{user_message, UserMessage};
 
 // ============================================================
 // Validation helpers
 // ============================================================
 
+/// Formats a [`UserMessage`] variant into its canonical English string via
+/// the catalog. Every user-facing Validation / BusinessRule message in this
+/// module must pass through this helper so the parser recognises the
+/// canonical text and `localize_*` can swap it for Spanish at the IPC
+/// boundary. Internal / developer-only errors (e.g. database failures) do
+/// not go through this helper.
+fn en_message(kind: UserMessage) -> String {
+    user_message(kind, Locale::En)
+}
+
 /// Validates that the movement kind is known.
 fn validate_kind(kind: &str) -> Result<MovementKind, DomainError> {
     validate_movement_kind(kind).ok_or_else(|| DomainError::Validation {
-        message: format!("Unknown movement kind: `{}`", kind),
+        message: en_message(UserMessage::UnknownMovementKind {
+            kind: kind.to_string(),
+        }),
     })
 }
 
@@ -38,17 +52,16 @@ fn validate_direction_usage(
         MovementKind::InventoryAdjustment => {
             if direction.is_none() {
                 return Err(DomainError::Validation {
-                    message: "direction is required for inventory_adjustment".to_string(),
+                    message: en_message(UserMessage::DirectionRequiredForInventoryAdjustment),
                 });
             }
         }
         _ => {
             if direction.is_some() {
                 return Err(DomainError::Validation {
-                    message: format!(
-                        "direction is only valid for inventory_adjustment, not `{}`",
-                        kind
-                    ),
+                    message: en_message(UserMessage::DirectionOnlyForInventoryAdjustment {
+                        kind: kind.to_string(),
+                    }),
                 });
             }
         }
@@ -67,29 +80,29 @@ fn validate_location_nullability(
         MovementKind::EntryInitial => {
             if source.is_some() {
                 return Err(DomainError::Validation {
-                    message: "entry:initial must not have a source location".to_string(),
+                    message: en_message(UserMessage::EntryInitialNoSource),
                 });
             }
             if dest.is_none() {
                 return Err(DomainError::Validation {
-                    message: "entry:initial requires a destination location".to_string(),
+                    message: en_message(UserMessage::EntryInitialRequiresDestination),
                 });
             }
         }
         MovementKind::Transfer => {
             if source.is_none() {
                 return Err(DomainError::Validation {
-                    message: "transfer requires a source location".to_string(),
+                    message: en_message(UserMessage::TransferRequiresSource),
                 });
             }
             if dest.is_none() {
                 return Err(DomainError::Validation {
-                    message: "transfer requires a destination location".to_string(),
+                    message: en_message(UserMessage::TransferRequiresDestination),
                 });
             }
             if source == dest {
                 return Err(DomainError::Validation {
-                    message: "transfer source and destination must differ".to_string(),
+                    message: en_message(UserMessage::TransferSourceAndDestinationDiffer),
                 });
             }
         }
@@ -97,30 +110,32 @@ fn validate_location_nullability(
             Some(DtoDirection::Increase) => {
                 if source.is_some() {
                     return Err(DomainError::Validation {
-                            message: "inventory_adjustment with direction=increase must not have a source location".to_string(),
-                        });
+                        message: en_message(UserMessage::InventoryAdjustmentIncreaseNoSource),
+                    });
                 }
                 if dest.is_none() {
                     return Err(DomainError::Validation {
-                            message: "inventory_adjustment with direction=increase requires a destination location".to_string(),
-                        });
+                        message: en_message(
+                            UserMessage::InventoryAdjustmentIncreaseRequiresDestination,
+                        ),
+                    });
                 }
             }
             Some(DtoDirection::Decrease) => {
                 if dest.is_some() {
                     return Err(DomainError::Validation {
-                            message: "inventory_adjustment with direction=decrease must not have a destination location".to_string(),
-                        });
+                        message: en_message(UserMessage::InventoryAdjustmentDecreaseNoDestination),
+                    });
                 }
                 if source.is_none() {
                     return Err(DomainError::Validation {
-                            message: "inventory_adjustment with direction=decrease requires a source location".to_string(),
-                        });
+                        message: en_message(UserMessage::InventoryAdjustmentDecreaseRequiresSource),
+                    });
                 }
             }
             None => {
                 return Err(DomainError::Validation {
-                    message: "direction is required for inventory_adjustment".to_string(),
+                    message: en_message(UserMessage::DirectionRequiredForInventoryAdjustment),
                 });
             }
         },
@@ -128,12 +143,16 @@ fn validate_location_nullability(
             // All exit kinds require source, no destination
             if source.is_none() {
                 return Err(DomainError::Validation {
-                    message: format!("`{}` requires a source location", kind),
+                    message: en_message(UserMessage::ExitRequiresSource {
+                        kind: kind.to_string(),
+                    }),
                 });
             }
             if dest.is_some() {
                 return Err(DomainError::Validation {
-                    message: format!("`{}` must not have a destination location", kind),
+                    message: en_message(UserMessage::ExitNoDestination {
+                        kind: kind.to_string(),
+                    }),
                 });
             }
         }
@@ -143,15 +162,18 @@ fn validate_location_nullability(
 
 /// Validates quantity is positive. entry:initial is allowed to have quantity = 0
 /// since the lot already has the quantity from the INSERT (no double-counting).
+///
+/// Emits catalog-shaped English text through `en_message` so
+/// `localize_validation` can swap it for Spanish at the IPC boundary.
 fn validate_quantity(qty: f64, kind: &MovementKind) -> Result<(), DomainError> {
     if qty < 0.0 {
         return Err(DomainError::Validation {
-            message: format!("Quantity must be non-negative, got {}", qty),
+            message: en_message(UserMessage::QuantityNonNegative { value: qty }),
         });
     }
     if qty == 0.0 && !matches!(kind, MovementKind::EntryInitial) {
         return Err(DomainError::Validation {
-            message: format!("Quantity must be positive, got {}", qty),
+            message: en_message(UserMessage::QuantityPositive { value: qty }),
         });
     }
     Ok(())
@@ -164,9 +186,11 @@ fn validate_quantity(qty: f64, kind: &MovementKind) -> Result<(), DomainError> {
 /// the lookup returns `None` which the domain validator treats as decimal
 /// to preserve back-compat.
 ///
-/// Returns `Ok(())` when valid, or a `DomainError::Validation` carrying a
-/// Spanish-language message otherwise. This is the single source of truth
-/// for the unit-aware quantity invariant on the backend.
+/// Returns `Ok(())` when valid, or a `DomainError::Validation` carrying the
+/// canonical English catalog text. This is the single source of truth
+/// for the unit-aware quantity invariant on the backend; the
+/// `localize_validation` command-boundary call swaps the message for the
+/// active locale.
 async fn validate_quantity_against_product_unit(
     pool: &SqlitePool,
     lot: &crate::dto::expiry_lots::ExpiryLotResponse,
@@ -178,11 +202,16 @@ async fn validate_quantity_against_product_unit(
         .map_err(|e| DomainError::Validation {
             message: format!("Failed to resolve product unit kind: {}", e),
         })?;
-    validate_quantity_for_unit_kind(quantity, kind, unit_kind)
-        .map_err(|msg| DomainError::Validation { message: msg })
+    validate_quantity_for_unit_kind(quantity, kind, unit_kind).map_err(|kind| {
+        DomainError::Validation {
+            message: en_message(kind),
+        }
+    })
 }
 
-/// Validates source balance coverage for the movement.
+/// Validates source balance coverage for the movement. Emits the catalog
+/// English text for the `InsufficientBalance` BusinessRule so
+/// `localize_business_rule` can swap it for Spanish at the IPC boundary.
 async fn validate_source_balance(
     pool: &SqlitePool,
     lot_id: &str,
@@ -199,17 +228,19 @@ async fn validate_source_balance(
 
     if current_balance < quantity {
         return Err(DomainError::BusinessRule {
-            message: format!(
-                "Insufficient balance at source location: available={}, requested={}",
-                current_balance, quantity
-            ),
+            message: en_message(UserMessage::InsufficientBalance {
+                available: current_balance,
+                requested: quantity,
+            }),
         }
         .into());
     }
     Ok(())
 }
 
-/// Validates location is active.
+/// Validates location is active. Emits the catalog English text for the
+/// `LocationInactive` BusinessRule so `localize_business_rule` can swap it
+/// for Spanish at the IPC boundary.
 async fn validate_location_active(pool: &SqlitePool, location_id: &str) -> Result<(), AppError> {
     let is_active: bool = sqlx::query_scalar("SELECT is_active FROM store_locations WHERE id = $1")
         .bind(location_id)
@@ -219,7 +250,7 @@ async fn validate_location_active(pool: &SqlitePool, location_id: &str) -> Resul
 
     if !is_active {
         return Err(DomainError::BusinessRule {
-            message: "Location is inactive".to_string(),
+            message: en_message(UserMessage::LocationInactive),
         }
         .into());
     }
@@ -252,8 +283,11 @@ pub async fn create_lot_movement(
         input.destination_location_id.as_deref(),
         input.direction.as_ref(),
     )?;
-    validate_notes(&kind, input.notes.as_deref())
-        .map_err(|msg| DomainError::Validation { message: msg })?;
+    validate_notes(&kind, input.notes.as_deref()).map_err(|_| DomainError::Validation {
+        message: en_message(UserMessage::NotesRequiredForMovement {
+            kind: kind.to_string(),
+        }),
+    })?;
 
     // ── Validate lot exists ───────────────────────────────────────────────────
     let lot = lot_repo::get_expiry_lot(pool, &input.lot_id)
@@ -1356,8 +1390,11 @@ mod integration_tests {
             "fractional quantity must be rejected for integer-unit products"
         );
         let err_msg = format!("{:?}", result.unwrap_err());
+        // The service now emits the canonical English catalog text so the
+        // command boundary can localise it. The parser recognises the
+        // `whole number for integer-unit products` substring.
         assert!(
-            err_msg.contains("entero") || err_msg.contains("fraccionarias"),
+            err_msg.contains("whole number") && err_msg.contains("integer-unit products"),
             "error should mention integer-unit fractional rejection, got: {err_msg}"
         );
     }
