@@ -42,3 +42,6 @@ Thumbs.db
 *.db-wal
 *.sqlite
 *.sqlite3
+
+# CodeGraph local index
+.codegraph/
