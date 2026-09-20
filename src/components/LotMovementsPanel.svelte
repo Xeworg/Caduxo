@@ -76,14 +76,7 @@
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   function formatDate(dateStr: string): string {
-    const d = new Date(dateStr);
-    return d.toLocaleString("es-MX", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return $LL.lotMovements.resolution.eventDateTime({ value: dateStr });
   }
 
   function getLocationName(id: string | null): string {
