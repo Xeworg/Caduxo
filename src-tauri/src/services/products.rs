@@ -17,6 +17,8 @@ use crate::dto::products::{
 };
 use crate::dto::scanner::ScanSearchResult;
 use crate::error::{AppError, DomainError};
+use crate::pdf::locale::Locale;
+use crate::services::user_messages::{user_message, UserMessage};
 
 /// Software-suggested default for `default_alert_days_before` when the user
 /// creates a new product. The schema default is `30`; this constant is the
@@ -395,7 +397,7 @@ pub async fn find_product_by_scan(
     let trimmed = scanned_value.trim();
     if trimmed.is_empty() {
         return Err(DomainError::Validation {
-            message: "Scan value cannot be empty".to_string(),
+            message: user_message(UserMessage::ScanValueEmpty, Locale::En),
         }
         .into());
     }
