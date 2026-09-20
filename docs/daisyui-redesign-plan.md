@@ -1,6 +1,48 @@
 # DaisyUI redesign plan
 
-## Status
+## Post-v1 status
+
+This plan shipped end-to-end through PR 1 → PR 13 of the
+`caduxo-daisyui-redesign` OpenSpec change
+(`openspec/changes/caduxo-daisyui-redesign/`). PR 14 owns the
+final verify + archive. Once that archive lands, this document
+moves under `openspec/changes/archive/<date>-caduxo-daisyui-
+redesign/docs/daisyui-redesign-plan.md` alongside the rest of
+the change artifacts.
+
+The contributor guide that replaced this plan's "how to add a
+new surface" prose lives in
+[`docs/design-system.md`](./design-system.md). Read that
+document first when touching the UI; come back here for the
+historical rationale and risk register only when you need
+provenance for a specific design decision.
+
+What this plan still answers (use sparingly — prefer
+`design-system.md` for ongoing work):
+
+- **Why a complete plan first** — kept as historical rationale
+  for the foundation-first delivery order.
+- **Phase-by-phase migration order** — kept as the provenance
+  trail for any PR that asks "why is this primitive where it
+  is". Phase numbers map 1:1 to PR numbers in the change.
+- **Risk register** — kept as the canonical record of the
+  risks the redesign accepted (CSS regression gate,
+  primitive contract drift, etc.).
+
+What moved out (into `docs/design-system.md`):
+
+- The primitive inventory (`Button`, `Card`, `Badge`, `Alert`,
+  `EmptyState`, `LoadingState`, `Toggle`, `Tooltip`, `Modal`,
+  `Table`, `Tabs`, `Select`, `Input`).
+- The `caduxo-light` theme block layout + the motion-token
+  inventory + the reduced-motion reset.
+- The i18n discipline (every visible string enters `src/i18n/
+  en/index.ts` and `src/i18n/es/index.ts` in the same PR).
+- The rules for adding a new surface (compose from existing
+  primitives, add EN + ES strings, respect
+  `prefers-reduced-motion`, gate CSS bundle size).
+
+## Status (planning)
 
 Planning branch: `feat/daisyui-redesign-plan`
 

@@ -10,7 +10,7 @@
     btn-success btn-link btn-square btn-circle
     btn-xs btn-sm btn-md btn-lg
     loading loading-spinner loading-sm
-    motion-safe:animate-none motion-reduce:transition-none
+    motion-reduce:transition-none
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";

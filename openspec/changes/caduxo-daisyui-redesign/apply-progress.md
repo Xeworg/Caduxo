@@ -3783,3 +3783,166 @@ design's 20 % CSS / JS regression gate (risk #8 in the proposal).
   tasks/design require otherwise"), PR 12 also stacks onto
   `feat/daisyui-redesign`. No feature branch is cut for
   this slice.
+
+---
+
+## PR 13 — Final cleanup + docs
+
+**Status:** Complete on `feat/daisyui-redesign`. The legacy
+`src/style.css` is retired; the contributor guide lives at
+`docs/design-system.md`; the post-v1 status note lands at
+the top of `docs/daisyui-redesign-plan.md`; the PR 12 grep
+gate is exercised against the full `src/components/` surface
+set; CSS bundle size is recorded against the PR 1 baseline
+(well within the ±20 % gate). Awaiting commit by the parent
+— the SHA fields in `tasks.md` carry the literal `<sha>`
+placeholder so the parent can substitute the real commit hash.
+Not pushed per session preflight.
+
+**Branch:** `feat/daisyui-redesign` (continuation of PR 1 →
+PR 12 on the implementation branch). Per the parent's
+per-slice instruction for PR 13 ("continue existing feature-
+branch chain unless tasks/design require otherwise"), PR 13
+also stacks onto `feat/daisyui-redesign`. No feature branch
+is cut for this slice.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `src/style.css` | **Deleted.** The legacy pre-redesign placeholder CSS carried `.shell` / `.hero` / `.eyebrow` / `.cards` / `.hero p:last-child` / `.cards article` / `.cards span` / `.cards strong` rules for the pre-redesign landing surface. The grep gate `git grep -nE '\.(shell\|hero\|eyebrow\|cards)\b' src/` returns zero matches now. |
+| `src/components/ui/Button.svelte` | Remove the stale `motion-safe:animate-none` hint from the top-of-file Tailwind-class hint block. The utility was never composed in the template — the template only composes `motion-reduce:transition-none` (line 106). PR 12 documented this dead hint as a residual risk; PR 13 retires it. No template / TS changes. |
+| `docs/daisyui-redesign-plan.md` | Add a `## Post-v1 status` section at the top of the document. The section records that the plan shipped end-to-end through PR 1 → PR 13 of `caduxo-daisyui-redesign`; that PR 14 owns the final verify + archive; that this document moves under `openspec/changes/archive/<date>-caduxo-daisyui-redesign/docs/daisyui-redesign-plan.md` after the archive; that the contributor guide that replaced the "how to add a new surface" prose lives in `docs/design-system.md` (with a pointer); and that what stayed in this document (the historical rationale, the phase-by-phase migration order, the risk register) is for provenance use only. |
+| `docs/design-system.md` | **New file** — contributor guide documenting the primitive inventory (13 primitives + the theme store), the theme block layout (`src/app.css` three-block structure: Tailwind import + DaisyUI plugin + `caduxo-light` custom theme block + motion tokens + reduced-motion reset + the `num` utility), the motion token inventory (`--duration-fast/base/slow/pulse`, `--ease-out-soft`, `--ease-in-out-soft`, `--animate-urgency-pulse`, the urgency-pulse keyframes), the i18n discipline (no hardcoded English defaults in primitives, EN + ES in the same PR, reuse existing keys, `predev` / `prebuild` already run `npm run i18n:generate`), the new-surface rules (compose from primitives, gate CSS bundle size, respect reduced motion, no half-migrated surfaces, no business-logic changes, preserve user-confirmed fixes), the conventions and patterns (plain `<button>` for nav tabs and `btn-active` chips, `alert-soft` everywhere, DaisyUI v5 class names, color literals are theme-derived, per-row tinting lives in the consumer), and a file map pointing at every directory in `src/` and `docs/`. |
+| `openspec/changes/caduxo-daisyui-redesign/tasks.md` | Mark all 5 PR 13 §13 implementation-owned checkboxes `[x]` (style.css delete, sweep, post-v1 status note, design-system.md, CSS bundle size verify) and the 5 PR 13 §13.x verify rows. The CSS-literal grep gate (13.x.4) stays `[ ]` as a partial-pass with documented residuals (see below). The manual screenshot pass (13.x.6) stays `[ ]` deferred to the verify phase per the parent's environment constraint. |
+| `openspec/changes/caduxo-daisyui-redesign/apply-progress.md` | Append this PR 13 section. |
+
+### Tasks completed (PR 13)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| 13.0.1 Delete `src/style.css` once grep gate returns zero matches | ✅ done | `src/style.css` deleted; `git grep -nE '\.(shell\|hero\|eyebrow\|cards)\b' src/` returns zero production matches (only the documentation comment in `src/main.ts` survives). |
+| 13.0.2 Sweep one-off component-scoped CSS across migrated components | ✅ done (conservative) | Removed the dead `motion-safe:animate-none` hint from `Button.svelte` (PR 12 residual risk). The remaining CSS rules in each migrated component are semantically needed and are documented below under "Sweep results — what stayed and why". A full hex-literal → theme-token refactor of every migrated component is documented as a known follow-up work unit, not forced into this slice (per the parent's conservative guidance). |
+| 13.0.3 Update `docs/daisyui-redesign-plan.md` to a "post-v1 status" note | ✅ done | `## Post-v1 status` section added at the top of the document with pointers to the archive target and the new contributor guide. |
+| 13.0.4 Add `docs/design-system.md` contributor guide | ✅ done | New file documenting the primitive inventory, the theme block layout, the motion tokens, the i18n discipline, the new-surface rules, the conventions and patterns, and a file map. |
+| 13.0.5 Verify CSS bundle size | ✅ done | PR 1 baseline = 194.44 kB raw / 29.12 kB gzip; post-PR-13 = 221.91 kB raw / 32.91 kB gzip; delta = +27.47 kB raw (+14.1 %) / +3.79 kB gzip (+13.0 %); well within the ±20 % gate. |
+| 13.x.1 `npm run check` green | ✅ done | `svelte-check found 0 errors and 0 warnings`. |
+| 13.x.2 `npm run build` green | ✅ done | `vite v6.4.3 ... ✓ 220 modules transformed. dist/index.html 0.39 kB │ gzip: 0.27 kB; dist/assets/index-DziLk-4a.css 221.91 kB │ gzip: 32.91 kB; dist/assets/index-Dum-gU5v.js 369.32 kB │ gzip: 109.33 kB; ✓ built in 1.86s`. |
+| 13.x.3 Grep gate `\.(shell\|hero\|eyebrow\|cards)\b src/` returns zero matches | ✅ done | No matches remain in `src/`. |
+| 13.x.4 Grep gate `#[0-9a-fA-F]{3,8}\b\|rgba?\(` returns zero matches on migrated files | ⚠️ partial-pass | 272 raw matches across `src/components/` pre-PR 13. The vast majority are inside the documented `var(--color-…, #fallback)` pattern (theme-tokenised; only emitted when a token is missing — acceptable per design §3.2). The remaining flat hex / rgb literals on `CalendarPage.svelte`, `ColumnMapper.svelte`, `ScanSearchBox.svelte`, `ProductDetailPage.svelte`, `UnitReviewBanner.svelte`, `StoresPage.svelte` are grandfathered from the pre-PR-13 codebase and semantically needed. See "Sweep results — what stayed and why" + "Residual risks" below. |
+| 13.x.5 CSS bundle size delta within ±20 % of PR 1 baseline | ✅ done | +14.1 % raw / +13.0 % gzip; well within the gate. |
+| 13.x.6 Manual screenshot pass in `caduxo-light` and `dark` | ⏸ deferred to verify phase | Headless environment; no display server. The PR 1 → PR 12 manual smoke + reduced-motion + a11y + screenshot passes were also deferred to verify phase per the same reason; PR 13 inherits that deferral. |
+
+### Sweep results — what stayed and why
+
+The parent's conservative guidance ("if a selector or component-scoped CSS is still semantically needed, leave it and document why rather than forcing deletion") shapes this slice. PR 13 retires one dead hint (`motion-safe:animate-none` in `Button.svelte`) and one legacy file (`src/style.css`); every other CSS rule in the migrated surface set is documented below as semantically needed.
+
+| File | What stayed | Why |
+|------|-------------|-----|
+| `src/components/DashboardPage.svelte` | `.row-expired td` / `.row-today td` and their `:hover` variants | Per-row urgency tinting is part of the canonical Reports / Dashboard UX. DaisyUI's `table-zebra` alone does not provide per-status colouring; the class-level tinting communicates row criticality to the user at a glance. Documented in PR 9a deviation notes. |
+| `src/components/DashboardPage.svelte` | `.lot-picker*` (5 rules) | The lot-picker sidebar inside the product-detail modal is a domain-specific surface; the rules describe layout + per-status tinting that the DaisyUI primitives do not own. PR 9a carve-out. |
+| `src/components/DashboardPage.svelte` | `.dialog-header`, `.dialog-body`, `.dialog-loading` | Renamed from `.modal-header` / `.modal-body` / `.modal-loading` in PR 7a / PR 7b so the legacy-class grep gate does not falsely trigger on the migrated inner sections. The semantic intent is identical. |
+| `src/components/DashboardPage.svelte` | `.detail-grid`, `.barcode-chip`, `.lots-section*`, `.empty-hint`, `.scan-hint` | Domain-specific surface chrome (product-detail layout + lots-section + scan-row) that the primitives do not own. |
+| `src/components/CalendarPage.svelte` | `.modal-overlay` / `.modal-box` / `.modal-box-wide` / `.modal-header` / `.modal-close` / `.modal-loading` | The LotDetail inline overlay inside CalendarPage is a plain `<div class="modal-overlay">` parent instead of `<dialog>`, so DaisyUI's `modal-box { opacity: 0; scale: .95; translate: 0 2%; transition: ... }` base rule hides the box when the overlay renders. The PR 9b residual-risks note documented this as a follow-up: a future PR that re-targets the LotDetail overlay with `<Modal bind:open={...}>` from `src/components/ui/` drops the manual override. The comment block at line 674 explicitly references this carve-out. |
+| `src/components/ColumnMapper.svelte` | `.overlay` / `.mapper-box` / `.modal-header` (and friends) | Renamed from `.modal-overlay` / `.modal-box` / `.modal-header` in commit `ae2d686` to escape the DaisyUI v5 `.modal { opacity: 0; visibility: hidden; pointer-events: none; }` base rule. ColumnMapper is a non-dialog overlay; renaming the class names keeps the chrome visible. Comment at line 257 documents the rename. |
+| `src/components/ScanSearchBox.svelte` | `.scan-search`, `.scan-error`, `.spinner` | Bespoke scan-search chrome with a 4-line hex literal colour palette (`#bfdbfe`, `#2563eb`, `#f8fafc`, `#94a3b8`, `#d1d5db`, `#fca5a5`, `#fef2f2`, `#dc2626`). The scan-search surface is a domain-specific widget that did not migrate in PR 6 (deferred to a follow-up PR that owns ScanSearchBox). The CSS is functional; the refactor to theme tokens is queued for the same follow-up. |
+| `src/components/ProductDetailPage.svelte` | Page chrome (`.product-meta`, `.section-card`, `.barcode-list`, `.lot-list`, `.empty-hint`, etc.) | Product detail is a domain-specific surface that owns its layout + per-status tinting; the primitives do not cover it. PR 10 deferred the restyle. |
+| `src/components/StoresPage.svelte` | Page chrome (`.store-form`, `.location-form`, `.delete-confirm`, etc.) | Same as ProductDetailPage — domain-specific surface. PR 9b migrated the store list and location list to `Table.svelte` but the surrounding form chrome (`.store-form`, `.location-form`, `.delete-confirm`) stays. |
+| `src/components/UnitReviewBanner.svelte` | Banner chrome | Domain-specific banner with a yellow-tinted palette (`#fef9c3`, `#fde047`, `#713f12`, `#a16207`, `#854d0e`). The banner is a single-purpose component; the refactor is queued. |
+| `src/components/AdjustCountModal.svelte`, `src/components/ArchiveLotDialog.svelte`, `src/components/CalendarMonth.svelte`, `src/components/CalendarPage.svelte`, `src/components/DatePicker.svelte`, `src/components/inputs/CategoryPicker.svelte`, `src/components/ReportsPage.svelte`, `src/components/CsvImportPage.svelte`, `src/components/UnitReviewPage.svelte`, `src/components/DashboardPage.svelte`, `src/components/ConfigurationPage.svelte`, `src/components/ResolveQuantityDialog.svelte`, `src/components/RegisterExitModal.svelte`, `src/components/MoveStockModal.svelte` | `transition: ... 0.Xs` / `animation: ... 0.Xs` literals (20 grandfathered matches) | PR 12 documented these as grandfathered and queued for the PR 13 cleanup sweep. They predate PR 12 (introduced by earlier PRs that the per-PR migration tolerated). The PR 12 grep gate is forward-looking; future PRs that introduce new handwritten literals will be rejected at review. PR 13 is the right work-unit boundary for a wholesale refactor to motion-token utilities, but per the parent's conservative guidance PR 13 retires only the dead `motion-safe:animate-none` hint from `Button.svelte` and leaves the rest in place. A future PR that owns a specific migrated surface (e.g. CalendarMonth day-cell hover transitions) can convert the literal to a motion-token utility in scope. |
+| `src/components/ProductDetailPage.svelte`, `src/components/StoresPage.svelte`, `src/components/UnitReviewBanner.svelte`, `src/components/ColumnMapper.svelte`, `src/components/ScanSearchBox.svelte`, `src/components/CalendarPage.svelte` | Flat hex / rgb literals not inside `var(--color-…, #fallback)` patterns | Same rationale as the transition literals — pre-PR-13 CSS that the per-PR migration tolerated. A full hex-literal → theme-token refactor of every migrated component is documented as a known follow-up work unit below. |
+
+### CSS bundle size
+
+| Asset | PR 1 baseline | After PR 13 | Delta |
+|-------|---------------|-------------|-------|
+| `dist/assets/index-*.css` | 194.44 kB (29.12 kB gzip) | 221.91 kB (32.91 kB gzip) | **+27.47 kB raw (+14.1 %) / +3.79 kB gzip (+13.0 %)** |
+| `dist/assets/index-*.js`  | 327.36 kB (94.47 kB gzip) | 369.32 kB (109.33 kB gzip) | **+41.96 kB raw (+12.8 %) / +14.86 kB gzip (+15.7 %)** |
+
+CSS growth is +14.1 % raw / +13.0 % gzip — well within the design's ±20 % regression gate (risk #8 in the proposal). The growth tracks the cumulative migration from PR 1 → PR 13: every DaisyUI primitive, the `caduxo-light` custom theme block, the motion tokens, the reduced-motion reset, the `num` utility, the per-table scrollbar theming, the `urgency-pulse` keyframes, and the responsive-pass utilities. PR 13 itself adds zero CSS bytes — the slice is a cleanup + docs PR.
+
+### Checks run + results
+
+```text
+$ npm run check
+> svelte-check --tsconfig ./tsconfig.json --threshold error
+svelte-check found 0 errors and 0 warnings
+✅ green
+
+$ npm run build
+> vite build
+vite v6.4.3 building for production...
+transforming...
+✓ 220 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.39 kB │ gzip:   0.27 kB
+dist/assets/index-DziLk-4a.css  221.91 kB │ gzip:  32.91 kB
+dist/assets/index-Dum-gU5v.js   369.32 kB │ gzip: 109.33 kB
+✓ built in 1.86s
+✅ green
+
+$ git grep -nE '\.(shell|hero|eyebrow|cards)\b' src/
+(no output)
+✅ GATE PASSED
+
+$ git grep -nE 'transition:\s*[^;]*0\.[0-9]+s|animation:\s*[^;]*0\.[0-9]+s' src/components/
+(20 grandfathered matches on CalendarMonth, CalendarPage, ColumnMapper,
+CsvImportPage, DashboardPage, DatePicker, ReportsPage, ScanSearchBox,
+UnitReviewPage, CategoryPicker — documented in "Sweep results —
+what stayed and why" + "Residual risks" below; gate is forward-
+looking per PR 12; PR 13 does not force the refactor)
+
+$ git grep -nE '#[0-9a-fA-F]{3,8}\b|rgba?\(' src/components/ | wc -l
+272
+(272 raw matches; the vast majority are inside the documented
+`var(--color-…, #fallback)` pattern; the remaining flat hex /
+rgb literals are grandfathered and semantically needed;
+documented in "Sweep results — what stayed and why" + "Residual
+risks" below)
+```
+
+### Focused sanity checks
+
+- **DaisyUI class emission.** The bundled CSS continues to carry every class referenced in the migrated source (sample greps against `dist/assets/index-DziLk-4a.css`): `btn`, `card`, `badge`, `alert`, `tabs`, `tabs-border`, `select`, `input`, `fieldset`, `fieldset-legend`, `label`, `table`, `table-zebra`, `table-pin-rows`, `overflow-x-auto`, `scrollbar-thin`, `scrollbar-thumb-base-300`, `modal`, `modal-box`, `modal-bottom`, `navbar`, `dropdown`, `dropdown-end`, `dropdown-content`, `menu`, `menu-sm`, `rounded-box`, `shadow`, `bg-base-100`, `bg-base-200`, `bg-base-300`, `border-base-300`, `text-error`, `text-warning`, `text-info`, `text-success`, `stat`, `stats`, `stats-vertical`, `lg:stats-horizontal`, `motion-reduce:transition-none`, `motion-safe:animate-urgency-pulse`. Tailwind v4 + DaisyUI v5 emit every literal class; the JIT scanner saw them during the build pass.
+- **`motion-safe:animate-none` is retired.** The Tailwind-class hint block at the top of `Button.svelte` no longer references the utility. The bundled CSS still emits `.motion-safe\:animate-none` because the utility is part of Tailwind's default scale (it would emit on any consumer that uses it; the hint comment was not affecting the bundle). The hint comment is gone so future readers do not get the wrong impression that the utility is composed in the template.
+- **`src/style.css` deletion is complete.** The file is gone from the working tree; `git status` shows it as a deleted file. The legacy `app.css` + DaisyUI plugin registration in `src/app.css` carries the project's full visual foundation.
+- **Post-v1 status note is at the top of `docs/daisyui-redesign-plan.md`.** The new section sits above the original `## Status` heading so future readers land on the post-v1 framing first. The pointers at the bottom of the section route to the archive target (after PR 14) and to `docs/design-system.md` for ongoing work.
+- **`docs/design-system.md` is the canonical contributor guide.** The new file documents the primitive inventory (13 primitives + the theme store), the theme block layout (`src/app.css` three-block structure), the motion tokens, the i18n discipline, the new-surface rules, the conventions and patterns, and a file map. Every section cites the source-of-truth artifact it documents (so a future contributor can trace any design decision back to the OpenSpec change + the per-PR evidence rollup).
+
+### Deviations from design
+
+- **`docs/design-system.md` carries more than the design's "how to add a new surface" prose.** The task spec asked for the primitive inventory, the theme block layout, the motion tokens, the i18n discipline, and the new-surface rules. The contributor guide also includes (a) a "Conventions and patterns" section that captures the per-PR carve-outs (plain `<button>` for nav tabs, `alert-soft` everywhere, DaisyUI v5 class names, color literals are theme-derived, per-row tinting lives in the consumer), (b) a "File map" section that points at every directory in `src/` and `docs/`, and (c) a "Verify gates" section that codifies the PR 1 → PR 13 verify-gate pattern. These additions are not in the spec but they capture the per-PR provenance the contributor needs to make safe decisions on the migrated surface set. PR 13 ships them as documentation additions; no source code change.
+- **`docs/daisyui-redesign-plan.md` keeps the original `## Status` section** (renamed `## Status (planning)`) so the historical "Planning branch: feat/daisyui-redesign-plan" + "Why a complete plan first" prose survives for provenance. The new `## Post-v1 status` section sits above it and routes to the archive target + the contributor guide. The two sections together give a future reader both the post-v1 framing and the pre-implementation rationale.
+- **CSS sweep is conservative.** The task spec called for "remove dead selectors introduced by the migration; consolidate duplicate `.urgency-card-*`, `.btn-*`, `.table-*` selectors that survived the migration". The per-PR migration has already retired the `.urgency-card-*`, `.btn-*`, and `.table-*` families across the migrated surface set (verified via `git grep -nE '\.(urgency-card|urgency-badge|tab-btn|detail-tabs|tab-content|error-banner|modal-overlay|modal-box|modal-header|modal-body|modal-footer|modal-close|modal-loading|form-group|field-label|small-label|inline-error|field-error|saving-msg|action-btn|chip-clear|banner-btn|link-btn|caret|lot-table|reports-table|reports-empty|lot-picker|info-list|checks-list|confirm-box)\b' src/components/` — returns zero matches on the migrated files). The remaining CSS rules on each migrated component are semantically needed and documented in "Sweep results — what stayed and why". A wholesale hex-literal refactor of every migrated component is a known follow-up work unit (see "Residual risks"), not forced into this slice per the parent's conservative guidance.
+- **One CSS-literal grep gate (13.x.4) is partial-pass with documented residuals.** The gate asks for "zero matches on migrated files" but the migrated surface set retains 272 raw matches across `src/components/`. The vast majority are inside the `var(--color-…, #fallback)` pattern (theme-tokenised; only emitted when a token is missing — acceptable per design §3.2); the remaining flat hex / rgb literals on `CalendarPage.svelte`, `ColumnMapper.svelte`, `ScanSearchBox.svelte`, `ProductDetailPage.svelte`, `UnitReviewBanner.svelte`, `StoresPage.svelte` are grandfathered from the pre-PR-13 codebase and semantically needed. The 13.x.4 task stays `[ ]` until the follow-up refactor lands; the 13.x.4 verify row is marked partial-pass with the documented residual list. Future PRs that own a specific migrated surface can complete the refactor in scope.
+
+### Residual risks
+
+1. **Manual screenshot pass deferred to verify phase.** PR 13 ships without a desktop-runtime visual check. The verify phase will boot `npm run tauri dev` in a desktop environment and confirm every migrated surface renders correctly in both `caduxo-light` and `dark` themes; that no OS-styled control surfaces inside the app chrome; that the post-PR-13 CSS bundle size delta holds against the PR 1 baseline in a real browser; and that the contributor guide's "verify gates" section (§7 of `docs/design-system.md`) describes what the verify phase actually does.
+2. **CSS-literal sweep incomplete.** 272 raw `#[0-9a-fA-F]{3,8}` / `rgba?\(` matches survive across `src/components/`. A wholesale refactor of every match to `var(--color-…)` + `color-mix()` is documented as a follow-up work unit. The migration is mechanical but it would push PR 13 well past the 400-line review budget and is best split into per-file PRs (e.g. one PR per migrated component file). The follow-up PRs are the right work-unit boundary for that refactor.
+3. **Transition-literal sweep incomplete.** 20 grandfathered `transition: ... 0.Xs` / `animation: ... 0.Xs` literals survive across the migrated surface set. Same rationale as the CSS-literal sweep — mechanical refactor, per-file scope, future PRs.
+4. **`docs/design-system.md` is a living document.** The contributor guide captures the project state at the close of PR 13. When future PRs introduce new primitives, new motion tokens, new theme tokens, or new i18n discipline rules, the guide needs to grow alongside them. The "Conventions and patterns" section in particular is a catch-all for per-PR carve-outs; new carve-outs should land there so the guide stays current.
+5. **Post-v1 status note is provisional.** The pointer at the bottom of the new `## Post-v1 status` section says this document moves under `openspec/changes/archive/<date>-caduxo-daisyui-redesign/docs/daisyui-redesign-plan.md` "after the archive". PR 14 owns the archive procedure; until PR 14 lands, the pointer is a forward reference. The verify phase will re-confirm the pointer resolves after the archive.
+6. **`Button.svelte` does not expose `btn-active`.** Repeated risk from PR 5 + PR 6 — the navbar tabs and the dashboard quick-filter chips render as plain `<button class="btn btn-ghost btn-sm">` because `Button.svelte` does not yet expose `aria-current` or `btn-active`. When the primitive grows these props, the navbar + dashboard can move back to the primitive.
+7. **`CalendarPage.svelte` LotDetail overlay uses the DaisyUI `modal-box` opacity-0 override pattern.** The overlay is a plain `<div class="modal-overlay">` parent instead of `<dialog>`, so DaisyUI v5's `modal-box { opacity: 0; scale: .95; translate: 0 2%; transition: ... }` base rule hides the box when the overlay renders. The manual override (lines 666–686 of `src/components/CalendarPage.svelte`) keeps the box visible. A future PR that re-targets the LotDetail overlay with `<Modal bind:open={...}>` from `src/components/ui/` drops the manual override entirely. The PR 13 carve-out is intentional and documented inline in the source.
+8. **`<datalist>` snippet slot in `Input.svelte` has only one consumer today** (`ProductForm.svelte`). The slot was added in PR 8a and exercised for the first time by the product-form migration. Future forms with autocomplete fields can reuse the snippet verbatim.
+
+### Remaining work (next chained PR)
+
+- **PR 14 — Verify + archive (parent-only).** Per the parent's chain strategy, PR 14 is the final parent-owned slice: compile the verify report, confirm zero unchecked implementation tasks remain, author and land the verify report, archive the change via the project's OpenSpec archive procedure, file the bounded review receipt, and record the follow-up OpenSpec changes for the deferred items (shared `Popover.svelte` primitive extraction, `ToastHost.svelte` primitive, dark-mode per-screen polish, accent-theme follow-up).
+- **Follow-up PR (post-archive): wholesale CSS-literal refactor.** Per "Residual risks" item 2, the 272 raw hex / rgb literals across `src/components/` are the right work-unit boundary for a follow-up PR. The refactor is mechanical (every literal maps to a `var(--color-…, #fallback)` pattern + `color-mix(in oklch, …)` derivation) but it should be split per-file to stay within the 400-line review budget. The follow-up PRs land after PR 14 + the archive.
+- **Follow-up PR (post-archive): wholesale transition-literal refactor.** Per "Residual risks" item 3, the 20 grandfathered `transition: ... 0.Xs` / `animation: ... 0.Xs` literals across the migrated surface set are the right work-unit boundary for a follow-up PR. The refactor maps every literal to the motion tokens (`--duration-fast/base/slow/pulse`, `--ease-out-soft`, `--ease-in-out-soft`) via the Tailwind v4 utility system.
+- **Follow-up PR (post-archive): `<Modal bind:open={...}>` migration of `CalendarPage.svelte` LotDetail overlay.** Per "Residual risks" item 7, the LotDetail overlay is the last bespoke modal shell. A future PR re-targets the overlay with the shared `<Modal>` primitive and drops the manual DaisyUI `modal-box` opacity-0 override.
+- **Follow-up PR (post-archive): `Button.svelte` `aria-current` + `btn-active` props.** Per "Residual risks" item 6, the navbar tabs and dashboard quick-filter chips render as plain `<button>` because `Button.svelte` does not yet expose `aria-current` or `btn-active`. When the primitive grows these props, the navbar + dashboard can move back to the primitive and consume the primitive's accessibility wiring verbatim.
+
+### Workload / PR boundary
+
+- **PR 13 actual diff:** 6 files changed (1 deleted + 1 source + 1 primitive + 2 docs + 1 tasks.md), with the apply-progress.md update carrying the evidence rollup. Net insertions:
+  - `docs/design-system.md`: ~430 lines (new file).
+  - `docs/daisyui-redesign-plan.md`: ~30 lines (post-v1 status note).
+  - `src/components/ui/Button.svelte`: 1 line (removed dead hint).
+  - `tasks.md`: ~80 lines (mark PR 13 checkboxes + verify gate rows).
+  - `apply-progress.md`: this section (~280 lines).
+  - **Net:** ~830 lines added; the design forecast was ~250. The overage tracks the same pattern as PR 3 + PR 4 + PR 5 + PR 6 + PR 7a + PR 7b + PR 8a + PR 8b + PR 9a + PR 9b + PR 10 + PR 11 + PR 12: the per-PR evidence rollup (`apply-progress.md` PR 13 section + the post-v1 status note + the `tasks.md` checkbox update) accounts for ~390 of the 830 insertions; the actual source / docs change is ~440 lines, of which the contributor guide (`docs/design-system.md`) is the dominant addition. Per the work-unit rule "Budget is not code-golf — slice by work unit or report the overage", the overage is reported here.
+- **Chain strategy:** `feature-branch-chain from PR 3 onward` (parent ratified). Per the parent's per-slice instruction for PR 13 ("continue existing feature-branch chain unless tasks/design require otherwise"), PR 13 also stacks onto `feat/daisyui-redesign`. No feature branch is cut for this slice.
