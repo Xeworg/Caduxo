@@ -3946,3 +3946,97 @@ risks" below)
   - `apply-progress.md`: this section (~280 lines).
   - **Net:** ~830 lines added; the design forecast was ~250. The overage tracks the same pattern as PR 3 + PR 4 + PR 5 + PR 6 + PR 7a + PR 7b + PR 8a + PR 8b + PR 9a + PR 9b + PR 10 + PR 11 + PR 12: the per-PR evidence rollup (`apply-progress.md` PR 13 section + the post-v1 status note + the `tasks.md` checkbox update) accounts for ~390 of the 830 insertions; the actual source / docs change is ~440 lines, of which the contributor guide (`docs/design-system.md`) is the dominant addition. Per the work-unit rule "Budget is not code-golf — slice by work unit or report the overage", the overage is reported here.
 - **Chain strategy:** `feature-branch-chain from PR 3 onward` (parent ratified). Per the parent's per-slice instruction for PR 13 ("continue existing feature-branch chain unless tasks/design require otherwise"), PR 13 also stacks onto `feat/daisyui-redesign`. No feature branch is cut for this slice.
+
+## PR 8a.1 — ProductForm datalist → Combobox (visual correction)
+
+**Status:** Complete on `feat/daisyui-redesign`. Bounded follow-up to
+PR 8a after the user reported an OS-styled black popup leaking from
+WebKit's native `<datalist>` on the Product form's barcode type +
+unit fields. Not pushed per session preflight; not committed per
+parent's explicit instruction.
+
+**Branch:** `feat/daisyui-redesign` (continuation of PR 1 → PR 13;
+same chain). Per the parent's per-slice instruction ("continue
+existing feature-branch chain unless tasks/design require otherwise"),
+PR 8a.1 stacks onto `feat/daisyui-redesign`. No new feature branch
+is cut.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `src/components/ui/Combobox.svelte` | New primitive — single-value, free-text-allowed, Svelte-rendered popover (no `<datalist>`). Mirrors `CategoryPicker.svelte` keyboard ergonomics (ArrowUp/Down, Enter, Escape, outside-click, scroll-reposition) and ARIA wiring (`role="combobox"`, `aria-expanded`, `aria-controls`, listbox/option roles, `aria-activedescendant`). Theme tokens + DaisyUI v5 `dropdown dropdown-content` classes for the visual contract. Two option shapes supported: `string[]` for label-only suggestions and `{ value; id?; label? }[]` for typed metadata the consumer receives via `onselect`. Fieldset / legend wrapper renders the visible label so ProductForm can drop the `<fieldset>` + `<legend>` boilerplate around the field. No hard-coded user-facing strings; `emptyText` is a prop the consumer passes when needed. |
+| `src/components/ProductForm.svelte` | Two-field migration: barcode type and product unit. Both fields swap the `Input + {#snippet datalist()}` block for a `<Combobox>` instance. Barcode type: free-text with a static options array. Unit: free-text with a `unitList`-derived options array; `oninput={handleUnitInput}` preserves the "clear `defaultUnitId` on every keystroke" behavior; `onblur={handleUnitBlur}` preserves the "open inline create on blur when unknown" behavior; `onselect={(opt) => { if (opt.id) defaultUnitId = opt.id; }}` is the new path that sets `defaultUnitId` when the user actively picks a known option from the popover. File header comment updated so future readers see why the primitive sits alongside `Input.svelte`. |
+| `openspec/changes/caduxo-daisyui-redesign/tasks.md` | New "PR 8a.1 — ProductForm datalist → Combobox (visual correction)" sub-section at the end; checkbox rows for the primitive, the ProductForm migration, and the verify gate. Forecast, rollback, and out-of-scope follow-ups documented inline. |
+| `openspec/changes/caduxo-daisyui-redesign/apply-progress.md` | This PR 8a.1 section with files-changed table, checks, deviations, residual risks, and out-of-scope notes. |
+
+### Tasks completed (PR 8a.1)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| 8a.1.1 Create `src/components/ui/Combobox.svelte` | ✅ done | Single-value primitive; Svelte-rendered popover; theme tokens; ARIA combobox 1.2 wiring; keyboard + mouse + outside-click + scroll positioning; two option shapes; fieldset/legend wrapper. |
+| 8a.1.2 Migrate ProductForm barcode type to Combobox | ✅ done | Static options array; free-text semantics preserved. |
+| 8a.1.3 Migrate ProductForm unit to Combobox | ✅ done | `unitList`-derived options; `oninput` clears `defaultUnitId`; `onblur` opens inline create on unknown; `onselect` sets `defaultUnitId` on active pick. |
+| 8a.1.4 Update ProductForm file header comment | ✅ done | "Input.svelte for text/number fields (with datalist snippets for barcode type + unit definitions autocomplete)" line replaced with a `Combobox.svelte`-based description + the "no OS-styled WebKit popup" rationale. |
+| 8a.1.5 `npm run check` green | ✅ done | `svelte-check found 0 errors and 0 warnings`. |
+| 8a.1.6 `npm run build` green | ✅ done | 222 modules transformed; built in 1.98s. CSS 223.85 kB (33.09 kB gzip); JS 373.51 kB (110.70 kB gzip). |
+| 8a.1.7 Focused grep gate | ✅ done | `grep -nE '<datalist\b\|</datalist>' src/components/ProductForm.svelte` returns one match on line 10 inside the file header documentation comment ("native `<datalist>` so the visible suggestions carry theme tokens"); zero active `<datalist>...</datalist>` markup. |
+| 8a.1.8 Manual smoke (create-product modal in both themes + barcode type popover + unit select inline-create) | ⏸️ deferred to verify phase | Headless environment; the verify phase will boot `npm run tauri dev` in a desktop runtime and exercise both flows. |
+
+### Checks run + results
+
+```text
+$ npm run check
+> svelte-check --tsconfig ./tsconfig.json --threshold error
+svelte-check found 0 errors and 0 warnings
+✅ green
+
+$ npm run build
+> vite build
+✓ 222 modules transformed.
+dist/index.html                   0.39 kB │ gzip:  0.26 kB
+dist/assets/index-DTtRZAOW.css  223.85 kB │ gzip: 33.09 kB
+dist/assets/index-DwdZ_AhJ.js   373.51 kB │ gzip: 110.70 kB
+✓ built in 1.98s
+✅ green
+
+$ git grep -nE '<datalist\b|</datalist>' src/components/ProductForm.svelte
+src/components/ProductForm.svelte:10:      native `<datalist>` so the visible suggestions carry theme
+✅ zero active markup (the only surviving match is a documentation comment inside the file header)
+```
+
+### Bundle size
+
+| Asset                   | Before PR 8a.1            | After PR 8a.1             | Delta                          |
+|-------------------------|---------------------------|---------------------------|--------------------------------|
+| `dist/assets/index-*.css` | 221.91 kB (32.91 kB gzip) | 223.85 kB (33.09 kB gzip) | +1.94 kB raw / +0.18 kB gzip   |
+| `dist/assets/index-*.js`  | 369.32 kB (109.33 kB gzip) | 373.51 kB (110.70 kB gzip) | +4.19 kB raw / +1.37 kB gzip   |
+
+CSS grows slightly because the new Combobox primitive adds its own themed popover rules. JS grows slightly because the primitive adds keyboard / positioning logic. The net CSS + JS delta is about +6.1 kB raw / +1.55 kB gzip, well within the design's 20% CSS regression gate (risk #8).
+
+### Deviations from design
+
+- **`Combobox.svelte` uses a hand-rolled fixed-positioned popover rather than DaisyUI's `dropdown` anchor pattern.** CategoryPicker's positioning logic is mirrored verbatim — `position: fixed` + manual top/left computed from the trigger's bounding rect — because the design's `dropdown dropdown-content` anchor relies on a CSS-only positioning contract that does not survive scrolling containers (CategoryPicker carries a `Residual risks` note about the same). The DaisyUI `dropdown dropdown-content` classes are still applied in markup so the popover inherits DaisyUI's `border-radius` / shadow contract, but the JS-driven positioning is the source of truth. This matches CategoryPicker exactly.
+- **`oninput` on the Combobox is `(value: string) => void`, not the legacy Svelte `Event` pattern.** The primitive follows the modern Input.svelte convention (`oninput?: (value: string) => void`) so ProductForm's existing `handleUnitInput` (which ignores the argument) works unchanged.
+- **`onselect` is payload-only — it does NOT also fire `oninput`.** When the user actively picks a known option via mouse click or Enter on the active suggestion, `selectOption` fires `onselect(option)` and the parent's `defaultUnitId = opt.id` runs. `oninput` does NOT fire on programmatic selection (the value is set inside `selectOption`, not via the input's native input event), so the parent's `handleUnitInput` does NOT clear `defaultUnitId` — the explicit pick wins. This is the new behavior the parent's scope asked for ("selecting a known unit sets `defaultUnitId` and `defaultUnit`"); the prior datalist flow implicitly cleared `defaultUnitId` on every input event including the synthetic one fired by the browser's `<datalist>` auto-fill, which meant `defaultUnitId` was never set via that path. The new behavior is a strict improvement: the user actively picked the option, so the FK should be set.
+- **`role="searchbox"` is applied to the input.** Mirrors CategoryPicker's pattern (which also uses `role="searchbox"` + `aria-autocomplete="list"`). The WAI-ARIA combobox 1.2 canonical pattern keeps the role on the container (the wrapper); the inner input's role="searchbox" is a slight redundancy that aligns with the existing codebase convention.
+- **Two svelte-ignore comments are needed on the trigger wrapper (`role="combobox"`) and one on each option.** Matches CategoryPicker's approach for the same elements. The first wrapper element is `role="combobox"` (so `a11y_interactive_supports_focus` fires because svelte-check insists on `tabindex`); the option is `role="option"` with `tabindex="-1"` (per WAI-ARIA — options are not tabbable, they're navigated via ArrowUp/Down on the input). CategoryPicker uses the same ignore comments; the canonical rule names use underscores (`a11y_interactive_supports_focus`, `a11y_click_events_have_key_events`); the hyphenated names are deprecated per Svelte 5's diagnostic surface.
+- **No new i18n keys.** The Combobox carries no default English copy. The `emptyText` prop is optional and is not used by the ProductForm migration (both fields have either always-shows-results or unknown-unit → inline-create flows that don't need an explicit "no matches" message). The parent's scope explicitly said "no new i18n keys required"; this matches.
+
+### Residual risks
+
+1. **Manual smoke pass deferred to verify phase.** The PR 8a.1 migration passes `npm run check` + `npm run build` + the focused grep gate in the headless environment, but the visual correctness test ("open the create-product modal in both themes; click the barcode type field, confirm the popover is themed with no black WebKit chrome; click the unit field, type a known unit name, ArrowDown to the suggestion, Enter to select, confirm `defaultUnitId` is set; type a brand-new unit name and Tab away, confirm the inline create subform opens") requires a desktop runtime. The verify phase will exercise the flow in a real browser.
+2. **`ProductDetailPage.svelte` still renders a `<datalist>` for barcode types.** The same visual issue applies to the product-detail screen (the parent's prompt scoped this sub-slice to ProductForm only — "Do not touch unrelated surfaces"). Migrating ProductDetailPage is the natural follow-up work unit. Either a follow-up PR 8a.2 sub-slice or PR 14 picks it up.
+3. **Combobox primitive has only one consumer today.** The primitive was carved for the ProductForm migration; the only fields that exercise it are the barcode type and the unit. Future free-text-with-suggestions fields across the surface set (e.g. ProductDetailPage barcode type, LotForm source-lot autocomplete, CSV import column auto-mapping) can drop the `<datalist>` pattern and consume the primitive verbatim. The acceptance test "primitive consumer audit" lives in the verify phase.
+4. **`onselect` callback is invoked on Enter AND mouse click, but NOT on blur-then-commit.** If a future form author expects `onselect` to fire when the user types a value that exactly matches a suggestion and tabs away (the natural "I matched a catalog value, lock it in" intent), the primitive does not currently emit that signal. The current ProductForm contract is "explicit pick only", which matches the existing `handleUnitInput` / `handleUnitBlur` flow. A future enhancement could auto-detect exact-match on blur and emit `onselect`; the carve-out is intentional for this slice.
+5. **The Combobox primitive does not expose a `required`-driven `<datalist>`-style "missing value" warning.** Inputs paired with a `<datalist>` had no native validation for "did you pick a suggestion or just type"; the new primitive preserves that permissive semantics. Future form-level validation (e.g. via the spec's `validationGate` follow-up) can layer on top.
+
+### Remaining work (next chained PR / follow-up)
+
+- **Follow-up sub-slice (recommended): migrate `ProductDetailPage.svelte` barcode type to `Combobox`.** Same visual issue; same one-line swap. The natural work-unit boundary is a PR 8a.2 sub-slice (or it folds into PR 14's verify pass).
+- **PR 14 — Verify + archive (parent-only).** Unchanged scope: compile the verify report, exercise the PR 8a.1 manual smoke list in a desktop runtime, archive the change, file the bounded review receipt.
+
+### Workload / PR boundary
+
+- **PR 8a.1 actual diff:** 4 files changed (1 new primitive + 1 source + 2 docs). The Combobox primitive is ~290 lines (hand-rolled positioning + ARIA wiring + dual option shapes + JSDoc-style contract comments); the ProductForm migration is ~30 net lines (two block replacements + one header comment + one stale-comment cleanup); the docs updates are ~100 net lines. **Net:** ~420 lines added, acceptable under the session's 3000-line review budget; the reusable primitive is the main review focus.
+- **Chain strategy:** `feature-branch-chain from PR 3 onward` (parent ratified). PR 8a.1 stacks onto `feat/daisyui-redesign`; no new feature branch is cut.

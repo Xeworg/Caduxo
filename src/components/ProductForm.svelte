@@ -3,8 +3,12 @@
   caduxo-daisyui-redesign).
 
   Full migration to the shared UI primitives:
-    - Input.svelte for text/number fields (with datalist snippets
-      for barcode type + unit definitions autocomplete).
+    - Input.svelte for text/number fields.
+    - Combobox.svelte for the free-text-with-suggestions fields
+      (barcode type + product unit definitions). The Combobox
+      primitive renders an Svelte-themed popover in lieu of the
+      native `<datalist>` so the visible suggestions carry theme
+      tokens (no OS-styled WebKit popup).
     - Button.svelte for primary / ghost / link actions.
     - Alert.svelte for error + barcode-notice surfaces.
     - DaisyUI `checkbox checkbox-primary checkbox-sm` wrapper for
@@ -41,6 +45,7 @@
   } from "../lib/unit_definitions.js";
   import CategoryPicker from "./inputs/CategoryPicker.svelte";
   import Input from "./ui/Input.svelte";
+  import Combobox from "./ui/Combobox.svelte";
   import Button from "./ui/Button.svelte";
   import Alert from "./ui/Alert.svelte";
   import { onMount } from "svelte";
@@ -95,7 +100,7 @@
   let barcodeNotice = ""; // empty = no notice
 
   // ── Unit catalog ───────────────────────────────────────────────────────────
-  /** Cached unit list for the datalist. */
+  /** Cached unit list surfaced as Combobox suggestions. */
   let unitList: UnitDefinitionResponse[] = [];
   /** Controls visibility of the inline unit creation sub-form. */
   let showInlineUnitForm = false;
@@ -410,23 +415,12 @@
           label={$LL.products.detail.barcode.valueLabel()}
           placeholder={$LL.products.placeholders.barcode()}
         />
-        <Input
+        <Combobox
           bind:value={upcType}
           label={$LL.products.detail.barcode.typeLabel()}
           placeholder={$LL.products.detail.barcode.typePlaceholder()}
-          list="barcode-types-create"
-        >
-          {#snippet datalist()}
-            <datalist id="barcode-types-create">
-              <option value="EAN13"></option>
-              <option value="EAN8"></option>
-              <option value="UPC"></option>
-              <option value="CODE128"></option>
-              <option value="CODE39"></option>
-              <option value="QR"></option>
-            </datalist>
-          {/snippet}
-        </Input>
+          options={["EAN13", "EAN8", "UPC", "CODE128", "CODE39", "QR"]}
+        />
       </div>
       <label class="checkbox-wrapper">
         <input
@@ -444,22 +438,17 @@
 
   <div class="grid-2">
     <div class="unit-field-col">
-      <Input
+      <Combobox
         bind:value={defaultUnit}
         label={$LL.products.productUnit()}
-        list="unit-definitions-list"
         placeholder={$LL.products.placeholders.unit()}
+        options={unitList.map((u) => ({ value: u.display_name, id: u.id }))}
         oninput={handleUnitInput}
         onblur={handleUnitBlur}
-      >
-        {#snippet datalist()}
-          <datalist id="unit-definitions-list">
-            {#each unitList as unit (unit.id)}
-              <option value={unit.display_name} data-id={unit.id}></option>
-            {/each}
-          </datalist>
-        {/snippet}
-      </Input>
+        onselect={(opt) => {
+          if (opt.id) defaultUnitId = opt.id;
+        }}
+      />
       {#if unitError}
         <Alert variant="error">{unitError}</Alert>
       {/if}

@@ -1358,3 +1358,109 @@ lines", never "ship a single oversized PR".
       list in PR 14 above. <!-- sdd-owner: parent -->
 - [ ] After all chained PRs land and review passes: execute PR 14
       (verify + archive) per the project's OpenSpec lifecycle. <!-- sdd-owner: parent -->
+
+---
+
+## PR 8a.1 — ProductForm datalist → Combobox (visual correction)
+
+Bounded follow-up to PR 8a after the user reported an OS-styled
+black popup leaking from WebKit's native `<datalist>` on the Product
+form's barcode type + unit fields (see
+`/tmp/pi-clipboard-48be3e7c-ad50-417b-b9b3-2b1603bf509a.png`). The
+PR 8a migration left the `<datalist>` in place because the design
+preserved the native autocomplete contract; the visual contract
+turned out to be unacceptable. This sub-slice introduces a
+single-value `Combobox.svelte` primitive (Svelte-rendered popover
+instead of `<datalist>`) and migrates the two ProductForm fields to
+it.
+
+### 8a.1.1 Primitive: `Combobox.svelte`
+
+- [x] Create `src/components/ui/Combobox.svelte` per the spec:
+      single-value, free-text-allowed, Svelte-rendered popover
+      (no `<datalist>`). Mirrors `CategoryPicker.svelte`'s keyboard
+      ergonomics (ArrowUp/Down navigation, Enter to select, Escape
+      to close, outside-click to close, scroll-driven repositioning)
+      and ARIA wiring (`role="combobox"`, `aria-expanded`,
+      `aria-controls`, listbox/option roles, `aria-activedescendant`).
+      Styled via `var(--color-…)` tokens (theme-aware light/dark);
+      `dropdown dropdown-content` classes borrowed from DaisyUI v5
+      for the visual contract. Two option shapes supported:
+      `string[]` for label-only suggestions and
+      `{ value: string; id?: string; label?: string }[]` for typed
+      metadata that the consumer receives via `onselect`. No hard-
+      coded user-facing strings; `emptyText` is a prop consumers
+      may pass when an explicit empty-state copy is needed.
+      <!-- sdd-owner: implementation -->
+
+### 8a.1.2 Migrate ProductForm
+
+- [x] Replace the `Input + {#snippet datalist()}` block on the
+      barcode type field with `<Combobox options={["EAN13", "EAN8",
+      "UPC", "CODE128", "CODE39", "QR"]} />`. Free-text semantics
+      preserved (the user can still type any barcode type string).
+      <!-- sdd-owner: implementation -->
+- [x] Replace the `Input + {#snippet datalist()}` block on the unit
+      field with `<Combobox options={unitList.map(u => ({ value:
+      u.display_name, id: u.id }))} oninput={handleUnitInput}
+      onblur={handleUnitBlur} onselect={(opt) => { if (opt.id)
+      defaultUnitId = opt.id; }} />`. `oninput` clears
+      `defaultUnitId` on every keystroke (preserves existing
+      `handleUnitInput` behavior). `onblur` still opens the inline
+      create subform when the typed value is unknown (preserves
+      existing `handleUnitBlur` behavior). `onselect` is the new
+      `defaultUnitId` set path — fires only when the user actively
+      picks a known option from the popover, not when they simply
+      type a value. <!-- sdd-owner: implementation -->
+- [x] Update the file header comment so the "Input.svelte for text
+      /number fields (with datalist snippets for barcode type +
+      unit definitions autocomplete)" line is replaced with a
+      `Combobox.svelte`-based description; the rationale ("the
+      visible suggestions carry theme tokens, no OS-styled WebKit
+      popup") is documented inline so future readers know why the
+      primitive lives alongside `Input.svelte`.
+      <!-- sdd-owner: implementation -->
+
+### 8a.1.3 PR 8a.1 verify gate
+
+- [x] `npm run check` (svelte-check --threshold error) green.
+      <!-- sdd-owner: implementation -->
+- [x] `npm run build` green. <!-- sdd-owner: implementation -->
+- [x] `git grep -nE '<datalist\b|</datalist>' src/components/ProductForm.svelte`
+      returns zero matches on active markup (the only surviving
+      match is a documentation comment inside the file header).
+      <!-- sdd-owner: implementation -->
+- [ ] Manual smoke — open the create-product modal in both themes;
+      click the barcode type field, confirm the popover is themed
+      (no black WebKit chrome); click the unit field, type "uni",
+      confirm suggestions appear in the themed popover, ArrowDown
+      to a known unit, Enter to select, confirm `defaultUnitId`
+      is set on the saved product; type a brand-new unit name and
+      Tab away, confirm the inline create subform opens.
+      (Deferred to verify phase — headless environment has no
+      display server.) <!-- sdd-owner: verification -->
+
+### 8a.1.4 Files / discovery targets
+
+- `src/components/ui/Combobox.svelte` (new primitive).
+- `src/components/ProductForm.svelte` (two-field migration).
+- `openspec/changes/caduxo-daisyui-redesign/tasks.md`
+  (this sub-section).
+- `openspec/changes/caduxo-daisyui-redesign/apply-progress.md`
+  (PR 8a.1 evidence rollup).
+
+**Forecast:** ~340 net additions (Combobox ~290 + ProductForm ~30
++ docs ~20). Within the 400-line review budget. **Rollback:**
+revert the two source files; the PR 8a Input+datalist flow returns
+intact. The Combobox primitive is new and has zero consumers beyond
+ProductForm's two fields; deleting it does not affect any other
+surface.
+
+**Out of scope (deliberately deferred).** `ProductDetailPage.svelte`
+also renders a barcode type `<datalist>` (the sibling product-detail
+screen). The visual issue applies there too — but the parent's
+prompt explicitly scoped this sub-slice to ProductForm only ("Do
+not touch unrelated surfaces"). Migrating ProductDetailPage's
+barcode type field to `Combobox` is the natural follow-up work
+unit; it lands in a follow-up sub-slice or as part of PR 14 if
+the verify phase picks it up.
