@@ -1,9 +1,18 @@
+<!--
+  MoveStockModal.svelte — Migrated to Modal.svelte primitive in
+  caduxo-daisyui-redesign PR 7a. Shell markup replaced with the
+  shared primitive; business state, validation, submit handlers,
+  and visible copy preserved verbatim.
+-->
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
   import { LL } from "../i18n/i18n-svelte.js";
   import { locale } from "../i18n/locale.svelte.js";
   import type { UnitKind } from "../lib/products.js";
   import { humanizeError } from "../lib/errors.js";
+  import Modal from "./ui/Modal.svelte";
+  import Select from "./ui/Select.svelte";
+  import Button from "./ui/Button.svelte";
 
   // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -20,6 +29,11 @@
   export let onCreated: () => void;
 
   // ── State ──────────────────────────────────────────────────────────────────
+
+  /** Backs the `<Modal>` primitive via two-way binding. */
+  let visible = true;
+  /** Element to receive focus when the modal closes (the trigger row). */
+  let returnFocusTo: HTMLElement | null = null;
 
   let sourceLocationId = "";
   let destinationLocationId = "";
@@ -123,18 +137,72 @@
       submitting = false;
     }
   }
+
+  /**
+   * Source location options for `<Select>`. The empty placeholder
+   * option is rendered via `value === ""` so the user can clear the
+   * selection without losing the bound rune state.
+   */
+  $: sourceLocationOptions = [
+    ...sourceLocations.map((loc) => {
+      const bal = currentBalances.find((b) => b.location_id === loc.id)?.balance ?? 0;
+      return {
+        value: loc.id,
+        label: `${locationLabel(loc)} (${$LL.lotMovements.modal.availableOption({ balance: bal })})`,
+      };
+    }),
+  ];
+
+  /**
+   * Destination location options for `<Select>`. Same shape as the
+   * source list minus the balance annotation, per the original
+   * shell.
+   */
+  $: destinationLocationOptions = [
+    ...filteredDestinations.map((loc) => ({
+      value: loc.id,
+      label: locationLabel(loc),
+    })),
+  ];
+
+  /**
+   * The modal's `oncancel` callback wires Escape to the consumer's
+   * close handler so the "discard in-progress edits on Escape"
+   * semantic is preserved verbatim.
+   */
+  function handleCancel() {
+    if (submitting) return;
+    onClose();
+  }
+
+  function handleClose() {
+    onClose();
+  }
 </script>
 
-<div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.lotMovements.moveStock()}>
-  <div class="modal-box">
-    <div class="modal-header">
+<Modal
+  bind:open={visible}
+  size="md"
+  showClose
+  closeLabel={$LL.lotMovements.modal.close()}
+  {returnFocusTo}
+  oncancel={handleCancel}
+  onclose={handleClose}
+  aria-label={$LL.lotMovements.moveStock()}
+>
+  {#snippet children()}
+    <header class="dialog-header">
       <h3>{$LL.lotMovements.moveStock()}</h3>
-      <button class="modal-close" on:click={onClose}>✕</button>
-    </div>
+    </header>
 
-    <div class="modal-body">
+    <div class="dialog-body">
       <label class="checkbox-row">
-        <input type="checkbox" bind:checked={transferAcrossStores} disabled={submitting || sourceLocations.length === 0} />
+        <input
+          type="checkbox"
+          class="checkbox checkbox-primary checkbox-sm"
+          bind:checked={transferAcrossStores}
+          disabled={submitting || sourceLocations.length === 0}
+        />
         {$LL.lotMovements.modal.moveAcrossStores()}
       </label>
 
@@ -149,23 +217,36 @@
       {:else}
         <div class="form-group">
           <label for="move-source">{$LL.lotMovements.modal.sourceLocation()}</label>
-          <select id="move-source" bind:value={sourceLocationId} disabled={submitting}>
-            <option value="">{$LL.lotMovements.modal.selectLocation()}</option>
-            {#each sourceLocations as loc}
-              {@const bal = currentBalances.find((b) => b.location_id === loc.id)?.balance ?? 0}
-              <option value={loc.id}>{locationLabel(loc)} ({$LL.lotMovements.modal.availableOption({ balance: bal })})</option>
-            {/each}
-          </select>
+          <Select
+            id="move-source"
+            bind:value={sourceLocationId}
+            options={sourceLocationOptions}
+            disabled={submitting}
+            aria-label={$LL.lotMovements.modal.sourceLocation()}
+          >
+            {#snippet leading()}
+              <option value="" disabled>
+                {$LL.lotMovements.modal.selectLocation()}
+              </option>
+            {/snippet}
+          </Select>
         </div>
 
         <div class="form-group">
           <label for="move-dest">{$LL.lotMovements.modal.destinationLocation()}</label>
-          <select id="move-dest" bind:value={destinationLocationId} disabled={submitting}>
-            <option value="">{$LL.lotMovements.modal.selectLocation()}</option>
-            {#each filteredDestinations as loc}
-              <option value={loc.id}>{locationLabel(loc)}</option>
-            {/each}
-          </select>
+          <Select
+            id="move-dest"
+            bind:value={destinationLocationId}
+            options={destinationLocationOptions}
+            disabled={submitting}
+            aria-label={$LL.lotMovements.modal.destinationLocation()}
+          >
+            {#snippet leading()}
+              <option value="" disabled>
+                {$LL.lotMovements.modal.selectLocation()}
+              </option>
+            {/snippet}
+          </Select>
         </div>
 
         <div class="form-group">
@@ -173,12 +254,14 @@
           <input
             id="move-qty"
             type="number"
+            class="input input-md w-full motion-reduce:transition-none"
             min={qtyMin}
             step={qtyStep}
             inputmode={qtyInputMode}
             max={availableQuantity}
             bind:value={quantity}
             disabled={submitting}
+            aria-label={$LL.lotMovements.modal.quantity()}
           />
           <span class="hint">{$LL.lotMovements.available({ available: availableQuantity })}{isIntegerUnit ? $LL.lotMovements.integerNote() : ""}</span>
         </div>
@@ -188,26 +271,51 @@
         {/if}
       {/if}
     </div>
+  {/snippet}
 
-    <div class="modal-footer">
-      <button type="button" class="btn-secondary" on:click={onClose} disabled={submitting}>
-        {$LL.lotMovements.modal.cancel()}
-      </button>
-      <button
-        type="button"
-        class="btn-primary"
-        on:click={submit}
-        disabled={submitting || sourceLocations.length === 0 || filteredDestinations.length === 0}
-      >
-        {submitting ? $LL.lotMovements.modal.saving() : $LL.lotMovements.modal.moveSubmit()}
-      </button>
-    </div>
-  </div>
-</div>
+  {#snippet footer()}
+    <Button
+      variant="ghost"
+      onclick={handleClose}
+      disabled={submitting}
+    >
+      {$LL.lotMovements.modal.cancel()}
+    </Button>
+    <Button
+      variant="primary"
+      onclick={submit}
+      disabled={submitting || sourceLocations.length === 0 || filteredDestinations.length === 0}
+      loading={submitting}
+    >
+      {submitting ? $LL.lotMovements.modal.saving() : $LL.lotMovements.modal.moveSubmit()}
+    </Button>
+  {/snippet}
+</Modal>
 
 <style>
+  /* ── Header ────────────────────────────────────────────────────────────── */
+  .dialog-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .dialog-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--color-base-content, #0f172a);
+  }
+
+  /* ── Body ──────────────────────────────────────────────────────────────── */
+  .dialog-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
   .info-text {
-    color: #6b7280;
+    color: var(--color-base-content, #6b7280);
+    opacity: 0.7;
     font-size: 0.88rem;
     margin: 0;
   }
@@ -218,7 +326,7 @@
     gap: 8px;
     margin-bottom: 14px;
     font-size: 0.86rem;
-    color: #374151;
+    color: var(--color-base-content, #374151);
   }
 
   .form-group {
@@ -230,34 +338,20 @@
 
   .form-group label {
     font-size: 0.85rem;
-    color: #374151;
+    color: var(--color-base-content, #374151);
     font-weight: 500;
-  }
-
-  .form-group select,
-  .form-group input {
-    padding: 8px 10px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    font-family: inherit;
-  }
-
-  .form-group select:focus,
-  .form-group input:focus {
-    outline: 2px solid #3b82f6;
-    border-color: #3b82f6;
   }
 
   .hint {
     font-size: 0.78rem;
-    color: #6b7280;
+    color: var(--color-base-content, #6b7280);
+    opacity: 0.7;
   }
 
   .alert-error {
-    background: #fee2e2;
-    color: #991b1b;
-    border: 1px solid #fca5a5;
+    background: color-mix(in oklch, var(--color-error) 12%, transparent);
+    color: var(--color-error);
+    border: 1px solid color-mix(in oklch, var(--color-error) 30%, transparent);
     border-radius: 6px;
     padding: 8px 12px;
     font-size: 0.85rem;

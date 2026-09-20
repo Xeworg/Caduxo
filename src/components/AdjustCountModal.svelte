@@ -1,9 +1,20 @@
+<!--
+  AdjustCountModal.svelte — Migrated to Modal.svelte primitive in
+  caduxo-daisyui-redesign PR 7a. Shell markup replaced with the
+  shared primitive; the "real physical quantity" input now uses
+  Input.svelte per the spec. Business state, validation, submit
+  handlers, and visible copy preserved verbatim.
+-->
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
   import { LL } from "../i18n/i18n-svelte.js";
   import { locale } from "../i18n/locale.svelte.js";
   import type { UnitKind } from "../lib/products.js";
   import { humanizeError } from "../lib/errors.js";
+  import Modal from "./ui/Modal.svelte";
+  import Input from "./ui/Input.svelte";
+  import Select from "./ui/Select.svelte";
+  import Button from "./ui/Button.svelte";
 
   // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -21,8 +32,24 @@
 
   // ── State ──────────────────────────────────────────────────────────────────
 
+  /** Backs the `<Modal>` primitive via two-way binding. */
+  let visible = true;
+  let returnFocusTo: HTMLElement | null = null;
+
   let locationId = "";
-  let realQuantity = 0;
+  /**
+   * Two-way bridge between `realQuantityAsString` (bound to the
+   * `<Input>` primitive's `value: string` contract) and
+   * `realQuantity: number` (consumed by the submit handler + the
+   * delta preview). The HTML `<input type="number">` round-trips
+   * through a string, so we keep both representations in sync.
+   */
+  let realQuantityAsString = "0";
+  $: realQuantity =
+    realQuantityAsString === "" || realQuantityAsString === "-"
+      ? 0
+      : Number(realQuantityAsString);
+
   let notes = "";
   let submitting = false;
   let errorMsg = "";
@@ -36,13 +63,8 @@
   $: isDecrease = delta < 0;
   $: isNoOp = delta === 0;
 
-  // ── Unit-aware quantity input rules ───────────────────────────────────────
+  // ── Unit-aware quantity validation ───────────────────────────────────────
   $: isIntegerUnit = unitType === "integer";
-  $: qtyMin = isIntegerUnit ? 0 : 0.01;
-  $: qtyStep = isIntegerUnit ? 1 : 0.01;
-  $: qtyInputMode = (isIntegerUnit ? "numeric" : "decimal") as
-    | "numeric"
-    | "decimal";
 
   /**
    * Local validation for integer-unit products: catches fractional input
@@ -54,6 +76,18 @@
     if (qty < 0) return false;
     return !Number.isInteger(qty);
   }
+
+  /**
+   * Location options for the `<Select>` primitive. The value is the
+   * location id; the label is `id — current balance` (verbatim from
+   * the original shell).
+   */
+  $: locationOptions = [
+    ...currentBalances.map((bal) => ({
+      value: bal.location_id,
+      label: `${bal.location_id} — ${$LL.lotMovements.modal.currentBalanceOption({ balance: bal.balance })}`,
+    })),
+  ];
 
   // ── Submit ────────────────────────────────────────────────────────────────
 
@@ -100,16 +134,33 @@
       submitting = false;
     }
   }
+
+  function handleCancel() {
+    if (submitting) return;
+    onClose();
+  }
+
+  function handleClose() {
+    onClose();
+  }
 </script>
 
-<div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.lotMovements.adjustCount()}>
-  <div class="modal-box">
-    <div class="modal-header">
+<Modal
+  bind:open={visible}
+  size="md"
+  showClose
+  closeLabel={$LL.lotMovements.modal.close()}
+  {returnFocusTo}
+  oncancel={handleCancel}
+  onclose={handleClose}
+  aria-label={$LL.lotMovements.adjustCount()}
+>
+  {#snippet children()}
+    <header class="dialog-header">
       <h3>{$LL.lotMovements.adjustCount()}</h3>
-      <button class="modal-close" on:click={onClose}>✕</button>
-    </div>
+    </header>
 
-    <div class="modal-body">
+    <div class="dialog-body">
       <div class="info-box">
         <p>
           {$LL.lotMovements.modal.adjustCurrentLotInventory({ quantity: lotQuantity, unit: lotUnit })}
@@ -121,25 +172,28 @@
 
       <div class="form-group">
         <label for="adjust-location">{$LL.lotsDetail.location()}</label>
-        <select id="adjust-location" bind:value={locationId} disabled={submitting}>
-          <option value="">{$LL.lotMovements.modal.selectLocation()}</option>
-          {#each currentBalances as bal}
-            <option value={bal.location_id}>
-              {bal.location_id} — {$LL.lotMovements.modal.currentBalanceOption({ balance: bal.balance })}
+        <Select
+          id="adjust-location"
+          bind:value={locationId}
+          options={locationOptions}
+          disabled={submitting}
+          aria-label={$LL.lotsDetail.location()}
+        >
+          {#snippet leading()}
+            <option value="" disabled>
+              {$LL.lotMovements.modal.selectLocation()}
             </option>
-          {/each}
-        </select>
+          {/snippet}
+        </Select>
       </div>
 
       <div class="form-group">
-        <label for="adjust-real">{$LL.lotMovements.quantityToSet()}</label>
-        <input
+        <Input
           id="adjust-real"
           type="number"
-          min={qtyMin}
-          step={qtyStep}
-          inputmode={qtyInputMode}
-          bind:value={realQuantity}
+          label={$LL.lotMovements.quantityToSet()}
+          bind:value={realQuantityAsString}
+          invalid={false}
           disabled={submitting}
         />
         <span class="hint">{$LL.lotMovements.currentInventory({ current: currentBalance })}{isIntegerUnit ? $LL.lotMovements.integerNote() : ""}</span>
@@ -165,10 +219,12 @@
         <label for="adjust-notes">{$LL.lotMovements.modal.notesRequiredReason()}</label>
         <textarea
           id="adjust-notes"
+          class="textarea w-full motion-reduce:transition-none"
           rows="3"
           bind:value={notes}
           disabled={submitting}
           placeholder={$LL.lotMovements.modal.adjustNotesPlaceholder()}
+          aria-label={$LL.lotMovements.modal.notesRequiredReason()}
         ></textarea>
       </div>
 
@@ -176,27 +232,51 @@
         <div class="alert-error" role="alert">{errorMsg}</div>
       {/if}
     </div>
+  {/snippet}
 
-    <div class="modal-footer">
-      <button type="button" class="btn-secondary" on:click={onClose} disabled={submitting}>
-        {$LL.lotMovements.modal.cancel()}
-      </button>
-      <button
-        type="button"
-        class="btn-primary"
-        on:click={submit}
-        disabled={submitting || isNoOp}
-      >
-        {submitting ? $LL.lotMovements.modal.saving() : $LL.lotMovements.modal.adjustSubmit()}
-      </button>
-    </div>
-  </div>
-</div>
+  {#snippet footer()}
+    <Button
+      variant="ghost"
+      onclick={handleClose}
+      disabled={submitting}
+    >
+      {$LL.lotMovements.modal.cancel()}
+    </Button>
+    <Button
+      variant="primary"
+      onclick={submit}
+      disabled={submitting || isNoOp}
+      loading={submitting}
+    >
+      {submitting ? $LL.lotMovements.modal.saving() : $LL.lotMovements.modal.adjustSubmit()}
+    </Button>
+  {/snippet}
+</Modal>
 
 <style>
+  /* ── Header ────────────────────────────────────────────────────────────── */
+  .dialog-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .dialog-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--color-base-content, #0f172a);
+  }
+
+  /* ── Body ──────────────────────────────────────────────────────────────── */
+  .dialog-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
   .info-box {
-    background: #f0f9ff;
-    border: 1px solid #bae6fd;
+    background: color-mix(in oklch, var(--color-info) 8%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-info) 30%, transparent);
     border-radius: 6px;
     padding: 10px 12px;
     margin-bottom: 16px;
@@ -208,7 +288,7 @@
   }
 
   .info-hint {
-    color: #0369a1;
+    color: color-mix(in oklch, var(--color-info) 90%, black);
     font-size: 0.82rem !important;
   }
 
@@ -221,30 +301,14 @@
 
   .form-group label {
     font-size: 0.85rem;
-    color: #374151;
+    color: var(--color-base-content, #374151);
     font-weight: 500;
-  }
-
-  .form-group select,
-  .form-group input,
-  .form-group textarea {
-    padding: 8px 10px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    font-family: inherit;
-  }
-
-  .form-group select:focus,
-  .form-group input:focus,
-  .form-group textarea:focus {
-    outline: 2px solid #3b82f6;
-    border-color: #3b82f6;
   }
 
   .hint {
     font-size: 0.78rem;
-    color: #6b7280;
+    color: var(--color-base-content, #6b7280);
+    opacity: 0.7;
   }
 
   .delta-preview {
@@ -258,21 +322,21 @@
   }
 
   .delta-preview.positive {
-    background: #dcfce7;
-    border: 1px solid #86efac;
-    color: #166534;
+    background: color-mix(in oklch, var(--color-success) 12%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-success) 30%, transparent);
+    color: var(--color-success);
   }
 
   .delta-preview.negative {
-    background: #fee2e2;
-    border: 1px solid #fca5a5;
-    color: #991b1b;
+    background: color-mix(in oklch, var(--color-error) 12%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-error) 30%, transparent);
+    color: var(--color-error);
   }
 
   .delta-preview.no-change {
-    background: #f3f4f6;
-    border: 1px solid #e5e7eb;
-    color: #6b7280;
+    background: var(--color-base-200, #f3f4f6);
+    border: 1px solid var(--color-base-300, #e5e7eb);
+    color: var(--color-base-content, #6b7280);
   }
 
   .delta-sign {
@@ -290,9 +354,9 @@
   }
 
   .alert-error {
-    background: #fee2e2;
-    color: #991b1b;
-    border: 1px solid #fca5a5;
+    background: color-mix(in oklch, var(--color-error) 12%, transparent);
+    color: var(--color-error);
+    border: 1px solid color-mix(in oklch, var(--color-error) 30%, transparent);
     border-radius: 6px;
     padding: 8px 12px;
     font-size: 0.85rem;

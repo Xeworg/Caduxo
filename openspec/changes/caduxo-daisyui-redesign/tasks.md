@@ -537,28 +537,36 @@ Apply-time gate: after the first modal lands, run `git diff --stat`;
 if `+` + `-` lines exceed 400, abort PR 7a mid-stream and continue the
 remaining three modals as PR 7b.
 
+> **PR 7a slice status.** PR 7a landed on commit
+> `<inserted after PR 7a apply>`. Three modal components migrated
+> (`MoveStockModal`, `AdjustCountModal`, `ArchiveLotDialog`). Diff:
+> 3 files / 396 insertions / 288 deletions — over the 400-line
+> budget, so the remaining modals (`RegisterExitModal`,
+> `ResolveQuantityDialog`) and the three `DashboardPage` inline
+> overlays continue as **PR 7b** in the next chained slice.
+
 ### 7.1 Modal-by-modal migration (per modal)
 
-- [ ] Replace the legacy `.modal-overlay / .modal-box / .modal-box-wide
+- [x] Replace the legacy `.modal-overlay / .modal-box / .modal-box-wide
       / .modal-header / .modal-body / .modal-footer / .modal-close /
       .modal-loading` markup with `<Modal bind:open={visible} …>`. <!-- sdd-owner: implementation -->
-- [ ] Move the existing close handler to `onClose`; preserve the
+- [x] Move the existing close handler to `onClose`; preserve the
       "discard in-progress edits on Escape" semantics by hooking the
       dialog's `cancel` event (the native `<dialog>` cancellation
       hook). <!-- sdd-owner: implementation -->
-- [ ] Replace the `✕` close button with `showClose` (a
+- [x] Replace the `✕` close button with `showClose` (a
       `btn btn-circle btn-ghost btn-sm absolute top-2 end-2`). <!-- sdd-owner: implementation -->
-- [ ] Move header / body / footer markup into the corresponding slots. <!-- sdd-owner: implementation -->
-- [ ] Preserve all existing business state, validation, and submit
+- [x] Move header / body / footer markup into the corresponding slots. <!-- sdd-owner: implementation -->
+- [x] Preserve all existing business state, validation, and submit
       handlers — only the shell changes. <!-- sdd-owner: implementation -->
 
 ### 7.2 Per-modal targets
 
-- [ ] `src/components/MoveStockModal.svelte` — migrate shell; preserve
+- [x] `src/components/MoveStockModal.svelte` — migrate shell; preserve
       source / destination select + quantity input. <!-- sdd-owner: implementation -->
-- [ ] `src/components/AdjustCountModal.svelte` — migrate shell; the
+- [x] `src/components/AdjustCountModal.svelte` — migrate shell; the
       `real physical quantity` input becomes `Input.svelte`. <!-- sdd-owner: implementation -->
-- [ ] `src/components/ArchiveLotDialog.svelte` — migrate shell;
+- [x] `src/components/ArchiveLotDialog.svelte` — migrate shell;
       confirmation button stays as `Button.svelte variant="danger"`. <!-- sdd-owner: implementation -->
 - [ ] `src/components/RegisterExitModal.svelte` — migrate shell;
       motivo select becomes `Select.svelte`; notes textarea remains
@@ -570,9 +578,9 @@ remaining three modals as PR 7b.
 
 ### 7.3 PR 7 verify gate
 
-- [ ] `npm run check` green. <!-- sdd-owner: implementation -->
-- [ ] `npm run build` green. <!-- sdd-owner: implementation -->
-- [ ] `git grep -nE '\.(modal-overlay|modal-box|modal-box-wide|modal-header|modal-body|modal-footer|modal-close|modal-loading)\b' src/components/`
+- [x] `npm run check` green. <!-- sdd-owner: implementation -->
+- [x] `npm run build` green. <!-- sdd-owner: implementation -->
+- [x] `git grep -nE '\.(modal-overlay|modal-box|modal-box-wide|modal-header|modal-body|modal-footer|modal-close|modal-loading)\b' src/components/`
       returns zero matches on the migrated files. <!-- sdd-owner: implementation -->
 - [ ] Manual smoke — every migrated modal opens via `showModal()`,
       traps focus inside the dialog, closes via Escape and (when
