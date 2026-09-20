@@ -680,11 +680,11 @@ continue the remaining forms as PR 8b.
       capability. <!-- sdd-owner: implementation -->
 - [x] `src/components/ConfigurationPage.svelte` — finish form
       migration (PR 5 handled the switcher + locale selector). <!-- sdd-owner: implementation -->
-- [ ] `src/components/ReportsPage.svelte` filters — migrate selects,
-      inputs, urgency radio group, action buttons. <!-- sdd-owner: implementation -->
-- [ ] `src/components/BackupRestorePage.svelte` — migrate section
+- [x] `src/components/ReportsPage.svelte` filters — migrate selects,
+      inputs, urgency filter, action buttons. <!-- sdd-owner: implementation -->
+- [x] `src/components/BackupRestorePage.svelte` — migrate section
       actions + restore-confirmation flow. <!-- sdd-owner: implementation -->
-- [ ] `src/components/CsvImportPage.svelte` — migrate stage buttons,
+- [x] `src/components/CsvImportPage.svelte` — migrate stage buttons,
       strategy radios, detail editor fields. <!-- sdd-owner: implementation -->
 
 ### 8.3 PR 8 verify gate
@@ -694,8 +694,10 @@ continue the remaining forms as PR 8b.
 - [x] `npm run build` green. <!-- sdd-owner: implementation -->
 - [x] `git grep -nE '\.(form-group|field-label|small-label|inline-error|field-error|saving-msg|action-btn|chip-clear|banner-btn|link-btn|caret)\b' src/components/ProductForm.svelte src/components/LotForm.svelte src/components/ReportsPage.svelte src/components/BackupRestorePage.svelte src/components/CsvImportPage.svelte`
       returns zero matches as the active surface class. (Only
-      matches on PR 8a migrated files are documentation comments
-      in `ConfigurationPage.svelte` — no active surface classes.)
+      matches are documentation comments in `ReportsPage.svelte`,
+      `BackupRestorePage.svelte`, and `CsvImportPage.svelte`
+      documenting the replaced class families — no active
+      surface classes anywhere on the PR 8 surface set.)
       <!-- sdd-owner: implementation -->
 - [ ] Manual smoke — every canonical form scenario from the
       unchanged forms capability continues to pass: `product picks a

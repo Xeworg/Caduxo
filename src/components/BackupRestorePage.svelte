@@ -1,3 +1,29 @@
+<!--
+  BackupRestorePage.svelte — backup export + restore validation flow
+  (PR 8b of caduxo-daisyui-redesign).
+
+  Migration to shared UI primitives:
+    - Button.svelte for every action button (export / validate /
+      restore / choose different / cancel).
+    - Alert.svelte for the export success / export error / validation
+      error / restore error surfaces (replaces `.message.success`
+      and `.message.error` divs).
+    - Alert.svelte for the destructive-operation warning banner
+      (replaces `.warning-banner`).
+    - The validation summary list (`.checks-list`) and the
+      destructive confirm block (`.confirm-box`) preserve their
+      bespoke layout because they are the canonical restore-confirmation
+      surface (the surrounding buttons, alerts, and section chrome
+      all migrate to primitives).
+    - No input / select / radio controls exist on this page; PR 9
+      owns the info-list (`.info-list`) and checks-list (`.checks-list`)
+      data-table migration.
+
+  Tailwind classes referenced here (for the JIT scanner):
+    btn btn-primary btn-secondary btn-danger btn-ghost btn-sm
+    alert alert-success alert-error alert-warning alert-soft
+    flex items-center gap-2
+-->
 <script lang="ts">
   import {
     exportBackupWithDialog,
@@ -5,6 +31,8 @@
     restoreBackup,
     type RestoreValidation,
   } from "../lib/backup_restore.js";
+  import Button from "./ui/Button.svelte";
+  import Alert from "./ui/Alert.svelte";
   import { LL } from "../i18n/i18n-svelte.js";
   import { humanizeError } from "../lib/errors.js";
 
@@ -186,16 +214,26 @@
     <h2>{$LL.backupRestore.exportSection()}</h2>
     <p>{$LL.backupRestore.exportDesc()}</p>
 
-    <button class="btn-primary" on:click={handleExport} disabled={exporting}>
+    <Button
+      variant="primary"
+      size="sm"
+      onclick={handleExport}
+      disabled={exporting}
+      loading={exporting}
+    >
       {exporting ? $LL.backupRestore.exporting() : $LL.backupRestore.exportButton()}
-    </button>
+    </Button>
 
     {#if exportSuccess}
-      <div class="message success">{exportSuccess}</div>
+      <div class="status-stack">
+        <Alert variant="success" role="status">{exportSuccess}</Alert>
+      </div>
     {/if}
 
     {#if exportError}
-      <div class="message error">{exportError}</div>
+      <div class="status-stack">
+        <Alert variant="error">{exportError}</Alert>
+      </div>
     {/if}
   </section>
 
@@ -208,17 +246,27 @@
       {$LL.backupRestore.restoreWarning()}
     </p>
 
-    <div class="warning-banner">
-      {$LL.backupRestore.restoreDangerBanner()}
+    <div class="banner-stack">
+      <Alert variant="warning" role="alert">
+        {$LL.backupRestore.restoreDangerBanner()}
+      </Alert>
     </div>
 
     {#if !validation}
-      <button class="btn-secondary" on:click={handleValidate} disabled={validating}>
+      <Button
+        variant="secondary"
+        size="sm"
+        onclick={handleValidate}
+        disabled={validating}
+        loading={validating}
+      >
         {validating ? $LL.backupRestore.selecting() : $LL.backupRestore.selectBackupFile()}
-      </button>
+      </Button>
 
       {#if validationError}
-        <div class="message error">{validationError}</div>
+        <div class="status-stack">
+          <Alert variant="error">{validationError}</Alert>
+        </div>
       {/if}
     {:else if validation.canRestore}
       <!-- Validation passed — show summary -->
@@ -231,23 +279,35 @@
         </ul>
 
         {#if !showRestoreConfirm}
-          <button class="btn-danger" on:click={openRestoreConfirm}>
+          <Button variant="danger" size="sm" onclick={openRestoreConfirm}>
             {$LL.backupRestore.restoreButton()}
-          </button>
+          </Button>
         {:else}
           <!-- Explicit destructive confirmation -->
           <div class="confirm-box">
             <p><strong>{$LL.common.confirm()}</strong> {$LL.backupRestore.restoreConfirmPrompt()}</p>
             <div class="confirm-actions">
-              <button class="btn-danger" on:click={handleRestore} disabled={restoring}>
+              <Button
+                variant="danger"
+                size="sm"
+                onclick={handleRestore}
+                disabled={restoring}
+                loading={restoring}
+              >
                 {restoring ? $LL.backupRestore.restoring() : $LL.backupRestore.restoreData()}
-              </button>
-              <button class="btn-secondary" on:click={() => { showRestoreConfirm = false; }}>
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onclick={() => { showRestoreConfirm = false; }}
+              >
                 {$LL.common.cancel()}
-              </button>
+              </Button>
             </div>
             {#if restoreError}
-              <div class="message error">{restoreError}</div>
+              <div class="status-stack">
+                <Alert variant="error">{restoreError}</Alert>
+              </div>
             {/if}
           </div>
         {/if}
@@ -263,9 +323,13 @@
         </ul>
 
         <p>
-          <button class="btn-secondary" on:click={() => { validation = null; selectedBackupPath = ""; }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onclick={() => { validation = null; selectedBackupPath = ""; }}
+          >
             {$LL.backupRestore.chooseDifferentFile()}
-          </button>
+          </Button>
         </p>
       </div>
     {/if}
@@ -300,46 +364,47 @@
   h1 {
     font-size: 1.5rem;
     margin-bottom: 1.5rem;
+    color: var(--color-base-content);
   }
 
   h2 {
     font-size: 1.15rem;
     margin-bottom: 0.75rem;
+    color: var(--color-base-content);
   }
 
   h3 {
     font-size: 1rem;
     margin-bottom: 0.5rem;
+    color: var(--color-base-content);
   }
 
   .card {
-    background: #fff;
-    border: 1px solid #e2e8f0;
+    background: var(--color-base-100);
+    border: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
     border-radius: 8px;
     padding: 1.25rem;
     margin-bottom: 1rem;
   }
 
   .card p {
-    color: #64748b;
+    color: var(--color-secondary);
     line-height: 1.6;
     margin-bottom: 0.75rem;
   }
 
-  .warning-banner {
-    background: #fff7ed;
-    border: 1px solid #fed7aa;
-    border-radius: 6px;
-    padding: 0.75rem 1rem;
-    margin-bottom: 0.75rem;
-    color: #c2410c;
-    font-size: 0.875rem;
-    font-weight: 500;
+  .banner-stack,
+  .status-stack {
+    margin-top: 0.75rem;
+    margin-bottom: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
   }
 
   .validation-summary {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
     border-radius: 6px;
     padding: 1rem;
   }
@@ -353,12 +418,12 @@
 
   .checks-list li {
     padding: 0.2rem 0;
-    color: #475569;
+    color: var(--color-secondary);
   }
 
   .confirm-box {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
+    background: color-mix(in oklch, var(--color-error) 6%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-error) 35%, transparent);
     border-radius: 6px;
     padding: 1rem;
     margin-top: 0.5rem;
@@ -372,6 +437,7 @@
     display: flex;
     gap: 0.5rem;
     align-items: center;
+    flex-wrap: wrap;
   }
 
   .info-list {
@@ -383,77 +449,13 @@
 
   dt {
     font-weight: 600;
-    color: #334155;
+    color: var(--color-base-content);
     white-space: nowrap;
   }
 
   dd {
-    color: #64748b;
+    color: var(--color-secondary);
     margin: 0;
     line-height: 1.5;
-  }
-
-  .btn-primary,
-  .btn-secondary,
-  .btn-danger {
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    border: none;
-    transition: background 0.15s;
-  }
-
-  .btn-primary {
-    background: #2563eb;
-    color: white;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: #1d4ed8;
-  }
-
-  .btn-secondary {
-    background: #f1f5f9;
-    color: #334155;
-    border: 1px solid #cbd5e1;
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: #e2e8f0;
-  }
-
-  .btn-danger {
-    background: #dc2626;
-    color: white;
-  }
-
-  .btn-danger:hover:not(:disabled) {
-    background: #b91c1c;
-  }
-
-  button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .message {
-    padding: 0.5rem 0.75rem;
-    border-radius: 6px;
-    margin-top: 0.5rem;
-    font-size: 0.875rem;
-  }
-
-  .success {
-    background: #f0fdf4;
-    border: 1px solid #bbf7d0;
-    color: #166534;
-  }
-
-  .error {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    color: #991b1b;
   }
 </style>

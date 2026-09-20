@@ -1,6 +1,31 @@
+<!--
+  ReportsPage.svelte — reports configurator + preview (PR 8b of
+  caduxo-daisyui-redesign).
+
+  Filter chrome migration to shared UI primitives:
+    - Select.svelte for the store / location / urgency filter selects.
+    - Button.svelte for the preview / export / edit-filters actions.
+    - Alert.svelte for the error + success banners (replaces the
+      bespoke `.alert-error` / `.alert-success` divs).
+    - The DatePicker wrapping (own component) and the CategoryPicker
+      (own component) stay verbatim — PR 10 owns the DatePicker
+      restyle and PR 9 owns the result table.
+    - The `urgency radio group` mentioned in the PR 8b scope is the
+      urgency filter select in `custom` mode; the page has no plain
+      `<input type="radio">` controls to migrate.
+
+  Tailwind classes referenced here (for the JIT scanner):
+    select select-md select-error
+    btn btn-primary btn-secondary btn-ghost btn-lg
+    alert alert-error alert-success alert-soft
+    flex items-center gap-2
+-->
 <script lang="ts">
   import { onMount } from "svelte";
   import DatePicker from "./DatePicker.svelte";
+  import Select from "./ui/Select.svelte";
+  import Button from "./ui/Button.svelte";
+  import Alert from "./ui/Alert.svelte";
   import {
     previewReport,
     exportReportPdfWithDialog,
@@ -36,8 +61,12 @@
   let view: View = "configure";
 
   let selectedReportType: ReportType = "expired";
-  let storeId: string | null = null;
-  let locationId: string | null = null;
+  // Backing state for the Select primitive. The native <select> renders
+  // the empty option (value="") so a `null` store / location is
+  // represented as an empty string. We translate back to `null` at the
+  // submit boundary.
+  let storeId: string = "";
+  let locationId: string = "";
   let categoryIds: string[] = [];
   let urgency: string = "";
   function todayIso(): string {
@@ -95,6 +124,18 @@
     { value: "future", label: $LL.reports.urgencyOptions.future() },
   ];
 
+  // ─── Derived select option lists ─────────────────────────────────────────
+
+  $: storeOptions = [
+    { value: "", label: $LL.dashboard.allStores() },
+    ...stores.map((s) => ({ value: s.id, label: s.name })),
+  ];
+
+  $: locationOptions = [
+    { value: "", label: $LL.dashboard.allLocations() },
+    ...locations.map((loc) => ({ value: loc.id, label: loc.name })),
+  ];
+
   // ─── Lifecycle ───────────────────────────────────────────────────────────
 
   onMount(async () => {
@@ -119,11 +160,13 @@
     return lot.unit;
   }
 
+  // When the store selection changes, refresh the location list. Empty
+  // store id means "all stores" so we drop the location filter.
   $: if (storeId) {
     loadLocations(storeId);
   } else {
     locations = [];
-    locationId = null;
+    locationId = "";
   }
 
   async function loadLocations(forStoreId: string) {
@@ -131,11 +174,11 @@
       locations = await listStoreLocations(forStoreId);
       // Drop the previous location id if it belonged to a different store.
       if (locationId && !locations.find((l) => l.id === locationId)) {
-        locationId = null;
+        locationId = "";
       }
     } catch {
       locations = [];
-      locationId = null;
+      locationId = "";
     }
   }
 
@@ -300,25 +343,27 @@
     <h1>{$LL.reports.pageTitle()}</h1>
     {#if view === "preview" && preview}
       <div class="page-header-actions">
-        <button class="btn-secondary" on:click={backToConfigure}>
+        <Button variant="ghost" size="sm" onclick={backToConfigure}>
           {$LL.reports.actions.editFilters()}
-        </button>
-        <button
-          class="btn-primary"
-          on:click={exportPdf}
+        </Button>
+        <Button
+          variant="primary"
+          size="sm"
+          onclick={exportPdf}
           disabled={exporting || preview.lots.length === 0}
+          loading={exporting}
         >
           {exporting ? $LL.reports.actions.exporting() : $LL.reports.actions.exportPdf()}
-        </button>
+        </Button>
       </div>
     {/if}
   </header>
 
   {#if errorMsg}
-    <div class="alert alert-error" role="alert">{errorMsg}</div>
+    <Alert variant="error">{errorMsg}</Alert>
   {/if}
   {#if successMsg}
-    <div class="alert alert-success" role="status">{successMsg}</div>
+    <Alert variant="success" role="status">{successMsg}</Alert>
   {/if}
 
   {#if view === "configure"}
@@ -343,28 +388,29 @@
     <section class="panel">
       <h2 class="panel-title">{$LL.reports.configureFilters()}</h2>
       <div class="filters-grid">
-        <label class="filter-field">
-          <span>{$LL.dashboard.store()}</span>
-          <select bind:value={storeId}>
-            <option value={null}>{$LL.dashboard.allStores()}</option>
-            {#each stores as s}
-              <option value={s.id}>{s.name}</option>
-            {/each}
-          </select>
-        </label>
+        <div class="filter-field">
+          <label class="filter-label" for="reports-store">{$LL.dashboard.store()}</label>
+          <Select
+            bind:value={storeId}
+            options={storeOptions}
+            size="md"
+            id="reports-store"
+          />
+        </div>
 
-        <label class="filter-field" class:disabled={!storeId || locations.length === 0}>
-          <span>{$LL.dashboard.location()}</span>
-          <select bind:value={locationId} disabled={!storeId || locations.length === 0}>
-            <option value={null}>{$LL.dashboard.allLocations()}</option>
-            {#each locations as loc}
-              <option value={loc.id}>{loc.name}</option>
-            {/each}
-          </select>
-        </label>
+        <div class="filter-field" class:disabled={!storeId || locations.length === 0}>
+          <label class="filter-label" for="reports-location">{$LL.dashboard.location()}</label>
+          <Select
+            bind:value={locationId}
+            options={locationOptions}
+            size="md"
+            id="reports-location"
+            disabled={!storeId || locations.length === 0}
+          />
+        </div>
 
         <div class="filter-field">
-          <span>{$LL.dashboard.category()}</span>
+          <span class="filter-label">{$LL.dashboard.category()}</span>
           <CategoryPicker
             bind:value={categoryIds}
             {categories}
@@ -372,50 +418,53 @@
           />
         </div>
 
-        <label class="filter-field" class:disabled={selectedReportType !== "custom"}>
-          <span>{$LL.reports.fields.urgency()}</span>
-          <select
+        <div class="filter-field" class:disabled={selectedReportType !== "custom"}>
+          <label class="filter-label" for="reports-urgency">{$LL.reports.fields.urgency()}</label>
+          <Select
             bind:value={urgency}
+            options={URGENCY_OPTIONS}
+            size="md"
+            id="reports-urgency"
             disabled={selectedReportType !== "custom"}
-          >
-            {#each URGENCY_OPTIONS as u}
-              <option value={u.value}>{u.label}</option>
-            {/each}
-          </select>
-        </label>
+          />
+        </div>
 
-        <label class="filter-field">
-          <span>{$LL.reports.fields.dateFrom()}</span>
+        <div class="filter-field">
+          <label class="filter-label" for="reports-date-from">{$LL.reports.fields.dateFrom()}</label>
           <DatePicker
             bind:value={dateFrom}
+            id="reports-date-from"
             ariaLabel={$LL.reports.fields.dateFrom()}
             placeholder={$LL.reports.fields.datePlaceholder()}
             clearable={true}
             todayDate={todayIso()}
           />
-        </label>
+        </div>
 
-        <label class="filter-field">
-          <span>{$LL.reports.fields.dateTo()}</span>
+        <div class="filter-field">
+          <label class="filter-label" for="reports-date-to">{$LL.reports.fields.dateTo()}</label>
           <DatePicker
             bind:value={dateTo}
+            id="reports-date-to"
             ariaLabel={$LL.reports.fields.dateTo()}
             placeholder={$LL.reports.fields.datePlaceholder()}
             clearable={true}
             todayDate={todayIso()}
           />
-        </label>
+        </div>
       </div>
     </section>
 
     <div class="actions-row">
-      <button
-        class="btn-primary btn-large"
-        on:click={runPreview}
+      <Button
+        variant="primary"
+        size="lg"
+        onclick={runPreview}
         disabled={loading}
+        loading={loading}
       >
         {loading ? $LL.reports.actions.generating() : $LL.reports.actions.preview()}
-      </button>
+      </Button>
     </div>
   {:else if preview}
     <!-- ── Preview view ────────────────────────────────────────────── -->
@@ -508,28 +557,9 @@
     gap: 8px;
   }
 
-  .alert {
-    padding: 10px 14px;
-    border-radius: 6px;
-    margin-bottom: 16px;
-    font-size: 0.9rem;
-  }
-
-  .alert-error {
-    background: #fee2e2;
-    color: #991b1b;
-    border: 1px solid #fca5a5;
-  }
-
-  .alert-success {
-    background: #dcfce7;
-    color: #166534;
-    border: 1px solid #86efac;
-  }
-
   .panel {
-    background: #fff;
-    border: 1px solid #e5e7eb;
+    background: var(--color-base-100);
+    border: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
     border-radius: 10px;
     padding: 20px 24px;
     margin-bottom: 16px;
@@ -538,11 +568,11 @@
   .panel-title {
     margin: 0 0 12px;
     font-size: 1rem;
-    color: #1f2937;
+    color: var(--color-base-content);
   }
 
   .muted {
-    color: #6b7280;
+    color: var(--color-secondary);
     font-weight: 400;
   }
 
@@ -559,34 +589,35 @@
     align-items: flex-start;
     gap: 4px;
     padding: 12px 14px;
-    border: 1px solid #d1d5db;
+    border: 1px solid color-mix(in oklch, var(--color-base-300) 80%, transparent);
     border-radius: 8px;
-    background: #fafafa;
+    background: var(--color-base-100);
     cursor: pointer;
     text-align: left;
     font-family: inherit;
     transition: border-color 0.12s, background 0.12s;
+    color: var(--color-base-content);
   }
 
   .report-type:hover {
-    background: #f3f4f6;
-    border-color: #9ca3af;
+    background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
+    border-color: color-mix(in oklch, var(--color-base-300) 90%, transparent);
   }
 
   .report-type.selected {
-    background: #eff6ff;
-    border-color: #2563eb;
+    background: color-mix(in oklch, var(--color-primary) 8%, transparent);
+    border-color: var(--color-primary);
   }
 
   .report-type-label {
     font-weight: 600;
     font-size: 0.9rem;
-    color: #1f2937;
+    color: var(--color-base-content);
   }
 
   .report-type-desc {
     font-size: 0.78rem;
-    color: #6b7280;
+    color: var(--color-secondary);
     line-height: 1.4;
   }
 
@@ -603,36 +634,14 @@
     gap: 4px;
   }
 
-  .filter-field span {
+  .filter-label {
     font-size: 0.78rem;
     font-weight: 500;
-    color: #374151;
+    color: var(--color-base-content);
   }
 
-  .filter-field.disabled span {
-    color: #9ca3af;
-  }
-
-  .filter-field select {
-    padding: 7px 10px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-family: inherit;
-    background: #fff;
-    color: #1e293b;
-  }
-
-  .filter-field select:focus {
-    outline: none;
-    border-color: #2563eb;
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
-  }
-
-  .filter-field.disabled select {
-    background: #f9fafb;
-    color: #9ca3af;
-    cursor: not-allowed;
+  .filter-field.disabled .filter-label {
+    color: color-mix(in oklch, var(--color-base-content) 40%, transparent);
   }
 
   .actions-row {
@@ -644,7 +653,7 @@
 
   /* ── Meta panel ───────────────────────────────────────────────────── */
   .report-meta-panel {
-    background: #f8fafc;
+    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
   }
 
   .meta-grid {
@@ -656,14 +665,14 @@
 
   .meta-grid dt {
     font-size: 0.78rem;
-    color: #6b7280;
+    color: var(--color-secondary);
     font-weight: 500;
   }
 
   .meta-grid dd {
     margin: 0;
     font-size: 0.85rem;
-    color: #1f2937;
+    color: var(--color-base-content);
   }
 
   .meta-filters {
@@ -673,8 +682,8 @@
 
   /* ── Empty state ──────────────────────────────────────────────────── */
   .empty-state {
-    background: #fff;
-    border: 1px dashed #d1d5db;
+    background: var(--color-base-100);
+    border: 1px dashed color-mix(in oklch, var(--color-base-300) 70%, transparent);
     border-radius: 10px;
     padding: 40px 20px;
     text-align: center;
@@ -682,20 +691,20 @@
 
   .empty-state p {
     margin: 0 0 6px;
-    color: #4b5563;
+    color: var(--color-secondary);
   }
 
   .empty-state .hint {
     font-size: 0.85rem;
-    color: #9ca3af;
+    color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
   }
 
   /* ── Table ────────────────────────────────────────────────────────── */
   .table-wrapper {
     overflow-x: auto;
     border-radius: 8px;
-    border: 1px solid #e5e7eb;
-    background: #fff;
+    border: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
+    background: var(--color-base-100);
   }
 
   .report-table {
@@ -705,15 +714,15 @@
   }
 
   .report-table thead {
-    background: #f8fafc;
+    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
   }
 
   .report-table th {
     text-align: left;
     padding: 8px 10px;
     font-weight: 600;
-    color: #475569;
-    border-bottom: 1px solid #e5e7eb;
+    color: var(--color-secondary);
+    border-bottom: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
     white-space: nowrap;
   }
 
@@ -725,9 +734,9 @@
 
   .report-table td {
     padding: 7px 10px;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid color-mix(in oklch, var(--color-base-200) 90%, transparent);
     vertical-align: middle;
-    color: #1e293b;
+    color: var(--color-base-content);
   }
 
   .report-table tr:last-child td {
@@ -735,13 +744,13 @@
   }
 
   .report-table tr:hover td {
-    background: #f8fafc;
+    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
   }
 
   .cell-sku {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.8rem;
-    color: #475569;
+    color: var(--color-secondary);
   }
 
   .cell-desc {
@@ -756,7 +765,7 @@
   }
 
   .loc-name {
-    color: #94a3b8;
+    color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
     font-size: 0.78rem;
   }
 
@@ -775,41 +784,41 @@
   }
 
   .cell-batch {
-    color: #94a3b8;
+    color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
     font-size: 0.8rem;
   }
 
   /* ── Urgency colours ──────────────────────────────────────────────── */
   .row-expired td {
-    background: #fff5f5;
+    background: color-mix(in oklch, var(--color-error) 8%, transparent);
   }
 
   .row-expired:hover td {
-    background: #ffe4e4;
+    background: color-mix(in oklch, var(--color-error) 14%, transparent);
   }
 
   .row-today td {
-    background: #fffbeb;
+    background: color-mix(in oklch, var(--color-warning) 14%, transparent);
   }
 
   .row-today:hover td {
-    background: #fef3c7;
+    background: color-mix(in oklch, var(--color-warning) 20%, transparent);
   }
 
   .row-alert td {
-    background: #f5faff;
+    background: color-mix(in oklch, var(--color-info) 8%, transparent);
   }
 
   .row-alert:hover td {
-    background: #e0efff;
+    background: color-mix(in oklch, var(--color-info) 14%, transparent);
   }
 
   .row-soon td {
-    background: #faf5ff;
+    background: color-mix(in oklch, var(--color-secondary) 10%, transparent);
   }
 
   .row-soon:hover td {
-    background: #f3e8ff;
+    background: color-mix(in oklch, var(--color-secondary) 16%, transparent);
   }
 
   .urgency-badge {
@@ -824,68 +833,27 @@
   }
 
   .urgency-badge.row-expired {
-    background: #fee2e2;
-    color: #991b1b;
+    background: color-mix(in oklch, var(--color-error) 18%, transparent);
+    color: var(--color-error);
   }
 
   .urgency-badge.row-today {
-    background: #fef3c7;
-    color: #92400e;
+    background: color-mix(in oklch, var(--color-warning) 22%, transparent);
+    color: var(--color-warning);
   }
 
   .urgency-badge.row-alert {
-    background: #dbeafe;
-    color: #1e40af;
+    background: color-mix(in oklch, var(--color-info) 18%, transparent);
+    color: var(--color-info);
   }
 
   .urgency-badge.row-soon {
-    background: #ede9fe;
-    color: #5b21b6;
+    background: color-mix(in oklch, var(--color-secondary) 18%, transparent);
+    color: var(--color-secondary);
   }
 
   .urgency-badge.row-normal {
-    background: #f1f5f9;
-    color: #475569;
-  }
-
-  /* ── Buttons ──────────────────────────────────────────────────────── */
-  .btn-primary {
-    background: #2563eb;
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    padding: 8px 16px;
-    font-size: 0.9rem;
-    cursor: pointer;
-    font-family: inherit;
-  }
-
-  .btn-primary:hover {
-    background: #1d4ed8;
-  }
-
-  .btn-primary:disabled {
-    background: #93c5fd;
-    cursor: not-allowed;
-  }
-
-  .btn-secondary {
-    background: #fff;
-    color: #374151;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    padding: 8px 16px;
-    font-size: 0.9rem;
-    cursor: pointer;
-    font-family: inherit;
-  }
-
-  .btn-secondary:hover {
-    background: #f9fafb;
-  }
-
-  .btn-large {
-    padding: 10px 22px;
-    font-size: 0.95rem;
+    background: color-mix(in oklch, var(--color-base-300) 50%, transparent);
+    color: var(--color-secondary);
   }
 </style>

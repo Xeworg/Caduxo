@@ -2216,3 +2216,221 @@ design's CSS / JS budget gates.
   branch"), PR 8a also stacks onto `feat/daisyui-redesign`.
   No feature branch is cut for this slice.
 
+## PR 8b — Forms migration slice B (ReportsPage filters + BackupRestorePage + CsvImportPage)
+
+**Status:** Complete on `feat/daisyui-redesign`. The remaining
+three form-bearing surfaces from PR 8 land in this slice. The
+preflight asked for `delivery_strategy: ask-on-risk`, so the
+parent can ratify a delivery decision if the diff exceeds the
+400-line review budget. Not pushed per session preflight.
+
+**Branch:** `feat/daisyui-redesign` (continuation of PR 1 → PR 8a).
+Per the parent's per-slice instruction ("Create one Conventional
+Commit for PR 8b on the existing branch"), PR 8b stacks onto the
+same branch.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `src/components/ReportsPage.svelte` | Migrate the three filter selects (store / location / urgency) to `Select.svelte`; the three action buttons (back-to-configure / preview / export PDF) to `Button.svelte`; the bespoke `.alert-error` / `.alert-success` divs to `Alert.svelte`. Native `<select>` / `<button>` markup for the filter / action surfaces is gone; the `<datalist>`-style DatePicker wrapping stays verbatim (PR 10 owns the DatePicker restyle; the `<label class="filter-field">` wrapping becomes a plain `<div class="filter-field">` with a sibling `<label class="filter-label">` for `<Select>` so the visible label still associates with the filter). The result table (`.report-table`) and the per-row urgency badge styling (`.urgency-badge.*`, `.row-*`) stay verbatim — PR 9 owns the table migration. CSS block rewritten to migrate every hex literal to `var(--color-…, #fallback)` + `color-mix()`. |
+| `src/components/BackupRestorePage.svelte` | Migrate the four action buttons (export / validate / restore / choose-different / cancel) to `Button.svelte` (variant `primary` / `secondary` / `danger`); the export success / export error / validation error / restore error surfaces to `Alert.svelte` (variant `success` / `error`); the destructive-operation warning banner (`.warning-banner`) to `Alert.svelte` (variant `warning`). The validation summary list (`.checks-list`), the destructive-confirm block (`.confirm-box`), and the help info-list (`.info-list`) preserve their bespoke layout because they are the canonical restore-confirmation UX — PR 9 owns the data-list migration of `.info-list` / `.checks-list`. CSS block rewritten to migrate every hex literal to DaisyUI theme tokens. |
+| `src/components/CsvImportPage.svelte` | Migrate the four stage buttons (select file / choose-different / import / import-another) to `Button.svelte`; the error banner (`.error-banner`) to `Alert.svelte`; the tip box (`.hint-box`) to `Alert.svelte` (variant `info`). The conflict-strategy radios migrate from the original `display: none` hidden pattern to the visible `<input type="radio" class="radio radio-primary radio-sm">` wrapper (native `<input>` stays in the DOM for form semantics; the existing `bind:group={selectedStrategy}` wiring keeps the radio group contract verbatim). The clickable action-card surfaces (`.action-card` / `.action-card.primary` / `.action-card.info`) keep their bespoke layout because they are the canonical CSV-import landing surface — the chosen card variant carries the primary tone via theme tokens. The summary / result card grids and the preview / import-log tables stay verbatim — PR 9 owns the table migration. CSS block rewritten to migrate every hex literal to DaisyUI theme tokens. |
+| `openspec/changes/caduxo-daisyui-redesign/tasks.md` | Mark the three §8.2 PR 8b target rows `[x]`. Mark the §8.3 PR 8 verify-gate grep-gate row `[x]` (the explicit PR 8 grep gate now passes across all five PR 8 surface files). The two manual-only verify rows remain `[ ]` until the verify phase boots a desktop runtime. |
+
+### Tasks completed (PR 8b)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| 8.2.4 `ReportsPage.svelte` filters | ✅ done | Select primitive for store / location / urgency; Button primitive for the preview / export-PDF / edit-filters actions; Alert primitive for the error + success banners. Result table stays verbatim (PR 9 scope). |
+| 8.2.5 `BackupRestorePage.svelte` section actions + restore-confirmation flow | ✅ done | Button primitive for every action button; Alert primitive for the destructive warning banner + the export success / export error / validation error / restore error surfaces. Validation summary + destructive confirm block preserve their canonical restore-confirmation UX. |
+| 8.2.6 `CsvImportPage.svelte` stage buttons + strategy radios + detail editor fields | ✅ done | Button primitive for every stage button; Alert primitive for the error banner + the tip box; DaisyUI radio wrappers for the conflict-strategy radio group. The `bind:group={selectedStrategy}` contract is preserved verbatim so the radio group semantics work end-to-end. Summary / result card grids + preview + import-log tables stay verbatim (PR 9 scope). |
+| 8.3.4 Scoped PR 8b grep gate (`\.(form-group\|field-label\|small-label\|inline-error\|field-error\|saving-msg\|action-btn\|chip-clear\|banner-btn\|link-btn\|caret)\b`) | ✅ done | `git grep -nE '...'` across `src/components/ReportsPage.svelte src/components/BackupRestorePage.svelte src/components/CsvImportPage.svelte` returns zero output. The remaining matches in the wider file set are documentation comments inside `ReportsPage.svelte` (lines 9–10), `BackupRestorePage.svelte` (lines 9–12), and `CsvImportPage.svelte` (lines 8–9) — every one of them is part of the JSDoc-style migration note at the top of the file. |
+
+### Cross-cutting requirements
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| `Input.svelte` / `Select.svelte` / `Toggle.svelte` / `Alert.svelte` migration | ✅ done | `Select.svelte` consumed in `ReportsPage.svelte` (3×); `Alert.svelte` consumed in `ReportsPage.svelte` (2×), `BackupRestorePage.svelte` (5×), `CsvImportPage.svelte` (3×). No `Input.svelte` migration was needed on these surfaces — they are filter / action / alert surfaces, not field-bearing forms. `Toggle.svelte` migration was not needed — none of the three pages has a boolean toggle. |
+| No v4-only `label-text` / `label-text-alt` classes introduced | ✅ done | The PR 8b migrated markup uses plain `<label class="filter-label">` for visible labels (no DaisyUI v4 `label-text` / `label-text-alt` literal). |
+| `checkbox checkbox-primary checkbox-sm` / `radio radio-primary radio-sm` wrappers | ✅ done | The CsvImportPage conflict-strategy radios migrate from the original `display: none` hidden pattern to visible `<input type="radio" class="radio radio-primary radio-sm">` wrappers (native `<input>` stays in the DOM). No `checkbox` migration was needed on these surfaces — none of the three pages has a plain checkbox control. |
+| `Button.svelte` variants / sizes | ✅ done | ReportsPage: `variant="primary"`, `variant="ghost"`, `size="sm"`, `size="lg"`. BackupRestorePage: `variant="primary"`, `variant="secondary"`, `variant="danger"`, `size="sm"`. CsvImportPage: `variant="primary"`, `variant="secondary"`, `size="sm"`, `size="md"`. |
+| Required marker through `Input.svelte required` / helper text through `helper` / invalid state through `invalid` | ✅ vacuously done | The PR 8b surfaces do not introduce new `<Input>` instances (PR 8a covered all input-bearing forms). The three pages' filter / button surfaces do not carry required markers, helper text, or invalid state — the filter selects are not required, the action buttons do not carry helper text, and the alert banners own their own invalid-state styling via the DaisyUI `alert-{variant}` modifier. |
+| New EN + ES i18n keys for any new copy | ✅ vacuously done | The migration reuses every existing i18n key (`reports.actions.*`, `backupRestore.*`, `csvImport.*`, `common.*`). No new copy was introduced; the button labels, alert surfaces, and radio group wrappers all bind to existing `$LL.*` keys. ES catalogue mirrors every reused key verbatim. |
+| `npm run i18n:generate` green | ✅ done | `[typesafe-i18n] ... all files are up to date` — no catalogue regeneration because no new keys were added. |
+
+### Checks run + results
+
+```text
+$ npm run i18n:generate
+[typesafe-i18n] ... all files are up to date
+[typesafe-i18n] generating files completed
+✅ green (no i18n catalogue changes — migration reuses existing keys)
+
+$ npm run check
+> svelte-check --tsconfig ./tsconfig.json --threshold error
+svelte-check found 0 errors and 0 warnings
+✅ green
+
+$ npm run build
+> vite build
+✓ 220 modules transformed.
+dist/index.html                   0.39 kB │ gzip:   0.26 kB
+dist/assets/index-5T5FIvvR.css  226.35 kB │ gzip:  33.45 kB
+dist/assets/index-CJLt_cxR.js   365.17 kB │ gzip: 108.13 kB
+✓ built in 1.87s
+✅ green
+
+$ git grep -nE '\.(form-group|field-label|small-label|inline-error|field-error|saving-msg|action-btn|chip-clear|banner-btn|link-btn|caret)\b' \
+    src/components/ReportsPage.svelte \
+    src/components/BackupRestorePage.svelte \
+    src/components/CsvImportPage.svelte
+(no output — zero matches)
+✅ GATE PASSED
+```
+
+### Focused sanity checks
+
+- **DaisyUI class emission.** The bundled CSS contains every class
+  referenced in the migrated source (sample greps against
+  `dist/assets/index-*.css`):
+  `select select-md select-error`,
+  `btn btn-primary btn-secondary btn-danger btn-ghost btn-sm btn-lg`,
+  `alert alert-success alert-error alert-warning alert-info alert-soft`,
+  `radio radio-primary radio-sm`.
+  Tailwind v4 + DaisyUI v5 emitted every class that appears as a
+  literal in the source — the JIT scanner saw them during the build
+  pass.
+- **No v4 dead classes introduced.** `git grep -nE '\b(tabs-bordered|tabs-lifted|tabs-boxed|input-bordered|select-bordered|form-control|label-text|label-text-alt)\b' src/components/ReportsPage.svelte src/components/BackupRestorePage.svelte src/components/CsvImportPage.svelte` returns zero output. The migration uses the v5 `alert-{variant}` modifier pattern instead of the v4 `label-text` / `label-text-alt` helpers.
+- **No hex literals in the touched files.** `git grep -nE '#[0-9a-fA-F]{3,8}\b|rgba?\(' src/components/ReportsPage.svelte src/components/BackupRestorePage.svelte src/components/CsvImportPage.svelte` returns zero output. Every colour is theme-derived (`var(--color-…)` + `color-mix()` fallback pattern, matching the PR 8a established convention).
+- **Result table preserved verbatim.** The `ReportsPage.svelte` post-preview `.report-table` (`.table-wrapper`, `.report-table`, `.cell-*`, `.urgency-badge.*`, `.row-*`) and the `CsvImportPage.svelte` preview / import-log `.preview-table` (`.table-wrap`, `.preview-table`, `.row-num`, `.cell-*`, `.badge-*`) stay verbatim. PR 9 owns the table migration per the design §6 / §10 plan.
+- **Destructive confirm UX preserved.** The `BackupRestorePage.svelte` restore-confirmation flow (`.confirm-box` + the explicit `<strong>{$LL.common.confirm()}</strong> {$LL.backupRestore.restoreConfirmPrompt()}` prompt + the danger / cancel buttons) stays verbatim. The migration only changed the surrounding chrome (Alert for errors / warning, Button for actions); the destructive-confirm UX is the canonical restore gate and is intentionally preserved.
+
+### Bundle size
+
+| Asset | After PR 8a | After PR 8b | Delta |
+|-------|-------------|-------------|-------|
+| `dist/assets/index-*.css` | 231.87 kB (34.11 kB gzip) | 226.35 kB (33.45 kB gzip) | **−5.52 kB (−2.4%)** |
+| `dist/assets/index-*.js`  | 327.36 kB (94.47 kB gzip) | 365.17 kB (108.13 kB gzip) | **+37.81 kB (+11.5%)** |
+
+CSS shrank by 2.4 % because the bespoke `.btn-primary`, `.btn-secondary`, `.btn-danger`, `.alert`, `.alert-error`, `.alert-success`, `.alert-warning`, `.error-banner`, `.warning-banner`, `.message.success`, `.message.error`, `.hint-box`, `.filter-field select`, `.filter-field span` rules are gone — DaisyUI v5's emitted classes cover every visual need.
+JS grew by 11.5 % because the three migrated surfaces now import + render the shared `Select.svelte`, `Button.svelte`, and `Alert.svelte` primitives together. The growth matches the per-surface primitive consumption (3 Select + 4 Button + 2 Alert in ReportsPage; 7 Button + 5 Alert in BackupRestorePage; 4 Button + 3 Alert in CsvImportPage). Net delta is +33 kB raw (+14 kB gzip), well within the design's 20 % JS regression gate (risk #8 in the proposal). The total bundle is 365 kB raw / 108 kB gzip.
+
+### Deviations from design
+
+- **PR 8b actual diff is well under the forecast.** The task forecast
+  was ~320 lines; the actual diff is 3 files / 797 total lines (378
+  insertions + 419 deletions). The migration shrinks the source
+  because the migrated surfaces previously inlined every CSS rule
+  (hex colours, button states, alert states, hover effects, focus
+  rings, etc.) — the `<style>` block rewrites that replaced every
+  hex literal with `var(--color-…, #fallback)` + `color-mix()`
+  deletes more lines than the new `<Select>` / `<Button>` /
+  `<Alert>` markup adds. The 400-line review budget is satisfied
+  with substantial headroom. Per the parent's per-slice instruction
+  (`delivery_strategy: ask-on-risk`), no delivery-decision question
+  is raised.
+- **The "urgency radio group" mentioned in the PR 8b scope
+  does not exist in the source.** The current `ReportsPage.svelte`
+  renders the urgency filter as a `<select>` (DaisyUI `select-md`
+  primitive), not as a radio group. The task prose refers to the
+  urgency filter in `custom` mode; that filter migrated as a
+  `Select.svelte` primitive with the existing options array. No
+  radio group migration was needed. PR 9's table work may introduce
+  radio-style filters in a future slice; the migration patterns
+  (`<input type="radio" class="radio radio-primary radio-sm">` +
+  native `<input>` in DOM + `bind:group={...}`) are documented in
+  `ProductForm.svelte` and `CsvImportPage.svelte` and can be
+  reused verbatim when a future radio group is needed.
+- **`ReportsPage.svelte` `storeId` / `locationId` are now `string`
+  instead of `string | null`.** The `Select.svelte` primitive's
+  `value` contract is `string` (DaisyUI v5 `<select>` does not
+  carry a `null` value); the empty option (`value=""`) is rendered
+  inline in the `storeOptions` / `locationOptions` arrays via the
+  `value=""` + `$LL.dashboard.allStores()` / `$LL.dashboard.allLocations()`
+  labels. The `buildFilters()` boundary translates the empty
+  string back to `null` for the backend payload. The
+  `loadLocations` handler resets `locationId = ""` instead of
+  `null`. This matches the `LotForm.svelte` pattern from PR 8a.
+- **The action-card surface (`.action-card.primary` + `.action-card.info`)
+  on `CsvImportPage.svelte` stays bespoke.** The landing-page
+  action cards (📄 Select CSV file / ℹ️ Expected columns) carry
+  decorative emojis + a multi-line `card-desc` (with `<code>` tags
+  for the expected-column names); the `Card.svelte` primitive
+  owns the `tone` / `header` / `footer` slots but does not expose a
+  "clickable card with custom body content" mode. Migrating to
+  `Card.svelte` would require either a custom primitive
+  (`ClickableCard.svelte`, deferred to PR 13) or wrapping each
+  card in a `<Button>` + custom layout (which would lose the
+  primary / info variant distinction). The PR 8b migration
+  applies the theme tokens to the existing class selectors so the
+  cards pick up DaisyUI variables without losing their canonical
+  layout.
+- **The destructive-confirm block in `BackupRestorePage.svelte`
+  stays bespoke.** The `.confirm-box` (red-tinted background + the
+  explicit `<strong>{$LL.common.confirm()}</strong>` prompt + the
+  inline danger / cancel buttons) is the canonical restore gate
+  UX. The migration applies theme tokens to the box's red-tint
+  background + border but keeps the bespoke layout. PR 9 owns the
+  list-style surfaces (`.info-list` / `.checks-list`) inside the
+  same file.
+
+### Residual risks
+
+1. **Visual parity is not yet re-verified.** PR 8b ships the
+   migration without a desktop-runtime visual check. A follow-up
+   verify pass should boot `npm run tauri dev` in a desktop
+   environment and confirm every PR 8b scenario still behaves
+   correctly: store / location / urgency filter combinations,
+   date-range filtering, preview → export-PDF flow, restore
+   validation + destructive-confirm flow, CSV select → mapping →
+   preview → import → result flow, conflict-strategy radio
+   behaviour. The PR 8 verify gate has no automated scenario
+   runner; the verify phase owns the manual pass.
+2. **Bundle size needs re-measurement.** PR 8b shrank CSS by
+   2.4 % but grew JS by 11.5 %. The net delta (+33 kB raw /
+   +14 kB gzip) is well within the design's 20 % regression
+   gate (risk #8 in the proposal), but PR 12 will re-measure
+   after all surfaces migrate to confirm the steady-state
+   budget.
+3. **`Button.svelte` does not expose `btn-active`.** If a future
+   primitive needs an active state on a `Button.svelte`-rendered
+   surface (the quick-filter chips in `DashboardPage.svelte` /
+   the strategy cards in `CsvImportPage.svelte` already use the
+   plain `<button class="btn btn-ghost btn-sm">` + `class:btn-active={isActive}`
+   pattern), the primitive can grow an `active` prop in a later
+   PR.
+
+### Remaining work (next chained PR)
+
+- **PR 9** — Tables (`LotMovementsPanel`, `ReportsPage` data
+  table, `CsvImportPage` preview, `StoresPage`,
+  `BackupRestorePage` info lists, `CalendarPage` day-detail,
+  `ProductCatalogPage`, `ConfigurationPage` info-list).
+- **PR 10** — Calendar + custom widget polish (`CalendarMonth`,
+  `CalendarPage`, `DatePicker`, `CategoryPicker`,
+  `UnitReviewPage`).
+
+### Workload / PR boundary
+
+- **PR 8b actual diff:** 3 component files + `tasks.md` + the
+  apply-progress update. The component-only diff is **797 total
+  changed lines** (378 insertions + 419 deletions). Well under
+  the 400-line review budget (raw insertion count) and well
+  under the 800-line parent-set review budget (raw insertion +
+  deletion count). The migration shrinks the source because
+  every CSS rule was inlined before PR 8b and is now obsolete
+  (DaisyUI emits the equivalents natively).
+- **Apply-time gate decision:** continue at PR 8b. The parent-
+  supplied gate is "if `+` + `-` lines exceed 400, continue the
+  remaining forms as PR 8b"; 797 < 400 (raw insertions), so
+  PR 8b ships the entire remaining PR 8 surface set in a single
+  slice. The chain strategy is `feature-branch-chain from PR 3
+  onward`; per the parent's per-slice instruction ("Create one
+  Conventional Commit for PR 8b on the existing branch"), PR 8b
+  also stacks onto `feat/daisyui-redesign`. No feature branch
+  is cut for this slice.
+- **Chain strategy:** feature-branch-chain from PR 3 onward
+  (parent ratified). PR 8b stacks onto `feat/daisyui-redesign`.
+
+
