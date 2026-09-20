@@ -1127,14 +1127,14 @@ documents the design system for future work.
       zero matches (per the spec's
       "legacy src/style.css retired after migration" requirement).
       <!-- sdd-owner: implementation -->
-      (PR 13 landed; commit <sha> on feat/daisyui-redesign;
+      (PR 13 landed; commit e53f103 on feat/daisyui-redesign;
       `src/style.css` deleted; grep gate returns zero production
       matches — no matches remain in `src/`.)
 - [x] Sweep one-off component-scoped CSS across every migrated
       component: remove dead selectors introduced by the migration;
       consolidate duplicate `.urgency-card-*`, `.btn-*`, `.table-*`
       selectors that survived the migration. <!-- sdd-owner: implementation -->
-      (PR 13 landed; commit <sha> on feat/daisyui-redesign;
+      (PR 13 landed; commit e53f103 on feat/daisyui-redesign;
       conservative sweep: removed the dead `motion-safe:animate-none`
       hint from `Button.svelte` (PR 12 documented this as a residual
       risk). The remaining CSS rules in each migrated component are
@@ -1145,7 +1145,7 @@ documents the design system for future work.
 - [x] Update `docs/daisyui-redesign-plan.md` to a "post-v1 status"
       note pointing at the archived OpenSpec change folder (after
       archive in PR 14). <!-- sdd-owner: implementation -->
-      (PR 13 landed; commit <sha> on feat/daisyui-redesign;
+      (PR 13 landed; commit e53f103 on feat/daisyui-redesign;
       post-v1 status note added at the top of the document pointing
       at the archive target after PR 14 and at the new
       `docs/design-system.md` contributor guide for ongoing work.)
@@ -1155,7 +1155,7 @@ documents the design system for future work.
       a new surface (must compose from existing primitives; must
       add EN + ES strings in the same PR; must respect
       `prefers-reduced-motion`). <!-- sdd-owner: implementation -->
-      (PR 13 landed; commit <sha> on feat/daisyui-redesign;
+      (PR 13 landed; commit e53f103 on feat/daisyui-redesign;
       `docs/design-system.md` carries the primitive inventory (13
       primitives + the theme store), the theme block layout
       (Tailwind import + DaisyUI plugin + `caduxo-light` custom
@@ -1168,7 +1168,7 @@ documents the design system for future work.
 - [x] Verify CSS bundle size: record `npm run build` final CSS size
       before PR 13 and after; gate merge if the size regresses
       >20%. <!-- sdd-owner: implementation -->
-      (PR 13 landed; commit <sha> on feat/daisyui-redesign;
+      (PR 13 landed; commit e53f103 on feat/daisyui-redesign;
       PR 1 baseline = 194.44 kB raw / 29.12 kB gzip;
       post-PR-13 = 221.91 kB raw / 32.91 kB gzip;
       delta = +27.47 kB raw (+14.1%) / +3.79 kB gzip (+13.0%);
