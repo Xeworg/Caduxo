@@ -538,7 +538,7 @@ if `+` + `-` lines exceed 400, abort PR 7a mid-stream and continue the
 remaining three modals as PR 7b.
 
 > **PR 7a slice status.** PR 7a landed on commit
-> `<inserted after PR 7a apply>`. Three modal components migrated
+> `ade9ce8`. Three modal components migrated
 > (`MoveStockModal`, `AdjustCountModal`, `ArchiveLotDialog`). Diff:
 > 3 files / 396 insertions / 288 deletions — over the 400-line
 > budget, so the remaining modals (`RegisterExitModal`,
