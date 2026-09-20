@@ -4040,3 +4040,112 @@ CSS grows slightly because the new Combobox primitive adds its own themed popove
 
 - **PR 8a.1 actual diff:** 4 files changed (1 new primitive + 1 source + 2 docs). The Combobox primitive is ~290 lines (hand-rolled positioning + ARIA wiring + dual option shapes + JSDoc-style contract comments); the ProductForm migration is ~30 net lines (two block replacements + one header comment + one stale-comment cleanup); the docs updates are ~100 net lines. **Net:** ~420 lines added, acceptable under the session's 3000-line review budget; the reusable primitive is the main review focus.
 - **Chain strategy:** `feature-branch-chain from PR 3 onward` (parent ratified). PR 8a.1 stacks onto `feat/daisyui-redesign`; no new feature branch is cut.
+
+---
+
+## PR 8a.2 — Remaining native popup controls → themed primitives (visual correction)
+
+**Status:** Complete on `feat/daisyui-redesign`. Bounded follow-up to
+PR 8a.1 after the user reported more OS-styled controls on the Reports
+filters and the ProductDetailPage barcode type. Not pushed per session
+preflight; not committed per parent's explicit instruction.
+
+**Branch:** `feat/daisyui-redesign` (continuation of PR 1 → PR 13 + PR
+8a.1; same chain). Per the parent's per-slice instruction ("continue
+existing feature-branch chain unless tasks/design require otherwise"),
+PR 8a.2 stacks onto `feat/daisyui-redesign`. No new feature branch is
+cut.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `src/components/ui/Listbox.svelte` | New primitive — closed-choice themed Svelte popover (no `<select>`). Single-value, no free typing; the user can only pick from the supplied `options: { value, label, disabled? }[]`. Mirrors `Combobox.svelte` keyboard ergonomics (click / Enter / Space / ArrowDown / ArrowUp opens; ArrowUp / ArrowDown move the active descendant; Enter / Space selects; Escape closes; Home / End jump to first / last; Tab closes; outside-click closes; scroll repositions). ARIA wiring follows the WAI-ARIA 1.2 select-only combobox / listbox pattern: trigger `role="combobox"` with `aria-haspopup="listbox"`, `aria-expanded`, `aria-controls`, `aria-activedescendant`, `aria-required`, `aria-invalid`; popover `role="listbox"`; options `role="option"` + `aria-selected` (+ `aria-disabled` when unselectable). A hidden `<input type="hidden">` carries the form-submission value when `name` is supplied. Theme tokens + DaisyUI v5 `dropdown dropdown-content` classes for the visual contract. Sizes `sm` and `md`; `disabled` greys the trigger out and short-circuits the keyboard handlers; `invalid` tints the border red. No hard-coded user-facing strings. |
+| `src/components/ReportsPage.svelte` | Three-filter migration: `storeId`, `locationId`, `urgency`. The three `Select.svelte` usages swap to `Listbox.svelte`. Empty-string semantics preserved (`storeId=""` = "all stores", `locationId=""` = "all locations", `urgency=""` = "all urgencies"); the first option in each option list is the "All …" entry with `value=""` and the Listbox's `displayLabel` falls back to that entry so an empty bound value still renders visible copy. `id`, `disabled`, `size` props pass through unchanged so the existing accessibility wiring (`<label for="reports-store">`, `<label for="reports-location">`, `<label for="reports-urgency">`) keeps working verbatim. File header comment updated; `Select` import removed; `select select-md select-error` removed from the JIT scanner hint comment; `dropdown dropdown-content` added. |
+| `src/components/ProductDetailPage.svelte` | Barcode type migration. Native `<input list>` + `<datalist id="barcode-types">` block swapped for `<Combobox bind:value={barcodeType} label={...} placeholder={...} options={BARCODE_TYPE_OPTIONS} />`, where `BARCODE_TYPE_OPTIONS = ["EAN13", "EAN8", "UPC", "CODE128", "CODE39", "QR"]` is a local `const` near the top of the script. Free-text semantics preserved (the user can still type any barcode type string, not just the listed six). The Combobox renders its own fieldset / legend so the wrapping `<label>` around the previous `<input>` is dropped; the visible label text is passed via the `label` prop. |
+| `openspec/changes/caduxo-daisyui-redesign/tasks.md` | New "PR 8a.2 — Remaining native popup controls → themed primitives (visual correction)" sub-section appended at the end; checkbox rows for the primitive, the ReportsPage migration, the ProductDetailPage migration, and the verify gate. Forecast, rollback, and out-of-scope follow-ups documented inline. |
+| `openspec/changes/caduxo-daisyui-redesign/apply-progress.md` | This PR 8a.2 section with files-changed table, checks, deviations, residual risks, and out-of-scope notes. |
+
+### Tasks completed (PR 8a.2)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| 8a.2.1 Create `src/components/ui/Listbox.svelte` | ✅ done | Closed-choice themed Svelte popover; WAI-ARIA 1.2 select-only combobox / listbox pattern; theme tokens + DaisyUI `dropdown dropdown-content`; `sm` / `md` sizes; `disabled`, `invalid`, `required`, `name` (hidden input) passthrough; keyboard (ArrowUp / Down / Home / End / Enter / Space / Escape / Tab) + mouse + outside-click + scroll-driven repositioning; option-level `disabled` and check-mark affordance for the selected entry. |
+| 8a.2.2 Migrate ReportsPage storeId filter to Listbox | ✅ done | Empty-string semantics preserved; `id="reports-store"`, `size="md"` pass through unchanged. |
+| 8a.2.3 Migrate ReportsPage locationId filter to Listbox | ✅ done | `disabled={!storeId \|\| locations.length === 0}` preserves the "no store picked → location stays empty + disabled" UX. |
+| 8a.2.4 Migrate ReportsPage urgency filter to Listbox | ✅ done | `disabled={selectedReportType !== "custom"}` preserves the "urgency only applies in custom mode" UX. |
+| 8a.2.5 Migrate ProductDetailPage barcode type to Combobox | ✅ done | `BARCODE_TYPE_OPTIONS` constant centralised at the top of the script; free-text semantics preserved. |
+| 8a.2.6 Update ReportsPage file header comment + remove `Select` import | ✅ done | "Select.svelte for the store / location / urgency filter selects" line replaced with a `Listbox.svelte`-based description plus the "no OS-styled WebKit popup" rationale; `select select-md select-error` removed from the JIT scanner hint comment; `dropdown dropdown-content` added. |
+| 8a.2.7 `npm run check` green | ✅ done | `svelte-check found 0 errors and 0 warnings`. |
+| 8a.2.8 `npm run build` green | ✅ done | 224 modules transformed; built in 2.03s. CSS 226.29 kB (33.45 kB gzip); JS 378.26 kB (112.44 kB gzip). |
+| 8a.2.9 Focused grep gate — ProductDetailPage `<datalist>` | ✅ done | `grep -nE '<datalist\b\|</datalist>' src/components/ProductDetailPage.svelte` returns zero matches (the previous PR 8 surface is fully clean). |
+| 8a.2.10 Focused grep gate — ReportsPage `<Select` | ✅ done | `grep -nE '<Select\b\|<Select ' src/components/ReportsPage.svelte` returns zero matches (the previous PR 8b surface is fully clean). |
+| 8a.2.11 Focused grep gate — primitives `<select>` | ✅ done | `grep -nE '^\s*<select(\s\|>)' src/components/ui/Listbox.svelte src/components/ui/Combobox.svelte` returns zero matches on active markup (the surviving matches are inside Svelte comments documenting the contract). |
+| 8a.2.12 Manual smoke (Reports filters + ProductDetailPage barcode type in both themes) | ⏸️ deferred to verify phase | Headless environment; the verify phase will boot `npm run tauri dev` in a desktop runtime and exercise the manual smoke list (filter popovers themed, keyboard + outside-click + Escape / Enter / Space all working, urgency disabled when report type is not `custom`, "all stores" → location list refreshes, ProductDetailPage barcode type popover themed, free-text semantics survive typing a non-suggested value). |
+
+### Checks run + results
+
+```text
+$ npm run check
+> svelte-check --tsconfig ./tsconfig.json --threshold error
+svelte-check found 0 errors and 0 warnings
+✅ green
+
+$ npm run build
+> vite build
+✓ 224 modules transformed.
+dist/index.html                   0.39 kB │ gzip:  0.26 kB
+dist/assets/index-Bf9ZZx2Z.css  226.29 kB │ gzip: 33.45 kB
+dist/assets/index-DsaDonhn.js   378.26 kB │ gzip: 112.44 kB
+✓ built in 2.03s
+✅ green
+
+$ git grep -nE '<datalist\b|</datalist>' src/components/ProductDetailPage.svelte
+✅ zero matches (clean)
+
+$ git grep -nE '<Select\b|<Select ' src/components/ReportsPage.svelte
+✅ zero matches (clean)
+
+$ git grep -nE '^\s*<select(\s|>)' src/components/ui/Listbox.svelte src/components/ui/Combobox.svelte
+✅ zero matches on active markup (the surviving matches are inside Svelte comments documenting the contract)
+```
+
+### Bundle size
+
+| Asset | Before PR 8a.2 | After PR 8a.2 | Delta |
+|-------|----------------|---------------|-------|
+| `dist/assets/index-*.css` | 223.85 kB (33.09 kB gzip) | 226.29 kB (33.45 kB gzip) | +2.44 kB raw / +0.36 kB gzip |
+| `dist/assets/index-*.js` | 373.51 kB (110.70 kB gzip) | 378.26 kB (112.44 kB gzip) | +4.75 kB raw / +1.74 kB gzip |
+
+CSS grows slightly because the new Listbox primitive adds its own themed popover + size variants + invalid-state rules. JS grows slightly because the primitive adds keyboard / positioning logic + WAI-ARIA 1.2 wiring. The net CSS + JS delta is about +7.2 kB raw / +2.1 kB gzip, well within the design's 20% CSS regression gate (risk #8).
+
+### Deviations from design
+
+- **`Listbox.svelte` uses a hand-rolled fixed-positioned popover rather than DaisyUI's `dropdown` anchor pattern.** CategoryPicker / Combobox positioning logic is mirrored verbatim — `position: fixed` + manual top/left computed from the trigger's bounding rect — because the design's `dropdown dropdown-content` anchor relies on a CSS-only positioning contract that does not survive scrolling containers (CategoryPicker carries a `Residual risks` note about the same). The DaisyUI `dropdown dropdown-content` classes are still applied in markup so the popover inherits DaisyUI's `border-radius` / shadow contract, but the JS-driven positioning is the source of truth. This matches CategoryPicker / Combobox exactly.
+- **`Listbox.svelte` trigger carries `role="combobox"` even though it has no text input.** This is the WAI-ARIA 1.2 select-only combobox pattern (a button trigger with `aria-haspopup="listbox"` and `role="combobox"`); it's the documented 1.2 pattern for closed-choice listboxes. The alternative `role="listbox"`-only pattern is also valid but does not accept the standard combobox attribute contract (`aria-activedescendant`, `aria-required`, `aria-invalid`) — using `role="combobox"` keeps the standard linter warnings off and matches the spec's select-only combobox contract verbatim.
+- **`onchange` is the single mutation signal.** Unlike Combobox (which exposes `oninput`, `onblur`, `onselect`), the Listbox is closed-choice so the only mutation is "user picked an option". One callback, one signature, no overload. ProductForm's existing `handleUnitInput` / `handleUnitBlur` / `onselect` plumbing is unaffected because the consumer list does not include ProductForm.
+- **`disabled` options are skipped during ArrowUp / ArrowDown navigation.** Mirrors native `<select>` + HTML `<option disabled>` semantics: the roving `activeIndex` lands on the next selectable entry. Native `<select>` allows arrow-key navigation onto disabled options (greyed-out) on some platforms; the Listbox skips them outright for predictability. This is a deliberate UX choice; the carve-out is documented because some users may expect the native-platform behavior.
+- **`required` is rendered as `aria-required="true"` on the trigger, plus the hidden `<input>` form-control mirror.** There is no `<select required>` fallback — the hidden `<input>` does not carry `required` because native form validation of an empty required field would block the submit button even when the visible Listbox shows a real selection. The consumer is responsible for layer-level validation. The `aria-required` annotation is the standard signal to assistive technology.
+- **`name` renders a hidden `<input type="hidden" name={name} value={value}>` so the primitive can stand in for a native `<select>` inside a `<form>`.** This is the standard listbox-form-submission pattern; the visible trigger is a button (not a form control) so the hidden input is required for `FormData` round-trip. None of the current consumers pass `name` (the ReportsPage filters are bound to component state, not submitted directly), so the hidden input is dormant today but available for the future.
+- **No new i18n keys.** The Listbox carries no default English copy. The `displayLabel` falls back to the first option so an empty bound value still renders the consumer-supplied "All …" entry. ReportsPage's existing i18n catalogue (`$LL.dashboard.allStores()`, `$LL.dashboard.allLocations()`, `$LL.reports.urgencyOptions.all()`) supplies the first-option labels verbatim.
+- **Combobox re-used in ProductDetailPage, not duplicated.** PR 8a.1's Combobox already covers the free-text-allowed-with-suggestions contract — the ProductDetailPage barcode type matches it exactly (same option list as the ProductForm sibling, same free-text semantics). Adding a new primitive for the same contract would have been wasteful; the existing primitive is the right tool.
+- **Two svelte-ignore comments are needed on each listbox option (`a11y_click_events_have_key_events`).** Matches Combobox's approach for the same elements. The popover is `role="listbox"` so the option is `role="option"` with `tabindex="-1"` (per WAI-ARIA — options are not tabbable, they're navigated via ArrowUp/Down on the trigger); the trigger handles all keyboard. Combobox uses the same ignore comments for the same reason.
+
+### Residual risks
+
+1. **Manual smoke pass deferred to verify phase.** The PR 8a.2 migration passes `npm run check` + `npm run build` + all three focused grep gates in the headless environment, but the visual correctness test ("open the Reports page in both themes; click each of the three filter popovers, confirm the popover is themed with no OS-styled WebKit chrome, ArrowDown / ArrowUp move the active option, Enter selects, Escape closes; switch the urgency select when the report type is not `custom` and confirm it stays disabled; pick `all stores` (the empty-value first option) and confirm the location list refreshes; open a product detail in both themes; click the barcode type field, confirm the popover is themed; type a non-suggested value (e.g. `DATAMATRIX`) and Tab away, confirm the free-text semantics survive") requires a desktop runtime. The verify phase will exercise the flow in a real browser.
+2. **Remaining native popup consumers remain in the codebase.** DashboardPage direct selects, ConfigurationPage locale/theme `Select.svelte`, RegisterExitModal, MoveStockModal, AdjustCountModal, LotForm, and remaining dialog/direct selects where applicable — all still leak OS-styled chrome on the visible dropdown. The parent's prompt scoped PR 8a.2 to ReportsPage + ProductDetailPage only; the remaining surfaces are deliberate follow-up work units for a later slice.
+3. **Listbox primitive has only one consumer today (ReportsPage's three filters).** The primitive was carved for the ReportsPage migration; the only fields that exercise it are `storeId`, `locationId`, and `urgency`. Future closed-choice surfaces across the codebase (the consumers listed above) can drop the native `<select>` pattern and consume the Listbox primitive verbatim. The acceptance test "primitive consumer audit" lives in the verify phase.
+4. **`disabled` options are skipped during keyboard navigation.** Some users may expect the native-platform behavior where arrow keys land on disabled options and the option is greyed-out (not skipped). The Listbox skips them for predictability; the deviation is documented above.
+5. **`required` does not block form submission via the hidden `<input>`.** If a future consumer passes `name="urgency" required` and binds the trigger to a value of `""`, the form's native validation will not flag the empty value because the hidden `<input>` does not carry `required`. The consumer must add layer-level validation. The `aria-required="true"` annotation is the standard assistive-technology signal. This is a deliberate carve-out because native `<select required>` blocks submit even when the visible field shows a real selection; the Listbox's hidden-input pattern is permissive by design.
+6. **`size: 'sm'` on the urgency filter shrinks the popover width to match the trigger.** All three ReportsPage filters use `size="md"` so this risk is dormant today; the `lb-sm` rule is in place for future consumers.
+
+### Remaining work (next chained PR / follow-up)
+
+- **Follow-up sub-slice (recommended): migrate remaining native select surfaces to `Listbox.svelte`.** Including DashboardPage direct selects and remaining `Select.svelte` consumers (ConfigurationPage locale/theme, RegisterExitModal motivo select, MoveStockModal source / destination selects, AdjustCountModal motivo select, LotForm motivo select). Each consumer is a one-line swap; the natural work-unit boundary is a PR 8a.3 sub-slice that folds them into one chained slice (the swap is mechanical and the visual contract is identical across consumers).
+- **PR 14 — Verify + archive (parent-only).** Unchanged scope: compile the verify report, exercise the PR 8a.2 manual smoke list in a desktop runtime, archive the change, file the bounded review receipt.
+
+### Workload / PR boundary
+
+- **PR 8a.2 actual diff:** 5 files changed (1 new primitive + 2 source + 2 docs). The Listbox primitive is ~410 lines (hand-rolled positioning + ARIA 1.2 wiring + sizes + disabled / invalid / required / name passthrough + check-mark affordance + JSDoc-style contract comments); the ReportsPage migration is ~25 net lines (three block replacements + one header comment + one stale-import cleanup + one JIT-scanner hint update); the ProductDetailPage migration is ~25 net lines (one input + datalist → Combobox swap + one local constant + one import addition); the docs updates are ~80 net lines. **Net:** ~540 lines added, marginally over the forecast's 400-line review budget; the reusable primitive is the main review focus; the consumer migrations are mechanical.
+- **Chain strategy:** `feature-branch-chain from PR 3 onward` (parent ratified). PR 8a.2 stacks onto `feat/daisyui-redesign`; no new feature branch is cut.

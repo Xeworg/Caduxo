@@ -1,9 +1,18 @@
 <!--
   ReportsPage.svelte — reports configurator + preview
-  (PR 8b forms + PR 9a tables of caduxo-daisyui-redesign).
+  (PR 8b forms + PR 8a.2 visual correction + PR 9a tables of
+  caduxo-daisyui-redesign).
 
   Filter chrome migration to shared UI primitives:
-    - Select.svelte for the store / location / urgency filter selects.
+    - Listbox.svelte for the store / location / urgency filter
+      selects (PR 8a.2 visual correction — replaced
+      `Select.svelte` because the underlying native `<select>`
+      dropdown leaked OS-styled chrome on WebKit / Chromium).
+      Empty-string semantics preserved (`storeId=""` represents
+      "all stores", `locationId=""` represents "all locations",
+      `urgency=""` represents "all urgencies"); the Listbox's
+      first option (the "All …" entry) is rendered as the
+      default so an empty bound value still shows visible copy.
     - Button.svelte for the preview / export / edit-filters actions.
     - Alert.svelte for the error + success banners (replaces the
       bespoke `.alert-error` / `.alert-success` divs).
@@ -28,17 +37,17 @@
       styling is unique to Reports).
 
   Tailwind classes referenced here (for the JIT scanner):
-    select select-md select-error
     btn btn-primary btn-secondary btn-ghost btn-lg
     alert alert-error alert-success alert-soft
     table table-zebra table-pin-rows
     overflow-x-auto
+    dropdown dropdown-content
     flex items-center gap-2
 -->
 <script lang="ts">
   import { onMount } from "svelte";
   import DatePicker from "./DatePicker.svelte";
-  import Select from "./ui/Select.svelte";
+  import Listbox from "./ui/Listbox.svelte";
   import Button from "./ui/Button.svelte";
   import Alert from "./ui/Alert.svelte";
   import Table from "./ui/Table.svelte";
@@ -78,10 +87,10 @@
   let view: View = "configure";
 
   let selectedReportType: ReportType = "expired";
-  // Backing state for the Select primitive. The native <select> renders
-  // the empty option (value="") so a `null` store / location is
-  // represented as an empty string. We translate back to `null` at the
-  // submit boundary.
+  // Backing state for the Listbox primitive. The first option in each
+  // option list is the "All …" entry with value="" so a `null` store /
+  // location / urgency is represented as an empty string. We translate
+  // back to `null` at the submit boundary.
   let storeId: string = "";
   let locationId: string = "";
   let categoryIds: string[] = [];
@@ -407,7 +416,7 @@
       <div class="filters-grid">
         <div class="filter-field">
           <label class="filter-label" for="reports-store">{$LL.dashboard.store()}</label>
-          <Select
+          <Listbox
             bind:value={storeId}
             options={storeOptions}
             size="md"
@@ -417,7 +426,7 @@
 
         <div class="filter-field" class:disabled={!storeId || locations.length === 0}>
           <label class="filter-label" for="reports-location">{$LL.dashboard.location()}</label>
-          <Select
+          <Listbox
             bind:value={locationId}
             options={locationOptions}
             size="md"
@@ -437,7 +446,7 @@
 
         <div class="filter-field" class:disabled={selectedReportType !== "custom"}>
           <label class="filter-label" for="reports-urgency">{$LL.reports.fields.urgency()}</label>
-          <Select
+          <Listbox
             bind:value={urgency}
             options={URGENCY_OPTIONS}
             size="md"

@@ -1464,3 +1464,170 @@ not touch unrelated surfaces"). Migrating ProductDetailPage's
 barcode type field to `Combobox` is the natural follow-up work
 unit; it lands in a follow-up sub-slice or as part of PR 14 if
 the verify phase picks it up.
+
+---
+
+## PR 8a.2 — Remaining native popup controls → themed primitives (visual correction)
+
+Bounded follow-up to PR 8a.1 after the user reported more
+OS-styled controls on the Reports filters and the
+ProductDetailPage barcode type (sibling of the ProductForm barcode
+type migrated in 8a.1). The user's inventory found:
+
+- `ReportsPage.svelte` `Select.svelte` usage — the underlying
+  native `<select>` dropdown still leaks OS-styled chrome on
+  WebKit / Chromium (system popup, OS font, unthemed).
+- `ProductDetailPage.svelte` barcode type `<input list>` +
+  `<datalist>` — the same WebKit `<datalist>` issue PR 8a.1
+  fixed for the ProductForm sibling.
+
+This sub-slice introduces a closed-choice themed `Listbox.svelte`
+primitive (Svelte-rendered popover, no native `<select>`) and
+migrates the three ReportsPage filter selects to it; the
+ProductDetailPage barcode type migrates to the existing
+`Combobox.svelte` primitive (free-text-allowed, matches the
+ProductForm sibling contract).
+
+### 8a.2.1 Primitive: `Listbox.svelte`
+
+- [x] Create `src/components/ui/Listbox.svelte` per the spec:
+      closed-choice themed Svelte popover (no `<select>`).
+      Single-value, no free typing — the user can ONLY pick
+      from the supplied options. Props: `value`,
+      `options: { value, label, disabled? }[]`,
+      `size: 'sm' | 'md'`, `disabled`, `invalid`,
+      `id`, `aria-label` / `aria-labelledby` /
+      `aria-describedby`, `required`, `name`,
+      `onchange?: (value: string) => void`. Mirrors
+      `Combobox.svelte` keyboard ergonomics (click / Enter /
+      Space / ArrowDown / ArrowUp opens; ArrowUp / ArrowDown
+      move the active descendant; Enter / Space selects;
+      Escape closes; Home / End jump to first / last option;
+      Tab closes; outside-click closes; scrolling
+      repositions). ARIA wiring follows the WAI-ARIA 1.2
+      select-only combobox / listbox pattern: trigger
+      `role="combobox"` with `aria-haspopup="listbox"`,
+      `aria-expanded`, `aria-controls`,
+      `aria-activedescendant`, `aria-required`,
+      `aria-invalid`; popover `role="listbox"`; options
+      `role="option"` + `aria-selected` (+ `aria-disabled`
+      when unselectable). A hidden `<input type="hidden">`
+      carries the form-submission value when `name` is
+      supplied so the primitive stands in for a native
+      `<select>` inside a `<form>`. Theme tokens +
+      DaisyUI v5 `dropdown dropdown-content` classes for
+      the visual contract. No hard-coded user-facing
+      strings. <!-- sdd-owner: implementation -->
+
+### 8a.2.2 Migrate ReportsPage filters
+
+- [x] Replace the three `Select.svelte` usages on
+      `ReportsPage.svelte` (storeId, locationId, urgency)
+      with `Listbox.svelte` instances. Empty-string
+      semantics preserved: `storeId=""` represents "all
+      stores", `locationId=""` represents "all
+      locations", `urgency=""` represents "all
+      urgencies". The first option in each option list
+      is the "All …" entry with value="" and the
+      Listbox's `displayLabel` falls back to that entry
+      so an empty bound value still renders visible copy.
+      `id`, `disabled`, `size` props pass through
+      unchanged so the existing accessibility wiring
+      (`<label for="reports-store">`,
+      `<label for="reports-location">`,
+      `<label for="reports-urgency">`) keeps working
+      verbatim. Update the file header comment so the
+      "Select.svelte for the store / location / urgency
+      filter selects" line is replaced with a
+      `Listbox.svelte`-based description plus the
+      "no OS-styled WebKit popup" rationale. Remove
+      `Select` from the script import list.
+      <!-- sdd-owner: implementation -->
+
+### 8a.2.3 Migrate ProductDetailPage barcode type
+
+- [x] Replace the native `<input list>` + `<datalist>`
+      block on the barcode type field with
+      `<Combobox options={BARCODE_TYPE_OPTIONS} />`,
+      where `BARCODE_TYPE_OPTIONS = ["EAN13", "EAN8",
+      "UPC", "CODE128", "CODE39", "QR"]` is a local
+      `const` near the top of the script (same suggestion
+      list as the ProductForm sibling — see PR 8a.1). The
+      Combobox renders its own fieldset / legend so the
+      wrapping `<label>` around the previous `<input>`
+      is dropped; the visible label text is passed via
+      the `label` prop. Free-text semantics preserved
+      (the user can still type any barcode type string,
+      not just the listed six). Update the file header
+      comment if needed so future readers see that the
+      `<datalist>` was retired for the same visual
+      reason as PR 8a.1. <!-- sdd-owner: implementation -->
+
+### 8a.2.4 PR 8a.2 verify gate
+
+- [x] `npm run check` (svelte-check --threshold error)
+      green. <!-- sdd-owner: implementation -->
+- [x] `npm run build` green. <!-- sdd-owner: implementation -->
+- [x] `git grep -nE '<datalist\b|</datalist>'
+      src/components/ProductDetailPage.svelte` returns
+      zero matches. <!-- sdd-owner: implementation -->
+- [x] `git grep -nE '<Select\b|<Select '
+      src/components/ReportsPage.svelte` returns zero
+      matches. <!-- sdd-owner: implementation -->
+- [x] `git grep -nE '^\s*<select(\s|>)' src/components/ui/Listbox.svelte src/components/ui/Combobox.svelte`
+      returns zero matches on active markup (the only
+      surviving matches are inside Svelte comments
+      documenting the contract). <!-- sdd-owner: implementation -->
+- [ ] Manual smoke — open the Reports page in both
+      themes; click each of the three filter popovers
+      (store, location, urgency), confirm the popover is
+      themed (no OS-styled WebKit chrome), ArrowDown /
+      ArrowUp move the active option, Enter selects,
+      Escape closes; switch the urgency select when the
+      report type is not `custom` and confirm it stays
+      disabled; pick "all stores" (the empty-value first
+      option) and confirm the location list refreshes.
+      Open a product detail in both themes; click the
+      barcode type field, confirm the popover is themed;
+      type a non-suggested value (e.g. `DATAMATRIX`)
+      and Tab away, confirm the free-text semantics
+      survive. (Deferred to verify phase — headless
+      environment has no display server.)
+      <!-- sdd-owner: verification -->
+
+### 8a.2.5 Files / discovery targets
+
+- `src/components/ui/Listbox.svelte` (new primitive).
+- `src/components/ReportsPage.svelte` (three-filter
+  migration).
+- `src/components/ProductDetailPage.svelte` (barcode
+  type migration).
+- `openspec/changes/caduxo-daisyui-redesign/tasks.md`
+  (this sub-section).
+- `openspec/changes/caduxo-daisyui-redesign/apply-progress.md`
+  (PR 8a.2 evidence rollup).
+
+**Forecast:** ~520 net additions (Listbox ~410 + ReportsPage
+~25 + ProductDetailPage ~25 + docs ~60). Acceptable under
+the current session's 3000-line review budget; the main
+review focus is the new Listbox primitive. **Rollback:**
+revert the three source files; the PR 8a.1 + PR 8b / PR 8
+Select flows return intact. The Listbox primitive is new
+and has zero consumers beyond ReportsPage's three filters;
+deleting it does not affect any other surface.
+
+**Out of scope (deliberately deferred).** DashboardPage
+urgency filters are direct native selects (raw `<select>`
+markup, no `Select.svelte` wrapper) and still leak
+OS-styled chrome on the visible dropdown. ConfigurationPage
+locale selector, RegisterExitModal motivo select,
+MoveStockModal source / destination selects, AdjustCountModal
+motivo select, and LotForm motivo select remain
+`Select.svelte` consumers whose underlying native
+`<select>` still leaks OS-styled chrome on the visible
+dropdown. The user's inventory flagged ReportsPage +
+ProductDetailPage explicitly; the parent's prompt scoped
+this sub-slice to those two surfaces only. Migrating
+these remaining select surfaces is the natural follow-up
+work unit; it lands in one or more follow-up sub-slices
+or as part of PR 14's verify pass.

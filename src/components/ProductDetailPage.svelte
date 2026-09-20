@@ -17,6 +17,7 @@
     import ResolveQuantityDialog from "./ResolveQuantityDialog.svelte";
     import ArchiveLotDialog from "./ArchiveLotDialog.svelte";
     import LotMovementsPanel from "./LotMovementsPanel.svelte";
+    import Combobox from "./ui/Combobox.svelte";
     import {
         getExpiryLot,
     } from "../lib/expiry_lots.js";
@@ -26,6 +27,19 @@
     } from "../lib/stores.js";
     import { LL } from "../i18n/i18n-svelte.js";
     import { humanizeError } from "../lib/errors.js";
+
+    /** Static barcode-type suggestion list shared by the ProductForm
+     *  Combobox (PR 8a.1) and this ProductDetailPage Combobox (PR
+     *  8a.2). Centralised here so a future migration can lift it
+     *  into i18n catalogues / domain constants in one place. */
+    const BARCODE_TYPE_OPTIONS = [
+        "EAN13",
+        "EAN8",
+        "UPC",
+        "CODE128",
+        "CODE39",
+        "QR",
+    ];
 
     // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -365,23 +379,12 @@ on:click={() => (confirmingArchive = false)}
                                 autocomplete="off"
                             />
                         </label>
-                        <label>
-                            {$LL.products.detail.barcode.typeLabel()}
-                            <input
-                                type="text"
-                                bind:value={barcodeType}
-                                placeholder={$LL.products.detail.barcode.typePlaceholder()}
-                                list="barcode-types"
-                            />
-                            <datalist id="barcode-types">
-                                <option value="EAN13"></option>
-                                <option value="EAN8"></option>
-                                <option value="UPC"></option>
-                                <option value="CODE128"></option>
-                                <option value="CODE39"></option>
-                                <option value="QR"></option>
-                            </datalist>
-                        </label>
+                        <Combobox
+                            bind:value={barcodeType}
+                            label={$LL.products.detail.barcode.typeLabel()}
+                            placeholder={$LL.products.detail.barcode.typePlaceholder()}
+                            options={BARCODE_TYPE_OPTIONS}
+                        />
                     </div>
                     <label class="checkbox-label">
                         <input type="checkbox" bind:checked={isPrimary} />
