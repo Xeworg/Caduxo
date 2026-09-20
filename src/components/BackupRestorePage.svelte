@@ -19,10 +19,22 @@
       owns the info-list (`.info-list`) and checks-list (`.checks-list`)
       data-table migration.
 
+  Migration to shared UI primitives (PR 9b of caduxo-daisyui-redesign):
+    - Table.svelte (zebra) hosts the per-check validation summary
+      (the `.checks-list` vertical line list). The Table is rendered
+      body-only (no `<thead>`) so each check becomes a single-row
+      vertical list line, matching the pre-migration UX. The
+      `.info-list` Q&A `<dl>` and the `.confirm-box` destructive
+      warning surface stay as-is because they are semantic HTML
+      (definition list) and the canonical restore-confirmation
+      surface respectively — the design's "(or DaisyUI `list`
+      patterns where appropriate)" carve-out applies.
+
   Tailwind classes referenced here (for the JIT scanner):
     btn btn-primary btn-secondary btn-danger btn-ghost btn-sm
     alert alert-success alert-error alert-warning alert-soft
     flex items-center gap-2
+    table table-zebra
 -->
 <script lang="ts">
   import {
@@ -33,6 +45,7 @@
   } from "../lib/backup_restore.js";
   import Button from "./ui/Button.svelte";
   import Alert from "./ui/Alert.svelte";
+  import Table from "./ui/Table.svelte";
   import { LL } from "../i18n/i18n-svelte.js";
   import { humanizeError } from "../lib/errors.js";
 
@@ -272,11 +285,31 @@
       <!-- Validation passed — show summary -->
       <div class="validation-summary">
         <h3>{$LL.backupRestore.backupValidated()}</h3>
-        <ul class="checks-list">
-          {#each validation.checks as check, i}
-            <li>{localizeCheck(validation.checkCodes[i], check)}</li>
-          {/each}
-        </ul>
+        <!--
+          Per-check validation summary rendered as a body-only Table
+          primitive (no <thead>): each row is a single cell that
+          renders the localized check line. Matches the pre-migration
+          vertical-line UX while still composing the DaisyUI `table`
+          + `table-zebra` chrome from the shared primitive.
+        -->
+        <Table zebra aria-label={$LL.backupRestore.backupValidated()}>
+          {#snippet body()}
+            <!--
+              Snippet bodies in Svelte 5 do not inherit the parent
+              `{#if validation.canRestore}` narrowing for TS flow
+              analysis, so we re-bind through a local `{@const}` and
+              guard with an explicit `{#if}` so `validation` is
+              narrowed to non-null inside the iteration.
+            -->
+            {#if validation}
+              {#each validation.checks as check, i}
+                <tr>
+                  <td>{localizeCheck(validation.checkCodes[i], check)}</td>
+                </tr>
+              {/each}
+            {/if}
+          {/snippet}
+        </Table>
 
         {#if !showRestoreConfirm}
           <Button variant="danger" size="sm" onclick={openRestoreConfirm}>
@@ -316,11 +349,28 @@
       <!-- Validation failed -->
       <div class="validation-summary">
         <h3>{$LL.backupRestore.cannotRestore()}</h3>
-        <ul class="checks-list">
-          {#each validation.checks as check, i}
-            <li>{localizeCheck(validation.checkCodes[i], check)}</li>
-          {/each}
-        </ul>
+        <!--
+          Per-check validation summary (failure branch) — same
+          body-only Table primitive pattern as the success branch
+          above. Each row is a single cell that renders the localized
+          check line.
+        -->
+        <Table zebra aria-label={$LL.backupRestore.cannotRestore()}>
+          {#snippet body()}
+            <!--
+              Same narrowing-guarded pattern as the canRestore branch
+              above — snippet bodies do not inherit the parent
+              `{:else}` narrowing for TS flow analysis.
+            -->
+            {#if validation}
+              {#each validation.checks as check, i}
+                <tr>
+                  <td>{localizeCheck(validation.checkCodes[i], check)}</td>
+                </tr>
+              {/each}
+            {/if}
+          {/snippet}
+        </Table>
 
         <p>
           <Button
@@ -407,18 +457,6 @@
     border: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
     border-radius: 6px;
     padding: 1rem;
-  }
-
-  .checks-list {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 0.75rem;
-    font-size: 0.875rem;
-  }
-
-  .checks-list li {
-    padding: 0.2rem 0;
-    color: var(--color-secondary);
   }
 
   .confirm-box {

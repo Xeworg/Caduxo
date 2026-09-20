@@ -1,3 +1,25 @@
+<!--
+  StoresPage.svelte — store + location management (PR 9b of
+  caduxo-daisyui-redesign).
+
+  Migration to shared UI primitives:
+    - Table.svelte (zebra) hosts both the store sidebar and the
+      per-store location list. Each row is keyboard-activatable via
+      `tabindex="0"` + Enter/Space; the Name cell renders a `<button
+      class="store-link">` so screen readers can announce the row
+      action without depending on the row-level click handler.
+    - Badge.svelte renders the active / inactive status cell.
+    - EmptyState.svelte replaces the bespoke `.empty-hint` text in
+      both the store sidebar and the location list (via the Table
+      primitive's `empty` slot).
+    - Button.svelte (variant `ghost`, size `icon`) replaces the
+      bespoke `.btn-icon` edit button for locations.
+    - The form blocks (store-form / location-form) and the first-run
+      banner are deliberately left untouched — they are PR 8 scope.
+
+  Tailwind classes referenced here (for the JIT scanner):
+    table table-zebra
+-->
 <script lang="ts">
   import { onMount } from "svelte";
   import {
@@ -18,6 +40,10 @@
   } from "../lib/stores.js";
   import { LL } from "../i18n/i18n-svelte.js";
   import { humanizeError } from "../lib/errors.js";
+  import Table from "./ui/Table.svelte";
+  import Badge from "./ui/Badge.svelte";
+  import EmptyState from "./ui/EmptyState.svelte";
+  import Button from "./ui/Button.svelte";
 
   // ── State ──────────────────────────────────────────────────────────────────
 
@@ -312,24 +338,55 @@
     <div class="stores-layout">
       <!-- Left: store list -->
       <aside class="store-list">
-        {#each stores as store (store.id)}
-          <button
-            class="store-item"
-            class:active={store.id === selectedStoreId}
-            on:click={() => selectStore(store.id)}
-          >
-            <span class="store-name">{store.name}</span>
-            {#if store.code}
-              <span class="store-code">{store.code}</span>
-            {/if}
-            {#if !store.is_active}
-              <span class="badge-inactive">{$LL.stores.inactive()}</span>
-            {/if}
-          </button>
-        {/each}
-        {#if stores.length === 0}
-          <p class="empty-hint">{$LL.stores.noStores()}</p>
-        {/if}
+        <Table zebra aria-label={$LL.stores.pageTitle()}>
+          {#snippet head()}
+            <tr>
+              <th>{$LL.stores.storeName()}</th>
+              <th>{$LL.stores.storeCode()}</th>
+              <th>{$LL.dashboard.status()}</th>
+            </tr>
+          {/snippet}
+          {#snippet body()}
+            {#each stores as store (store.id)}
+              <tr
+                class="store-row"
+                class:active={store.id === selectedStoreId}
+                tabindex="0"
+                on:click={() => selectStore(store.id)}
+                on:keydown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    selectStore(store.id);
+                  }
+                }}
+              >
+                <td>
+                  <button
+                    type="button"
+                    class="store-link"
+                    on:click|stopPropagation={() => selectStore(store.id)}
+                  >
+                    {store.name}
+                  </button>
+                </td>
+                <td>{store.code ?? "—"}</td>
+                <td>
+                  {#if store.is_active}
+                    <Badge semantic="success" size="sm">{$LL.stores.active()}</Badge>
+                  {:else}
+                    <Badge semantic="neutral" size="sm">{$LL.stores.inactive()}</Badge>
+                  {/if}
+                </td>
+              </tr>
+            {/each}
+          {/snippet}
+          {#snippet empty()}
+            <EmptyState
+              title={$LL.stores.noStores()}
+              icon="inbox"
+            />
+          {/snippet}
+        </Table>
       </aside>
 
       <!-- Right: store detail / form -->
@@ -414,28 +471,47 @@
 
             {#if !locationFormOpen}
               <!-- Location list -->
-              {#if locations.length === 0}
-                <p class="empty-hint">{$LL.stores.noLocationsHint()}</p>
-              {:else}
-                <ul class="location-list">
+              <Table zebra aria-label={$LL.stores.internalLocations()}>
+                {#snippet head()}
+                  <tr>
+                    <th>{$LL.stores.locationName()}</th>
+                    <th>{$LL.stores.locationNotes()}</th>
+                    <th>{$LL.dashboard.status()}</th>
+                    <th>{$LL.common.actions()}</th>
+                  </tr>
+                {/snippet}
+                {#snippet body()}
                   {#each locations as loc (loc.id)}
-                    <li class="location-item">
-                      <div class="location-info">
-                        <span class="location-name">{loc.name}</span>
-                        {#if loc.notes}<span class="location-notes">{loc.notes}</span>{/if}
-                        {#if !loc.is_active}<span class="badge-inactive">{$LL.stores.inactive()}</span>{/if}
-                      </div>
-                      <button
-                        class="btn-icon"
-                        title={$LL.stores.edit()}
-                        on:click={() => startEditLocation(loc)}
-                      >
-                        ✏️
-                      </button>
-                    </li>
+                    <tr class="location-row">
+                      <td>{loc.name}</td>
+                      <td class="notes">{loc.notes ?? ""}</td>
+                      <td>
+                        {#if loc.is_active}
+                          <Badge semantic="success" size="sm">{$LL.stores.active()}</Badge>
+                        {:else}
+                          <Badge semantic="neutral" size="sm">{$LL.stores.inactive()}</Badge>
+                        {/if}
+                      </td>
+                      <td>
+                        <Button
+                          variant="icon"
+                          size="sm"
+                          aria-label={$LL.stores.edit()}
+                          onclick={() => startEditLocation(loc)}
+                        >
+                          ✏️
+                        </Button>
+                      </td>
+                    </tr>
                   {/each}
-                </ul>
-              {/if}
+                {/snippet}
+                {#snippet empty()}
+                  <EmptyState
+                    title={$LL.stores.noLocationsHint()}
+                    icon="tag"
+                  />
+                {/snippet}
+              </Table>
 
             {:else}
               <!-- Location form -->
@@ -550,52 +626,38 @@
     align-items: start;
   }
 
-  /* ── Store list sidebar ────────────────────────────────────────────────── */
-  .store-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .store-item {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 7px;
-    padding: 10px 12px;
-    text-align: left;
+  /* ── Store sidebar (Table primitive hosts the table; only the
+     row-level hover / focus / active states stay local because
+     the Table primitive does not own row-state styling) ──────── */
+  .store-row {
     cursor: pointer;
-    transition: background 0.15s;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
   }
 
-  .store-item:hover {
-    background: #f9fafb;
+  .store-row:hover {
+    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
   }
 
-  .store-item.active {
-    background: #eff6ff;
-    border-color: #3b82f6;
+  .store-row.active {
+    background: color-mix(in oklch, var(--color-primary) 12%, transparent);
   }
 
-  .store-name {
-    font-weight: 500;
-    font-size: 0.9rem;
+  .store-row:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
   }
 
-  .store-code {
-    font-size: 0.75rem;
-    color: #6b7280;
+  .store-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
   }
 
-  .badge-inactive {
-    font-size: 0.7rem;
-    background: #f3f4f6;
-    color: #9ca3af;
-    border-radius: 4px;
-    padding: 1px 5px;
-    align-self: flex-start;
+  .store-link:hover {
+    text-decoration: underline;
   }
 
   /* ── Store detail ──────────────────────────────────────────────────────── */
@@ -725,14 +787,6 @@
     font-size: 0.82rem;
   }
 
-  .btn-icon {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 0.9rem;
-    padding: 2px 6px;
-  }
-
   /* ── Locations ─────────────────────────────────────────────────────────── */
   .locations-section {
     border-top: 1px solid #f3f4f6;
@@ -751,40 +805,15 @@
     font-size: 1rem;
   }
 
-  .location-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .location-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 10px;
-    background: #f9fafb;
-    border-radius: 6px;
-    gap: 8px;
-  }
-
-  .location-info {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .location-name {
-    font-size: 0.9rem;
-    font-weight: 500;
-  }
-
-  .location-notes {
-    font-size: 0.78rem;
-    color: #6b7280;
+  /* Local styling for the per-cell muted notes column. The
+     location-row wrapper is reserved for any future per-row state
+     (e.g. hover / focus-visible) the migration may add; today only
+     the .notes child needs local styling because the rest of the
+     location list inherits from the Table primitive's DaisyUI
+     chrome. */
+  .location-row .notes {
+    color: var(--color-secondary);
+    font-size: 0.85rem;
   }
 
   .empty-hint {

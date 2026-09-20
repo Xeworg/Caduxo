@@ -1,3 +1,26 @@
+<!--
+  ProductCatalogPage.svelte — searchable product catalog (PR 9b of
+  caduxo-daisyui-redesign).
+
+  Migration to shared UI primitives:
+    - Table.svelte (zebra) hosts the per-product list. Numeric /
+      monospaced cells (SKU + barcode) use the local `.cell-mono`
+      utility; the description cell renders a `<button
+      class="product-link">` so screen readers can announce the
+      row action without depending on the row-level click handler.
+    - Badge.svelte renders the active / archived status cell. Active
+      uses `semantic="success"`; archived uses `semantic="neutral"`
+      and reuses the existing `$LL.products.archived()` label.
+    - The "Status" column header reuses `$LL.dashboard.status()`
+      because no `products.table.status` key exists (no new i18n
+      keys per PR 9b's no-new-keys constraint). The same key is
+      used by the dashboard table; the cross-namespace reuse is
+      intentional because "Status" is a generic English / Spanish
+      word.
+
+  Tailwind classes referenced here (for the JIT scanner):
+    table table-zebra
+-->
 <script lang="ts">
   import { onMount } from "svelte";
   import {
@@ -14,6 +37,8 @@
   import { humanizeError } from "../lib/errors.js";
   import ProductForm from "./ProductForm.svelte";
   import ProductDetailPage from "./ProductDetailPage.svelte";
+  import Table from "./ui/Table.svelte";
+  import Badge from "./ui/Badge.svelte";
 
   // ── View state ─────────────────────────────────────────────────────────────
 
@@ -246,31 +271,51 @@
           <span class="results-filter">{$LL.products.catalog.forQuery({ query: appliedQuery })}</span>
         {/if}
       </div>
-      <ul class="product-list">
-        {#each displayedProducts as product (product.id)}
-          <li>
-            <button
-              type="button"
-              class="product-item"
+      <Table zebra aria-label={$LL.products.catalog.pageTitle()}>
+        {#snippet head()}
+          <tr>
+            <th>{$LL.products.productDescription()}</th>
+            <th>{$LL.products.productSku()}</th>
+            <th>{$LL.products.productBarcode()}</th>
+            <th>{$LL.dashboard.status()}</th>
+          </tr>
+        {/snippet}
+        {#snippet body()}
+          {#each displayedProducts as product (product.id)}
+            <tr
+              class="product-row"
               class:archived={!product.is_active}
+              tabindex="0"
               on:click={() => openDetail(product)}
+              on:keydown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  openDetail(product);
+                }
+              }}
             >
-              <div class="product-main">
-                <span class="product-description">{product.description}</span>
-                <span class="product-sku">{product.sku}</span>
-              </div>
-              <div class="product-meta">
-                {#if product.primary_barcode}
-                  <span class="product-barcode">{product.primary_barcode}</span>
+              <td>
+                <button
+                  type="button"
+                  class="product-link"
+                  on:click|stopPropagation={() => openDetail(product)}
+                >
+                  {product.description}
+                </button>
+              </td>
+              <td class="cell-mono">{product.sku}</td>
+              <td class="cell-mono">{product.primary_barcode ?? "—"}</td>
+              <td>
+                {#if product.is_active}
+                  <Badge semantic="success" size="sm">{$LL.stores.active()}</Badge>
+                {:else}
+                  <Badge semantic="neutral" size="sm">{$LL.products.archived()}</Badge>
                 {/if}
-                {#if !product.is_active}
-                  <span class="badge-inactive">{$LL.products.archived()}</span>
-                {/if}
-              </div>
-            </button>
-          </li>
-        {/each}
-      </ul>
+              </td>
+            </tr>
+          {/each}
+        {/snippet}
+      </Table>
     {/if}
 
   {:else if view === "create"}
@@ -405,85 +450,42 @@
     color: #4b5563;
   }
 
-  .product-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .product-item {
-    width: 100%;
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    padding: 12px 14px;
+  .product-row {
     cursor: pointer;
+  }
+
+  .product-row:hover {
+    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
+  }
+
+  .product-row.archived {
+    opacity: 0.65;
+    background: color-mix(in oklch, var(--color-base-200) 90%, transparent);
+  }
+
+  .product-row:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+  }
+
+  .product-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--color-primary);
+    cursor: pointer;
+    font: inherit;
     text-align: left;
-    font-family: inherit;
-    transition: background 0.15s, border-color 0.15s;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
   }
 
-  .product-item:hover {
-    background: #f9fafb;
-    border-color: #cbd5e1;
+  .product-link:hover {
+    text-decoration: underline;
   }
 
-  .product-item.archived {
-    background: #f9fafb;
-    opacity: 0.75;
-  }
-
-  .product-main {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-
-  .product-description {
-    font-weight: 500;
-    font-size: 0.95rem;
-    color: #1f2937;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .product-sku {
+  .cell-mono {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.78rem;
-    color: #6b7280;
-  }
-
-  .product-meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
-  }
-
-  .product-barcode {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.78rem;
-    color: #4b5563;
-    background: #f3f4f6;
-    padding: 2px 7px;
-    border-radius: 4px;
-  }
-
-  .badge-inactive {
-    font-size: 0.7rem;
-    background: #f3f4f6;
-    color: #9ca3af;
-    border-radius: 4px;
-    padding: 2px 7px;
+    font-size: 0.85rem;
+    color: var(--color-secondary);
   }
 
   /* Panel */

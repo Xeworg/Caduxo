@@ -14,6 +14,8 @@
   import { listStores, listStoreLocations, type StoreLocationResponse } from "../lib/stores.js";
   import LotMovementsPanel from "./LotMovementsPanel.svelte";
   import { humanizeError } from "../lib/errors.js";
+  import Table from "./ui/Table.svelte";
+  import Badge from "./ui/Badge.svelte";
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -53,14 +55,21 @@
     }
   }
 
-  function urgencyClass(row: DashboardLotRow): string {
+  /**
+   * Maps the backend urgency bucket (`alert_window | next_30_days | future`)
+   * to the closed `BadgeUrgency` union consumed by the shared `Badge.svelte`
+   * primitive. The mapping is local to this page so the dashboard / ledger
+   * surfaces can keep their bespoke buckets; only the CalendarPage's
+   * day-detail panel needs the Badge primitive today.
+   */
+  function urgencyToBadge(row: DashboardLotRow): "expired" | "today" | "alert" | "soon" | "normal" {
     switch (row.urgency) {
-      case "expired":   return "status-expired";
-      case "today":     return "status-today";
-      case "alert_window": return "status-alert";
-      case "next_30_days": return "status-soon";
-      case "future":    return "status-future";
-      default:          return "status-unknown";
+      case "expired":   return "expired";
+      case "today":     return "today";
+      case "alert_window": return "alert";
+      case "next_30_days": return "soon";
+      case "future":    return "normal";
+      default:          return "normal";
     }
   }
 
@@ -386,8 +395,8 @@ function onLotCancel() {
         {#if dayRows.length === 0}
           <p class="day-empty">{$LL.calendar.noLotsOnDate()}</p>
         {:else}
-          <table class="day-table">
-            <thead>
+          <Table zebra stickyHeader aria-label={$LL.calendar.dayPanelTitle({ date: formatDate(selectedDate) })}>
+            {#snippet head()}
               <tr>
                 <th>{$LL.calendar.table.product()}</th>
                 <th>{$LL.calendar.table.qty()}</th>
@@ -397,8 +406,8 @@ function onLotCancel() {
                 <th>{$LL.calendar.table.days()}</th>
                 <th>{$LL.calendar.table.status()}</th>
               </tr>
-            </thead>
-            <tbody>
+            {/snippet}
+            {#snippet body()}
               {#each dayRows as row (row.lot_id)}
                 <tr>
                   <td>
@@ -418,14 +427,14 @@ function onLotCancel() {
                     {row.days_remaining}
                   </td>
                   <td>
-                    <span class="status-badge {urgencyClass(row)}">
+                    <Badge urgency={urgencyToBadge(row)} size="sm">
                       {urgencyLabel(row)}
-                    </span>
+                    </Badge>
                   </td>
                 </tr>
               {/each}
-            </tbody>
-          </table>
+            {/snippet}
+          </Table>
         {/if}
       </div>
     </div>
@@ -615,50 +624,19 @@ function onLotCancel() {
     padding: 20px 0;
   }
 
-  /* ── Day table ─────────────────────────────────────────────────────────── */
-
-  .day-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.85rem;
-  }
-
-  .day-table th {
-    text-align: left;
-    font-weight: 600;
-    color: #64748b;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 4px 8px;
-    border-bottom: 1px solid #e2e8f0;
-  }
-
-  .day-table td {
-    padding: 6px 8px;
-    border-bottom: 1px solid #f1f5f9;
-    color: #1e293b;
-    vertical-align: middle;
-  }
-
-  .day-table tr:last-child td {
-    border-bottom: none;
-  }
-
-  .num {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
-
+  /* Negative-days accent. The `num` utility (PR 1) and the
+     table chrome come from `Table.svelte` + DaisyUI; only the
+     per-cell tint stays local because it composes with the table
+     primitive's `text-base-content` default. */
   .days-neg {
-    color: #ef4444;
+    color: var(--color-error);
   }
 
   .lot-link {
     background: none;
     border: none;
     padding: 0;
-    color: #2563eb;
+    color: var(--color-primary);
     cursor: pointer;
     font-size: 0.85rem;
     font-family: inherit;
@@ -667,31 +645,14 @@ function onLotCancel() {
   }
 
   .lot-link:hover {
-    color: #1d4ed8;
+    color: color-mix(in oklch, var(--color-primary) 80%, black);
     text-decoration: underline;
   }
 
   .lot-link:focus-visible {
-    outline: 2px solid #2563eb;
+    outline: 2px solid var(--color-primary);
     outline-offset: 2px;
   }
-
-  /* ── Status badges ──────────────────────────────────────────────────────── */
-
-  .status-badge {
-    display: inline-block;
-    padding: 2px 7px;
-    border-radius: 12px;
-    font-size: 0.7rem;
-    font-weight: 600;
-  }
-
-  .status-expired { background: #fee2e2; color: #b91c1c; }
-  .status-today   { background: #fef3c7; color: #92400e; }
-  .status-alert   { background: #fff7ed; color: #c2410c; }
-  .status-soon    { background: #eff6ff; color: #1d4ed8; }
-  .status-future  { background: #f0fdf4; color: #15803d; }
-  .status-unknown { background: #f1f5f9; color: #475569; }
 
   /* ── Loading / error ──────────────────────────────────────────────────── */
 
