@@ -5,6 +5,8 @@
     restoreBackup,
     type RestoreValidation,
   } from "../lib/backup_restore.js";
+  import { LL } from "../i18n/i18n-svelte.js";
+  import { humanizeError } from "../lib/errors.js";
 
   // ─── State ────────────────────────────────────────────────────────────────
 
@@ -32,11 +34,15 @@
       const result = await exportBackupWithDialog();
       if (result) {
         const kb = (result.bytes / 1024).toFixed(1);
-        exportSuccess = `Backup saved to ${result.path} (${kb} KB, schema v${result.schemaVersion}).`;
+        exportSuccess = $LL.backupRestore.exportSuccess({
+          path: result.path,
+          kb,
+          schema: result.schemaVersion,
+        });
       }
       // null means cancelled
     } catch (e) {
-      exportError = String(e);
+      exportError = humanizeError(e);
     } finally {
       exporting = false;
     }
@@ -60,7 +66,7 @@
         }
       }
     } catch (e) {
-      validationError = String(e);
+      validationError = humanizeError(e);
     } finally {
       validating = false;
     }
@@ -83,7 +89,7 @@
       // On success, reload the page to reflect restored data
       window.location.reload();
     } catch (e) {
-      restoreError = String(e);
+      restoreError = humanizeError(e);
     } finally {
       restoring = false;
     }
@@ -94,18 +100,94 @@
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
+
+  /**
+   * Stable check codes emitted by the backend. Must stay in lock-step with
+   * the `CHECK_CODE_*` constants in
+   * `src-tauri/src/services/backup_restore.rs`. See the matching
+   * `backupRestore.checks` i18n namespace for the localized strings.
+   */
+  const CHECK_CODES = {
+    fileNotFound: "file_not_found",
+    sqliteHeaderValid: "sqlite_header_valid",
+    sqliteHeaderInvalid: "sqlite_header_invalid",
+    requiredTablesPresent: "required_tables_present",
+    requiredTablesMissing: "required_tables_missing",
+    schemaVersionDetected: "schema_version_detected",
+    integrityCheckOk: "integrity_check_ok",
+    integrityCheckFailed: "integrity_check_failed",
+    schemaCheckFailed: "schema_check_failed",
+    schemaVersionInvalid: "schema_version_invalid",
+    schemaVersionCompatible: "schema_version_compatible",
+  } as const;
+
+  /**
+   * Number of tables the backend requires in a Caduxo backup. Mirrors
+   * `REQUIRED_TABLES.len()` in `services::backup_restore`; kept as a
+   * constant here so the localized "All N required tables present" message
+   * shows the same number the backend emits in the English fallback.
+   */
+  const REQUIRED_TABLES_COUNT = 8;
+
+  /**
+   * Resolves a backend check code to a localized string, falling back to
+   * the raw `fallback` text when the code is missing or unknown. Schema
+   * version placeholders are extracted from the fallback so the localized
+   * "Schema version: N" message carries the same N the backend reports.
+   */
+  function localizeCheck(
+    code: string | null | undefined,
+    fallback: string,
+  ): string {
+    switch (code) {
+      case CHECK_CODES.fileNotFound:
+        return $LL.backupRestore.checks.fileNotFound();
+      case CHECK_CODES.sqliteHeaderValid:
+        return $LL.backupRestore.checks.sqliteHeaderValid();
+      case CHECK_CODES.sqliteHeaderInvalid:
+        return $LL.backupRestore.checks.sqliteHeaderInvalid();
+      case CHECK_CODES.requiredTablesPresent:
+        return $LL.backupRestore.checks.requiredTablesPresent({
+          n: REQUIRED_TABLES_COUNT,
+        });
+      case CHECK_CODES.requiredTablesMissing:
+        return $LL.backupRestore.checks.requiredTablesMissing();
+      case CHECK_CODES.schemaVersionDetected: {
+        const match = fallback.match(/Schema version:\s*(-?\d+)/);
+        return $LL.backupRestore.checks.schemaVersionDetected({
+          v: match?.[1] ?? "0",
+        });
+      }
+      case CHECK_CODES.integrityCheckOk:
+        return $LL.backupRestore.checks.integrityCheckOk();
+      case CHECK_CODES.integrityCheckFailed:
+        return $LL.backupRestore.checks.integrityCheckFailed();
+      case CHECK_CODES.schemaCheckFailed:
+        return $LL.backupRestore.checks.schemaCheckFailed();
+      case CHECK_CODES.schemaVersionInvalid: {
+        const match = fallback.match(/Schema version\s*(-?\d+)/);
+        return $LL.backupRestore.checks.schemaVersionInvalid({
+          v: match?.[1] ?? "0",
+        });
+      }
+      case CHECK_CODES.schemaVersionCompatible:
+        return $LL.backupRestore.checks.schemaVersionCompatible();
+      default:
+        return fallback;
+    }
+  }
 </script>
 
 <div class="page">
-  <h1>Backup &amp; Restore</h1>
+  <h1>{$LL.backupRestore.pageTitle()}</h1>
 
   <!-- ─── Export ─────────────────────────────────────────────────────────── -->
   <section class="card">
-    <h2>Export backup</h2>
-    <p>Creates a full copy of your database at a location you choose. The app remains open and usable during export.</p>
+    <h2>{$LL.backupRestore.exportSection()}</h2>
+    <p>{$LL.backupRestore.exportDesc()}</p>
 
     <button class="btn-primary" on:click={handleExport} disabled={exporting}>
-      {exporting ? "Exporting…" : "Export database"}
+      {exporting ? $LL.backupRestore.exporting() : $LL.backupRestore.exportButton()}
     </button>
 
     {#if exportSuccess}
@@ -119,19 +201,20 @@
 
   <!-- ─── Restore ───────────────────────────────────────────────────────── -->
   <section class="card">
-    <h2>Restore from backup</h2>
+    <h2>{$LL.backupRestore.restoreSection()}</h2>
     <p>
-      Restoring a backup replaces all current data with the contents of the backup file.
-      <strong>This is a destructive operation.</strong> Make sure you have an export of your current data before proceeding.
+      {$LL.backupRestore.restoreDesc()}
+      <strong>{$LL.backupRestore.destructiveOp()}</strong>
+      {$LL.backupRestore.restoreWarning()}
     </p>
 
     <div class="warning-banner">
-      ⚠️ Restoring a backup cannot be undone. Current data will be permanently replaced.
+      {$LL.backupRestore.restoreDangerBanner()}
     </div>
 
     {#if !validation}
       <button class="btn-secondary" on:click={handleValidate} disabled={validating}>
-        {validating ? "Selecting…" : "Select backup file to restore"}
+        {validating ? $LL.backupRestore.selecting() : $LL.backupRestore.selectBackupFile()}
       </button>
 
       {#if validationError}
@@ -140,27 +223,27 @@
     {:else if validation.canRestore}
       <!-- Validation passed — show summary -->
       <div class="validation-summary">
-        <h3>✅ Backup file validated</h3>
+        <h3>{$LL.backupRestore.backupValidated()}</h3>
         <ul class="checks-list">
-          {#each validation.checks as check}
-            <li>{check}</li>
+          {#each validation.checks as check, i}
+            <li>{localizeCheck(validation.checkCodes[i], check)}</li>
           {/each}
         </ul>
 
         {#if !showRestoreConfirm}
           <button class="btn-danger" on:click={openRestoreConfirm}>
-            Restore from this backup
+            {$LL.backupRestore.restoreButton()}
           </button>
         {:else}
           <!-- Explicit destructive confirmation -->
           <div class="confirm-box">
-            <p><strong>Are you sure?</strong> This will permanently replace all current data with the backup.</p>
+            <p><strong>{$LL.common.confirm()}</strong> {$LL.backupRestore.restoreConfirmPrompt()}</p>
             <div class="confirm-actions">
               <button class="btn-danger" on:click={handleRestore} disabled={restoring}>
-                {restoring ? "Restoring…" : "Yes, replace my data"}
+                {restoring ? $LL.backupRestore.restoring() : $LL.backupRestore.restoreData()}
               </button>
               <button class="btn-secondary" on:click={() => { showRestoreConfirm = false; }}>
-                Cancel
+                {$LL.common.cancel()}
               </button>
             </div>
             {#if restoreError}
@@ -172,16 +255,16 @@
     {:else}
       <!-- Validation failed -->
       <div class="validation-summary">
-        <h3>❌ Backup file cannot be restored</h3>
+        <h3>{$LL.backupRestore.cannotRestore()}</h3>
         <ul class="checks-list">
-          {#each validation.checks as check}
-            <li>{check}</li>
+          {#each validation.checks as check, i}
+            <li>{localizeCheck(validation.checkCodes[i], check)}</li>
           {/each}
         </ul>
 
         <p>
           <button class="btn-secondary" on:click={() => { validation = null; selectedBackupPath = ""; }}>
-            Choose a different file
+            {$LL.backupRestore.chooseDifferentFile()}
           </button>
         </p>
       </div>
@@ -190,19 +273,19 @@
 
   <!-- ─── Help ───────────────────────────────────────────────────────────── -->
   <section class="card">
-    <h2>About backups</h2>
+    <h2>{$LL.backupRestore.aboutSection()}</h2>
     <dl class="info-list">
-      <dt>What is included?</dt>
-      <dd>Full database copy including all stores, products, expiry lots, categories, settings, and history.</dd>
+      <dt>{$LL.backupRestore.includesQ()}</dt>
+      <dd>{$LL.backupRestore.includesA()}</dd>
 
-      <dt>How often should I back up?</dt>
-      <dd>Regular backups are recommended before major changes like CSV imports or bulk lot operations.</dd>
+      <dt>{$LL.backupRestore.howOftenQ()}</dt>
+      <dd>{$LL.backupRestore.howOftenA()}</dd>
 
-      <dt>Where should I save backups?</dt>
-      <dd>Any location you choose — external drive, cloud folder, or local directory. Standard SQLite files can be opened with most database tools.</dd>
+      <dt>{$LL.backupRestore.whereQ()}</dt>
+      <dd>{$LL.backupRestore.whereA()}</dd>
 
-      <dt>Current database location</dt>
-      <dd>The active database is stored in the app's local data directory. The backup export lets you choose where to save your copy.</dd>
+      <dt>{$LL.backupRestore.locationQ()}</dt>
+      <dd>{$LL.backupRestore.locationA()}</dd>
     </dl>
   </section>
 </div>

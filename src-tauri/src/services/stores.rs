@@ -8,6 +8,8 @@ use crate::dto::stores::{
     StoreUpdate,
 };
 use crate::error::{AppError, DomainError};
+use crate::pdf::locale::Locale;
+use crate::services::user_messages::{user_message, UserMessage};
 
 /// Returns true if the database has at least one active store.
 pub async fn is_first_run(pool: &DbPool) -> Result<bool, AppError> {
@@ -70,7 +72,7 @@ pub async fn create_location(
 
     if !store.is_active {
         return Err(DomainError::BusinessRule {
-            message: "Cannot add location to an inactive store".to_string(),
+            message: user_message(UserMessage::InactiveStoreLocation, Locale::En),
         }
         .into());
     }
@@ -426,6 +428,7 @@ mod tests {
             SettingsUpdate {
                 last_selected_store_id: Some(store.id.clone()),
                 require_initial_location_on_lot_create: None,
+                language: None,
             },
         )
         .await?;

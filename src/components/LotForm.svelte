@@ -14,6 +14,8 @@
         type StoreResponse,
         type StoreLocationResponse,
     } from "../lib/stores.js";
+    import { LL } from "../i18n/i18n-svelte.js";
+    import { humanizeError } from "../lib/errors.js";
 
     // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -108,7 +110,7 @@
                 expiryDate = d.toISOString().slice(0, 10);
             }
         } catch (e: unknown) {
-            errorMsg = String(e);
+            errorMsg = humanizeError(e);
         } finally {
             loadingStores = false;
         }
@@ -135,19 +137,19 @@
     async function submit() {
         errorMsg = "";
         if (!selectedStoreId) {
-            errorMsg = "Store is required";
+            errorMsg = $LL.lotForm.storeRequired();
             return;
         }
         if (requireInitialLocation && !selectedLocationId) {
-            errorMsg = "Selecciona una ubicación";
+            errorMsg = $LL.lotForm.selectLocationRequired();
             return;
         }
         if (!expiryDate) {
-            errorMsg = "Expiry date is required";
+            errorMsg = $LL.lotForm.expiryDateRequired();
             return;
         }
         if (mode === "create" && quantity <= 0) {
-            errorMsg = "Quantity must be greater than zero";
+            errorMsg = $LL.lotForm.quantityGreaterThanZero();
             return;
         }
         submitting = true;
@@ -190,7 +192,7 @@
                 onSaved(saved);
             }
         } catch (e: unknown) {
-            errorMsg = String(e);
+            errorMsg = humanizeError(e);
         } finally {
             submitting = false;
         }
@@ -200,17 +202,13 @@
 <form class="lot-form" on:submit|preventDefault={submit}>
     <h3>
         {mode === "edit"
-? "Edit expiry lot (metadata only)"
-: "New expiry lot"}
+? $LL.lotForm.editTitle()
+: $LL.lotForm.createTitle()}
     </h3>
 
     {#if mode === "edit"}
         <p class="metadata-only-notice" role="note">
-Editing a lot only updates its metadata (location, unit, expiry
-date, alert days, batch code, notes). To change the quantity, use
-the <strong>movement</strong>, <strong>adjustment</strong>, or
-<strong>resolve</strong> actions so the stock ledger stays
-accurate.
+{$LL.lotForm.quantityUseMovementHint()}
         </p>
     {/if}
 
@@ -219,18 +217,18 @@ accurate.
     {/if}
 
     {#if loadingStores}
-        <p class="loading">Loading stores…</p>
+        <p class="loading">{$LL.lotForm.loadingStores()}</p>
     {:else if stores.length === 0}
         <div class="alert alert-error" role="alert">
-            No stores available. Create a store before adding expiry lots.
+            {$LL.lotForm.noStoresAvailable()}
         </div>
     {:else}
         <!-- Store selection — only shown when multiple stores exist -->
         {#if stores.length > 1}
             <label>
-                Store *
+                {$LL.lotForm.selectStore()}
                 <select bind:value={selectedStoreId}>
-                    <option value="" disabled>— Select store —</option>
+                    <option value="" disabled>{$LL.lotForm.selectStorePlaceholder()}</option>
                     {#each stores as store (store.id)}
                         <option value={store.id}>{store.name}</option>
                     {/each}
@@ -239,22 +237,22 @@ accurate.
         {:else}
             <!-- Single store: remember the selection implicitly. -->
             <p class="store-hint">
-                Store: <strong>{stores[0].name}</strong>
+                {$LL.lotForm.selectStore()}: <strong>{stores[0].name}</strong>
             </p>
         {/if}
 
         <!-- Location picker — shown when the store has locations -->
         {#if selectedStoreId && locations.length > 0}
             <label>
-                Internal location
+                {$LL.lotForm.internalLocation()}
                 {#if requireInitialLocation}
-                    <span class="required-hint">(required)</span>
+                    <span class="required-hint">{$LL.lotForm.locationRequired()}</span>
                 {:else}
-                    <span class="optional-hint">(optional)</span>
+                    <span class="optional-hint">{$LL.lotForm.locationOptional()}</span>
                 {/if}
                 <select bind:value={selectedLocationId}>
                     {#if !requireInitialLocation}
-                        <option value="">— None —</option>
+                        <option value="">{$LL.lotForm.noLocation()}</option>
                     {/if}
                     {#each locations as loc (loc.id)}
                         <option value={loc.id}>{loc.name}</option>
@@ -268,18 +266,18 @@ accurate.
                         <!-- Edit mode: quantity is read-only. Quantity changes
                              must go through movement/adjustment/resolve flows. -->
                         <div class="quantity-readonly">
-                            <span class="quantity-label">Quantity</span>
+                            <span class="quantity-label">{$LL.lotForm.quantityReadonly()}</span>
                             <span class="quantity-value">
                                 {lot.quantity}
                                 {#if lot.unit}<span class="quantity-unit">{lot.unit}</span>{/if}
                             </span>
                             <span class="quantity-hint">
-                                Use movement / adjustment / resolve actions to change it.
+                                {$LL.lotForm.quantityUseMovementHint()}
                             </span>
                         </div>
                     {:else}
                         <label>
-                            Quantity *
+                            {$LL.lotForm.quantityStar()}
                             <input
                                 type="number"
                                 bind:value={quantity}
@@ -293,18 +291,18 @@ accurate.
                     {#if productUnitKind === null}
                         <!-- Product has no catalog link: show editable unit text input. -->
                         <label>
-                            Unit
+                            {$LL.lotForm.selectUnit()}
                             <input
                                 type="text"
                                 bind:value={unit}
-                                placeholder="e.g. kg, L, pcs"
+                                placeholder={$LL.lotForm.placeholders.unit()}
                                 autocomplete="off"
                             />
                         </label>
                     {:else}
                         <!-- Product has a catalog link: show read-only display name. -->
                         <div class="readonly-field">
-                            <span class="readonly-label">Unit</span>
+                            <span class="readonly-label">{$LL.lotForm.selectUnit()}</span>
                             <span class="unit-chip">{unit}</span>
                         </div>
                     {/if}
@@ -312,20 +310,20 @@ accurate.
 
         <div class="grid-2">
             <label>
-                Expiry date *
+                {$LL.lotForm.expiryDate()}
                 <DatePicker
                     bind:value={expiryDate}
                     clearable={false}
-                    ariaLabel="Expiry date"
+                    ariaLabel={$LL.lotForm.expiryDate()}
                     id="lot-expiry"
                     name="expiry_date"
-                    placeholder="YYYY-MM-DD"
+                    placeholder={$LL.lotForm.dateFormat()}
                     todayDate={todayIso()}
                 />
             </label>
 
             <label>
-                Alert days before *
+                {$LL.lotForm.alertDaysStar()}
                 <input
                     type="number"
                     bind:value={alertDaysBefore}
@@ -339,26 +337,26 @@ accurate.
 
         <div class="batch-code-wrapper">
             <label>
-                Batch code (optional)
+                {$LL.lotForm.batchCodeOptional()}
                 <input
                     type="text"
                     bind:value={batchCode}
-                    placeholder="e.g. B2024-001"
+                    placeholder={$LL.lotForm.placeholders.batchCode()}
                     autocomplete="off"
                 />
             </label>
             {#if batchEcho}
                 <span class="batch-echo-chip" aria-live="polite">
-                    Lote generado: <code>{batchEcho}</code>
+                    {$LL.lotForm.createTitle()}: <code>{batchEcho}</code>
                 </span>
             {/if}
         </div>
 
         <label>
-            Notes (optional)
+            {$LL.lotForm.notesOptional()}
             <textarea
                 bind:value={notes}
-                placeholder="Optional notes…"
+                placeholder={$LL.common.optional()}
                 rows="2"
             ></textarea>
         </label>
@@ -370,10 +368,10 @@ accurate.
                 disabled={submitting}
             >
                 {submitting
-                    ? "Saving…"
+                    ? $LL.lotForm.saving()
                     : mode === "edit"
-                      ? "Save changes"
-                      : "Add lot"}
+                      ? $LL.lotForm.saveChanges()
+                      : $LL.lotForm.addLot()}
             </button>
             <button
                 type="button"
@@ -381,7 +379,7 @@ accurate.
                 on:click={onCancel}
                 disabled={submitting}
             >
-                Cancel
+                {$LL.common.cancel()}
             </button>
         </div>
     {/if}

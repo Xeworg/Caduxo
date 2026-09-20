@@ -4,6 +4,11 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import type { UnitKind } from "./products.js";
+import {
+   DEFAULT_LOCALE,
+   locale as activeLocale,
+   type SupportedLocale,
+} from "../i18n/locale.svelte.js";
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -69,6 +74,21 @@ export interface UnitReviewActionResult {
  assigned_unit: UnitDefinitionResponse | null;
 }
 
+// ─── Locale plumbing ─────────────────────────────────────────────────────────
+
+/**
+ * Returns the active UI locale, used as the implicit default for the
+ * `locale` parameter accepted by every backend-mutating wrapper in this
+ * file. Callers that already hold a `SupportedLocale` can pass it
+ * explicitly; otherwise the wrapper reads `activeLocale.current` and falls
+ * back to `DEFAULT_LOCALE` while the rune is still uninitialised.
+ */
+function resolveLocale(locale?: SupportedLocale): SupportedLocale {
+   if (locale) return locale;
+   const current = activeLocale?.current;
+   return (current ?? DEFAULT_LOCALE) as SupportedLocale;
+}
+
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
 /** Lists all active (non-archived) unit definitions ordered by kind then display_name. */
@@ -76,18 +96,38 @@ export async function listUnitDefinitions(): Promise<UnitDefinitionResponse[]> {
  return invoke<UnitDefinitionResponse[]>("list_unit_definitions");
 }
 
-/** Creates a new custom unit. Rejects duplicate keys (case-insensitive). */
+/**
+ * Creates a new custom unit. Rejects duplicate keys (case-insensitive).
+ *
+ * `locale` is forwarded to the Rust command so backend validation messages
+ * (key format, display name) and the duplicate-key boundary reach the UI in
+ * the active locale. When omitted, the wrapper reads the active UI locale.
+ */
 export async function createUnitDefinition(
  input: UnitDefinitionCreateInput,
+ locale?: SupportedLocale,
 ): Promise<UnitDefinitionResponse> {
- return invoke<UnitDefinitionResponse>("create_unit_definition", { input });
+ return invoke<UnitDefinitionResponse>("create_unit_definition", {
+  input,
+  locale: resolveLocale(locale),
+ });
 }
 
-/** Renames a unit's display_name (key is immutable in this slice). */
+/**
+ * Renames a unit's display_name (key is immutable in this slice).
+ *
+ * `locale` is forwarded to the Rust command so the display-name validation
+ * and the unknown-id boundary reach the UI in the active locale. When
+ * omitted, the wrapper reads the active UI locale.
+ */
 export async function renameUnitDefinition(
  input: UnitDefinitionRenameInput,
+ locale?: SupportedLocale,
 ): Promise<UnitDefinitionResponse> {
- return invoke<UnitDefinitionResponse>("rename_unit_definition", { input });
+ return invoke<UnitDefinitionResponse>("rename_unit_definition", {
+  input,
+  locale: resolveLocale(locale),
+ });
 }
 
 /** Returns all unrecognized unit groups: products with no catalog link but a
@@ -108,9 +148,19 @@ export async function dismissUnitAuditBanner(): Promise<void> {
  return invoke<void>("dismiss_unit_audit_banner");
 }
 
-/** Applies a review action from UnitReviewPage. */
+/**
+ * Applies a review action from UnitReviewPage.
+ *
+ * `locale` is forwarded to the Rust command so the unknown-preset-id
+ * boundary raised by `map_to_preset` reaches the UI in the active locale.
+ * When omitted, the wrapper reads the active UI locale.
+ */
 export async function applyUnitReviewAction(
  action: UnitReviewAction,
+ locale?: SupportedLocale,
 ): Promise<UnitReviewActionResult> {
- return invoke<UnitReviewActionResult>("apply_unit_review_action", { action });
+ return invoke<UnitReviewActionResult>("apply_unit_review_action", {
+  action,
+  locale: resolveLocale(locale),
+ });
 }

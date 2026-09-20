@@ -70,6 +70,13 @@ pub struct SettingsResponse {
     /// When true, lot creation requires a location to be chosen.
     /// When false, an empty location picker uses the sentinel "Sin ubicacion".
     pub require_initial_location_on_lot_create: bool,
+    /// Effective locale; one of {"en", "es"}. Falls back to "en" when no row
+    /// is persisted so the type stays a non-nullable string for consumers.
+    pub language: String,
+    /// True only when an `app_settings.language` row was actually persisted.
+    /// False on fresh installs lets the frontend call OS / WebView detection
+    /// instead of treating the `"en"` fallback as a manual user preference.
+    pub language_configured: bool,
 }
 
 /// Input for updating settings.
@@ -78,4 +85,6 @@ pub struct SettingsUpdate {
     pub last_selected_store_id: Option<String>,
     /// Optional: toggles the require_initial_location_on_lot_create setting.
     pub require_initial_location_on_lot_create: Option<bool>,
+    /// Optional: when present, sets the language preference to "en" or "es".
+    pub language: Option<String>,
 }

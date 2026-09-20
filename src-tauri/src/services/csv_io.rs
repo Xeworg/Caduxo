@@ -26,6 +26,47 @@ use crate::dto::csv_io::{
 };
 use crate::dto::dashboard::DashboardFilters;
 use crate::error::{AppError, DomainError, InfrastructureError};
+use crate::pdf::locale::Locale;
+use crate::services::user_messages::{user_message, UserMessage};
+
+// ============================================================
+// Stable reason codes
+// ============================================================
+//
+// These string codes travel alongside the existing `reason: String` fields on
+// CSV preview/import DTOs. The frontend dispatches by code through the
+// `csvImport.reasonCodes` i18n namespace and falls back to `reason` when a
+// code is missing or unrecognized. New codes can be added; existing ones
+// must stay stable because they are persisted as part of the IPC contract.
+//
+// The constants are kept inline here (and mirrored as string literals in
+// `src/components/CsvImportPage.svelte`) so we don't expand the public
+// surface of the DTO module just to host code names.
+
+/// Required field `sku` is missing on the row.
+pub const REASON_CODE_REQUIRED_FIELD_SKU: &str = "required_field_sku";
+/// Required field `description` is missing on the row.
+pub const REASON_CODE_REQUIRED_FIELD_DESCRIPTION: &str = "required_field_description";
+/// SKU already exists in the database (import skip strategy).
+pub const REASON_CODE_SKU_ALREADY_EXISTS: &str = "sku_already_exists";
+/// SKU conflict requires manual resolution (import review strategy).
+pub const REASON_CODE_SKU_CONFLICT_MANUAL: &str = "sku_conflict_manual";
+/// Barcode belongs to another product (import skip/update strategy).
+pub const REASON_CODE_BARCODE_BELONGS_TO_OTHER_PRODUCT: &str = "barcode_belongs_to_other_product";
+/// Barcode conflict requires manual resolution (import review strategy).
+pub const REASON_CODE_BARCODE_CONFLICT_MANUAL: &str = "barcode_conflict_manual";
+/// `default_alert_days_before` is negative.
+pub const REASON_CODE_ALERT_DAYS_NEGATIVE: &str = "alert_days_negative";
+/// `default_alert_days_before` exceeds the upper bound.
+pub const REASON_CODE_ALERT_DAYS_TOO_LARGE: &str = "alert_days_too_large";
+/// `default_alert_days_before` is outside the inclusive `[0, 3650]` range
+/// (import commit path).
+pub const REASON_CODE_ALERT_DAYS_RANGE_INVALID: &str = "alert_days_range_invalid";
+/// Generic database error (SKU/barcode uniqueness lookup failed).
+pub const REASON_CODE_DB_ERROR: &str = "db_error";
+/// Generic validation failure (catches domain-rule text from
+/// `domain::validation` that does not have its own code).
+pub const REASON_CODE_GENERIC_VALIDATION: &str = "generic_validation";
 
 // ============================================================
 // Header detection
@@ -141,18 +182,19 @@ pub async fn preview_product_csv(
     let mapping = resolve_mapping(&headers, input.mapping);
 
     // Both required fields must resolve; otherwise we cannot classify rows.
+    //
+    // Both messages are emitted as the canonical English UserMessage text so
+    // the command layer can localise them via `localize_validation`. The
+    // `starts_with` parser in `user_messages` matches these prefixes, which
+    // keeps Spanish UI flows free of English backend validation strings.
     if mapping.sku.is_none() {
         return Err(AppError::Domain(DomainError::Validation {
-            message:
-                "SKU column not detected. Provide a column named `sku`, `code`, or `reference`."
-                    .to_string(),
+            message: user_message(UserMessage::SkuColumnNotDetected, Locale::En),
         }));
     }
     if mapping.description.is_none() {
         return Err(AppError::Domain(DomainError::Validation {
-            message:
-                "Description column not detected. Provide a column named `description` or `name`."
-                    .to_string(),
+            message: user_message(UserMessage::DescriptionColumnNotDetected, Locale::En),
         }));
     }
 
@@ -322,6 +364,7 @@ async fn classify_row(
         return (
             CsvPreviewRowStatus::Invalid {
                 reason: msg.clone(),
+                reason_code: Some(REASON_CODE_GENERIC_VALIDATION.to_string()),
             },
             Some(sku),
             barcode.clone(),
@@ -333,6 +376,7 @@ async fn classify_row(
         return (
             CsvPreviewRowStatus::Invalid {
                 reason: msg.clone(),
+                reason_code: Some(REASON_CODE_GENERIC_VALIDATION.to_string()),
             },
             Some(sku),
             barcode.clone(),
@@ -345,6 +389,7 @@ async fn classify_row(
             return (
                 CsvPreviewRowStatus::Invalid {
                     reason: msg.clone(),
+                    reason_code: Some(REASON_CODE_GENERIC_VALIDATION.to_string()),
                 },
                 Some(sku),
                 barcode.clone(),
@@ -358,6 +403,7 @@ async fn classify_row(
             return (
                 CsvPreviewRowStatus::Invalid {
                     reason: "Default alert days before cannot be negative".to_string(),
+                    reason_code: Some(REASON_CODE_ALERT_DAYS_NEGATIVE.to_string()),
                 },
                 Some(sku),
                 barcode.clone(),
@@ -369,6 +415,7 @@ async fn classify_row(
             return (
                 CsvPreviewRowStatus::Invalid {
                     reason: format!("Default alert days exceeds maximum of {days}"),
+                    reason_code: Some(REASON_CODE_ALERT_DAYS_TOO_LARGE.to_string()),
                 },
                 Some(sku),
                 barcode.clone(),
@@ -397,6 +444,7 @@ async fn classify_row(
             return (
                 CsvPreviewRowStatus::Invalid {
                     reason: format!("Database error while checking SKU uniqueness: {e}"),
+                    reason_code: Some(REASON_CODE_DB_ERROR.to_string()),
                 },
                 Some(sku),
                 barcode.clone(),
@@ -426,6 +474,7 @@ async fn classify_row(
                 return (
                     CsvPreviewRowStatus::Invalid {
                         reason: format!("Database error while checking barcode uniqueness: {e}"),
+                        reason_code: Some(REASON_CODE_DB_ERROR.to_string()),
                     },
                     Some(sku),
                     barcode.clone(),
@@ -715,12 +764,15 @@ pub async fn import_product_csv(
 
     if mapping.sku.is_none() {
         return Err(AppError::Domain(DomainError::Validation {
-            message: "SKU column not mapped. Cannot import.".to_string(),
+            // Same canonical text as `preview_product_csv`; lets a single
+            // UserMessage variant cover both auto-detect and explicit-mapping
+            // failure paths and keeps round-trip coverage with the parser.
+            message: user_message(UserMessage::SkuColumnNotDetected, Locale::En),
         }));
     }
     if mapping.description.is_none() {
         return Err(AppError::Domain(DomainError::Validation {
-            message: "Description column not mapped. Cannot import.".to_string(),
+            message: user_message(UserMessage::DescriptionColumnNotDetected, Locale::En),
         }));
     }
 
@@ -847,6 +899,7 @@ async fn import_row(
         _ => {
             return Ok(CsvImportRowOutcome::Invalid {
                 reason: "SKU is required".to_string(),
+                reason_code: Some(REASON_CODE_REQUIRED_FIELD_SKU.to_string()),
             });
         }
     };
@@ -855,26 +908,37 @@ async fn import_row(
         _ => {
             return Ok(CsvImportRowOutcome::Invalid {
                 reason: "Description is required".to_string(),
+                reason_code: Some(REASON_CODE_REQUIRED_FIELD_DESCRIPTION.to_string()),
             });
         }
     };
 
     // 2. Domain validation.
     if let Err(msg) = validate_sku(&sku) {
-        return Ok(CsvImportRowOutcome::Invalid { reason: msg });
+        return Ok(CsvImportRowOutcome::Invalid {
+            reason: msg,
+            reason_code: Some(REASON_CODE_GENERIC_VALIDATION.to_string()),
+        });
     }
     if let Err(msg) = validate_description(&description) {
-        return Ok(CsvImportRowOutcome::Invalid { reason: msg });
+        return Ok(CsvImportRowOutcome::Invalid {
+            reason: msg,
+            reason_code: Some(REASON_CODE_GENERIC_VALIDATION.to_string()),
+        });
     }
     if let Some(b) = barcode {
         if let Err(msg) = validate_barcode(b) {
-            return Ok(CsvImportRowOutcome::Invalid { reason: msg });
+            return Ok(CsvImportRowOutcome::Invalid {
+                reason: msg,
+                reason_code: Some(REASON_CODE_GENERIC_VALIDATION.to_string()),
+            });
         }
     }
     if let Some(days) = default_alert_days_before {
         if !(0..=3650).contains(&days) {
             return Ok(CsvImportRowOutcome::Invalid {
                 reason: "Alert days must be between 0 and 3650".to_string(),
+                reason_code: Some(REASON_CODE_ALERT_DAYS_RANGE_INVALID.to_string()),
             });
         }
     }
@@ -891,6 +955,7 @@ async fn import_row(
         // ── Skip strategy ──────────────────────────────────────────
         (Some(_existing), ConflictStrategy::Skip) => Ok(CsvImportRowOutcome::Skipped {
             reason: format!("SKU '{}' already exists", sku),
+            reason_code: Some(REASON_CODE_SKU_ALREADY_EXISTS.to_string()),
         }),
 
         // ── Update strategy ────────────────────────────────────────
@@ -936,6 +1001,7 @@ async fn import_row(
         // ── Review strategy ────────────────────────────────────────
         (Some(_), ConflictStrategy::Review) => Ok(CsvImportRowOutcome::Skipped {
             reason: "SKU conflict requires manual resolution".to_string(),
+            reason_code: Some(REASON_CODE_SKU_CONFLICT_MANUAL.to_string()),
         }),
 
         // ── SKU does not exist ─────────────────────────────────────
@@ -944,18 +1010,24 @@ async fn import_row(
             if let Some(b) = barcode {
                 let existing_by_bc = products_repo::find_by_barcode_exact(pool, b).await?;
                 if existing_by_bc.is_some() {
-                    let reason = match strategy {
-                        ConflictStrategy::Skip => {
-                            format!("Barcode '{}' belongs to another product", b)
-                        }
-                        ConflictStrategy::Update => {
-                            format!("Barcode '{}' belongs to another product", b)
-                        }
-                        ConflictStrategy::Review => {
-                            "Barcode conflict requires manual resolution".to_string()
-                        }
+                    let (reason, code) = match strategy {
+                        ConflictStrategy::Skip => (
+                            format!("Barcode '{}' belongs to another product", b),
+                            REASON_CODE_BARCODE_BELONGS_TO_OTHER_PRODUCT,
+                        ),
+                        ConflictStrategy::Update => (
+                            format!("Barcode '{}' belongs to another product", b),
+                            REASON_CODE_BARCODE_BELONGS_TO_OTHER_PRODUCT,
+                        ),
+                        ConflictStrategy::Review => (
+                            "Barcode conflict requires manual resolution".to_string(),
+                            REASON_CODE_BARCODE_CONFLICT_MANUAL,
+                        ),
                     };
-                    return Ok(CsvImportRowOutcome::Skipped { reason });
+                    return Ok(CsvImportRowOutcome::Skipped {
+                        reason,
+                        reason_code: Some(code.to_string()),
+                    });
                 }
             }
 
@@ -1685,8 +1757,16 @@ mod tests {
 
         let skipped_row = result.rows.iter().find(|r| r.sku == "EXIST-SKU").unwrap();
         match &skipped_row.outcome {
-            CsvImportRowOutcome::Skipped { reason } => {
+            CsvImportRowOutcome::Skipped {
+                reason,
+                reason_code,
+            } => {
                 assert!(reason.contains("EXIST-SKU"));
+                assert_eq!(
+                    reason_code.as_deref(),
+                    Some(REASON_CODE_SKU_ALREADY_EXISTS),
+                    "expected sku_already_exists code for skip-strategy duplicate SKU"
+                );
             }
             other => panic!("expected Skipped, got {other:?}"),
         }
@@ -1738,8 +1818,16 @@ mod tests {
 
         let row = &result.rows[0];
         match &row.outcome {
-            CsvImportRowOutcome::Skipped { reason } => {
+            CsvImportRowOutcome::Skipped {
+                reason,
+                reason_code,
+            } => {
                 assert!(reason.contains("another product"));
+                assert_eq!(
+                    reason_code.as_deref(),
+                    Some(REASON_CODE_BARCODE_BELONGS_TO_OTHER_PRODUCT),
+                    "expected barcode_belongs_to_other_product code when barcode is owned by another product"
+                );
             }
             other => panic!("expected Skipped, got {other:?}"),
         }
@@ -1893,8 +1981,16 @@ mod tests {
 
         let row = &result.rows[0];
         match &row.outcome {
-            CsvImportRowOutcome::Skipped { reason } => {
+            CsvImportRowOutcome::Skipped {
+                reason,
+                reason_code,
+            } => {
                 assert!(reason.contains("manual resolution"));
+                assert_eq!(
+                    reason_code.as_deref(),
+                    Some(REASON_CODE_SKU_CONFLICT_MANUAL),
+                    "expected sku_conflict_manual code for review-strategy SKU conflict"
+                );
             }
             other => panic!("expected Skipped, got {other:?}"),
         }
@@ -1934,8 +2030,16 @@ mod tests {
 
         let row = &result.rows[0];
         match &row.outcome {
-            CsvImportRowOutcome::Invalid { reason } => {
+            CsvImportRowOutcome::Invalid {
+                reason,
+                reason_code,
+            } => {
                 assert!(reason.contains("SKU"));
+                assert_eq!(
+                    reason_code.as_deref(),
+                    Some(REASON_CODE_REQUIRED_FIELD_SKU),
+                    "expected required_field_sku code for missing SKU"
+                );
             }
             other => panic!("expected Invalid, got {other:?}"),
         }
@@ -1961,8 +2065,16 @@ mod tests {
 
         let row = &result.rows[0];
         match &row.outcome {
-            CsvImportRowOutcome::Invalid { reason } => {
+            CsvImportRowOutcome::Invalid {
+                reason,
+                reason_code,
+            } => {
                 assert!(reason.contains("Description"));
+                assert_eq!(
+                    reason_code.as_deref(),
+                    Some(REASON_CODE_REQUIRED_FIELD_DESCRIPTION),
+                    "expected required_field_description code for missing description"
+                );
             }
             other => panic!("expected Invalid, got {other:?}"),
         }

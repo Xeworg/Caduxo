@@ -34,8 +34,15 @@ pub struct RestoreValidation {
     pub has_expected_schema: bool,
     /// Whether the schema version is compatible (same as or lower than current).
     pub is_version_compatible: bool,
-    /// Human-readable description of each validation check.
+    /// Human-readable description of each validation check (English canonical
+    /// fallback text). Kept as the source of truth for older frontends.
     pub checks: Vec<String>,
+    /// Stable check codes aligned with `checks`. Each entry is `Some(code)`
+    /// when the service emits a typed code for that check, or `None` when
+    /// the row has no localized counterpart (reserved for future additions).
+    /// The frontend dispatches by code and falls back to the matching
+    /// `checks[i]` string when the code is `None` or unrecognized.
+    pub check_codes: Vec<Option<String>>,
     /// The schema version detected in the backup, if readable.
     pub detected_schema_version: Option<i64>,
     /// Whether the backup passed all checks and is safe to restore.

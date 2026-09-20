@@ -10,9 +10,22 @@ use crate::dto::products::{
 };
 use crate::dto::scanner::ScanSearchResult;
 use crate::error::{AppError, CommandError};
+use crate::pdf::locale::Locale;
 use crate::services::categories as categories_service;
 use crate::services::products as service;
+use crate::services::user_messages::{
+    localize_business_rule, localize_duplicate_field, localize_internal, localize_not_found,
+    localize_validation,
+};
 use crate::state::AppState;
+
+/// Resolves an optional BCP-47 locale tag into a [`Locale`], falling back to
+/// English when the frontend does not supply one. Used at every product
+/// command boundary so the catalog validation messages stay
+/// frontend-compatible (no required caller-side argument).
+fn resolve_locale(locale: Option<String>) -> Locale {
+    locale.as_deref().map(Locale::parse).unwrap_or(Locale::En)
+}
 
 // ============================================================
 // Categories
@@ -30,26 +43,46 @@ pub async fn list_categories(
 }
 
 /// Creates a new category.
+///
+/// `locale` (BCP-47 tag) is forwarded to `localize_validation` so the
+/// category `Name` validation surfaced by the service reaches the UI in the
+/// active locale. Unknown tags fall back to English via `Locale::parse`.
 #[tauri::command]
 pub async fn create_category(
     state: State<'_, AppState>,
     input: CategoryCreate,
+    locale: Option<String>,
 ) -> Result<CategoryResponse, CommandError> {
     let pool = state.pool().await;
+    let loc = resolve_locale(locale);
     service::create_category(&pool, input)
         .await
+        .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
 /// Updates an existing category (rename and/or archive).
+///
+/// `locale` (BCP-47 tag) is forwarded to `localize_validation` for the same
+/// reason as `create_category`.
 #[tauri::command]
 pub async fn update_category(
     state: State<'_, AppState>,
     input: CategoryUpdate,
+    locale: Option<String>,
 ) -> Result<CategoryResponse, CommandError> {
     let pool = state.pool().await;
+    let loc = resolve_locale(locale);
     service::update_category(&pool, input)
         .await
+        .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
@@ -73,26 +106,48 @@ pub async fn list_categories_search(
 // ============================================================
 
 /// Creates a new active product.
+///
+/// `locale` (BCP-47 tag) is forwarded to `localize_validation` so the
+/// SKU / description / alert-days validation surfaced by the service reaches
+/// the UI in the active locale. Unknown tags fall back to English via
+/// `Locale::parse`.
 #[tauri::command]
 pub async fn create_product(
     state: State<'_, AppState>,
     input: ProductCreate,
+    locale: Option<String>,
 ) -> Result<ProductResponse, CommandError> {
     let pool = state.pool().await;
+    let loc = resolve_locale(locale);
     service::create_product(&pool, input)
         .await
+        .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
 /// Updates an existing product.
+///
+/// `locale` (BCP-47 tag) is forwarded to `localize_validation` for the same
+/// reason as `create_product`.
 #[tauri::command]
 pub async fn update_product(
     state: State<'_, AppState>,
     input: ProductUpdate,
+    locale: Option<String>,
 ) -> Result<ProductResponse, CommandError> {
     let pool = state.pool().await;
+    let loc = resolve_locale(locale);
     service::update_product(&pool, input)
         .await
+        .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
@@ -135,14 +190,22 @@ pub async fn search_products(
 /// `NotFound { scanned_value }` when nothing matched. The `has_lots` field
 /// tells the frontend whether to jump directly to lot entry or show the
 /// product detail first.
+///
+/// `locale` (BCP-47 tag) is forwarded to `localize_validation` so the
+/// `ScanValueEmpty` validation surfaced by the service reaches the UI in the
+/// active locale. Unknown tags fall back to English via `Locale::parse`.
 #[tauri::command]
 pub async fn find_product_by_scan(
     state: State<'_, AppState>,
     scanned_value: String,
+    locale: Option<String>,
 ) -> Result<ScanSearchResult, CommandError> {
     let pool = state.pool().await;
+    let loc = resolve_locale(locale);
     service::find_product_by_scan(&pool, &scanned_value)
         .await
+        .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
@@ -157,14 +220,27 @@ pub fn suggested_product_alert_days() -> i32 {
 // ============================================================
 
 /// Adds a barcode to a product.
+///
+/// `locale` (BCP-47 tag) is forwarded to `localize_validation` and
+/// `localize_business_rule` so both the barcode validation (empty / too long
+/// / invalid chars) and the simple constant BusinessRule rejection for an
+/// archived product reach the UI in the active locale. Unknown tags fall
+/// back to English via `Locale::parse`.
 #[tauri::command]
 pub async fn add_product_barcode(
     state: State<'_, AppState>,
     input: ProductBarcodeCreate,
+    locale: Option<String>,
 ) -> Result<ProductBarcodeResponse, CommandError> {
     let pool = state.pool().await;
+    let loc = resolve_locale(locale);
     service::add_barcode(&pool, input)
         .await
+        .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 

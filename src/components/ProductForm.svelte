@@ -15,6 +15,8 @@
       } from "../lib/unit_definitions.js";
       import CategoryPicker from "./inputs/CategoryPicker.svelte";
       import { onMount } from "svelte";
+      import { LL } from "../i18n/i18n-svelte.js";
+    import { humanizeError } from "../lib/errors.js";
 
       // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -168,15 +170,15 @@
     const displayName = newUnitDisplayName.trim();
 
     if (!key) {
-      unitError = "Key is required";
+      unitError = $LL.lotForm.keyRequired();
       return;
     }
     if (!displayName) {
-      unitError = "Display name is required";
+      unitError = $LL.lotForm.displayNameRequired();
       return;
     }
     if (!/^[a-z0-9_-]{1,16}$/.test(key)) {
-      unitError = "Key must be 1-16 lowercase letters, digits, hyphens or underscores";
+      unitError = $LL.lotForm.keyPattern();
       return;
     }
     // Check for duplicate (case-insensitive).
@@ -184,7 +186,7 @@
       (u) => u.key === key || u.key === key.toLowerCase(),
     );
     if (dupe) {
-      unitError = `Key "${key}" already exists as "${dupe.display_name}". Select it from the list instead.`;
+      unitError = $LL.lotForm.keyAlreadyExists({ key, existing: dupe.display_name });
       return;
     }
 
@@ -204,13 +206,13 @@
       defaultUnit = created.display_name;
       resetInlineUnit();
     } catch (e: unknown) {
-      const msg = String(e);
+      const msg = humanizeError(e);
       // Recoverable DuplicateField error.
-      if (/duplicate|already exists|unique/i.test(msg)) {
-    unitError = `Key "${key}" already exists. Please choose a different key.`;
-      } else {
-    unitError = msg;
-      }
+        if (/duplicate|already exists|unique/i.test(msg)) {
+        unitError = $LL.lotForm.keyAlreadyExistsGeneric({ key });
+        } else {
+        unitError = msg;
+        }
     } finally {
       creatingUnit = false;
     }
@@ -219,15 +221,15 @@
       async function submit() {
         errorMsg = "";
         if (!sku.trim()) {
-          errorMsg = "SKU is required";
+          errorMsg = $LL.products.productSku() + " " + $LL.common.required();
           return;
         }
         if (!description.trim()) {
-          errorMsg = "Description is required";
+          errorMsg = $LL.products.productDescription() + " " + $LL.common.required();
           return;
         }
         if (defaultAlertDays < 0) {
-          errorMsg = "Alert days cannot be negative";
+          errorMsg = $LL.products.productAlertDays() + " " + $LL.errors.generic();
           return;
         }
         submitting = true;
@@ -262,10 +264,10 @@
               if (!result.ok) {
                 switch (result.kind) {
                   case "duplicate_other":
-                    barcodeNotice = `Barcode "${trimmed}" already belongs to another product and was not attached.`;
+                    barcodeNotice = $LL.products.detail.barcode.valueRequired() + ` (${trimmed})`;
                     break;
                   case "duplicate_same":
-                    barcodeNotice = result.message || `Barcode "${trimmed}" is already attached to this product.`;
+                    barcodeNotice = result.message || $LL.products.detail.barcode.valueRequired() + ` (${trimmed})`;
                     break;
                   case "other":
                     barcodeNotice = result.message;
@@ -276,7 +278,7 @@
           }
           onSaved(saved);
         } catch (e: unknown) {
-          errorMsg = String(e);
+          errorMsg = humanizeError(e);
         } finally {
           submitting = false;
         }
@@ -292,63 +294,63 @@
       }
     </script>
 
-<form class="product-form" on:submit|preventDefault={submit}>
-  <h3>{mode === "edit" ? "Edit product" : "Create product"}</h3>
+    <form class="product-form" on:submit|preventDefault={submit}>
+  <h3>{mode === "edit" ? $LL.products.editProduct() : $LL.products.createProduct()}</h3>
 
   {#if errorMsg}
     <div class="alert alert-error" role="alert">{errorMsg}</div>
   {/if}
 
   <label>
-    SKU *
+    {$LL.products.productSku()} *
     <input
       type="text"
       bind:value={sku}
-      placeholder="e.g. MILK-1L"
+      placeholder={$LL.products.placeholders.sku()}
       required
       autocomplete="off"
     />
   </label>
 
   <label>
-    Description *
+    {$LL.products.productDescription()} *
     <input
       type="text"
       bind:value={description}
-      placeholder="e.g. Whole Milk 1L"
+      placeholder={$LL.products.placeholders.description()}
       required
     />
   </label>
 
   <div class="category-field">
-    <span class="field-label">Category</span>
+    <span class="field-label">{$LL.products.productCategory()}</span>
     <CategoryPicker
       bind:value={categoryIds}
       {categories}
-      placeholder="Search or create a category…"
+      placeholder="{$LL.categoryPicker.searchPlaceholder()}"
       on:create={handleCategoryCreated}
     />
   </div>
 
       {#if mode === "create"}
         <section class="barcode-subsection">
-          <div class="subsection-header"><h4>Barcodes</h4></div>
+          <div class="subsection-header"><h4>{$LL.products.detail.barcode.title()}</h4></div>
           <div class="grid-2">
             <label>
-              Barcode value
+              {$LL.products.detail.barcode.valueLabel()}
               <input
                 type="text"
                 bind:value={upcValue}
-                placeholder="e.g. 7501234567890"
+                placeholder={$LL.products.placeholders.barcode()}
                 autocomplete="off"
               />
             </label>
             <label>
-              Type (optional)
+              {$LL.products.detail.barcode.typeLabel()}
               <input
                 type="text"
                 bind:value={upcType}
-                placeholder="e.g. EAN13, UPC"
+                placeholder={$LL.products.detail.barcode.typePlaceholder()}
                 list="barcode-types-create"
               />
               <datalist id="barcode-types-create">
@@ -363,7 +365,7 @@
           </div>
           <label class="checkbox-label">
             <input type="checkbox" bind:checked={upcIsPrimary} />
-            Set as primary
+            {$LL.products.detail.barcode.setAsPrimary()}
           </label>
           {#if barcodeNotice}
             <div class="alert alert-info inline-error" role="status">{barcodeNotice}</div>
@@ -372,14 +374,14 @@
       {/if}
 
           <div class="grid-2">
-        <label>
-          Default unit
+          <label>
+          {$LL.products.productUnit()}
           <div class="unit-input-row">
             <input
               type="text"
               bind:value={defaultUnit}
               list="unit-definitions-list"
-              placeholder="e.g. kg, L, piece"
+              placeholder={$LL.products.placeholders.unit()}
               on:input={() => {
                 // When the user edits the text, clear the FK so the backend
                 // resolves the text fresh on save.
@@ -419,7 +421,7 @@
             <button
               type="button"
               class="btn-link unit-add-btn"
-              title="Create a new unit"
+              title={$LL.lotForm.createCustomUnit()}
               on:click={() => {
                 showInlineUnitForm = !showInlineUnitForm;
                 if (showInlineUnitForm && defaultUnit.trim()) {
@@ -429,7 +431,7 @@
                 unitError = "";
               }}
             >
-              + New unit
+              + {$LL.lotForm.createCustomUnit()}
             </button>
           </div>
           {#if unitError}
@@ -440,12 +442,12 @@
         {#if showInlineUnitForm}
           <div class="inline-unit-form">
             <div class="inline-unit-header">
-              <span class="inline-unit-hint">Create custom unit</span>
+              <span class="inline-unit-hint">{$LL.lotForm.createCustomUnit()}</span>
               <button
                 type="button"
                 class="inline-unit-close"
-                aria-label="Close custom unit form"
-                title="Close"
+                aria-label={$LL.lotForm.close()}
+                title={$LL.lotForm.close()}
                 disabled={creatingUnit}
                 on:click={resetInlineUnit}
               >
@@ -454,20 +456,20 @@
             </div>
             <div class="inline-unit-fields">
               <label class="small-label">
-                Key
+                {$LL.lotForm.key()}
                 <input
                   type="text"
                   bind:value={newUnitKey}
-                  placeholder="e.g. my-unit"
+                  placeholder={$LL.lotForm.keyPlaceholder()}
                   maxlength="16"
                 />
               </label>
               <label class="small-label">
-                Display name
+                {$LL.lotForm.displayName()}
                 <input
                   type="text"
                   bind:value={newUnitDisplayName}
-                  placeholder="e.g. My Unit"
+                  placeholder={$LL.lotForm.displayNamePlaceholder()}
                 />
               </label>
               <div class="kind-radios">
@@ -477,7 +479,7 @@
                     bind:group={newUnitKind}
                     value={"integer"}
                   />
-                  Integer
+                  {$LL.lotForm.integer()}
                 </label>
                 <label class="radio-label">
                   <input
@@ -485,7 +487,7 @@
                     bind:group={newUnitKind}
                     value={"decimal"}
                   />
-                  Decimal
+                  {$LL.lotForm.decimal()}
                 </label>
               </div>
               <button
@@ -494,14 +496,14 @@
                 disabled={creatingUnit}
                 on:click={submitInlineUnit}
               >
-                {creatingUnit ? "Creating…" : "Add unit"}
+                {creatingUnit ? $LL.lotForm.creating() : $LL.lotForm.addUnit()}
               </button>
             </div>
           </div>
         {/if}
 
         <label>
-      Alert days before *
+      {$LL.products.productAlertDays()}
       <input
         type="number"
         bind:value={defaultAlertDays}
@@ -514,10 +516,10 @@
   </div>
 
   <label>
-    Notes
+    {$LL.products.productNotes()}
     <textarea
       bind:value={notes}
-      placeholder="Optional notes…"
+      placeholder={$LL.common.optional()}
       rows="3"
     ></textarea>
   </label>
@@ -525,17 +527,17 @@
   {#if mode === "edit"}
     <label class="checkbox-label">
       <input type="checkbox" bind:checked={isActive} />
-      Active
+      {$LL.dashboard.active()}
     </label>
   {/if}
 
   <div class="form-actions">
     <button type="submit" class="btn-primary" disabled={submitting}>
       {submitting
-        ? "Saving…"
+        ? $LL.common.saving()
         : mode === "edit"
-          ? "Save changes"
-          : "Create product"}
+          ? $LL.lotForm.saveChanges()
+          : $LL.products.createProduct()}
     </button>
     <button
       type="button"
@@ -543,7 +545,7 @@
       on:click={onCancel}
       disabled={submitting}
     >
-      Cancel
+      {$LL.common.cancel()}
     </button>
   </div>
 </form>

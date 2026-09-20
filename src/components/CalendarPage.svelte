@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
+  import { LL } from "../i18n/i18n-svelte.js";
   import CalendarMonth from "./CalendarMonth.svelte";
   import {
     listDashboardLots,
@@ -12,6 +13,7 @@
   } from "../lib/expiry_lots.js";
   import { listStores, listStoreLocations, type StoreLocationResponse } from "../lib/stores.js";
   import LotMovementsPanel from "./LotMovementsPanel.svelte";
+  import { humanizeError } from "../lib/errors.js";
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -20,15 +22,15 @@
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
 
-  /** Format an ISO date as a human-readable string. */
+  /** Format an ISO date as a locale-aware human-readable string. */
   function formatDate(iso: string): string {
     if (!iso) return "";
     const [y, m, day] = iso.split("-").map(Number);
-    const months = [
-      "January", "February", "March", "April", "May", "June",
-      "July", "August", "September", "October", "November", "December",
-    ];
-    return `${months[m - 1]} ${day}, ${y}`;
+    return new Date(y, m - 1, day).toLocaleDateString(undefined, {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
   }
 
   /** Days remaining until expiry_date (negative = expired). */
@@ -42,11 +44,11 @@
   /** Status label for a lot row. */
   function urgencyLabel(row: DashboardLotRow): string {
     switch (row.urgency) {
-      case "expired":   return "Expired";
-      case "today":     return "Today";
-      case "alert_window": return "Alert";
-      case "next_30_days": return "Soon";
-      case "future":    return "Future";
+      case "expired":   return $LL.calendar.urgencyLabels.expired();
+      case "today":     return $LL.calendar.urgencyLabels.today();
+      case "alert_window": return $LL.calendar.urgencyLabels.alertWindow();
+      case "next_30_days": return $LL.calendar.urgencyLabels.next30Days();
+      case "future":    return $LL.calendar.urgencyLabels.future();
       default:          return row.status;
     }
   }
@@ -239,7 +241,7 @@ const watchdog = window.setTimeout(() => {
           window.clearTimeout(watchdog);
           if (myGen !== loadGeneration) return;
           console.error("[CalendarPage] loadLots failed", e);
-          const message = e instanceof Error ? e.message : String(e);
+          const message = humanizeError(e);
           loadStage = `failed: ${message}`;
           errorMsg = message;
 } finally {
@@ -314,7 +316,7 @@ const watchdog = window.setTimeout(() => {
     loadAllStoreLocations(),
       ]);
     } catch (e) {
-      errorMsg = String(e);
+      errorMsg = humanizeError(e);
       showLotDetail = false;
     } finally {
       detailLoading = false;
@@ -330,27 +332,27 @@ function onLotCancel() {
 
 <div class="cal-page">
   <div class="cal-page-header">
-    <h2 class="page-title">Calendar</h2>
+    <h2 class="page-title">{$LL.calendar.pageTitle()}</h2>
     <button
       type="button"
       class="btn-refresh"
       on:click={loadLots}
       disabled={loading}
-      aria-label="Refresh lot data"
+      aria-label={$LL.calendar.refreshAria()}
     >
-      ⟳ Refresh
+      ⟳ {$LL.calendar.refresh()}
     </button>
   </div>
 
       {#if loading && lots.length === 0}
-        <p class="loading-msg">Loading lots…</p>
+        <p class="loading-msg">{$LL.calendar.loadingLots()}</p>
         <p class="loading-diag" role="status" aria-live="polite" data-testid="cal-load-diag">
           Calendar load status: {loadStage}, attempt #{loadAttempts}{#if lastLoadStartedAt !== null && lastLoadFinishedAt === null}
             ({Math.max(0, Math.round((nowMs - lastLoadStartedAt) / 100) / 10)}s running){:else if lastLoadStartedAt !== null && lastLoadFinishedAt !== null}
             (took {Math.max(0, Math.round((lastLoadFinishedAt - lastLoadStartedAt) / 100) / 10)}s){/if}
         </p>
       {:else if errorMsg && lots.length === 0}
-        <p class="error-msg">Failed to load lots: {errorMsg}</p>
+        <p class="error-msg">{$LL.calendar.loadFailed({ msg: errorMsg })}</p>
         <p class="loading-diag" role="status" aria-live="polite" data-testid="cal-load-diag">
           Calendar load status: {loadStage}, attempt #{loadAttempts}{#if lastLoadStartedAt !== null && lastLoadFinishedAt !== null}
             (failed after {Math.max(0, Math.round((lastLoadFinishedAt - lastLoadStartedAt) / 100) / 10)}s){/if}
@@ -365,7 +367,7 @@ function onLotCancel() {
           {selectedDate}
           {todayDate}
           {dayBadges}
-          ariaLabel="Expiry calendar"
+          ariaLabel={$LL.calendar.pageTitle()}
           on:daySelect={onDaySelect}
           on:monthChange={onMonthChange}
           on:viewYearChange={onViewYearChange}
@@ -375,25 +377,25 @@ function onLotCancel() {
       <!-- Day detail panel -->
       <div class="day-panel">
         <h3 class="day-panel-title">
-          {formatDate(selectedDate)}
+          {$LL.calendar.dayPanelTitle({ date: formatDate(selectedDate) })}
           {#if dayRows.length > 0}
             <span class="badge-count">{dayRows.length}</span>
           {/if}
         </h3>
 
         {#if dayRows.length === 0}
-          <p class="day-empty">No expirations on {selectedDate}</p>
+          <p class="day-empty">{$LL.calendar.noLotsOnDate()}</p>
         {:else}
           <table class="day-table">
             <thead>
               <tr>
-                <th>Product</th>
-                <th>Qty</th>
-                <th>Unit</th>
-                <th>Store</th>
-                <th>Location</th>
-                <th>Days</th>
-                <th>Status</th>
+                <th>{$LL.calendar.table.product()}</th>
+                <th>{$LL.calendar.table.qty()}</th>
+                <th>{$LL.calendar.table.unit()}</th>
+                <th>{$LL.calendar.table.store()}</th>
+                <th>{$LL.calendar.table.location()}</th>
+                <th>{$LL.calendar.table.days()}</th>
+                <th>{$LL.calendar.table.status()}</th>
               </tr>
             </thead>
             <tbody>
@@ -432,14 +434,14 @@ function onLotCancel() {
 
 <!-- Lot edit overlay — reusing the existing LotForm pattern -->
 {#if showLotDetail}
-  <div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Lot detail">
+  <div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.dashboard.lotDetail()}>
     <div class="modal-box modal-box-wide">
       <div class="modal-header">
-        <h3>Lot Detail</h3>
+        <h3>{$LL.dashboard.lotDetail()}</h3>
         <button class="modal-close" on:click={onLotCancel}>✕</button>
       </div>
       {#if detailLoading}
-        <p class="modal-loading">Loading…</p>
+        <p class="modal-loading">{$LL.lotsDetail.loading()}</p>
       {:else if detailLot}
         <!-- Tabs -->
         <div class="detail-tabs">
@@ -449,7 +451,7 @@ function onLotCancel() {
             class:active={lotDetailTab === "detail"}
             on:click={() => (lotDetailTab = "detail")}
           >
-            Detalle
+            {$LL.lotsDetail.detail()}
           </button>
           <button
             type="button"
@@ -457,26 +459,26 @@ function onLotCancel() {
             class:active={lotDetailTab === "history"}
             on:click={() => (lotDetailTab = "history")}
           >
-            Historial
+            {$LL.lotsDetail.history()}
           </button>
         </div>
 
         {#if lotDetailTab === "detail"}
           <dl class="detail-grid">
-            <dt>Product</dt>
+            <dt>{$LL.dashboard.product()}</dt>
             <dd>{detailLot.product_id}</dd>
-            <dt>Store</dt>
+            <dt>{$LL.dashboard.store()}</dt>
             <dd>{detailLot.store_id}</dd>
-            <dt>Location</dt>
+            <dt>{$LL.dashboard.location()}</dt>
             <dd>{detailLot.location_id ?? "—"}</dd>
-            <dt>Quantity</dt>
+            <dt>{$LL.lotsDetail.quantity()}</dt>
             <dd>{detailLot.quantity}</dd>
-            <dt>Expiry date</dt>
+            <dt>{$LL.dashboard.expiryDate()}</dt>
             <dd>{detailLot.expiry_date}</dd>
-            <dt>Alert days</dt>
+            <dt>{$LL.dashboard.alertDaysBefore()}</dt>
             <dd>{detailLot.alert_days_before}</dd>
             {#if detailLot.batch_code}
-              <dt>Batch</dt>
+              <dt>{$LL.lotsDetail.batch()}</dt>
               <dd>{detailLot.batch_code}</dd>
             {/if}
           </dl>
@@ -486,14 +488,14 @@ function onLotCancel() {
               class="btn-secondary"
               on:click={onLotCancel}
             >
-              Close
+              {$LL.common.close()}
             </button>
             <button
               type="button"
               class="btn-primary"
               on:click={() => (lotDetailTab = "history")}
             >
-              Open movement actions
+              {$LL.lotMovements.panelTitle()}
             </button>
           </div>
         {:else}

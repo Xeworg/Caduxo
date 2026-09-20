@@ -224,6 +224,8 @@ pub fn next_batch_candidate(prefix: &str, date: &str, last_nnn: u32) -> String {
 // Unit-kind aware quantity validation
 // ============================================================
 
+use crate::services::user_messages::UserMessage;
+
 /// Validates a movement quantity against the product's unit kind.
 ///
 /// - `UnitKind::Integer`: quantity must be a whole number (no fractional part).
@@ -235,13 +237,15 @@ pub fn next_batch_candidate(prefix: &str, date: &str, last_nnn: u32) -> String {
 /// (the lot's quantity already exists on the `expiry_lots` row, so the
 /// initial movement is a history marker rather than a real delta).
 ///
-/// Returns `Ok(())` when valid, or a Spanish-language error string explaining
-/// the rejection when invalid.
+/// Returns `Ok(())` when valid, or a [`UserMessage`] describing the rejection
+/// when invalid. The caller is expected to format the variant through
+/// `user_message(..., locale)` so the locale-aware translation happens at the
+/// command boundary while the domain layer stays pure.
 pub fn validate_quantity_for_unit_kind(
     quantity: f64,
     kind: &MovementKind,
     unit_kind: Option<UnitKind>,
-) -> Result<(), String> {
+) -> Result<(), UserMessage> {
     // entry:initial keeps its special-case: qty == 0 is allowed even for
     // integer-unit products (history marker; lot quantity is already on file).
     if matches!(kind, MovementKind::EntryInitial) && quantity == 0.0 {
@@ -253,17 +257,11 @@ pub fn validate_quantity_for_unit_kind(
             // Negative or zero quantity is rejected for non-entry movements
             // (the existing service-level rule).
             if quantity <= 0.0 {
-                return Err(format!(
-                    "La cantidad debe ser mayor a 0 (recibido {})",
-                    quantity
-                ));
+                return Err(UserMessage::QuantityPositive { value: quantity });
             }
             // Fractional component must be zero — reject 1.5, 0.25, etc.
             if quantity.fract() != 0.0 {
-                return Err(format!(
-                    "La unidad del producto es de tipo entero; no se permiten cantidades fraccionarias ({})",
-                    quantity
-                ));
+                return Err(UserMessage::QuantityIntegerFractional { value: quantity });
             }
             Ok(())
         }
@@ -271,10 +269,7 @@ pub fn validate_quantity_for_unit_kind(
             // Decimal units (and legacy/null units) accept any positive magnitude.
             // entry:initial still allows 0; other kinds reject non-positive.
             if quantity <= 0.0 && !matches!(kind, MovementKind::EntryInitial) {
-                return Err(format!(
-                    "La cantidad debe ser mayor a 0 (recibido {})",
-                    quantity
-                ));
+                return Err(UserMessage::QuantityPositive { value: quantity });
             }
             Ok(())
         }
@@ -630,15 +625,17 @@ mod tests {
 
     #[test]
     fn validate_qty_integer_rejects_fractional() {
-        // Fractional quantities are rejected for integer-unit products.
+        // Fractional quantities are rejected for integer-unit products and
+        // surface as the new `QuantityIntegerFractional` variant so the
+        // command boundary can localise the canonical English shape.
         let err =
             validate_quantity_for_unit_kind(1.5, &MovementKind::ExitSale, Some(UnitKind::Integer));
-        assert!(err.is_err());
-        let msg = err.unwrap_err();
-        assert!(
-            msg.contains("entero") && msg.contains("fraccionarias"),
-            "error message should mention integer-unit and fractional rejection, got: {msg}"
-        );
+        match err {
+            Err(UserMessage::QuantityIntegerFractional { value }) => {
+                assert_eq!(value, 1.5)
+            }
+            other => panic!("expected QuantityIntegerFractional, got {other:?}"),
+        }
     }
 
     #[test]
@@ -777,21 +774,31 @@ mod tests {
     }
 
     #[test]
-    fn validate_qty_error_messages_in_spanish() {
-        // Verify all rejection branches produce Spanish-language messages.
+    fn validate_qty_error_messages_use_catalog_variants() {
+        // Verify all rejection branches surface the catalog variant the
+        // command boundary will route through `localize_validation`.
         let err_integer_frac =
             validate_quantity_for_unit_kind(1.5, &MovementKind::ExitSale, Some(UnitKind::Integer))
                 .unwrap_err();
-        assert!(err_integer_frac.contains("entero"));
+        assert!(matches!(
+            err_integer_frac,
+            UserMessage::QuantityIntegerFractional { value } if value == 1.5
+        ));
 
         let err_integer_zero =
             validate_quantity_for_unit_kind(0.0, &MovementKind::ExitSale, Some(UnitKind::Integer))
                 .unwrap_err();
-        assert!(err_integer_zero.contains("mayor a 0"));
+        assert!(matches!(
+            err_integer_zero,
+            UserMessage::QuantityPositive { value } if value == 0.0
+        ));
 
         let err_decimal_zero =
             validate_quantity_for_unit_kind(0.0, &MovementKind::ExitSale, Some(UnitKind::Decimal))
                 .unwrap_err();
-        assert!(err_decimal_zero.contains("mayor a 0"));
+        assert!(matches!(
+            err_decimal_zero,
+            UserMessage::QuantityPositive { value } if value == 0.0
+        ));
     }
 }

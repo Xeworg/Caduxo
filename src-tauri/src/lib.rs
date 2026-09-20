@@ -27,6 +27,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_os::init())
         .setup(|app| {
             tauri::async_runtime::block_on(async_init(app)).map_err(|e| {
                 tracing::error!(error = %e, "Setup failed");

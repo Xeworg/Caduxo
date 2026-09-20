@@ -5,6 +5,11 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type { UnitKind } from "./products.js";
+import {
+   DEFAULT_LOCALE,
+   locale as activeLocale,
+   type SupportedLocale,
+} from "../i18n/locale.svelte.js";
 
 // ─── DTOs ────────────────────────────────────────────────────────────────────
 
@@ -142,11 +147,36 @@ export async function getExpiryLot(id: string): Promise<ExpiryLotResponse> {
   return invoke<ExpiryLotResponse>("get_expiry_lot", { id });
 }
 
-/** Creates a new expiry lot. */
+/**
+ * Returns the active UI locale, used as the implicit default for the
+ * `locale` parameter accepted by every backend-call wrapper in this file.
+ *
+ * Callers that already hold a `SupportedLocale` can pass it explicitly to
+ * avoid the rune read at call time; otherwise the wrapper reads
+ * `activeLocale.current` and falls back to `DEFAULT_LOCALE` while the rune
+ * is still uninitialised.
+ */
+function resolveLocale(locale?: SupportedLocale): SupportedLocale {
+   if (locale) return locale;
+   const current = activeLocale?.current;
+   return (current ?? DEFAULT_LOCALE) as SupportedLocale;
+}
+
+/**
+ * Creates a new expiry lot.
+ *
+ * `locale` is forwarded to the Rust command so the backend can localise
+ * validation errors (notably `LocationRequired`) before they reach the UI.
+ * When omitted, the wrapper uses the active UI locale.
+ */
 export async function createExpiryLot(
   input: ExpiryLotCreate,
+  locale?: SupportedLocale,
 ): Promise<ExpiryLotResponse> {
-  return invoke<ExpiryLotResponse>("create_expiry_lot", { input });
+  return invoke<ExpiryLotResponse>("create_expiry_lot", {
+    input,
+    locale: resolveLocale(locale),
+  });
 }
 
 /** Updates an existing active expiry lot. */

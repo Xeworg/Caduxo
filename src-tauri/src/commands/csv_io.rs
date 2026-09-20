@@ -13,6 +13,7 @@ use crate::dto::csv_io::{
 };
 use crate::error::{AppError, CommandError};
 use crate::services::csv_io as service;
+use crate::services::user_messages::localize_validation;
 use crate::state::AppState;
 
 /// Reads a UTF-8 CSV file from disk and returns its contents. Used by the
@@ -29,14 +30,22 @@ pub async fn read_csv_text(path: String) -> Result<String, CommandError> {
 /// mapping, classifies each row (duplicate SKU/barcode, missing required,
 /// invalid values), and returns a row-by-row summary plus aggregate counts.
 /// Does NOT modify the database — preview only.
+///
+/// `locale` (BCP-47 tag) is forwarded to `localize_validation` so the
+/// `SkuColumnNotDetected` / `DescriptionColumnNotDetected` validations
+/// surfaced by the service reach the UI in the active locale. Unknown tags
+/// fall back to English via `Locale::parse`.
 #[tauri::command]
 pub async fn preview_product_csv(
     state: State<'_, AppState>,
     input: CsvPreviewInput,
+    locale: String,
 ) -> Result<CsvPreviewResponse, CommandError> {
     let pool = state.pool().await;
+    let loc = crate::pdf::locale::Locale::parse(&locale);
     service::preview_product_csv(&pool, input)
         .await
+        .map_err(|e| localize_validation(e, loc))
         .map_err(AppError::into)
 }
 
@@ -44,14 +53,20 @@ pub async fn preview_product_csv(
 /// strategy. Creates new products (and their barcodes), updates existing products
 /// when the strategy is `Update`, or returns conflict rows for review without
 /// making any database changes when the strategy is `Review`.
+///
+/// `locale` (BCP-47 tag) is forwarded to `localize_validation` for the same
+/// reason as `preview_product_csv`.
 #[tauri::command]
 pub async fn import_product_csv(
     state: State<'_, AppState>,
     input: CsvImportInput,
+    locale: String,
 ) -> Result<CsvImportResult, CommandError> {
     let pool = state.pool().await;
+    let loc = crate::pdf::locale::Locale::parse(&locale);
     service::import_product_csv(&pool, input)
         .await
+        .map_err(|e| localize_validation(e, loc))
         .map_err(AppError::into)
 }
 

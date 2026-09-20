@@ -72,14 +72,37 @@ pub async fn set_last_selected_store_id(
     }
 }
 
+/// Retrieves the language setting, or None if absent.
+pub async fn get_language_setting(pool: &SqlitePool) -> Result<Option<String>, sqlx::Error> {
+    get_setting(pool, "language").await
+}
+
+/// Persists the language setting. Rejects values outside {"en", "es"} at the
+/// command layer; this function accepts any non-empty string.
+pub async fn set_language_setting(pool: &SqlitePool, value: &str) -> Result<(), sqlx::Error> {
+    upsert_setting(pool, "language", value).await
+}
+
 /// Builds the full settings snapshot.
 pub async fn get_settings(pool: &SqlitePool) -> Result<SettingsResponse, sqlx::Error> {
     let last_selected_store_id = get_last_selected_store_id(pool).await?;
     let require_initial_location_on_lot_create =
         get_require_initial_location_on_lot_create(pool).await?;
+    // The row's presence (and a value in the supported set) is the
+    // single source of truth for whether the user made a manual pick.
+    // Anything else — absent row, empty value, unsupported tag — is reported
+    // as `language_configured: false` so the frontend can run OS detection
+    // instead of treating the fallback string as a preference.
+    let stored_language = get_language_setting(pool).await?;
+    let language_configured = matches!(stored_language.as_deref(), Some("en") | Some("es"));
+    let language = stored_language
+        .filter(|_| language_configured)
+        .unwrap_or_else(|| "en".to_string());
     Ok(SettingsResponse {
         last_selected_store_id,
         require_initial_location_on_lot_create,
+        language,
+        language_configured,
     })
 }
 
@@ -90,8 +113,8 @@ mod tests {
     use crate::db::migrations::fresh_test_pool;
 
     use super::{
-        get_last_selected_store_id, get_setting, get_settings, set_last_selected_store_id,
-        upsert_setting,
+        get_last_selected_store_id, get_setting, get_settings, set_language_setting,
+        set_last_selected_store_id, upsert_setting,
     };
 
     #[tokio::test]
@@ -160,6 +183,55 @@ mod tests {
             settings.last_selected_store_id,
             Some("store-abc".to_string())
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_settings_language_unconfigured_on_fresh_install(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+
+        // No `app_settings.language` row yet: the response must still expose
+        // a non-null language (fallback "en"), but the configured flag must
+        // be false so the frontend can run OS detection.
+        let settings = get_settings(&pool).await?;
+        assert_eq!(settings.language, "en");
+        assert!(!settings.language_configured);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_settings_language_configured_when_persisted(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+
+        // Persist a manual pick: configured flag flips true and the value
+        // is returned as-is (no fallback masking).
+        set_language_setting(&pool, "es").await?;
+        let settings = get_settings(&pool).await?;
+        assert_eq!(settings.language, "es");
+        assert!(settings.language_configured);
+
+        // Same for the other supported locale.
+        set_language_setting(&pool, "en").await?;
+        let settings = get_settings(&pool).await?;
+        assert_eq!(settings.language, "en");
+        assert!(settings.language_configured);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_settings_language_unconfigured_for_unsupported_value(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+
+        // A persisted but unsupported tag (e.g. legacy "fr") must NOT be
+        // reported as a manual preference — the frontend falls back to
+        // detection instead of honouring an invalid row.
+        upsert_setting(&pool, "language", "fr").await?;
+        let settings = get_settings(&pool).await?;
+        assert_eq!(settings.language, "en");
+        assert!(!settings.language_configured);
         Ok(())
     }
 }

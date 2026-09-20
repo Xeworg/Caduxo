@@ -7,13 +7,20 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "i18n:generate": "typesafe-i18n --no-watch",
+    "i18n:watch": "typesafe-i18n",
+    "i18n:typesafe": "typesafe-i18n --no-watch",
+    "prebuild": "npm run i18n:generate",
+    "predev": "npm run i18n:generate"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "@tauri-apps/plugin-notification": "^2.0.0",
+    "@tauri-apps/plugin-os": "^2.3.2",
     "svelte": "^5.0.0",
+    "typesafe-i18n": "^5.27.1",
     "vite": "^6.0.0"
   },
   "devDependencies": {

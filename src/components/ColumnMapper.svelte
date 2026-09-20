@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { LL } from "../i18n/i18n-svelte.js";
   import { type CsvColumnMapping } from "../lib/csv.js";
 
   // ── Props ──────────────────────────────────────────────────────────────────
@@ -45,7 +46,7 @@
    */
   function colOptions(): Array<{ value: number | ""; label: string }> {
     const opts: Array<{ value: number | ""; label: string }> = [
-      { value: "", label: "— not mapped —" },
+      { value: "", label: $LL.csvImport.notMapped() },
     ];
     for (let i = 0; i < headers.length; i++) {
       const current = assignedField(i);
@@ -83,9 +84,9 @@
 <div class="overlay">
   <div class="modal">
     <header class="modal-header">
-      <h2>Map CSV Columns</h2>
+      <h2>{$LL.csvImport.mapColumns()}</h2>
       <p class="subtitle">
-        Tell Caduxo which column contains each field. Unmapped optional fields use defaults.
+        {$LL.csvImport.mapColumnsSubtitle()}
       </p>
     </header>
 
@@ -93,17 +94,17 @@
       <table class="map-table">
         <thead>
           <tr>
-            <th>Field</th>
-            <th>Column</th>
-            <th>Preview</th>
+            <th>{$LL.csvImport.field()}</th>
+            <th>{$LL.csvImport.column()}</th>
+            <th>{$LL.csvImport.preview()}</th>
           </tr>
         </thead>
         <tbody>
           <!-- SKU -->
           <tr class={selectedSku === "" ? "req-row" : ""}>
             <td>
-              <span class="field-label">SKU</span>
-              <span class="req-badge">Required</span>
+              <span class="field-label">{$LL.csvImport.sku()}</span>
+              <span class="req-badge">{$LL.csvImport.required()}</span>
             </td>
             <td>
               <select
@@ -123,8 +124,8 @@
           <!-- Description -->
           <tr class={selectedDescription === "" ? "req-row" : ""}>
             <td>
-              <span class="field-label">Description</span>
-              <span class="req-badge">Required</span>
+              <span class="field-label">{$LL.csvImport.description()}</span>
+              <span class="req-badge">{$LL.csvImport.required()}</span>
             </td>
             <td>
               <select
@@ -145,7 +146,7 @@
 
           <!-- UPC/Barcode -->
           <tr>
-            <td><span class="field-label">UPC / Barcode</span></td>
+            <td><span class="field-label">{$LL.csvImport.upcBarcode()}</span></td>
             <td>
               <select bind:value={selectedBarcode}>
                 {#each barcodeOptions as opt}
@@ -162,7 +163,7 @@
 
           <!-- Category -->
           <tr>
-            <td><span class="field-label">Category name</span></td>
+            <td><span class="field-label">{$LL.csvImport.categoryName()}</span></td>
             <td>
               <select bind:value={selectedCategory}>
                 {#each categoryOptions as opt}
@@ -179,7 +180,7 @@
 
           <!-- Unit -->
           <tr>
-            <td><span class="field-label">Unit</span></td>
+            <td><span class="field-label">{$LL.csvImport.unit()}</span></td>
             <td>
               <select bind:value={selectedUnit}>
                 {#each unitOptions as opt}
@@ -194,7 +195,7 @@
 
           <!-- Alert Days -->
           <tr>
-            <td><span class="field-label">Alert days</span></td>
+            <td><span class="field-label">{$LL.csvImport.alertDays()}</span></td>
             <td>
               <select bind:value={selectedAlertDays}>
                 {#each alertOptions as opt}
@@ -211,7 +212,7 @@
 
           <!-- Notes -->
           <tr>
-            <td><span class="field-label">Notes</span></td>
+            <td><span class="field-label">{$LL.csvImport.notes()}</span></td>
             <td>
               <select bind:value={selectedNotes}>
                 {#each notesOptions as opt}
@@ -228,13 +229,13 @@
     </div>
 
     <footer class="modal-footer">
-      <button class="btn-cancel" on:click={onCancel}>Cancel</button>
+      <button class="btn-cancel" on:click={onCancel}>{$LL.common.cancel()}</button>
       <button
         class="btn-apply"
         disabled={!isValid}
         on:click={handleApply}
       >
-        Preview Import
+        {$LL.csvImport.previewImport()}
       </button>
     </footer>
   </div>

@@ -10,6 +10,8 @@ use crate::dto::unit_definitions::{
     UnitDefinitionCreateInput, UnitDefinitionRenameInput, UnitDefinitionResponse,
 };
 use crate::error::{AppError, DomainError};
+use crate::pdf::locale::Locale;
+use crate::services::user_messages::{user_message, UserMessage};
 
 /// Key validation: 1–16 chars, lowercase alphanumeric plus hyphen/underscore.
 fn validate_unit_key(key: &str) -> Result<(), DomainError> {
@@ -143,7 +145,7 @@ pub async fn archive_unit(pool: &DbPool, id: String) -> Result<(), AppError> {
         .map_err(AppError::from)?
     {
         return Err(AppError::Domain(DomainError::BusinessRule {
-            message: "Unit is still referenced by product(s) and cannot be archived".to_string(),
+            message: user_message(UserMessage::UnitStillReferenced, Locale::En),
         }));
     }
 

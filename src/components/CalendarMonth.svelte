@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
+  import { LL } from "../i18n/i18n-svelte.js";
 
   // ── Props ───────────────────────────────────────────────────────────────────
 
@@ -20,15 +21,14 @@
     escape: void;
   }>();
 
-  // ── Labels ─────────────────────────────────────────────────────────────────
-
-  const LABELS = {
-    weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const,
-    months: [
-      "January", "February", "March", "April", "May", "June",
-      "July", "August", "September", "October", "November", "December",
-    ] as const,
-  };
+  // ── Locale-backed arrays ──
+  $: MONTH_NAMES = $LL.calendar.monthNames
+    ? Array.from({ length: 12 }, (_, i) => ($LL.calendar.monthNames as Record<string, () => string>)[String(i)]())
+    : [];
+  $: WEEKDAY_NAMES = $LL.calendar.weekdayShort
+    ? Array.from({ length: 7 }, (_, i) => ($LL.calendar.weekdayShort as Record<string, () => string>)[String(i)]())
+    : [];
+  $: monthGridLabel = `${MONTH_NAMES[viewMonth - 1] ?? ""} ${viewYear}`;
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -318,7 +318,11 @@
   function cellAriaLabel(cell: { iso: string; day: number }): string {
     if (!cell.iso) return "";
     const d = parseIso(cell.iso);
-    return `${LABELS.months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+    return $LL.calendar.ariaDayCell({
+      month: MONTH_NAMES[d.getMonth()] ?? "",
+      day: d.getDate(),
+      year: d.getFullYear(),
+    });
   }
 </script>
 
@@ -328,7 +332,7 @@
     <button
       type="button"
       class="cal-nav"
-      aria-label="Previous month"
+      aria-label={$LL.calendar.ariaPreviousMonth()}
       on:click={prevMonth}
     >
       ‹
@@ -344,7 +348,7 @@
             <button
               type="button"
               class="cal-nav cal-nav-sm"
-              aria-label="Previous decade"
+              aria-label={$LL.calendar.ariaPreviousDecade()}
               on:click={prevDecade}
             >
               ‹
@@ -355,7 +359,7 @@
             <button
               type="button"
               class="cal-nav cal-nav-sm"
-              aria-label="Next decade"
+              aria-label={$LL.calendar.ariaNextDecade()}
               on:click={nextDecade}
             >
               ›
@@ -369,7 +373,7 @@
                 class="year-chip"
                 class:year-selected={yr === viewYear}
                 class:year-disabled={disabled}
-                aria-label="Year {yr}"
+                aria-label={$LL.calendar.ariaYear({ year: yr })}
                 aria-pressed={yr === viewYear}
                 {disabled}
                 on:click={() => !disabled && selectYear(yr)}
@@ -383,15 +387,15 @@
         <button
           type="button"
           class="cal-month-btn"
-          aria-label="Cycle month"
+          aria-label={$LL.calendar.ariaCycleMonth()}
           on:click={cycleMonth}
         >
-          {LABELS.months[viewMonth - 1]}
+          {MONTH_NAMES[viewMonth - 1] ?? ""}
         </button>
         <button
           type="button"
           class="cal-year-btn"
-          aria-label="Open year picker"
+          aria-label={$LL.calendar.ariaOpenYearPicker()}
           on:click={openYearPicker}
         >
           {displayYear} ▼
@@ -402,7 +406,7 @@
     <button
       type="button"
       class="cal-nav"
-      aria-label="Next month"
+      aria-label={$LL.calendar.ariaNextMonth()}
       on:click={nextMonth}
     >
       ›
@@ -411,7 +415,7 @@
 
   <!-- Weekday row -->
   <div class="cal-weekdays" aria-hidden="true">
-    {#each LABELS.weekdays as wd}
+    {#each WEEKDAY_NAMES as wd}
       <span class="cal-weekday">{wd}</span>
     {/each}
   </div>
@@ -421,7 +425,7 @@
   <div
     class="cal-grid"
     role="grid"
-    aria-label="{LABELS.months[viewMonth - 1]} {viewYear}"
+    aria-label={monthGridLabel}
     tabindex="0"
     on:keydown={onKeydown}
   >

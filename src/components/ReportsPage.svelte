@@ -26,6 +26,9 @@
     type StoreResponse,
     type StoreLocationResponse,
   } from "../lib/stores.js";
+  import { locale } from "../i18n/locale.svelte.js";
+  import { LL } from "../i18n/i18n-svelte.js";
+  import { humanizeError } from "../lib/errors.js";
 
   // ─── View state ──────────────────────────────────────────────────────────
 
@@ -60,36 +63,36 @@
 
   // ─── Report type options ─────────────────────────────────────────────────
 
-  const REPORT_TYPES: { value: ReportType; label: string; description: string }[] = [
+  $: REPORT_TYPES = [
     {
-      value: "in_alert_window",
-      label: "In alert window",
-      description: "Lots within their per-lot alert threshold.",
+      value: "in_alert_window" as ReportType,
+      label: $LL.reports.reportTypes.inAlertWindow(),
+      description: $LL.reports.reportTypes.inAlertWindowDesc(),
     },
     {
-      value: "expired",
-      label: "Expired",
-      description: "Lots past their expiry date.",
+      value: "expired" as ReportType,
+      label: $LL.reports.reportTypes.expired(),
+      description: $LL.reports.reportTypes.expiredDesc(),
     },
     {
-      value: "next_30_days",
-      label: "Next 30 days",
-      description: "Lots expiring within the next 30 calendar days.",
+      value: "next_30_days" as ReportType,
+      label: $LL.reports.reportTypes.next30Days(),
+      description: $LL.reports.reportTypes.next30DaysDesc(),
     },
     {
-      value: "custom",
-      label: "Custom",
-      description: "Build a report with arbitrary urgency / date / category filters.",
+      value: "custom" as ReportType,
+      label: $LL.reports.reportTypes.custom(),
+      description: $LL.reports.reportTypes.customDesc(),
     },
   ];
 
-  const URGENCY_OPTIONS: { value: string; label: string }[] = [
-    { value: "", label: "All urgencies" },
-    { value: "expired", label: "Expired" },
-    { value: "today", label: "Today" },
-    { value: "alert_window", label: "Alert window" },
-    { value: "next_30_days", label: "Next 30 days" },
-    { value: "future", label: "Future" },
+  $: URGENCY_OPTIONS = [
+    { value: "", label: $LL.reports.urgencyOptions.all() },
+    { value: "expired", label: $LL.reports.urgencyOptions.expired() },
+    { value: "today", label: $LL.reports.urgencyOptions.today() },
+    { value: "alert_window", label: $LL.reports.urgencyOptions.alertWindow() },
+    { value: "next_30_days", label: $LL.reports.urgencyOptions.next30Days() },
+    { value: "future", label: $LL.reports.urgencyOptions.future() },
   ];
 
   // ─── Lifecycle ───────────────────────────────────────────────────────────
@@ -104,7 +107,7 @@
       categories = categoryList;
       unitCatalog = await listUnitDefinitions().catch(() => []);
     } catch (e: unknown) {
-      errorMsg = String(e);
+      errorMsg = humanizeError(e);
     }
   });
 
@@ -167,10 +170,10 @@
         kind: selectedReportType,
         filters: buildFilters(),
       };
-      preview = await previewReport(request);
+      preview = await previewReport(request, locale.current);
       view = "preview";
     } catch (e: unknown) {
-      errorMsg = humanizeError(String(e));
+      errorMsg = humanizeError(e);
     } finally {
       loading = false;
     }
@@ -186,13 +189,19 @@
         kind: selectedReportType,
         filters: buildFilters(),
       };
-      const result = await exportReportPdfWithDialog(request);
+      const result = await exportReportPdfWithDialog(request, locale.current);
       if (result) {
-        successMsg = `Exported ${result.rows_written} ${result.rows_written === 1 ? "row" : "rows"} across ${result.page_count} page${result.page_count === 1 ? "" : "s"}`;
+        // Pluralization is handled by typesafe-i18n's inline plural
+        // parts inside `reports.exportSuccess`, so we just hand over the
+        // numeric counts — no caller-composed singular/plural words.
+        successMsg = $LL.reports.exportSuccess({
+          rows: result.rows_written,
+          pages: result.page_count,
+        });
         setTimeout(() => (successMsg = ""), 5000);
       }
     } catch (e: unknown) {
-      errorMsg = humanizeError(String(e));
+      errorMsg = humanizeError(e);
     } finally {
       exporting = false;
     }
@@ -206,41 +215,33 @@
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
-  function humanizeError(raw: string): string {
-    // Tauri command errors come back as "{ kind: 'validation', detail: { message: '...' } }".
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed?.detail?.message) return parsed.detail.message;
-      if (parsed?.message) return parsed.message;
-    } catch {
-      // not JSON, return raw
-    }
-    return raw;
-  }
-
   function formatDate(dateStr: string): string {
-    if (!dateStr || dateStr.length !== 10) return dateStr;
-    const [y, m, d] = dateStr.split("-");
-    return `${d}/${m}/${y}`;
+    // Delegate to the locale-aware typesafe-i18n `shortDate` formatter
+    // exposed via `$LL.reports.table.shortDate`. Pass-through for empty
+    // input so the table can render an empty cell without an error.
+    if (!dateStr) return "";
+    return $LL.reports.table.shortDate({ date: dateStr });
   }
 
   function formatQty(qty: number): string {
-    if (Number.isInteger(qty)) return qty.toString();
-    return qty.toString();
+    if (qty === null || qty === undefined) return "";
+    return $LL.reports.table.qtyFormatted({ qty });
   }
 
   function formatDays(days: number): string {
-    if (days < 0) return `${Math.abs(days)} ago`;
+    if (days < 0) {
+      return $LL.pdf.daysAgo({ n: Math.abs(days) });
+    }
     return days.toString();
   }
 
   function urgencyLabel(u: string): string {
     switch (u) {
-      case "expired": return "Expired";
-      case "today": return "Today";
-      case "alert_window": return "Alert";
-      case "next_30_days": return "Next 30d";
-      default: return "Future";
+      case "expired": return $LL.dashboard.urgency.expired();
+      case "today": return $LL.dashboard.urgency.today();
+      case "alert_window": return $LL.dashboard.urgency.alertWindow();
+      case "next_30_days": return $LL.dashboard.urgency.next30Days();
+      default: return $LL.dashboard.urgency.future();
     }
   }
 
@@ -268,20 +269,25 @@
         if (!meta) return "";
         const f = meta.filters_used;
         const parts: string[] = [];
-        if (f.store_id) parts.push(`store=${f.store_id.slice(0, 8)}…`);
-        if (f.location_id) parts.push(`location=${f.location_id.slice(0, 8)}…`);
+        const storePrefix = $LL.reports.filterSummary.store().replace("=", "");
+        const locPrefix = $LL.reports.filterSummary.location().replace("=", "");
+        const urgencyPrefix = $LL.reports.filterSummary.urgency().replace("=", "");
+        const fromPrefix = $LL.reports.filterSummary.from().replace("=", "");
+        const toPrefix = $LL.reports.filterSummary.to().replace("=", "");
+        if (f.store_id) parts.push(`${storePrefix}=${f.store_id.slice(0, 8)}…`);
+        if (f.location_id) parts.push(`${locPrefix}=${f.location_id.slice(0, 8)}…`);
         if (f.category_ids && f.category_ids.length > 0) {
           const n = f.category_ids.length;
           if (f.category_ids.includes(UNCATEGORIZED_SENTINEL)) {
-            parts.push(`categories=${n} (includes uncategorized)`);
+            parts.push($LL.reports.filterSummary.categoriesUnc({ n }));
           } else {
-            parts.push(`categories (${n})`);
+            parts.push($LL.reports.filterSummary.categories({ n }));
           }
         }
-        if (f.urgency) parts.push(`urgency=${f.urgency}`);
-        if (f.date_from) parts.push(`from=${f.date_from}`);
-        if (f.date_to) parts.push(`to=${f.date_to}`);
-        return parts.length === 0 ? "(no filters)" : parts.join(" · ");
+        if (f.urgency) parts.push(`${urgencyPrefix}=${f.urgency}`);
+        if (f.date_from) parts.push(`${fromPrefix}=${f.date_from}`);
+        if (f.date_to) parts.push(`${toPrefix}=${f.date_to}`);
+        return parts.length === 0 ? $LL.reports.table.noFilters() : parts.join(" · ");
       }
 
   function reportTypeLabel(t: ReportType): string {
@@ -291,18 +297,18 @@
 
 <div class="page">
   <header class="page-header">
-    <h1>Reports</h1>
+    <h1>{$LL.reports.pageTitle()}</h1>
     {#if view === "preview" && preview}
       <div class="page-header-actions">
         <button class="btn-secondary" on:click={backToConfigure}>
-          ← Edit filters
+          {$LL.reports.actions.editFilters()}
         </button>
         <button
           class="btn-primary"
           on:click={exportPdf}
           disabled={exporting || preview.lots.length === 0}
         >
-          {exporting ? "Exporting…" : "Export PDF"}
+          {exporting ? $LL.reports.actions.exporting() : $LL.reports.actions.exportPdf()}
         </button>
       </div>
     {/if}
@@ -318,7 +324,7 @@
   {#if view === "configure"}
     <!-- ── Configure view ─────────────────────────────────────────── -->
     <section class="panel">
-      <h2 class="panel-title">1. Choose a report</h2>
+      <h2 class="panel-title">{$LL.reports.chooseReport()}</h2>
       <div class="report-types">
         {#each REPORT_TYPES as opt}
           <button
@@ -335,12 +341,12 @@
     </section>
 
     <section class="panel">
-      <h2 class="panel-title">2. Filters</h2>
+      <h2 class="panel-title">{$LL.reports.configureFilters()}</h2>
       <div class="filters-grid">
         <label class="filter-field">
-          <span>Store</span>
+          <span>{$LL.dashboard.store()}</span>
           <select bind:value={storeId}>
-            <option value={null}>All stores</option>
+            <option value={null}>{$LL.dashboard.allStores()}</option>
             {#each stores as s}
               <option value={s.id}>{s.name}</option>
             {/each}
@@ -348,9 +354,9 @@
         </label>
 
         <label class="filter-field" class:disabled={!storeId || locations.length === 0}>
-          <span>Location</span>
+          <span>{$LL.dashboard.location()}</span>
           <select bind:value={locationId} disabled={!storeId || locations.length === 0}>
-            <option value={null}>All locations</option>
+            <option value={null}>{$LL.dashboard.allLocations()}</option>
             {#each locations as loc}
               <option value={loc.id}>{loc.name}</option>
             {/each}
@@ -358,17 +364,16 @@
         </label>
 
         <div class="filter-field">
-          <span>Category</span>
+          <span>{$LL.dashboard.category()}</span>
           <CategoryPicker
             bind:value={categoryIds}
             {categories}
             includeUncategorized={true}
-            placeholder="Filter by category…"
           />
         </div>
 
         <label class="filter-field" class:disabled={selectedReportType !== "custom"}>
-          <span>Urgency</span>
+          <span>{$LL.reports.fields.urgency()}</span>
           <select
             bind:value={urgency}
             disabled={selectedReportType !== "custom"}
@@ -380,22 +385,22 @@
         </label>
 
         <label class="filter-field">
-          <span>Date from</span>
+          <span>{$LL.reports.fields.dateFrom()}</span>
           <DatePicker
             bind:value={dateFrom}
-            ariaLabel="Date from"
-            placeholder="YYYY-MM-DD"
+            ariaLabel={$LL.reports.fields.dateFrom()}
+            placeholder={$LL.reports.fields.datePlaceholder()}
             clearable={true}
             todayDate={todayIso()}
           />
         </label>
 
         <label class="filter-field">
-          <span>Date to</span>
+          <span>{$LL.reports.fields.dateTo()}</span>
           <DatePicker
             bind:value={dateTo}
-            ariaLabel="Date to"
-            placeholder="YYYY-MM-DD"
+            ariaLabel={$LL.reports.fields.dateTo()}
+            placeholder={$LL.reports.fields.datePlaceholder()}
             clearable={true}
             todayDate={todayIso()}
           />
@@ -409,7 +414,7 @@
         on:click={runPreview}
         disabled={loading}
       >
-        {loading ? "Generating preview…" : "Preview report"}
+        {loading ? $LL.reports.actions.generating() : $LL.reports.actions.preview()}
       </button>
     </div>
   {:else if preview}
@@ -420,33 +425,33 @@
         <span class="muted">— {preview.metadata.description}</span>
       </h2>
       <dl class="meta-grid">
-        <dt>Generated at</dt>
+        <dt>{$LL.reports.table.generatedAt()}</dt>
         <dd>{formatGeneratedAt(preview.metadata.generated_at)}</dd>
-        <dt>Rows</dt>
+        <dt>{$LL.reports.table.rows()}</dt>
         <dd><strong>{preview.metadata.row_count}</strong></dd>
-        <dt>Filters</dt>
+        <dt>{$LL.reports.table.filters()}</dt>
         <dd class="meta-filters">{filterSummary(preview.metadata)}</dd>
       </dl>
     </section>
 
     {#if preview.lots.length === 0}
       <div class="empty-state">
-        <p>No lots match the current report filters.</p>
-        <p class="hint">Adjust the filters above and run the preview again.</p>
+        <p>{$LL.reports.emptyState.noRowsMatch()}</p>
+        <p class="hint">{$LL.reports.emptyState.adjustFilters()}</p>
       </div>
     {:else}
-      <div class="table-wrapper" role="region" aria-label="Report rows">
+      <div class="table-wrapper" role="region" aria-label={$LL.reports.table.reportRows()}>
         <table class="report-table">
           <thead>
             <tr>
-              <th>SKU</th>
-              <th>Description</th>
-              <th>Store / Location</th>
-              <th class="num">Qty</th>
-              <th>Expiry</th>
-              <th class="num">Days</th>
-              <th>Urgency</th>
-              <th>Batch</th>
+              <th>{$LL.reports.table.sku()}</th>
+              <th>{$LL.reports.table.description()}</th>
+              <th>{$LL.reports.table.storeLocation()}</th>
+              <th class="num">{$LL.reports.table.qty()}</th>
+              <th>{$LL.reports.table.expiry()}</th>
+              <th class="num">{$LL.reports.table.days()}</th>
+              <th>{$LL.reports.table.urgency()}</th>
+              <th>{$LL.reports.table.batch()}</th>
             </tr>
           </thead>
           <tbody>

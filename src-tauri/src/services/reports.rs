@@ -24,6 +24,8 @@ use crate::db::DbPool;
 use crate::dto::dashboard::{DashboardFilters, DashboardLotRow, DashboardPreset};
 use crate::dto::reports::{ReportData, ReportFilters, ReportMetadata, ReportRequest, ReportType};
 use crate::error::{AppError, DomainError};
+use crate::pdf::locale::Locale;
+use crate::services::user_messages::{localize_validation, user_message, UserMessage};
 
 // ============================================================
 // Filter parsing / validation
@@ -31,6 +33,11 @@ use crate::error::{AppError, DomainError};
 
 /// Parses an optional ISO-8601 date (YYYY-MM-DD). Treats blank strings as
 /// "no filter" (returns `Ok(None)`).
+///
+/// Emits the canonical English `InvalidDateFormat` variant so the entry
+/// point can localise it via `localize_validation`. `label` is interpolated
+/// verbatim into the UserMessage catalog message; keep it stable so the
+/// inverse parser keeps round-trip coverage.
 fn optional_date(
     label: &str,
     value: Option<&str>,
@@ -45,22 +52,34 @@ fn optional_date(
     chrono::NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
         .map(Some)
         .map_err(|_| DomainError::Validation {
-            message: format!("Invalid {label} `{raw}` (expected YYYY-MM-DD)"),
+            message: user_message(
+                UserMessage::InvalidDateFormat {
+                    label: label.to_string(),
+                    value: raw.to_string(),
+                },
+                Locale::En,
+            ),
         })
 }
 
 /// Validates the shape of the filters before any DB work happens. Returns
 /// `Validation` for malformed dates or an inverted date range.
+///
+/// Both error shapes match the `UserMessage` catalog canonical English text
+/// so `preview_report` can apply `localize_validation` at the entry point
+/// without per-call-site branching.
 fn validate_filters(filters: &ReportFilters) -> Result<(), DomainError> {
     let from = optional_date("date_from", filters.date_from.as_deref())?;
     let to = optional_date("date_to", filters.date_to.as_deref())?;
     if let (Some(f), Some(t)) = (from, to) {
         if f > t {
             return Err(DomainError::Validation {
-                message: format!(
-                    "date_from `{}` must be on or before date_to `{}`",
-                    filters.date_from.as_deref().unwrap_or(""),
-                    filters.date_to.as_deref().unwrap_or("")
+                message: user_message(
+                    UserMessage::InvertedDateRange {
+                        from: filters.date_from.as_deref().unwrap_or("").to_string(),
+                        to: filters.date_to.as_deref().unwrap_or("").to_string(),
+                    },
+                    Locale::En,
                 ),
             });
         }
@@ -119,10 +138,11 @@ fn build_metadata(
     request: &ReportRequest,
     effective_filters: ReportFilters,
     row_count: usize,
+    locale: Locale,
 ) -> ReportMetadata {
     ReportMetadata {
         report_type: request.kind.as_str().to_string(),
-        description: request.kind.description().to_string(),
+        description: request.kind.description(locale).into_owned(),
         filters_used: effective_filters,
         generated_at: Utc::now().to_rfc3339(),
         row_count,
@@ -180,9 +200,17 @@ fn filter_by_date_range(
 ///   3. Apply `date_from`/`date_to` post-filters when set.
 ///   4. Build metadata (type, description, effective filters, generation
 ///      timestamp, row count).
-pub async fn preview_report(pool: &DbPool, request: ReportRequest) -> Result<ReportData, AppError> {
+pub async fn preview_report(
+    pool: &DbPool,
+    request: ReportRequest,
+    locale: Locale,
+) -> Result<ReportData, AppError> {
     let effective = request.filters.clone().unwrap_or_default();
-    validate_filters(&effective).map_err(AppError::Domain)?;
+    // Localise validation errors at the entry point so any
+    // `DomainError::Validation` that escapes `validate_filters` reaches the
+    // caller in the requested locale. Other domain variants pass through
+    // untouched (`localize_validation` ignores non-Validation errors).
+    validate_filters(&effective).map_err(|e| localize_validation(AppError::Domain(e), locale))?;
 
     let dashboard_filters = to_dashboard_filters(&request);
     let mut response = crate::services::dashboard::get_dashboard(pool, dashboard_filters).await?;
@@ -196,7 +224,7 @@ pub async fn preview_report(pool: &DbPool, request: ReportRequest) -> Result<Rep
     );
 
     let row_count = response.lots.len();
-    let metadata = build_metadata(&request, effective, row_count);
+    let metadata = build_metadata(&request, effective, row_count, locale);
     Ok(ReportData {
         metadata,
         lots: response.lots,
@@ -215,9 +243,10 @@ pub async fn export_report_pdf(
     pool: &DbPool,
     request: ReportRequest,
     path: std::path::PathBuf,
+    locale: Locale,
 ) -> Result<crate::pdf::report_pdf::RenderedReport, AppError> {
-    let data = preview_report(pool, request).await?;
-    let rendered = crate::pdf::report_pdf::render_report(&data, &path)?;
+    let data = preview_report(pool, request, locale).await?;
+    let rendered = crate::pdf::report_pdf::render_report(&data, &path, locale)?;
     Ok(rendered)
 }
 
@@ -479,7 +508,7 @@ mod tests {
             ReportType::Custom,
         ] {
             assert!(
-                !kind.description().is_empty(),
+                !kind.description(Locale::En).is_empty(),
                 "description for {:?} must be non-empty",
                 kind
             );
@@ -671,6 +700,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect("preview");
@@ -695,6 +725,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect("preview");
@@ -719,6 +750,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect("preview");
@@ -745,6 +777,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect("preview");
@@ -773,6 +806,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect("preview");
@@ -813,6 +847,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect("preview");
@@ -829,7 +864,7 @@ mod tests {
         let pool = fresh_test_pool().await.expect("pool");
         let _fx = seed_report_fixture(&pool).await;
 
-        let data = preview_report(&pool, request_of(ReportType::Custom, None))
+        let data = preview_report(&pool, request_of(ReportType::Custom, None), Locale::En)
             .await
             .expect("preview");
 
@@ -844,9 +879,13 @@ mod tests {
         let pool = fresh_test_pool().await.expect("pool");
         let _fx = seed_report_fixture(&pool).await;
 
-        let data = preview_report(&pool, request_of(ReportType::Expired, empty_filters()))
-            .await
-            .expect("preview");
+        let data = preview_report(
+            &pool,
+            request_of(ReportType::Expired, empty_filters()),
+            Locale::En,
+        )
+        .await
+        .expect("preview");
 
         assert_eq!(data.metadata.report_type, "expired");
         assert!(!data.metadata.description.is_empty());
@@ -879,6 +918,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect("preview");
@@ -912,6 +952,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect_err("malformed date must be rejected");
@@ -935,6 +976,7 @@ mod tests {
                     ..Default::default()
                 }),
             ),
+            Locale::En,
         )
         .await
         .expect_err("inverted range must be rejected");

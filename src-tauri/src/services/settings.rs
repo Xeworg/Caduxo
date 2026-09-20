@@ -10,7 +10,8 @@ pub async fn get_settings(pool: &DbPool) -> Result<SettingsResponse, AppError> {
     repo::get_settings(pool).await.map_err(AppError::from)
 }
 
-/// Updates settings: last_selected_store_id and require_initial_location_on_lot_create.
+/// Updates settings: last_selected_store_id, require_initial_location_on_lot_create,
+/// and language.
 pub async fn update_settings(
     pool: &DbPool,
     input: SettingsUpdate,
@@ -20,6 +21,11 @@ pub async fn update_settings(
         .map_err(AppError::from)?;
     if let Some(value) = input.require_initial_location_on_lot_create {
         repo::set_require_initial_location_on_lot_create(pool, value)
+            .await
+            .map_err(AppError::from)?;
+    }
+    if let Some(value) = input.language.as_deref() {
+        repo::set_language_setting(pool, value)
             .await
             .map_err(AppError::from)?;
     }
@@ -41,6 +47,37 @@ mod tests {
         assert!(settings.last_selected_store_id.is_none());
         // Default: require_initial_location_on_lot_create = true
         assert!(settings.require_initial_location_on_lot_create);
+        // Default: language is reported as the "en" fallback but NOT
+        // configured — the frontend uses the configured flag to decide
+        // whether to honour the value or run OS detection.
+        assert_eq!(settings.language, "en");
+        assert!(!settings.language_configured);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn update_settings_persists_language_and_marks_configured(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+
+        // After a manual pick, the snapshot must surface both the value and
+        // the configured flag so the frontend stops calling detection.
+        let updated = update_settings(
+            &pool,
+            SettingsUpdate {
+                last_selected_store_id: None,
+                require_initial_location_on_lot_create: None,
+                language: Some("es".to_string()),
+            },
+        )
+        .await?;
+        assert_eq!(updated.language, "es");
+        assert!(updated.language_configured);
+
+        // And subsequent reads reflect the same state.
+        let settings = get_settings(&pool).await?;
+        assert_eq!(settings.language, "es");
+        assert!(settings.language_configured);
         Ok(())
     }
 
@@ -63,6 +100,7 @@ mod tests {
             SettingsUpdate {
                 last_selected_store_id: Some(store.id.clone()),
                 require_initial_location_on_lot_create: None,
+                language: None,
             },
         )
         .await?;
@@ -73,6 +111,7 @@ mod tests {
             SettingsUpdate {
                 last_selected_store_id: None,
                 require_initial_location_on_lot_create: None,
+                language: None,
             },
         )
         .await?;

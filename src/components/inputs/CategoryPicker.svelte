@@ -2,6 +2,8 @@
     import { UNCATEGORIZED_SENTINEL } from "../../lib/categories.js";
     import { createCategory, type CategoryResponse } from "../../lib/products.js";
     import { tick } from "svelte";
+    import { LL } from "../../i18n/i18n-svelte.js";
+    import { humanizeError } from "../../lib/errors.js";
 
     // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -18,8 +20,8 @@
      */
     export let categories: CategoryResponse[] = [];
 
-    /** Placeholder text shown in the search input. */
-    export let placeholder: string = "Search categories…";
+    /** Placeholder text for the internal search input. */
+    export let placeholder = "";
 
     /**
      * When true, an "Uncategorized" pseudo-row appears in the result list.
@@ -240,9 +242,9 @@
             // Close popover and reset
             closePopover();
         } catch (e: unknown) {
-            const msg = String(e);
+            const msg = humanizeError(e);
             if (/duplicate|case|already|exists/i.test(msg)) {
-                createError = `"${name}" already exists`;
+                createError = $LL.categoryPicker.alreadyExists({ name });
             } else {
                 createError = msg;
             }
@@ -380,14 +382,14 @@
 
 <!-- Selected chips -->
             {#if selectedChips.length > 0 || hasUncategorized}
-                <div class="cp-chips" role="list" aria-label="Selected categories">
+                <div class="cp-chips" role="list" aria-label={$LL.categoryPicker.selectedCategories()}>
                     {#if hasUncategorized}
                         <span class="cp-chip cp-chip--uncat" role="listitem">
-                        Uncategorized
+                        {$LL.categoryPicker.uncategorized()}
                         <button
                             type="button"
                             class="cp-chip-remove"
-                            aria-label="Remove Uncategorized"
+                            aria-label={$LL.categoryPicker.removeCategory({ name: $LL.categoryPicker.uncategorized() })}
                             on:click|stopPropagation={() => removeChip(UNCATEGORIZED_SENTINEL)}
                         >✕</button>
                     </span>
@@ -398,7 +400,7 @@
                         <button
                             type="button"
                             class="cp-chip-remove"
-                            aria-label="Remove {chip.name}"
+                            aria-label={$LL.categoryPicker.removeCategory({ name: chip.name })}
                             on:click|stopPropagation={() => removeChip(chip.id)}
                         >✕</button>
                     </span>
@@ -407,10 +409,10 @@
             <button
                 type="button"
                 class="cp-clear-all"
-                aria-label="Clear all selected categories"
+                aria-label={$LL.categoryPicker.clearAllAria()}
                 on:click|stopPropagation={clearAll}
             >
-                Clear all
+                {$LL.categoryPicker.clearAll()}
             </button>
         {/if}
 
@@ -443,12 +445,12 @@
                 bind:this={inputEl}
                 type="text"
                 bind:value={query}
-                {placeholder}
+                placeholder={placeholder || $LL.categoryPicker.placeholder()}
                 autocomplete="off"
                 autocorrect="off"
                 autocapitalize="off"
                 spellcheck="false"
-                aria-label="Search categories"
+                aria-label={$LL.categoryPicker.searchAria()}
                 aria-autocomplete="list"
                 aria-controls={isOpen ? "cp-listbox" : undefined}
                 aria-activedescendant={
@@ -465,7 +467,7 @@
                 <button
                     type="button"
                     class="cp-close-icon"
-                    aria-label="Close"
+                    aria-label={$LL.common.close()}
                     tabindex="-1"
                     on:click|stopPropagation={closePopover}
                 >✕</button>
@@ -480,14 +482,14 @@
             id="cp-listbox"
             class="cp-popover"
             role="listbox"
-            aria-label="Category results"
+            aria-label={$LL.categoryPicker.results()}
             aria-multiselectable="true"
         >
             <!-- Loading state -->
             {#if searching}
-                <div class="cp-status">Searching…</div>
+                <div class="cp-status">{$LL.categoryPicker.searching()}</div>
             {:else if results.length === 0 && !query.trim() && !includeUncategorized}
-                <div class="cp-status">No categories yet</div>
+                <div class="cp-status">{$LL.categoryPicker.noCategories()}</div>
             {:else}
                 <!-- Uncategorized pseudo-row -->
                 {#if includeUncategorized}
@@ -502,7 +504,7 @@
                         on:click={() => onItemClick(0)}
                         on:mouseenter={() => (activeIndex = 0)}
                     >
-                        <span class="cp-option-name">Uncategorized</span>
+                        <span class="cp-option-name">{$LL.categoryPicker.uncategorized()}</span>
                         {#if hasUncategorized}
                             <span class="cp-check" aria-hidden="true">✓</span>
                         {/if}
@@ -545,9 +547,9 @@
                         on:mouseenter={() => (activeIndex = createIdx)}
                     >
                         {#if creating}
-                            <span class="cp-creating">Creating…</span>
+                            <span class="cp-creating">{$LL.categoryPicker.creating()}</span>
                         {:else}
-                            <span>Create "<strong>{query.trim()}</strong>"</span>
+                            <span>{$LL.categoryPicker.createOption({ name: query.trim() })}</span>
                         {/if}
                     </div>
                 {/if}

@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { LL } from "../i18n/i18n-svelte.js";
+  import { humanizeError } from "../lib/errors.js";
   import {
     listLotMovements,
     getLotLocationBalances,
     formatMovementQuantity,
-    getKindLabel,
     type LotMovementResponse,
     type LotLocationBalance,
   } from "../lib/lot_movements.js";
@@ -60,7 +61,7 @@
         getLotLocationBalances(lotId),
       ]);
     } catch (e) {
-      errorMsg = String(e);
+      errorMsg = humanizeError(e);
     } finally {
       loading = false;
     }
@@ -76,20 +77,37 @@
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   function formatDate(dateStr: string): string {
-    const d = new Date(dateStr);
-    return d.toLocaleString("es-MX", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return $LL.lotMovements.resolution.eventDateTime({ value: dateStr });
   }
 
   function getLocationName(id: string | null): string {
     if (!id) return "—";
     const loc = allLocations.find((l) => l.id === id);
     return loc?.name ?? id.slice(0, 8) + "…";
+  }
+
+  function getMovementKindLabel(kind: string, direction?: string | null): string {
+    if (kind === "inventory_adjustment" && direction) {
+      return direction === "increase"
+        ? $LL.lotMovements.movementKinds.inventoryAdjustmentIncrease()
+        : $LL.lotMovements.movementKinds.inventoryAdjustmentDecrease();
+    }
+
+    const movementKindLabels: Record<string, () => string> = {
+      "entry:initial": $LL.lotMovements.movementKinds.initialEntry,
+      transfer: $LL.lotMovements.movementKinds.transfer,
+      "exit:sale": $LL.lotMovements.exitReasons.sale,
+      "exit:waste": $LL.lotMovements.exitReasons.waste,
+      "exit:expired": $LL.lotMovements.exitReasons.expired,
+      "exit:damaged": $LL.lotMovements.exitReasons.damaged,
+      "exit:internal_consumption": $LL.lotMovements.exitReasons.internalConsumption,
+      "exit:return_to_supplier": $LL.lotMovements.exitReasons.returnToSupplier,
+      "exit:inventory_adjustment": $LL.lotMovements.exitReasons.inventoryAdjustmentExit,
+      "exit:other": $LL.lotMovements.exitReasons.other,
+      inventory_adjustment: $LL.lotMovements.movementKinds.inventoryAdjustment,
+    };
+
+    return movementKindLabels[kind]?.() ?? kind;
   }
 
   function handleMovementCreated() {
@@ -108,7 +126,7 @@
   <div class="panel-header">
     <div class="totals">
       <div class="total-item">
-        <span class="total-label">Total</span>
+        <span class="total-label">{$LL.lotMovements.total()}</span>
         <span class="total-value">{lotQuantity} {lotUnit}</span>
       </div>
       {#each balances as bal}
@@ -128,25 +146,25 @@
           type="button"
           class="btn-action btn-move"
           on:click={() => openActionForm("move")}
-          title="Mover stock entre ubicaciones"
+          title={$LL.lotMovements.actionTitles.moveStock()}
         >
-          Mover stock
+          {$LL.lotMovements.moveStock()}
         </button>
         <button
           type="button"
           class="btn-action btn-exit"
           on:click={() => openActionForm("exit")}
-          title="Registrar salida de stock"
+          title={$LL.lotMovements.actionTitles.registerExit()}
         >
-          Registrar salida
+          {$LL.lotMovements.registerExit()}
         </button>
         <button
           type="button"
           class="btn-action btn-adjust"
           on:click={() => openActionForm("adjust")}
-          title="Ajustar conteo de inventario"
+          title={$LL.lotMovements.actionTitles.adjustCount()}
         >
-          Ajustar conteo
+          {$LL.lotMovements.adjustCount()}
         </button>
       </div>
     {/if}
@@ -154,15 +172,15 @@
 
   <!-- ── Movements list ────────────────────────────────────────────────────── -->
   {#if loading}
-    <p class="loading">Cargando movimientos…</p>
+    <p class="loading">{$LL.lotMovements.loadingMovements()}</p>
   {:else if errorMsg}
     <div class="alert-error" role="alert">{errorMsg}</div>
   {:else if movements.length === 0}
-    <p class="empty-hint">Sin movimientos registrados.</p>
+    <p class="empty-hint">{$LL.lotMovements.noMovements()}</p>
   {:else}
     <ul class="movement-list">
       {#each movements as mov (mov.id)}
-        {@const label = getKindLabel(mov.movement_kind, mov.direction)}
+        {@const label = getMovementKindLabel(mov.movement_kind, mov.direction)}
         {@const qty = formatMovementQuantity(mov.quantity, mov.movement_kind, mov.direction)}
         <li class="movement-item">
           <div class="movement-main">
@@ -180,7 +198,7 @@
               </span>
             {:else}
               <span class="movement-locations">
-                desde <span class="loc-badge">{getLocationName(mov.source_location_id)}</span>
+                {$LL.lotMovements.fromLocation()} <span class="loc-badge">{getLocationName(mov.source_location_id)}</span>
               </span>
             {/if}
             <span class="movement-time">{formatDate(mov.created_at)}</span>

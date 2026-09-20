@@ -10,6 +10,8 @@
   import { UNCATEGORIZED_SENTINEL } from "../lib/categories.js";
   import CategoryPicker from "./inputs/CategoryPicker.svelte";
   import { exportProductsWithDialog } from "../lib/csv.js";
+  import { LL } from "../i18n/i18n-svelte.js";
+  import { humanizeError } from "../lib/errors.js";
   import ProductForm from "./ProductForm.svelte";
   import ProductDetailPage from "./ProductDetailPage.svelte";
 
@@ -43,7 +45,7 @@
       categories = await listCategories();
       await runSearch("");
     } catch (e: unknown) {
-      errorMsg = String(e);
+      errorMsg = humanizeError(e);
     } finally {
       loading = false;
     }
@@ -62,7 +64,7 @@
       appliedQuery = query;
       results = await searchProducts({ query });
     } catch (e: unknown) {
-      errorMsg = String(e);
+      errorMsg = humanizeError(e);
     } finally {
       searching = false;
     }
@@ -109,7 +111,7 @@
   async function handleSaved(product: ProductResponse) {
     const wasEditing = view === "edit";
     flash(
-      wasEditing ? `Updated ${product.sku}` : `Created ${product.sku}`,
+      wasEditing ? $LL.products.detail.edit() + ` ${product.sku}` : $LL.products.createProduct() + ` ${product.sku}`,
       "success",
     );
     selectedProduct = null;
@@ -126,7 +128,7 @@
   }
 
   function handleArchived() {
-    flash("Product archived", "success");
+    flash($LL.products.archived(), "success");
     selectedProductId = null;
     view = "list";
     runSearch(appliedQuery);
@@ -143,13 +145,14 @@
         try {
           const result = await exportProductsWithDialog();
           if (result) {
+            const rows = result.rows_written;
             flash(
-              `Exported ${result.rows_written} ${result.rows_written === 1 ? "product" : "products"}`,
+              `${$LL.products.catalog.exportCsv()} — ${rows} ${rows === 1 ? $LL.products.catalog.productCount({ n: rows }) : $LL.products.catalog.productCount_plural({ n: rows })}`,
               "success",
             );
           }
         } catch (e: unknown) {
-          errorMsg = String(e);
+          errorMsg = humanizeError(e);
           setTimeout(() => (errorMsg = ""), 5000);
         } finally {
               exporting = false;
@@ -170,21 +173,21 @@
       })();
     </script>
 
-<div class="page">
+    <div class="page">
       <header class="page-header">
-        <h1>Products</h1>
+        <h1>{$LL.products.catalog.pageTitle()}</h1>
         {#if view === "list"}
           <div class="page-header-actions">
             <button
               class="btn-secondary"
               on:click={exportProducts}
               disabled={exporting}
-              title="Export all products to a CSV file"
+              title={$LL.products.catalog.exportCsvTitle()}
             >
-              {exporting ? "Exporting…" : "Export CSV"}
+              {exporting ? $LL.products.catalog.exporting() : $LL.products.catalog.exportCsv()}
             </button>
             <button class="btn-primary" on:click={startCreate}>
-              + New Product
+              + {$LL.products.createProduct()}
             </button>
           </div>
         {/if}
@@ -204,12 +207,12 @@
             type="text"
             bind:value={searchQuery}
             on:input={onSearchInput}
-            placeholder="Search by description, SKU, or barcode…"
+            placeholder={$LL.products.catalog.searchPlaceholder()}
             autocomplete="off"
           />
           {#if searchQuery}
             <button type="button" class="btn-secondary btn-small" on:click={clearSearch}>
-              Clear
+              {$LL.products.catalog.clear()}
             </button>
           {/if}
           <div class="category-filter">
@@ -217,29 +220,30 @@
               bind:value={categoryIds}
               {categories}
               includeUncategorized={true}
-              placeholder="Filter by category…"
             />
           </div>
         </div>
 
     {#if loading}
-      <p class="loading">Loading products…</p>
+      <p class="loading">{$LL.products.catalog.loading()}</p>
     {:else if searching && results.length === 0}
-      <p class="loading">Searching…</p>
+      <p class="loading">{$LL.products.catalog.searching()}</p>
     {:else if results.length === 0}
       <div class="empty-state">
         {#if appliedQuery}
-          <p>No products match "<strong>{appliedQuery}</strong>".</p>
+          <p>{$LL.products.catalog.noProductsMatch({ query: appliedQuery })}</p>
         {:else}
-          <p>No products yet.</p>
-          <p class="hint">Click <strong>+ New Product</strong> to add the first one.</p>
+          <p>{$LL.products.catalog.noProductsYet()}</p>
+          <p class="hint">{$LL.products.catalog.noProductsYetHint()}</p>
         {/if}
       </div>
     {:else}
       <div class="results-summary">
-        <span>{displayedProducts.length} {displayedProducts.length === 1 ? "product" : "products"}</span>
+        <span>{displayedProducts.length === 1
+          ? $LL.products.catalog.productCount({ n: displayedProducts.length })
+          : $LL.products.catalog.productCount_plural({ n: displayedProducts.length })}</span>
         {#if appliedQuery}
-          <span class="results-filter">for "<strong>{appliedQuery}</strong>"</span>
+          <span class="results-filter">{$LL.products.catalog.forQuery({ query: appliedQuery })}</span>
         {/if}
       </div>
       <ul class="product-list">
@@ -260,7 +264,7 @@
                   <span class="product-barcode">{product.primary_barcode}</span>
                 {/if}
                 {#if !product.is_active}
-                  <span class="badge-inactive">Archived</span>
+                  <span class="badge-inactive">{$LL.products.archived()}</span>
                 {/if}
               </div>
             </button>

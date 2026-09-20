@@ -7,6 +7,8 @@
     type UnitDefinitionResponse,
     type UnitReviewActionResult,
   } from "../lib/unit_definitions.js";
+  import { LL } from "../i18n/i18n-svelte.js";
+  import { humanizeError } from "../lib/errors.js";
 
   /** Called when the user dismisses or finishes the review. */
   export let onDone: () => void;
@@ -18,6 +20,29 @@
   let actionInProgress: string | null = null;
   let actionResult: UnitReviewActionResult | null = null;
 
+  /** Plural-aware subtitle message. */
+  $: subtitleFn = groups.length === 0
+    ? $LL.unitReview.noUnrecognizedUnits
+    : groups.length === 1
+    ? $LL.unitReview.unrecognizedFound
+    : $LL.unitReview.unrecognizedFound;
+  $: subtitleValues = groups.length === 1
+    ? $LL.unitReview.unrecognizedValue_singular
+    : $LL.unitReview.unrecognizedValue_plural;
+  $: subtitleMessage = subtitleFn({
+    count: groups.length,
+    values: subtitleValues,
+  });
+
+  /** Plural-aware success message. */
+  $: successFn = actionResult && actionResult.updated_count === 1
+    ? $LL.unitReview.productsUpdated_singular
+    : $LL.unitReview.productsUpdated_plural;
+  $: successMessage = successFn ? successFn({ count: actionResult!.updated_count }) : "";
+  $: assignedUnitMsg = actionResult?.assigned_unit
+    ? $LL.unitReview.unitAssigned({ name: actionResult.assigned_unit.display_name })
+    : "";
+
   async function init() {
     loading = true;
     error = "";
@@ -27,7 +52,7 @@
         listUnitDefinitions(),
       ]);
     } catch (e) {
-      error = String(e);
+      error = humanizeError(e);
     } finally {
       loading = false;
     }
@@ -44,7 +69,7 @@
       actionResult = result;
       groups = groups.filter((g) => g.raw_value !== rawValue);
     } catch (e) {
-      error = String(e);
+      error = humanizeError(e);
     } finally {
       actionInProgress = null;
     }
@@ -61,7 +86,7 @@
       actionResult = result;
       groups = groups.filter((g) => g.raw_value !== rawValue);
     } catch (e) {
-      error = String(e);
+      error = humanizeError(e);
     } finally {
       actionInProgress = null;
     }
@@ -78,7 +103,7 @@
       actionResult = result;
       groups = groups.filter((g) => g.raw_value !== rawValue);
     } catch (e) {
-      error = String(e);
+      error = humanizeError(e);
     } finally {
       actionInProgress = null;
     }
@@ -96,11 +121,9 @@
 
 <div class="review-page">
   <div class="review-header">
-    <h2>Review unrecognized units</h2>
+    <h2>{$LL.unitReview.pageTitle()}</h2>
     <p class="subtitle">
-      {groups.length === 0
-        ? "No unrecognized units — all products are catalog-linked."
-        : `${groups.length} unrecognized ${groups.length === 1 ? "value" : "values"} found. Choose how to handle each one.`}
+      {subtitleMessage}
     </p>
   </div>
 
@@ -109,12 +132,12 @@
   {/if}
 
   {#if loading}
-    <p class="loading">Loading…</p>
+    <p class="loading">{$LL.common.loading()}</p>
   {:else if groups.length === 0}
     <div class="empty-state">
-      <p>✅ All products use recognized catalog units.</p>
+      <p>{$LL.unitReview.allRecognized()}</p>
       <button type="button" class="btn-primary" on:click={onDone}>
-        Back to dashboard
+        {$LL.unitReview.backToDashboard()}
       </button>
     </div>
   {:else}
@@ -124,18 +147,22 @@
         <div class="group-card" class:disabled={inProgress}>
           <div class="group-header">
             <span class="raw-value">"{group.raw_value}"</span>
-            <span class="product-count">{group.product_count} {group.product_count === 1 ? "product" : "products"}</span>
+            <span class="product-count">
+              {group.product_count === 1
+                ? $LL.unitReview.unitCount_singular({ n: group.product_count })
+                : $LL.unitReview.unitCount_plural({ n: group.product_count })}
+            </span>
           </div>
 
           <div class="action-row">
             <!-- Map to preset -->
             <details class="preset-dropdown">
               <summary class="btn-outline btn-sm">
-                Map to preset
+                {$LL.unitReview.mapToPresetDropdown()}
                 <span class="caret">▾</span>
               </summary>
               <div class="dropdown-panel">
-                <p class="dropdown-hint">Integer presets:</p>
+                <p class="dropdown-hint">{$LL.unitReview.integerPresets()}</p>
                 {#each presetsByKind.integer as preset (preset.id)}
                   <button
                     type="button"
@@ -146,7 +173,7 @@
                     {preset.display_name} ({preset.key})
                   </button>
                 {/each}
-                <p class="dropdown-hint">Decimal presets:</p>
+                <p class="dropdown-hint">{$LL.unitReview.decimalPresets()}</p>
                 {#each presetsByKind.decimal as preset (preset.id)}
                   <button
                     type="button"
@@ -163,12 +190,12 @@
             <!-- Keep as custom -->
             <details class="custom-form">
               <summary class="btn-outline btn-sm">
-                Create custom unit
+                {$LL.unitReview.createCustomUnit()}
                 <span class="caret">▾</span>
               </summary>
               <div class="custom-panel">
                 <label class="small-label">
-                  Display name
+                  {$LL.unitReview.displayName()}
                   <input
                     type="text"
                     value={group.raw_value}
@@ -178,11 +205,11 @@
                 <div class="kind-radios">
                   <label class="radio-label">
                     <input type="radio" name="kind-{group.raw_value}" value="integer" checked />
-                    Integer
+                    {$LL.unitReview.integer()}
                   </label>
                   <label class="radio-label">
                     <input type="radio" name="kind-{group.raw_value}" value="decimal" />
-                    Decimal
+                    {$LL.unitReview.decimal()}
                   </label>
                 </div>
                 <button
@@ -203,7 +230,7 @@
                     );
                   }}
                 >
-                  {inProgress ? "…" : "Create & assign"}
+                  {inProgress ? $LL.unitReview.inProgress() : $LL.unitReview.createAndAssign()}
                 </button>
               </div>
             </details>
@@ -215,7 +242,7 @@
               disabled={inProgress}
               on:click={() => leaveForLater(group.raw_value)}
             >
-              Leave for later
+              {$LL.unitReview.leaveForLater()}
             </button>
           </div>
         </div>
@@ -224,15 +251,15 @@
 
     {#if actionResult}
       <div class="alert-success" role="status">
-        ✅ {actionResult.updated_count} product{actionResult.updated_count === 1 ? "" : "s"} updated.
-        {#if actionResult.assigned_unit}
-          Unit "<strong>{actionResult.assigned_unit.display_name}</strong>" is now assigned.
+        {successMessage}
+        {#if assignedUnitMsg}
+          {@html assignedUnitMsg}
         {/if}
       </div>
     {/if}
 
     <button type="button" class="btn-secondary" on:click={onDone}>
-      Done — back to dashboard
+      {$LL.unitReview.done()}
     </button>
   {/if}
 </div>

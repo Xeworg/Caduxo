@@ -4,6 +4,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import type { Locales } from "../i18n/i18n-types.js";
 
 // ─── DTOs ────────────────────────────────────────────────────────────────────
 
@@ -68,12 +69,18 @@ export interface LotLocationBalance {
  * Creates a new lot movement and updates the lot total atomically.
  *
  * @param input - Movement creation input
+ * @param locale - Active BCP-47 locale tag (e.g. `"en"`, `"es"`, `"es-MX"`)
+ *   forwarded to the Rust command so user-facing Validation and
+ *   BusinessRule messages reach the UI in the active locale. Unknown tags
+ *   fall back to English at the backend. Omitting the argument preserves
+ *   the previous English-only behaviour.
  * @returns The created movement response
  */
 export async function createLotMovement(
  input: LotMovementCreate,
+ locale?: Locales,
 ): Promise<LotMovementResponse> {
- return invoke<LotMovementResponse>("create_lot_movement", { input });
+ return invoke<LotMovementResponse>("create_lot_movement", { input, locale });
 }
 
 /**
@@ -101,35 +108,6 @@ export async function getLotLocationBalances(
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/**
- * Maps movement kind to Spanish display label.
- */
-export function getKindLabel(kind: string, direction?: string | null): string {
- const kindLabels: Record<string, string> = {
-  "entry:initial": "Entrada inicial",
-  transfer: "Transferencia",
-  "exit:sale": "Venta",
-  "exit:waste": "Merma",
-  "exit:expired": "Vencido",
-  "exit:damaged": "Dañado",
-  "exit:internal_consumption": "Consumo interno",
-  "exit:return_to_supplier": "Devolución a proveedor",
-  "exit:inventory_adjustment": "Ajuste de inventario (salida)",
-  "exit:other": "Otro",
-  inventory_adjustment: "Ajuste de inventario",
- };
-
- const base = kindLabels[kind] ?? kind;
-
- if (kind === "inventory_adjustment" && direction) {
-  return direction === "increase"
-   ? "Ajuste de inventario (+)"
-   : "Ajuste de inventario (−)";
- }
-
- return base;
-}
 
 /**
  * Formats a movement quantity with sign prefix for inventory_adjustment.

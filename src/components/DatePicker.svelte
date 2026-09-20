@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import CalendarMonth from "./CalendarMonth.svelte";
+  import { LL } from "../i18n/i18n-svelte.js";
 
   // ── Props ───────────────────────────────────────────────────────────────────
 
@@ -284,10 +285,10 @@
   $: helperText = (() => {
     if (!isInvalid) return "";
     if (invalidReason === "shape" || invalidReason === "calendar")
-      return "Use YYYY-MM-DD";
-    if (invalidReason === "range") return "Year must be 1900–2100";
-    if (invalidReason === "required") return "This field is required";
-    return "Invalid date";
+      return $LL.errors.dateUseIsoFormat();
+    if (invalidReason === "range") return $LL.errors.dateYearRange();
+    if (invalidReason === "required") return $LL.errors.dateFieldRequired();
+    return $LL.errors.dateInvalid();
   })();
 </script>
 
@@ -317,7 +318,7 @@
     <button
       type="button"
       class="dp-icon"
-      aria-label="Open calendar"
+      aria-label={$LL.datePicker.ariaOpenCalendar()}
       tabindex="0"
       on:click={togglePopover}
     >
@@ -327,7 +328,7 @@
       <button
         type="button"
         class="dp-clear"
-        aria-label="Clear date"
+        aria-label={$LL.datePicker.ariaClearDate()}
         on:click={onClear}
       >
         ✕
@@ -346,7 +347,7 @@
       bind:this={popoverEl}
       class="dp-popover"
       role="dialog"
-      aria-label="{ariaLabel} calendar"
+      aria-label={$LL.datePicker.calendarDialog({ label: ariaLabel })}
     >
       <CalendarMonth
         viewYear={popoverYear}
@@ -355,7 +356,7 @@
         {todayDate}
         {minDate}
         {maxDate}
-        ariaLabel="{ariaLabel} calendar"
+        ariaLabel={$LL.datePicker.calendarDialog({ label: ariaLabel })}
         on:daySelect={onDaySelect}
         on:monthChange={onMonthChange}
         on:viewYearChange={onViewYearChange}
@@ -368,7 +369,7 @@
             disabled={isTodayDisabled()}
             on:click={onToday}
           >
-            Today
+            {$LL.datePicker.today()}
           </button>
         </svelte:fragment>
       </CalendarMonth>
