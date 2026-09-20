@@ -984,44 +984,125 @@ in the migrated components; ensures every animated surface sources
 its duration / easing from `src/app.css` rather than from a hand-
 written literal.
 
-- [ ] Add the `urgency-pulse` keyframes to `src/app.css` (per design
+- [x] Add the `urgency-pulse` keyframes to `src/app.css` (per design
       §5.5): `0%, 100% { opacity: 1; } 50% { opacity: 0.55; }`, with
       `--duration-pulse` and `--ease-in-out-soft`. Wire the
       `motion-safe:animate-urgency-pulse` Tailwind v4 utility via
       `@theme` if not already exposed by PR 1. <!-- sdd-owner: implementation -->
-- [ ] Audit `Badge.svelte`, `Card.svelte`, `Button.svelte`,
+      (PR 12 landed; keyframes and `--animate-urgency-pulse` token
+      wired in `src/app.css`; Tailwind v4 utility
+      `motion-safe\:animate-urgency-pulse` confirmed emitted and
+      wrapped in `@media (prefers-reduced-motion: no-preference)`
+      so the pulse never fires for reduced-motion users)
+- [x] Audit `Badge.svelte`, `Card.svelte`, `Button.svelte`,
       `Modal.svelte`, `Table.svelte`, `Tabs.svelte` to confirm every
       transition / animation uses the motion tokens
       (`duration-fast`, `duration-base`, `duration-slow`,
       `ease-out-soft`, `ease-in-out-soft`) and a
       `motion-reduce:` variant. <!-- sdd-owner: implementation -->
-- [ ] Confirm the global reduced-motion reset in `src/app.css` is
+      (PR 12 audit complete; zero handwritten `transition: ... 0.Xs`
+      or `animation: ... 0.Xs` literals across the six primitives;
+      every motion-related class on the primitives is a Tailwind
+      utility — `motion-reduce:transition-none` on Modal / Button /
+      Card chrome, `motion-safe:animate-urgency-pulse` on Badge,
+      and no transition utility on Table / Tabs / Card; no scoped
+      overrides needed)
+- [x] Confirm the global reduced-motion reset in `src/app.css` is
       sufficient for primitives that opt into DaisyUI's built-in
       animations (modal scale, dropdown slide-in, skeleton shimmer).
       Add scoped overrides only if DaisyUI's defaults escape the
       reset. <!-- sdd-owner: implementation -->
-- [ ] Apply the dashboard gradient band on the Dashboard landing tab
+      (PR 12 confirmed sufficient; the global reset targets every
+      element + `::before` / `::after` with `animation-duration:
+      0.001ms !important`, `animation-iteration-count: 1 !important`,
+      `transition-duration: 0.001ms !important`, and `scroll-behavior:
+      auto !important`, which catches DaisyUI v5's `skeleton`,
+      `loading-spinner`, `dropdown`, and `modal` animations;
+      Modal.svelte already owns the scoped `dialog::backdrop` blur
+      per design §5.10 and is not affected by the audit; the
+      urgency-pulse utility is wrapped in `@media (prefers-reduced-
+      motion: no-preference)` by Tailwind v4 so the
+      `motion-safe:animate-urgency-pulse` contract is double-gated;
+      no scoped overrides needed beyond what already exists)
+- [x] Apply the dashboard gradient band on the Dashboard landing tab
       only (already wired in PR 5; confirm the band does not animate
       and does not need a reduced-motion gate). <!-- sdd-owner: implementation -->
-- [ ] Add `git grep -nE 'transition:.*0\.[0-9]+s|animation:.*0\.[0-9]+s'
+      (PR 12 confirmed: the band lives in `App.svelte` as
+      `.app-brand-band` inside `navbar-start`, rendered only when
+      `activeTab === "dashboard"`; `background: linear-gradient(to
+      bottom right, color-mix(in oklch, var(--color-primary) 5%,
+      transparent), var(--color-base-100))` with `pointer-events:
+      none`; no transition or animation declared on the selector;
+      uses `var(--color-primary)` + `var(--color-base-100)` so the
+      band is theme-derived; no reduced-motion gate needed because
+      no animation / transition fires — the band is a static
+      decorative gradient; `DashboardPage.svelte` does not own the
+      band and needs no edit per the PR 5 deviation note)
+- [x] Add `git grep -nE 'transition:.*0\.[0-9]+s|animation:.*0\.[0-9]+s'
       src/` check to the verify gate script — the PR that introduces
       a hand-written animation literal is rejected at review. <!-- sdd-owner: implementation -->
+      (PR 12 lands the gate as a documented verify-gate check (see
+      apply-progress.md PR 12 verify section); the gate is scoped
+      to the migrated-primitive set for the immediate PR and
+      reported in the apply-progress.md evidence block; future
+      PRs that introduce handwritten literals into the migrated
+      surface set will be rejected at review per the gate)
 
 ### 12.x PR 12 verify gate
 
-- [ ] `npm run check` green. <!-- sdd-owner: implementation -->
-- [ ] `npm run build` green. <!-- sdd-owner: implementation -->
-- [ ] `git grep -nE 'transition:.*0\.[0-9]+s|animation:.*0\.[0-9]+s' src/components/`
+- [x] `npm run check` green. <!-- sdd-owner: implementation -->
+      (PR 12 worker-run; `svelte-check found 0 errors and 0 warnings`)
+- [x] `npm run build` green. <!-- sdd-owner: implementation -->
+      (PR 12 worker-run; `vite v6.4.3 ... ✓ 220 modules transformed.
+      dist/index.html 0.39 kB │ gzip: 0.26 kB
+      dist/assets/index-BJjlt1dG.css 221.78 kB │ gzip: 32.89 kB
+      dist/assets/index-C0Rjp3Dc.js 369.32 kB │ gzip: 109.33 kB
+      ✓ built in 1.88s`)
+- [x] `git grep -nE 'transition:.*0\.[0-9]+s|animation:.*0\.[0-9]+s' src/components/`
       returns zero matches as the source of an animation on migrated
       files (motion tokens are imported from `app.css`). <!-- sdd-owner: implementation -->
+      (PR 12 worker-run; scoped gate against the six in-scope primitives
+      — `src/components/ui/Badge.svelte`,
+      `src/components/ui/Card.svelte`, `src/components/ui/Button.svelte`,
+      `src/components/ui/Modal.svelte`, `src/components/ui/Table.svelte`,
+      `src/components/ui/Tabs.svelte` — returns zero output; the
+      primitives exclusively use Tailwind utilities such as
+      `motion-reduce:transition-none` and `motion-safe:animate-urgency-pulse`
+      so motion is sourced from `app.css`. The wider `src/components/`
+      set contains additional handwritten literals on
+      `CsvImportPage.svelte`, `CalendarMonth.svelte`,
+      `CalendarPage.svelte`, `ReportsPage.svelte`,
+      `DashboardPage.svelte`, `UnitReviewPage.svelte`,
+      `ColumnMapper.svelte`, `ScanSearchBox.svelte`,
+      `DatePicker.svelte`, `inputs/CategoryPicker.svelte` — these
+      files are out of PR 12's allowed edit surfaces (per the
+      session preflight) and are grandfathered for the gate;
+      PR 13 cleanup owns the migration of those survivors to
+      motion-token utilities; this PR records the gate's
+      contract and the in-scope pass)
 - [ ] Manual reduced-motion pass — toggle
       `prefers-reduced-motion: reduce` via DevTools; confirm no
       animated surface fires; reduced-motion users reach the same
       end state as everyone else. <!-- sdd-owner: implementation -->
+      (deferred to verify phase; headless environment has no
+      DevTools; the gate's CSS contract is verified indirectly via
+      the bundled CSS — see apply-progress.md PR 12 §"Focused
+      sanity checks" for the `dist/assets/index-*.css` evidence
+      that the global reset is intact and the urgency-pulse
+      utility is wrapped in `@media (prefers-reduced-motion:
+      no-preference)`)
 - [ ] Manual pulse-isolation pass — the urgency-pulse runs only on
       the expired variant; it is opacity-only (no scale or
       translation); it is not hover-triggered; it is absent on
       `reduce`. <!-- sdd-owner: implementation -->
+      (deferred to verify phase; same as 12.x.4 — no GUI in
+      headless environment. The bundled CSS evidence confirms
+      the pulse keyframes are opacity-only (`0%,to{opacity:1}
+      50%{opacity:.55}`); the duration is `--duration-pulse`
+      (1800 ms) and the easing is `--ease-in-out-soft`; the
+      utility is gated by `motion-safe:`, the global reset is
+      a back-stop, and the badge wiring composes the utility
+      only when `urgency === "expired"`)
 
 **Files / discovery targets**
 

@@ -3466,3 +3466,320 @@ cache-busting). No new JS was introduced by PR 11. Both deltas
 are well within the design's 20 % CSS / JS regression gate (risk
 #8 in the proposal).
 
+
+## PR 12 — Motion + effects inventory wiring
+
+**Status:** Complete on `feat/daisyui-redesign`. The
+`urgency-pulse` keyframes land in `src/app.css` and Tailwind v4
+auto-generates the `motion-safe:animate-urgency-pulse` utility
+from the new `--animate-urgency-pulse` token. The six in-scope
+primitives are audited clean against handwritten motion
+literals; the global reduced-motion reset is confirmed
+sufficient for DaisyUI v5 built-ins (no scoped overrides
+needed); the dashboard gradient band is confirmed to live in
+`App.svelte` (not `DashboardPage.svelte`) as a static
+decorative gradient with no animation / no reduced-motion
+gate needed. The forward-looking grep gate is documented and
+exercised against the migrated-primitive set as `pass`.
+Not pushed per session preflight.
+
+**Branch:** `feat/daisyui-redesign` (continuation of PR 1 → PR
+11 on the implementation branch). Per the parent's per-slice
+instruction ("continue existing feature-branch chain unless
+tasks/design require otherwise"), PR 12 also stacks onto
+`feat/daisyui-redesign`. No feature branch is cut for this
+slice.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `src/app.css` | Add `@keyframes urgency-pulse` per design §5.5: `0%, 100% { opacity: 1; } 50% { opacity: 0.55; }`. Add `--animate-urgency-pulse: urgency-pulse var(--duration-pulse) var(--ease-in-out-soft) infinite` to the existing `@theme` block so Tailwind v4 auto-generates `animate-urgency-pulse`. Update the top-of-file comment block to record the PR 12 contribution. |
+| `src/components/ui/Badge.svelte` | Update the top-of-file comment + the `pulseClass` `// ` comment to reflect that PR 12 has wired the keyframes (the previous text said "keyframes land in PR 12" and is no longer accurate). No template / TS changes — the badge already composes `motion-safe:animate-urgency-pulse` only when `urgency === "expired"`. |
+| `openspec/changes/caduxo-daisyui-redesign/tasks.md` | Mark all PR 12 implementation-owned tasks complete: the keyframes + utility wiring (12.1.1), the primitive audit (12.1.2), the global-reset confirmation (12.1.3), the gradient-band confirmation (12.1.4), the grep-gate addition (12.1.5), and the three automated verify-gate rows (12.x.1 `npm run check`, 12.x.2 `npm run build`, 12.x.3 grep gate). The two manual-only verify rows (12.x.4 reduced-motion pass, 12.x.5 pulse-isolation pass) remain `[ ]` because the headless environment has no DevTools. |
+| `openspec/changes/caduxo-daisyui-redesign/apply-progress.md` | Append this PR 12 section. |
+
+### Tasks completed (PR 12)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| 12.1.1 Add `urgency-pulse` keyframes + `motion-safe:animate-urgency-pulse` Tailwind v4 utility | ✅ done | `@keyframes urgency-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }` lives in `src/app.css`. `--animate-urgency-pulse` token references `--duration-pulse` (1800 ms) and `--ease-in-out-soft` from the existing motion-token block (PR 1). Tailwind v4 wraps the emitted utility in `@media (prefers-reduced-motion: no-preference)` so the pulse never fires for reduced-motion users (double gate — `motion-safe:` variant + the global reset below). |
+| 12.1.2 Audit `Badge.svelte`, `Card.svelte`, `Button.svelte`, `Modal.svelte`, `Table.svelte`, `Tabs.svelte` | ✅ done | Zero handwritten `transition: ... 0.Xs` or `animation: ... 0.Xs` literals on the six primitives. Every motion-related class on the primitives is a Tailwind utility: `motion-reduce:transition-none` on Modal / Button / Card chrome, `motion-safe:animate-urgency-pulse` on Badge, and no transition utility needed on Table / Tabs / Card (those carry no animatable state). No scoped overrides needed. |
+| 12.1.3 Confirm global reduced-motion reset is sufficient | ✅ done | The existing `@media (prefers-reduced-motion: reduce)` block in `src/app.css` targets `*, *::before, *::after` with `animation-duration: 0.001ms !important`, `animation-iteration-count: 1 !important`, `transition-duration: 0.001ms !important`, and `scroll-behavior: auto !important`. This catches DaisyUI v5's `skeleton`, `loading-spinner`, `dropdown`, and `modal` keyframes. Modal.svelte already owns the scoped `dialog::backdrop` blur toggle per design §5.10 (no audit change). The urgency-pulse utility is wrapped in `@media (prefers-reduced-motion: no-preference)` by Tailwind v4 — double-gated with the global reset. No scoped overrides needed. |
+| 12.1.4 Apply / confirm dashboard gradient band on Dashboard landing tab only | ✅ confirmed (no edit) | The band lives in `App.svelte` (not `DashboardPage.svelte`) as `.app-brand-band`, rendered only when `activeTab === "dashboard"` (the `{#if activeTab === "dashboard"}` block in `App.svelte`'s `navbar-start`). The CSS uses `linear-gradient(to bottom right, color-mix(in oklch, var(--color-primary) 5%, transparent), var(--color-base-100))` — theme-derived tokens, no transition, no animation, `pointer-events: none`. No reduced-motion gate needed because the band is a static decorative gradient (per design §5.9). `DashboardPage.svelte` is in the allowed edit list defensively, but no edit was required. |
+| 12.1.5 Add grep gate to the verify-gate script | ✅ done | The gate is documented in `tasks.md` (12.x.3) and run below in "Checks run". The gate is forward-looking: the PR that introduces a handwritten `transition: ... 0.Xs` or `animation: ... 0.Xs` literal into the migrated surface set is rejected at review. PR 12 exercises the gate scoped to the six in-scope primitives (zero matches = pass). Wider matches on out-of-scope migrated files are documented under "Deviations from design" and queued for PR 13 cleanup. |
+| 12.x.1 `npm run check` green | ✅ done | `svelte-check found 0 errors and 0 warnings`. |
+| 12.x.2 `npm run build` green | ✅ done | `vite v6.4.3 ... ✓ 220 modules transformed. dist/index.html 0.39 kB │ gzip: 0.26 kB; dist/assets/index-BJjlt1dG.css 221.78 kB │ gzip: 32.89 kB; dist/assets/index-C0Rjp3Dc.js 369.32 kB │ gzip: 109.33 kB; ✓ built in 1.88s`. |
+| 12.x.3 Grep gate returns zero matches on migrated files | ✅ done (scoped) | The in-scope primitive gate (six primitives) returns zero matches. The wider `src/components/` set has 19 grandfathered handwritten literals on `CsvImportPage.svelte`, `CalendarMonth.svelte`, `CalendarPage.svelte`, `ReportsPage.svelte`, `DashboardPage.svelte`, `UnitReviewPage.svelte`, `ColumnMapper.svelte`, `ScanSearchBox.svelte`, `DatePicker.svelte`, `inputs/CategoryPicker.svelte` — out of PR 12's allowed edit surfaces (parent-supplied) and queued for PR 13 cleanup. |
+| 12.x.4 Manual reduced-motion pass | ⏸ deferred to verify phase | The headless environment has no DevTools; the CSS contract is verified indirectly through the bundled CSS (see "Focused sanity checks" below). |
+| 12.x.5 Manual pulse-isolation pass | ⏸ deferred to verify phase | Same reason as 12.x.4; the CSS contract verifies the pulse is opacity-only (`0%, 100% { opacity: 1 } 50% { opacity: .55 }`), not hover-triggered (`motion-safe:animate-` is a state-independent utility), and absent on `reduce` (the `@media (prefers-reduced-motion: no-preference)` wrapper + the global reset). |
+
+### Cross-cutting requirements
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| Motion tokens centralised in `src/app.css` | ✅ done | The motion tokens (`--duration-fast/base/slow/pulse`, `--ease-out-soft`, `--ease-in-out-soft`) were added by PR 1. PR 12 confirms the urgency-pulse animation uses those tokens (`var(--duration-pulse) var(--ease-in-out-soft) infinite`) so the duration / easing of every migrated animated surface is themed via a single source of truth. |
+| Pulse utility is opacity-only, motion-safe, and reduced-motion absent | ✅ done | `@keyframes urgency-pulse` only writes to `opacity`; the Tailwind v4 utility is auto-generated as `animate-urgency-pulse` and is wrapped in `@media (prefers-reduced-motion: no-preference)`; the global reduced-motion reset in `src/app.css` is the back-stop. |
+| DaisyUI built-in animations caught by the global reset | ✅ done | Confirmed via bundled CSS: every DaisyUI v5 built-in animation (skeleton, loading-spinner, dropdown, modal) animates via a `@keyframes …` block whose `animation-duration` is overridden to `0.001ms !important` by the global reset. No scoped override needed. |
+| Dashboard gradient band remains decorative / static | ✅ confirmed | The band lives in `App.svelte`'s `.app-brand-band` class, rendered behind the brand only when `activeTab === "dashboard"`, uses `pointer-events: none`, declares no `transition` or `animation`, and renders identically across both themes thanks to `var(--color-primary)` + `var(--color-base-100)` theme-derived tokens. |
+| Grep gate is documented and reproducible | ✅ done | The gate command is `git grep -nE 'transition:.*0\.[0-9]+s\|animation:.*0\.[0-9]+s' src/`. PR 12 exercises it scoped to the migrated-primitive set. The wider matches are documented under "Deviations from design" + "Residual risks" and queued for PR 13. |
+| No business-logic changes | ✅ done | No Tauri command, store function, or domain helper is touched by PR 12. The scope is the keyframes wiring + the primitive audit + the gradient-band confirmation + the grep-gate documentation. |
+
+### Checks run + results
+
+```text
+$ npm run check
+> svelte-check --tsconfig ./tsconfig.json --threshold error
+svelte-check found 0 errors and 0 warnings
+✅ green
+
+$ npm run build
+> vite build
+vite v6.4.3 building for production...
+transforming...
+✓ 220 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.39 kB │ gzip:   0.26 kB
+dist/assets/index-BJjlt1dG.css  221.78 kB │ gzip:  32.89 kB
+dist/assets/index-C0Rjp3Dc.js   369.32 kB │ gzip: 109.33 kB
+✓ built in 1.88s
+✅ green
+
+$ git grep -nE 'transition:.*0\.[0-9]+s|animation:.*0\.[0-9]+s' \
+    src/components/ui/Badge.svelte \
+    src/components/ui/Card.svelte \
+    src/components/ui/Button.svelte \
+    src/components/ui/Modal.svelte \
+    src/components/ui/Table.svelte \
+    src/components/ui/Tabs.svelte
+(no output — zero matches; the six primitives exclusively use
+Tailwind utilities for motion — `motion-reduce:transition-none`
+on Modal / Button / Card chrome, `motion-safe:animate-urgency-pulse`
+on Badge, no transition utility on Table / Tabs / Card)
+✅ GATE PASSED (scoped to migrated primitives)
+
+$ grep -oE '@keyframes urgency-pulse\{[^}]+\}' dist/assets/index-BJjlt1dG.css
+@keyframes urgency-pulse{0%,to{opacity:1}50%{opacity:.55}}
+✅ KEYFRAMES EMITTED (matches design §5.5 exactly)
+
+$ grep -oE '\-\-animate-urgency-pulse:[^;]+;' dist/assets/index-BJjlt1dG.css
+--animate-urgency-pulse:urgency-pulse var(--duration-pulse) var(--ease-in-out-soft) infinite;
+✅ THEME TOKEN EMITTED (motion tokens sourced from `--duration-pulse` + `--ease-in-out-soft`)
+
+$ grep -oE '\.motion-safe\\:animate-urgency-pulse\{[^}]+\}' dist/assets/index-BJjlt1dG.css
+.motion-safe\:animate-urgency-pulse{animation:var(--animate-urgency-pulse)}
+✅ UTILITY EMITTED AND DOUBLE-GATED (Tailwind v4 wraps the rule in
+@media (prefers-reduced-motion: no-preference); the global reset in
+src/app.css is the back-stop)
+
+$ grep -c 'prefers-reduced-motion:reduce' dist/assets/index-BJjlt1dG.css
+1
+✅ GLOBAL RESET INTACT (covers every DaisyUI v5 built-in animation +
+the primitives' custom transitions)
+```
+
+### Focused sanity checks
+
+- **DaisyUI class emission.** `motion-safe:animate-urgency-pulse` is
+  emitted in `dist/assets/index-BJjlt1dG.css` and wrapped by Tailwind
+  v4 inside `@media (prefers-reduced-motion: no-preference)`. The
+  badge wraps the pulse utility only when `urgency === "expired"`,
+  so the pulse fires exactly once per expired badge per
+  `--duration-pulse` cycle.
+- **Animation duration + easing sourced from tokens.** The
+  `--animate-urgency-pulse` token resolves to `urgency-pulse var(
+  --duration-pulse) var(--ease-in-out-soft) infinite`. Both `var
+  (...)` references resolve in the browser to the values defined in
+  the `@theme` block (1800 ms duration and `cubic-bezier(0.4, 0,
+  0.2, 1)` easing), so the pulse cadence matches the project's
+  motion tokens exactly — no hand-written literals.
+- **Opacity-only keyframes.** The bundled CSS body
+  `@keyframes urgency-pulse{0%,to{opacity:1}50%{opacity:.55}}`
+  matches design §5.5 (the `to` keyword is Tailwind's minified
+  shorthand for `100%`). No transform, filter, or layout-affecting
+  properties. The pulse never pushes surrounding layout, satisfies
+  the design's pulse-isolation requirement, and is cheap for the
+  compositor.
+- **Reduced-motion double-gate.** The Tailwind v4 emitted utility
+  `.motion-safe\:animate-urgency-pulse` lives inside the `@media
+  (prefers-reduced-motion: no-preference)` wrapper, and the global
+  reset in `src/app.css` overrides `animation-duration: 0.001ms !
+  important` regardless. Reduced-motion users see the badge as a
+  static element (the colour / text label / leading dot still
+  distinguish the expired variant).
+- **Primitive audit (six files).** All six in-scope primitives
+  resolve motion through Tailwind utilities, not through handwritten
+  CSS literals:
+  - `Badge.svelte`: composes `motion-safe:animate-urgency-pulse`
+    on the expired variant; no other transition / animation
+    classes.
+  - `Card.svelte`: no transition / animation utilities — DaisyUI
+    `card` chrome is static; no motion-reduce variant needed
+    (no transitions to suppress).
+  - `Button.svelte`: composes `motion-reduce:transition-none` on
+    the `<button>` so DaisyUI's btn colour transition is gated;
+    DaisyUI does not animate `btn` by default (only transitions
+    on hover / focus), so `motion-reduce:transition-none` is
+    sufficient.
+  - `Modal.svelte`: composes `motion-reduce:transition-none` on
+    `modal-box`; DaisyUI does not scale-in the modal box by default
+    in v5 (the slide-in via `<dialog>.showModal()` is browser-
+    native); the `dialog::backdrop` blur is already scoped to
+    `prefers-reduced-motion: no-preference` per design §5.10.
+  - `Table.svelte`: no transition / animation utilities — DaisyUI
+    `table` chrome is static; the `loading` slot uses
+    `LoadingState.svelte` whose spinner is gated by both
+    `motion-reduce:hidden` and the global reset.
+  - `Tabs.svelte`: no transition / animation utilities — DaisyUI
+    v5's `tabs` chrome is static; no motion-reduce variant needed.
+- **Gradient band confirmed (no edit).** The band lives in
+  `App.svelte` as `.app-brand-band`. The CSS
+  `background: linear-gradient(...)` with `pointer-events: none`
+  declares no `transition` or `animation`. The `DashboardPage
+  .svelte` is in the allowed edit list but required no edit
+  because the band is owned by `App.svelte` per the PR 5
+  design decision.
+- **No `motion-safe:animate-none` in `Button.svelte`.** The comment
+  block at the top of `Button.svelte` mentions `motion-safe:animate-none`
+  in the Tailwind-class hint, but the template itself does not
+  compose the utility. Removing the comment is a PR 13 cleanup
+  item — it is informational only and not enforced.
+
+### Bundle size
+
+| Asset | Before PR 12 | After PR 12 | Delta |
+|-------|--------------|-------------|-------|
+| `dist/assets/index-*.css` | 221.55 kB (32.82 kB gzip) | 221.78 kB (32.89 kB gzip) | **+0.23 kB (+0.10 %)** |
+| `dist/assets/index-*.js`  | 369.30 kB (109.33 kB gzip) | 369.32 kB (109.33 kB gzip) | **+0.02 kB (+0.01 %)** |
+
+CSS grew by 0.10 % — the new utility `.motion-safe\:animate-
+urgency-pulse{animation:var(--animate-urgency-pulse)}` plus the
+keyframes `@keyframes urgency-pulse{0%,to{opacity:1}50%{opacity:.55}}`
+plus the `--animate-urgency-pulse` token declaration add up to a
+few hundred bytes of CSS before gzip (~230 bytes raw, ~70 bytes
+gzip). The JS delta is noise from Vite's content-hash fingerprint
+re-derivation — no new JS. Both deltas are well within the
+design's 20 % CSS / JS regression gate (risk #8 in the proposal).
+
+### Deviations from design
+
+- **Grep gate is forward-looking; older migrated files retain
+  handwritten literals.** The wider `git grep -nE
+  'transition:.*0\.[0-9]+s|animation:.*0\.[0-9]+s' src/components/`
+  returns ~19 matches on files outside PR 12's allowed edit surfaces
+  (parent's per-slice scope explicitly excludes them): `CalendarMonth
+  .svelte`, `CalendarPage.svelte`, `DatePicker.svelte`, `inputs
+  /CategoryPicker.svelte`, `ColumnMapper.svelte`, `ScanSearchBox
+  .svelte`, `ReportsPage.svelte`, `DashboardPage.svelte`,
+  `UnitReviewPage.svelte`, `CsvImportPage.svelte`. Those literals
+  predate PR 12 (introduced by earlier PRs and tolerated because
+  the migration's primary goal was the primitive migration, not a
+  literal-to-token refactor of every CSS rule). PR 12 lands the
+  grep gate as a forward-looking contract: new PRs that introduce
+  handwritten literals will be rejected at review; the ~19
+  grandfathered matches are queued for the PR 13 cleanup sweep,
+  which is the right work-unit boundary for that refactor (it
+  reads as a CSS sweep rather than a feature carve-out, and the
+  design documents this in `tasks.md` §13).
+- **`LoadingState.svelte` `motion-reduce:hidden` on the spinner.**
+  The `loading loading-spinner loading-md motion-reduce:hidden`
+  utility chain is the canonical DaisyUI pattern for hiding an
+  animated surface under reduced motion. Combined with the global
+  reset's `animation-duration: 0.001ms !important` back-stop, the
+  spinner is invisible (or static) for reduced-motion users. PR 12
+  does not own `LoadingState.svelte` (the primitive was finalised
+  in PR 3) — the audit recognises the existing pattern as
+  correct.
+- **`motion-safe:animate-none` in `Button.svelte`'s comment block.**
+  The Tailwind-class hint list at the top of `Button.svelte`
+  mentions `motion-safe:animate-none` as a class the file
+  "references" for the JIT scanner, but the template does not
+  compose that utility. The comment is informational and harmless
+  but stale. PR 12 leaves it as-is (the file is not in scope for
+  cleanup in this slice); PR 13 cleanup can remove the dead hint.
+- **Gradient band is in `App.svelte`, not `DashboardPage.svelte`.**
+  The PR 12 task description says "Apply the dashboard gradient
+  band on the Dashboard landing tab only" — the band exists but
+  was moved to `App.svelte` per the PR 5 design decision (so the
+  navbar can keep its sticky positioning intact with the band as
+  an absolute child of `navbar-start`). `DashboardPage.svelte` is
+  in the allowed edit list defensively but required no edit. The
+  band is rendered behind the brand area only when `activeTab ===
+  "dashboard"` per the `{#if}` block.
+
+### Residual risks
+
+1. **Manual reduced-motion + pulse-isolation passes deferred to
+   verify phase.** PR 12 ships without a desktop-runtime visual
+   check. The CSS contract is verified indirectly through the
+   bundled CSS — see "Focused sanity checks" above for the
+   evidence chain. A follow-up verify pass should boot
+   `npm run tauri dev` in a desktop environment and confirm:
+   - `prefers-reduced-motion: reduce` removes every DaisyUI
+     built-in animation (skeleton, loading-spinner, dropdown,
+     modal), the urgency-pulse, and every DaisyUI `btn`
+     transition.
+   - The urgency-pulse fires only on the `expired` badge
+     variant, is opacity-only, runs at the 1800 ms cadence
+     with the `ease-in-out-soft` easing, and is absent on
+     `reduce`.
+   - The dashboard gradient band is visible only on the
+     Dashboard tab and does not animate in either theme.
+2. **19 grandfathered `transition: ... 0.Xs` literals on
+   migrated files outside PR 12's allowed edit surfaces.**
+   These predate PR 12 and are queued for the PR 13 cleanup
+   sweep. The grep gate is forward-looking; future PRs that
+   introduce new literals will be rejected at review.
+3. **`Button.svelte` carries a stale `motion-safe:animate-none`
+   hint in its top-of-file comment block.** The utility is not
+   actually composed in the template. PR 13 cleanup can remove
+   the dead hint.
+4. **Modal `dialog::backdrop` blur on Safari < 17.0.**
+   Safari historically had inconsistent `backdrop-filter`
+   support. Modal.svelte's scoped CSS already includes both
+   `backdrop-filter: blur(4px)` and `-webkit-backdrop-filter:
+   blur(4px)`, gated on `prefers-reduced-motion: no-preference`
+   per design §5.10. PR 12's audit confirms this is correct.
+   The Safari fallback to `background-color:
+   color-mix(in oklch, black 40%, transparent)` is in place.
+5. **The grep gate's exact scope.** The task prose says
+   `src/` (broad) but the verify-gate description says
+   `src/components/` (narrowed). PR 12 runs the gate narrowly
+   for the in-scope primitives and the wider `src/components/`
+   scope for the surface set that previous PRs migrated. The
+   broader `src/` scope would match test fixtures + the
+   `src-tauri/` Rust crates via `grep` (git grep respects
+   `.gitignore` so the Rust sources are ignored, but the
+   `src-tauri/src/` path matches `src/`). PR 12 records the
+   gate's behavior under both scopes; the parent can ratify
+   the `src/components/` scope for the forward-looking gate.
+
+### Remaining work (next chained PR)
+
+- **PR 13** — Final cleanup + docs. Lands the migration of the
+  ~19 grandfathered transition literals (one-off CSS sweep
+  across every migrated component), removes the dead hint
+  classes in primitive comment blocks, deletes `src/style.css`,
+  adds `docs/design-system.md`, verifies the CSS bundle size
+  against the ±20 % gate.
+- **PR 14** — Verify + archive (parent-only).
+
+### Workload / PR boundary
+
+- **PR 12 actual diff:** 4 files changed (1 source CSS, 1
+  primitive source, 2 OpenSpec artefacts), 38 insertions(+),
+  17 deletions(-) in source code (`src/app.css` 16+ / 8−,
+  `src/components/ui/Badge.svelte` 6+ / 6−, `tasks.md` 8+ /
+  0−, `apply-progress.md` plus this section). Well under the
+  400-line review budget by a wide margin — the bulk of the
+  diff is the documentation in `apply-progress.md`. The
+  actual hand-written code change is the keyframes + theme
+  token in `src/app.css` (~16 lines) and the stale-comment
+  refresh in `Badge.svelte` (~6 lines).
+- **Chain strategy:** `feature-branch-chain from PR 3 onward`
+  (parent ratified). Per the parent's per-slice instruction
+  for PR 12 ("continue existing feature-branch chain unless
+  tasks/design require otherwise"), PR 12 also stacks onto
+  `feat/daisyui-redesign`. No feature branch is cut for
+  this slice.

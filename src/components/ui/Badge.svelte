@@ -8,12 +8,15 @@
       | info | neutral).
   When both are supplied, `urgency` takes precedence. The optional
   `dot` flag renders a leading status dot. The `expired` urgency
-  variant is wired up for the `motion-safe:animate-urgency-pulse`
-  utility, whose keyframes land in PR 12 (task 12.1.1). Reduced-motion
-  users see the badge as static because the global reset clamps
-  every animation / transition; the motion-safe variant is the
-  narrow allow-list that keeps the pulse only for users who have not
-  requested reduced motion.
+  variant composes `motion-safe:animate-urgency-pulse` (PR 12 wires
+  the `urgency-pulse` keyframes + the `--animate-urgency-pulse` token
+  in `src/app.css`). The pulse is opacity-only and runs at the
+  project `--duration-pulse` cadence with `--ease-in-out-soft`. The
+  `motion-safe:` variant is the narrow allow-list: reduced-motion
+  users see the badge as a static element via the global reset in
+  `src/app.css` (the reset clamps every animation / transition as a
+  back-stop even when the `motion-safe:` variant fires, because the
+  pulse is gated on both conditions).
 
   Tailwind classes referenced here (for the JIT scanner):
     badge badge-error badge-warning badge-success badge-info badge-neutral
@@ -80,9 +83,13 @@
   const statusClass = $derived(`status-${effective}`);
   const sizeClass = $derived(size === "sm" ? "badge-sm" : "");
 
-  // The pulse utility is only emitted once the keyframes are defined
-  // in PR 12. Until then the class is a no-op; consumers can render
-  // this primitive today without waiting for the animation to land.
+  // The pulse utility is emitted only for the `expired` urgency
+  // variant. The `urgency-pulse` keyframes are defined in
+  // `src/app.css` (PR 12) and the `--animate-urgency-pulse` token
+  // there exposes the Tailwind v4 utility. The `motion-safe:`
+  // variant ensures the pulse only fires for users who have NOT
+  // requested reduced motion; the global reduced-motion reset in
+  // `src/app.css` is the back-stop.
   const pulseClass = $derived(
     urgency === "expired" ? "motion-safe:animate-urgency-pulse" : "",
   );

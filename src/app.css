@@ -10,6 +10,17 @@
  *   - Adds a `num` utility for numeric column alignment (used by the
  *     shared Table primitive in PR 9).
  *
+ * PR 12 (motion + effects inventory wiring) of the same change:
+ *   - Defines the `urgency-pulse` keyframes (opacity-only blink,
+ *     eased via the project's motion tokens) used by the
+ *     `motion-safe:animate-urgency-pulse` Tailwind v4 utility that
+ *     `Badge.svelte` composes for the `expired` urgency variant.
+ *   - The utility is auto-generated from the `--animate-urgency-pulse`
+ *     token registered in `@theme` below. The `motion-safe:` variant
+ *     is the narrow allow-list — reduced-motion users see the badge
+ *     as a static element (the global reset also clamps it as a
+ *     back-stop).
+ *
  * No page migration happens in PR 1 — this file only wires the
  * foundation. See docs/daisyui-redesign-plan.md and the design phase
  * for the per-component migration map.
@@ -86,6 +97,32 @@
   --duration-pulse: 1800ms;
   --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  /* `--animate-urgency-pulse` exposes the `animate-urgency-pulse`
+   * Tailwind v4 utility, composed from the project motion tokens
+   * (`--duration-pulse` + `--ease-in-out-soft`). The animation is
+   * opacity-only (no scale, no translate) per the design's pulse-
+   * isolation requirement, so it never pushes surrounding layout.
+   * Consumers compose it via `motion-safe:animate-urgency-pulse` so
+   * the pulse fires only when the user has NOT requested reduced
+   * motion (the global reset below also clamps it as a back-stop). */
+  --animate-urgency-pulse: urgency-pulse var(--duration-pulse)
+    var(--ease-in-out-soft) infinite;
+}
+
+/* The `urgency-pulse` keyframes that `--animate-urgency-pulse`
+ * references. Opacity-only and looped infinitely at the
+ * `--duration-pulse` cadence; never transform- or filter- based so
+ * layout is preserved and reduced-motion users never observe the
+ * pulse (covered by the global reset + the `motion-safe:` variant
+ * gating in `Badge.svelte`). */
+@keyframes urgency-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
 }
 
 /* ─── Global reduced-motion reset ─────────────────────────────────────── */
