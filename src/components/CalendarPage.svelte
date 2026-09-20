@@ -418,7 +418,7 @@ function onLotCancel() {
                     <button
                       type="button"
                       class="lot-link"
-                      on:click={() => openLot(row)}
+                      onclick={() => openLot(row)}
                     >
                       {row.description || row.sku || row.product_id}
                     </button>
@@ -451,7 +451,7 @@ function onLotCancel() {
     <div class="modal-box modal-box-wide">
       <div class="modal-header">
         <h3>{$LL.dashboard.lotDetail()}</h3>
-        <button class="modal-close" on:click={onLotCancel}>✕</button>
+        <button class="modal-close" onclick={onLotCancel}>✕</button>
       </div>
       {#if detailLoading}
         <p class="modal-loading">{$LL.lotsDetail.loading()}</p>
@@ -462,7 +462,7 @@ function onLotCancel() {
             type="button"
             class="tab-btn"
             class:active={lotDetailTab === "detail"}
-            on:click={() => (lotDetailTab = "detail")}
+            onclick={() => (lotDetailTab = "detail")}
           >
             {$LL.lotsDetail.detail()}
           </button>
@@ -470,7 +470,7 @@ function onLotCancel() {
             type="button"
             class="tab-btn"
             class:active={lotDetailTab === "history"}
-            on:click={() => (lotDetailTab = "history")}
+            onclick={() => (lotDetailTab = "history")}
           >
             {$LL.lotsDetail.history()}
           </button>
@@ -499,14 +499,14 @@ function onLotCancel() {
             <button
               type="button"
               class="btn-secondary"
-              on:click={onLotCancel}
+              onclick={onLotCancel}
             >
               {$LL.common.close()}
             </button>
             <button
               type="button"
               class="btn-primary"
-              on:click={() => (lotDetailTab = "history")}
+              onclick={() => (lotDetailTab = "history")}
             >
               {$LL.lotMovements.panelTitle()}
             </button>
