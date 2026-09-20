@@ -10,7 +10,10 @@ use crate::dto::expiry_lots::{
 use crate::error::{AppError, CommandError};
 use crate::pdf::locale::Locale;
 use crate::services::expiry_lots as service;
-use crate::services::user_messages::{localize_business_rule, localize_validation};
+use crate::services::user_messages::{
+    localize_business_rule, localize_duplicate_field, localize_internal, localize_not_found,
+    localize_validation,
+};
 use crate::state::AppState;
 
 /// Resolves an optional BCP-47 locale tag into a [`Locale`], falling back to
@@ -96,6 +99,9 @@ pub async fn create_expiry_lot(
         .await
         .map_err(|e| localize_validation(e, loc))
         .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
@@ -119,6 +125,9 @@ pub async fn update_expiry_lot(
         .await
         .map_err(|e| localize_validation(e, loc))
         .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
@@ -144,6 +153,9 @@ pub async fn archive_expiry_lot(
         .await
         .map_err(|e| localize_validation(e, loc))
         .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
@@ -169,6 +181,8 @@ pub async fn resolve_expiry_lot(
         .await
         .map_err(|e| localize_validation(e, loc))
         .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 

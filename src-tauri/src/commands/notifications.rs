@@ -1,5 +1,18 @@
 //! Tauri commands for the local notification pipeline.
 //!
+//! ## Localization note
+//!
+//! These commands do **not** accept a `locale` argument today, so the
+//! backend error boundaries stay on the canonical English path
+//! (`CommandError::NotFound` for unknown lot ids, `CommandError::Internal`
+//! for infrastructure errors). Wiring `localize_not_found` and
+//! `localize_internal` here would require an IPC signature change for
+//! every command in this module, which the active slice deliberately
+//! avoids to keep the frontend contract narrow. A follow-up slice can
+//! introduce an optional `locale: Option<String>` argument per command
+//! (matching the pattern used by `commands::products`, `commands::stores`,
+//! and `commands::expiry_lots`) without breaking existing callers.
+//!
 //! These commands are thin adapters over `services::notifications`. They are
 //! designed for later frontend wiring once the notification permission flow
 //! lands; the backend contract is stable today so the UI can be built against

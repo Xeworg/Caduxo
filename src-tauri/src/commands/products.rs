@@ -13,7 +13,10 @@ use crate::error::{AppError, CommandError};
 use crate::pdf::locale::Locale;
 use crate::services::categories as categories_service;
 use crate::services::products as service;
-use crate::services::user_messages::{localize_business_rule, localize_validation};
+use crate::services::user_messages::{
+    localize_business_rule, localize_duplicate_field, localize_internal, localize_not_found,
+    localize_validation,
+};
 use crate::state::AppState;
 
 /// Resolves an optional BCP-47 locale tag into a [`Locale`], falling back to
@@ -55,6 +58,9 @@ pub async fn create_category(
     service::create_category(&pool, input)
         .await
         .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
@@ -73,6 +79,10 @@ pub async fn update_category(
     service::update_category(&pool, input)
         .await
         .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
@@ -112,6 +122,10 @@ pub async fn create_product(
     service::create_product(&pool, input)
         .await
         .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
@@ -130,6 +144,10 @@ pub async fn update_product(
     service::update_product(&pool, input)
         .await
         .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
@@ -187,6 +205,7 @@ pub async fn find_product_by_scan(
     service::find_product_by_scan(&pool, &scanned_value)
         .await
         .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
@@ -219,6 +238,9 @@ pub async fn add_product_barcode(
         .await
         .map_err(|e| localize_validation(e, loc))
         .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 

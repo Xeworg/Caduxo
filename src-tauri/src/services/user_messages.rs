@@ -50,12 +50,17 @@
 //! | `LotNoLongerActive` | `Lot is no longer active and cannot be archived` | `El lote ya no está activo y no se puede archivar` |
 //! | `CannotResolveLotStatus { status }` | `Cannot resolve lot: lot is already \`{status}\`` | `No se puede resolver el lote: el lote ya está \`{status}\`` |
 //! | `ResolveQuantityExceedsRemaining { requested, unit, available }` | `Cannot resolve {requested:.2} {unit}: only {available:.2} {unit} remain` | `No se pueden resolver {requested:.2} {unit}: solo quedan {available:.2} {unit}` |
+//! | `InsufficientBalance { available, requested }` | `Insufficient balance at source location: available={available}, requested={requested}` | `Saldo insuficiente en la ubicación de origen: disponible={available}, solicitado={requested}` |
+//! | `LocationInactive` | `Location is inactive` | `La ubicación está inactiva` |
+//! | `ResourceNotFound { resource, id }` | `<resource> \`<id>\` not found` | `<resource> \`<id>\` no encontrado` |
+//! | `DuplicateField { field, value }` | `uniqueness violation: <field> = \`<value>\` already exists` | `violación de unicidad: <field> = \`<value>\` ya existe` |
+//! | `InternalError` | `An internal error occurred. Please try again.` | `Ocurrió un error interno. Por favor, inténtalo de nuevo.` |
 
 use crate::error::AppError;
 use crate::pdf::locale::Locale;
 
 /// A typed description of a user-visible message.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UserMessage {
     InvalidDateFormat {
         label: String,
@@ -252,6 +257,35 @@ pub enum UserMessage {
     /// Lot movement business rule: the source or destination location is
     /// inactive. Constant text.
     LocationInactive,
+    /// Backend boundary error: a resource lookup failed at the command
+    /// boundary. The carried `{resource, id}` pair (snake_case identifier
+    /// plus the original lookup id) matches the canonical English string
+    /// produced by `From<AppError> for CommandError` so the parser can
+    /// round-trip and `localize_not_found` can rewrite the message in the
+    /// active locale. The resource label is **not** translated to a
+    /// friendly name — the parent slice intentionally leaves identifier
+    /// localization as a non-goal.
+    ResourceNotFound {
+        resource: String,
+        id: String,
+    },
+    /// Backend boundary error: a uniqueness violation surfaced at the
+    /// command boundary. The carried `{field, value}` pair matches the
+    /// canonical English string produced by
+    /// `From<AppError> for CommandError` (the same string the frontend
+    /// defensive regex `/^uniqueness violation: barcode/` matches in
+    /// `src/lib/products.ts`). `localize_duplicate_field` rewrites the
+    /// message while preserving the structured `field` and `value` for
+    /// the frontend dispatch.
+    DuplicateField {
+        field: String,
+        value: String,
+    },
+    /// Backend boundary error: an infrastructure / internal error reached
+    /// the command boundary. Constant text — the original
+    /// `InfrastructureError` detail stays in tracing/logs at the call
+    /// site and is **never** surfaced to the UI.
+    InternalError,
 }
 
 /// Returns the user-visible message string for the given kind in the given locale.
@@ -588,6 +622,24 @@ pub fn user_message(kind: UserMessage, locale: Locale) -> String {
         }
         (UserMessage::LocationInactive, L::En) => "Location is inactive".to_string(),
         (UserMessage::LocationInactive, L::Es) => "La ubicación está inactiva".to_string(),
+        (UserMessage::ResourceNotFound { resource, id }, L::En) => {
+            format!("{resource} `{id}` not found")
+        }
+        (UserMessage::ResourceNotFound { resource, id }, L::Es) => {
+            format!("{resource} `{id}` no encontrado")
+        }
+        (UserMessage::DuplicateField { field, value }, L::En) => {
+            format!("uniqueness violation: {field} = `{value}` already exists")
+        }
+        (UserMessage::DuplicateField { field, value }, L::Es) => {
+            format!("violación de unicidad: {field} = `{value}` ya existe")
+        }
+        (UserMessage::InternalError, L::En) => {
+            "An internal error occurred. Please try again.".to_string()
+        }
+        (UserMessage::InternalError, L::Es) => {
+            "Ocurrió un error interno. Por favor, inténtalo de nuevo.".to_string()
+        }
     }
 }
 
@@ -838,6 +890,27 @@ pub fn parse_user_message_kind(message: &str) -> Option<UserMessage> {
         return Some(UserMessage::LocationInactive);
     }
 
+    // ─── Command-boundary boundary error shapes ─────────────────────────────
+    //
+    // The three arms below recognise the canonical English strings the
+    // `From<AppError> for CommandError` conversion produces for the
+    // post-localization `Localized*` variants. They let `parse_user_message_kind`
+    // round-trip even when the helper chain is bypassed (e.g. tests that
+    // build a `CommandError` directly from an `AppError`), and they let
+    // future frontend i18n layers identify the underlying kind.
+
+    if let Some((resource, id)) = parse_resource_not_found(message) {
+        return Some(UserMessage::ResourceNotFound { resource, id });
+    }
+
+    if let Some((field, value)) = parse_duplicate_field(message) {
+        return Some(UserMessage::DuplicateField { field, value });
+    }
+
+    if message == "An internal error occurred. Please try again." {
+        return Some(UserMessage::InternalError);
+    }
+
     None
 }
 
@@ -989,6 +1062,62 @@ fn parse_insufficient_balance(message: &str) -> Option<(f64, f64)> {
     Some((available, requested))
 }
 
+/// Parses a `<resource> \`<id>\` not found` message back into the captured
+/// `(resource, id)` pair. Returns `None` for malformed input.
+///
+/// The resource label is a snake_case identifier (`store`,
+/// `store_location`, `expiry_lot`, `unit_definition`, `product`,
+/// `lot`, ...); the id is the original lookup key (typically a UUID).
+/// Both segments are rejected when empty or when they contain inner
+/// backticks, so the round-trip is deterministic.
+fn parse_resource_not_found(message: &str) -> Option<(String, String)> {
+    const SUFFIX: &str = " not found";
+    if !message.ends_with(SUFFIX) {
+        return None;
+    }
+    let inner = message.strip_suffix(SUFFIX)?;
+    // Expect `<resource> \`<id>\`` — find the last two backticks and split
+    // the segment between them. The closing backtick is the last char of
+    // `inner` (the original `\`<id>\`` ends right where the suffix begins).
+    if !inner.ends_with('`') {
+        return None;
+    }
+    let without_closing = inner.strip_suffix('`')?;
+    let open = without_closing.rfind('`')?;
+    let id = without_closing[open + 1..].to_string();
+    let resource = without_closing[..open].trim().to_string();
+    if resource.is_empty() || id.is_empty() || id.contains('`') || resource.contains('`') {
+        return None;
+    }
+    Some((resource, id))
+}
+
+/// Parses a `uniqueness violation: <field> = \`<value>\` already exists`
+/// message back into the captured `(field, value)` pair. Returns `None`
+/// for malformed input.
+///
+/// The field is a snake_case identifier (`sku`, `barcode`, `name`,
+/// `categories.name`, ...); the value is the original lookup value
+/// (typically a SKU code, barcode, or display name). Inner backticks in
+/// the value are rejected so the round-trip stays deterministic.
+fn parse_duplicate_field(message: &str) -> Option<(String, String)> {
+    const PREFIX: &str = "uniqueness violation: ";
+    const SUFFIX: &str = " already exists";
+    if !message.starts_with(PREFIX) || !message.ends_with(SUFFIX) {
+        return None;
+    }
+    let inner = message.strip_prefix(PREFIX)?.strip_suffix(SUFFIX)?;
+    let (field, rest) = inner.split_once(" = `")?;
+    if !rest.ends_with('`') {
+        return None;
+    }
+    let value = rest.strip_suffix('`')?;
+    if field.is_empty() || value.is_empty() || value.contains('`') || field.contains('`') {
+        return None;
+    }
+    Some((field.to_string(), value.to_string()))
+}
+
 /// Wraps a validation error with locale-aware text if the message is one of the
 /// known user-facing strings. Otherwise returns the original error unchanged.
 /// Developer-only errors (`DomainError::Internal`) are returned as-is.
@@ -1023,6 +1152,93 @@ pub fn localize_business_rule(err: AppError, locale: Locale) -> AppError {
         });
     }
     crate::error::AppError::Domain(crate::error::DomainError::BusinessRule { message })
+}
+
+/// Wraps a `DomainError::NotFound` with locale-aware text. Mirrors
+/// [`localize_validation`] / [`localize_business_rule`] but rewrites the
+/// error into the dedicated `LocalizedNotFound` post-localization shape so
+/// `From<AppError> for CommandError` can preserve the wire
+/// `kind: "not_found"` while carrying a localized `message`.
+///
+/// The resource label and id are preserved verbatim — the canonical
+/// English `<resource> \`<id>\` not found` shape is always available as
+/// the locale-neutral fallback via the un-localized conversion. Chained
+/// after `localize_validation` / `localize_business_rule` at the command
+/// boundary so a single helper chain covers all four user-visible
+/// variants.
+pub fn localize_not_found(err: AppError, locale: Locale) -> AppError {
+    let crate::error::AppError::Domain(crate::error::DomainError::NotFound { resource, id }) = err
+    else {
+        return err;
+    };
+    let message = user_message(
+        UserMessage::ResourceNotFound {
+            resource: resource.to_string(),
+            id: id.clone(),
+        },
+        locale,
+    );
+    crate::error::AppError::Domain(crate::error::DomainError::LocalizedNotFound {
+        resource,
+        id,
+        message,
+    })
+}
+
+/// Wraps a `DomainError::DuplicateField` with locale-aware text while
+/// preserving `field` and `value` for the frontend structured-field
+/// checks (e.g. `kind === "duplicate_field"` and
+/// `detail.field === "barcode"`). Mirrors [`localize_not_found`] in
+/// rewriting the error into the dedicated `LocalizedDuplicateField`
+/// post-localization shape.
+///
+/// The canonical English `uniqueness violation: <field> = \`<value>\`
+/// already exists` shape stays as the `Display` impl of
+/// `DomainError::DuplicateField`, so the frontend defensive regex
+/// `/^uniqueness violation: barcode/` in `src/lib/products.ts` continues
+/// to match when the helper chain is bypassed.
+pub fn localize_duplicate_field(err: AppError, locale: Locale) -> AppError {
+    let crate::error::AppError::Domain(crate::error::DomainError::DuplicateField {
+        field,
+        value,
+    }) = err
+    else {
+        return err;
+    };
+    let message = user_message(
+        UserMessage::DuplicateField {
+            field: field.to_string(),
+            value: value.clone(),
+        },
+        locale,
+    );
+    crate::error::AppError::Domain(crate::error::DomainError::LocalizedDuplicateField {
+        field,
+        value,
+        message,
+    })
+}
+
+/// Wraps an `InfrastructureError` with locale-aware text. The original
+/// `InfrastructureError` detail stays in tracing/logs at the call site;
+/// only the generic UI notice is localized. Mirrors [`localize_not_found`]
+/// / [`localize_duplicate_field`] by rewriting the error into the
+/// dedicated `LocalizedInternal` post-localization shape so
+/// `From<AppError> for CommandError` produces `CommandError::Internal
+/// { message }` with a localized message.
+///
+/// Non-infrastructure errors pass through untouched, matching the
+/// behaviour of the validation / business_rule helpers.
+pub fn localize_internal(err: AppError, locale: Locale) -> AppError {
+    match err {
+        crate::error::AppError::Infrastructure(_) => {
+            let message = user_message(UserMessage::InternalError, locale);
+            crate::error::AppError::Domain(crate::error::DomainError::LocalizedInternal {
+                message,
+            })
+        }
+        other => other,
+    }
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -2880,5 +3096,370 @@ mod tests {
             message,
             "Failed to resolve product unit kind: some internal issue"
         );
+    }
+
+    // ─── Command-boundary error shapes (Task 1) ──────────────────────────────
+    //
+    // Coverage for the new `UserMessage` variants
+    // (`ResourceNotFound`, `DuplicateField`, `InternalError`), their
+    // canonical English round-trip through `parse_user_message_kind`,
+    // and the three new boundary helpers (`localize_not_found`,
+    // `localize_duplicate_field`, `localize_internal`).
+
+    #[test]
+    fn resource_not_found_en_roundtrips() {
+        let en_msg = en(UserMessage::ResourceNotFound {
+            resource: "store".into(),
+            id: "abc-123".into(),
+        });
+        assert_eq!(en_msg, "store `abc-123` not found");
+        let parsed = parse_user_message_kind(&en_msg);
+        match parsed {
+            Some(UserMessage::ResourceNotFound { resource, id }) => {
+                assert_eq!(resource, "store");
+                assert_eq!(id, "abc-123");
+            }
+            other => panic!("expected ResourceNotFound round-trip, got {other:?}"),
+        }
+        // Round-trip stability: en(en_round_trip) == en_msg.
+        let re_en = en(UserMessage::ResourceNotFound {
+            resource: "store".into(),
+            id: "abc-123".into(),
+        });
+        assert_eq!(re_en, en_msg);
+    }
+
+    #[test]
+    fn resource_not_found_es_keeps_resource_label() {
+        // The non-goal explicitly keeps the snake_case resource identifier
+        // (e.g. `expiry_lot`, `store_location`) in English; only the
+        // surrounding phrase is translated.
+        let es_msg = es(UserMessage::ResourceNotFound {
+            resource: "expiry_lot".into(),
+            id: "deadbeef".into(),
+        });
+        assert_eq!(es_msg, "expiry_lot `deadbeef` no encontrado");
+    }
+
+    #[test]
+    fn parse_resource_not_found_rejects_malformed() {
+        // Missing suffix → None.
+        assert_eq!(parse_user_message_kind("store `abc`"), None);
+        // Missing id backticks → None.
+        assert_eq!(parse_user_message_kind("store abc not found"), None);
+        // Inner backtick in id → None (the parser is strict).
+        assert_eq!(
+            parse_user_message_kind("store `a`b` not found"),
+            None
+        );
+        // Empty resource → None.
+        assert_eq!(parse_user_message_kind("`abc` not found"), None);
+    }
+
+    #[test]
+    fn localize_not_found_translates_canonical_english() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::NotFound {
+            resource: "store",
+            id: "abc".into(),
+        });
+        let localized = localize_not_found(err, Locale::Es);
+        let AppError::Domain(DomainError::LocalizedNotFound {
+            resource,
+            id,
+            message,
+        }) = localized
+        else {
+            panic!("expected LocalizedNotFound");
+        };
+        assert_eq!(resource, "store");
+        assert_eq!(id, "abc");
+        assert_eq!(message, "store `abc` no encontrado");
+    }
+
+    #[test]
+    fn localize_not_found_passes_through_non_not_found_error() {
+        // Pass-through branch: only `DomainError::NotFound` is rewritten.
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::Validation {
+            message: "Some validation".into(),
+        });
+        let result = localize_not_found(err, Locale::Es);
+        let AppError::Domain(DomainError::Validation { message }) = result else {
+            panic!("expected Validation untouched");
+        };
+        assert_eq!(message, "Some validation");
+    }
+
+    #[test]
+    fn localize_not_found_keeps_english_when_locale_en() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::NotFound {
+            resource: "unit_definition",
+            id: "uid-7".into(),
+        });
+        let localized = localize_not_found(err, Locale::En);
+        let AppError::Domain(DomainError::LocalizedNotFound { message, .. }) = localized else {
+            panic!("expected LocalizedNotFound");
+        };
+        assert_eq!(message, "unit_definition `uid-7` not found");
+    }
+
+    #[test]
+    fn duplicate_field_en_roundtrips_and_preserves_field() {
+        // The canonical English must continue to match the frontend
+        // defensive regex `/^uniqueness violation: barcode/` in
+        // `src/lib/products.ts`, so the round-trip is a regression guard
+        // against accidental string drift.
+        let en_msg = en(UserMessage::DuplicateField {
+            field: "barcode".into(),
+            value: "7501234567890".into(),
+        });
+        assert_eq!(
+            en_msg,
+            "uniqueness violation: barcode = `7501234567890` already exists"
+        );
+        assert!(en_msg.starts_with("uniqueness violation: barcode"));
+        let parsed = parse_user_message_kind(&en_msg);
+        match parsed {
+            Some(UserMessage::DuplicateField { field, value }) => {
+                assert_eq!(field, "barcode");
+                assert_eq!(value, "7501234567890");
+            }
+            other => panic!("expected DuplicateField round-trip, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn duplicate_field_es_does_not_break_english_substring() {
+        // The Spanish translation must NOT start with
+        // "uniqueness violation: " so the structured CommandError wire
+        // shape (`kind === "duplicate_field"`, `detail.field === "barcode"`)
+        // remains the primary detection path on the frontend.
+        let es_msg = es(UserMessage::DuplicateField {
+            field: "barcode".into(),
+            value: "7501234567890".into(),
+        });
+        assert_eq!(
+            es_msg,
+            "violación de unicidad: barcode = `7501234567890` ya existe"
+        );
+        assert!(!es_msg.starts_with("uniqueness violation:"));
+    }
+
+    #[test]
+    fn parse_duplicate_field_rejects_malformed() {
+        // Missing value backticks → None.
+        assert_eq!(
+            parse_user_message_kind("uniqueness violation: barcode = 7501234567890 already exists"),
+            None
+        );
+        // Missing "already exists" suffix → None.
+        assert_eq!(
+            parse_user_message_kind("uniqueness violation: barcode = `7501234567890`"),
+            None
+        );
+        // Inner backtick in value → None.
+        assert_eq!(
+            parse_user_message_kind("uniqueness violation: name = `a`b` already exists"),
+            None
+        );
+        // Empty field → None.
+        assert_eq!(
+            parse_user_message_kind("uniqueness violation:  = `abc` already exists"),
+            None
+        );
+    }
+
+    #[test]
+    fn localize_duplicate_field_translates_and_preserves_structured_fields() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::DuplicateField {
+            field: "barcode",
+            value: "7501234567890".into(),
+        });
+        let localized = localize_duplicate_field(err, Locale::Es);
+        let AppError::Domain(DomainError::LocalizedDuplicateField {
+            field,
+            value,
+            message,
+        }) = localized
+        else {
+            panic!("expected LocalizedDuplicateField");
+        };
+        // Structured fields preserved verbatim so the frontend
+        // `detail.field === "barcode"` check keeps working.
+        assert_eq!(field, "barcode");
+        assert_eq!(value, "7501234567890");
+        assert_eq!(
+            message,
+            "violación de unicidad: barcode = `7501234567890` ya existe"
+        );
+    }
+
+    #[test]
+    fn localize_duplicate_field_passes_through_non_duplicate_field() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::NotFound {
+            resource: "store",
+            id: "abc".into(),
+        });
+        let result = localize_duplicate_field(err, Locale::Es);
+        let AppError::Domain(DomainError::NotFound { resource, id }) = result else {
+            panic!("expected NotFound untouched");
+        };
+        assert_eq!(resource, "store");
+        assert_eq!(id, "abc");
+    }
+
+    #[test]
+    fn internal_error_en_roundtrips() {
+        let en_msg = en(UserMessage::InternalError);
+        assert_eq!(en_msg, "An internal error occurred. Please try again.");
+        assert_eq!(
+            parse_user_message_kind(&en_msg),
+            Some(UserMessage::InternalError)
+        );
+    }
+
+    #[test]
+    fn internal_error_es_does_not_match_english_parser() {
+        let es_msg = es(UserMessage::InternalError);
+        assert_eq!(
+            es_msg,
+            "Ocurrió un error interno. Por favor, inténtalo de nuevo."
+        );
+        // The English-only parser must not match the Spanish form — a
+        // Spanish UI message that round-tripped back through the
+        // English parser would silently lose its localization.
+        assert_eq!(parse_user_message_kind(&es_msg), None);
+    }
+
+    #[test]
+    fn localize_internal_translates_infrastructure_error() {
+        use crate::error::{AppError, DomainError, InfrastructureError};
+        // Build an Infrastructure error without a live database — the
+        // helper rewrites it into the LocalizedInternal shape regardless
+        // of which sub-variant it actually carries.
+        let err: AppError = AppError::Infrastructure(InfrastructureError::AppDataPath);
+        let localized = localize_internal(err, Locale::Es);
+        let AppError::Domain(DomainError::LocalizedInternal { message }) = localized else {
+            panic!("expected LocalizedInternal");
+        };
+        assert_eq!(
+            message,
+            "Ocurrió un error interno. Por favor, inténtalo de nuevo."
+        );
+    }
+
+    #[test]
+    fn localize_internal_passes_through_non_infrastructure_error() {
+        // Domain errors must not be rewritten into the Internal surface;
+        // that would silently change the wire `kind` for Validation /
+        // BusinessRule / NotFound / DuplicateField errors.
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::Validation {
+            message: "Some validation".into(),
+        });
+        let result = localize_internal(err, Locale::Es);
+        let AppError::Domain(DomainError::Validation { message }) = result else {
+            panic!("expected Validation untouched");
+        };
+        assert_eq!(message, "Some validation");
+    }
+
+    #[test]
+    fn localized_not_found_collapses_to_command_error_not_found() {
+        // The post-localization variant must round-trip through
+        // `From<AppError> for CommandError>` into
+        // `CommandError::NotFound { message }` so the wire `kind` is
+        // preserved.
+        use crate::error::{AppError, CommandError, DomainError};
+        let err = AppError::Domain(DomainError::LocalizedNotFound {
+            resource: "expiry_lot",
+            id: "abc".into(),
+            message: "expiry_lot `abc` no encontrado".into(),
+        });
+        let cmd: CommandError = err.into();
+        match cmd {
+            CommandError::NotFound { message } => {
+                assert_eq!(message, "expiry_lot `abc` no encontrado");
+            }
+            other => panic!("expected CommandError::NotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn localized_duplicate_field_collapses_to_command_error_duplicate_field() {
+        // The post-localization variant must round-trip through
+        // `From<AppError> for CommandError>` into
+        // `CommandError::DuplicateField { field, value, message }`,
+        // preserving all three fields.
+        use crate::error::{AppError, CommandError, DomainError};
+        let err = AppError::Domain(DomainError::LocalizedDuplicateField {
+            field: "barcode",
+            value: "7501234567890".into(),
+            message: "violación de unicidad: barcode = `7501234567890` ya existe".into(),
+        });
+        let cmd: CommandError = err.into();
+        match cmd {
+            CommandError::DuplicateField {
+                field,
+                value,
+                message,
+            } => {
+                assert_eq!(field, "barcode");
+                assert_eq!(value, "7501234567890");
+                assert_eq!(
+                    message,
+                    "violación de unicidad: barcode = `7501234567890` ya existe"
+                );
+            }
+            other => panic!("expected CommandError::DuplicateField, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn localized_internal_collapses_to_command_error_internal() {
+        use crate::error::{AppError, CommandError, DomainError};
+        let err = AppError::Domain(DomainError::LocalizedInternal {
+            message: "Ocurrió un error interno. Por favor, inténtalo de nuevo.".into(),
+        });
+        let cmd: CommandError = err.into();
+        match cmd {
+            CommandError::Internal { message } => {
+                assert_eq!(
+                    message,
+                    "Ocurrió un error interno. Por favor, inténtalo de nuevo."
+                );
+            }
+            other => panic!("expected CommandError::Internal, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn command_error_duplicate_field_carries_localized_message_even_without_helper() {
+        // Regression guard: `From<AppError> for CommandError>` must keep
+        // producing a localized `message` for the canonical English
+        // `DuplicateField` path too (the helper is an optimization, not
+        // a requirement for the new wire field).
+        use crate::error::{AppError, CommandError, DomainError};
+        let err = AppError::Domain(DomainError::DuplicateField {
+            field: "barcode",
+            value: "7501234567890".into(),
+        });
+        let cmd: CommandError = err.into();
+        match cmd {
+            CommandError::DuplicateField {
+                field,
+                value,
+                message,
+            } => {
+                assert_eq!(field, "barcode");
+                assert_eq!(value, "7501234567890");
+                assert!(message.starts_with("uniqueness violation: barcode"));
+            }
+            other => panic!("expected CommandError::DuplicateField, got {other:?}"),
+        }
     }
 }

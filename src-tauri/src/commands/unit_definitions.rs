@@ -1,4 +1,22 @@
 //! Tauri command adapters for the unit definitions catalog.
+//!
+//! ## Localization note
+//!
+//! These commands do **not** accept a `locale` argument today, so the
+//! backend error boundaries stay on the canonical English path
+//! (`CommandError::NotFound`, `CommandError::DuplicateField`,
+//! `CommandError::Internal` with their default messages). Wiring
+//! `localize_not_found`, `localize_duplicate_field`, and
+//! `localize_internal` here would require an IPC signature change for
+//! every command in this module, which the active slice deliberately
+//! avoids to keep the frontend contract narrow. The helper chain
+//! (`localize_validation` / `localize_business_rule`) is also left
+//! un-wired for the same reason — the unit-definitions service surfaces
+//! `BusinessRule` messages that this slice does not localize. A follow-up
+//! slice can introduce an optional `locale: Option<String>` argument per
+//! command (matching the pattern used by `commands::products`,
+//! `commands::stores`, and `commands::expiry_lots`) without breaking
+//! existing callers.
 
 use crate::dto::unit_definitions::{
     UnitAuditBannerState, UnitDefinitionCreateInput, UnitDefinitionRenameInput,

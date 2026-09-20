@@ -3,7 +3,10 @@
 use crate::dto::lot_movements::{LotLocationBalance, LotMovementCreate, LotMovementResponse};
 use crate::pdf::locale::Locale;
 use crate::services::lot_movements as service;
-use crate::services::user_messages::{localize_business_rule, localize_validation};
+use crate::services::user_messages::{
+    localize_business_rule, localize_duplicate_field, localize_internal, localize_not_found,
+    localize_validation,
+};
 use crate::state::AppState;
 use tauri::State;
 
@@ -48,6 +51,9 @@ pub async fn create_lot_movement(
         .await
         .map_err(|e| localize_validation(e, loc))
         .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(|e| e.to_string())
 }
 

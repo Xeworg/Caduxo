@@ -11,7 +11,8 @@ use crate::pdf::locale::Locale;
 use crate::services::settings as settings_service;
 use crate::services::stores as store_service;
 use crate::services::user_messages::{
-    localize_business_rule, localize_validation, user_message, UserMessage,
+    localize_business_rule, localize_duplicate_field, localize_internal, localize_not_found,
+    localize_validation, user_message, UserMessage,
 };
 use crate::state::AppState;
 
@@ -57,6 +58,9 @@ pub async fn create_store(
     store_service::create_store(&pool, input)
         .await
         .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
@@ -75,6 +79,10 @@ pub async fn update_store(
     store_service::update_store(&pool, input)
         .await
         .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
@@ -109,6 +117,9 @@ pub async fn create_store_location(
         .await
         .map_err(|e| localize_validation(e, loc))
         .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
@@ -127,6 +138,9 @@ pub async fn update_store_location(
     store_service::update_location(&pool, input)
         .await
         .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
 
