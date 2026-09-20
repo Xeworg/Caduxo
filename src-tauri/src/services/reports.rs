@@ -25,6 +25,7 @@ use crate::dto::dashboard::{DashboardFilters, DashboardLotRow, DashboardPreset};
 use crate::dto::reports::{ReportData, ReportFilters, ReportMetadata, ReportRequest, ReportType};
 use crate::error::{AppError, DomainError};
 use crate::pdf::locale::Locale;
+use crate::services::user_messages::{localize_validation, user_message, UserMessage};
 
 // ============================================================
 // Filter parsing / validation
@@ -32,6 +33,11 @@ use crate::pdf::locale::Locale;
 
 /// Parses an optional ISO-8601 date (YYYY-MM-DD). Treats blank strings as
 /// "no filter" (returns `Ok(None)`).
+///
+/// Emits the canonical English `InvalidDateFormat` variant so the entry
+/// point can localise it via `localize_validation`. `label` is interpolated
+/// verbatim into the UserMessage catalog message; keep it stable so the
+/// inverse parser keeps round-trip coverage.
 fn optional_date(
     label: &str,
     value: Option<&str>,
@@ -46,22 +52,34 @@ fn optional_date(
     chrono::NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
         .map(Some)
         .map_err(|_| DomainError::Validation {
-            message: format!("Invalid {label} `{raw}` (expected YYYY-MM-DD)"),
+            message: user_message(
+                UserMessage::InvalidDateFormat {
+                    label: label.to_string(),
+                    value: raw.to_string(),
+                },
+                Locale::En,
+            ),
         })
 }
 
 /// Validates the shape of the filters before any DB work happens. Returns
 /// `Validation` for malformed dates or an inverted date range.
+///
+/// Both error shapes match the `UserMessage` catalog canonical English text
+/// so `preview_report` can apply `localize_validation` at the entry point
+/// without per-call-site branching.
 fn validate_filters(filters: &ReportFilters) -> Result<(), DomainError> {
     let from = optional_date("date_from", filters.date_from.as_deref())?;
     let to = optional_date("date_to", filters.date_to.as_deref())?;
     if let (Some(f), Some(t)) = (from, to) {
         if f > t {
             return Err(DomainError::Validation {
-                message: format!(
-                    "date_from `{}` must be on or before date_to `{}`",
-                    filters.date_from.as_deref().unwrap_or(""),
-                    filters.date_to.as_deref().unwrap_or("")
+                message: user_message(
+                    UserMessage::InvertedDateRange {
+                        from: filters.date_from.as_deref().unwrap_or("").to_string(),
+                        to: filters.date_to.as_deref().unwrap_or("").to_string(),
+                    },
+                    Locale::En,
                 ),
             });
         }
@@ -188,7 +206,11 @@ pub async fn preview_report(
     locale: Locale,
 ) -> Result<ReportData, AppError> {
     let effective = request.filters.clone().unwrap_or_default();
-    validate_filters(&effective).map_err(AppError::Domain)?;
+    // Localise validation errors at the entry point so any
+    // `DomainError::Validation` that escapes `validate_filters` reaches the
+    // caller in the requested locale. Other domain variants pass through
+    // untouched (`localize_validation` ignores non-Validation errors).
+    validate_filters(&effective).map_err(|e| localize_validation(AppError::Domain(e), locale))?;
 
     let dashboard_filters = to_dashboard_filters(&request);
     let mut response = crate::services::dashboard::get_dashboard(pool, dashboard_filters).await?;

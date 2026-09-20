@@ -9,6 +9,7 @@ use crate::dto::expiry_lots::{
 };
 use crate::error::{AppError, CommandError};
 use crate::services::expiry_lots as service;
+use crate::services::user_messages::localize_validation;
 use crate::state::AppState;
 
 /// Returns all active expiry lots across all stores, ordered by expiry date.
@@ -61,14 +62,21 @@ pub async fn get_expiry_lot(
 /// Creates a new expiry lot. Pre-fills unit and alert-days from the product
 /// defaults when those fields are omitted (None). Fails if no active store
 /// exists.
+///
+/// `locale` (BCP-47 tag) is forwarded to `localize_validation` so the
+/// `LocationRequired` validation surfaced by the service reaches the UI in
+/// the active locale. Unknown tags fall back to English via `Locale::parse`.
 #[tauri::command]
 pub async fn create_expiry_lot(
     state: State<'_, AppState>,
     input: ExpiryLotCreate,
+    locale: String,
 ) -> Result<ExpiryLotResponse, CommandError> {
     let pool = state.pool().await;
+    let loc = crate::pdf::locale::Locale::parse(&locale);
     service::create_expiry_lot(&pool, input)
         .await
+        .map_err(|e| localize_validation(e, loc))
         .map_err(AppError::into)
 }
 

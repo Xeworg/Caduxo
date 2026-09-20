@@ -10,6 +10,11 @@ import {
    open as openDialog,
    save as saveDialog,
 } from "@tauri-apps/plugin-dialog";
+import {
+   DEFAULT_LOCALE,
+   locale as activeLocale,
+   type SupportedLocale,
+} from "../i18n/locale.svelte.js";
 
 // ─── Conflict strategy ───────────────────────────────────────────────
 
@@ -143,14 +148,35 @@ export type DashboardPreset =
 // ─── Backend command wrappers ───────────────────────────────────────────
 
 /**
+ * Returns the active UI locale, used as the implicit default for the
+ * `locale` parameter accepted by every backend-call wrapper in this file.
+ * Callers that already hold a `SupportedLocale` can pass it explicitly;
+ * otherwise the wrapper reads `activeLocale.current` and falls back to
+ * `DEFAULT_LOCALE` while the rune is still uninitialised.
+ */
+function resolveLocale(locale?: SupportedLocale): SupportedLocale {
+   if (locale) return locale;
+   const current = activeLocale?.current;
+   return (current ?? DEFAULT_LOCALE) as SupportedLocale;
+}
+
+/**
  * Commits a product CSV import using the provided column mapping and conflict
  * strategy. Creates new products, updates existing products (when strategy is
  * `update`), or returns conflict rows for review (when strategy is `review`).
+ *
+ * `locale` is forwarded to the Rust command so backend validation messages
+ * (missing required columns) reach the UI in the active locale. When omitted,
+ * the wrapper reads the active UI locale.
  */
 export async function importProductCsv(
    input: CsvImportInput,
+   locale?: SupportedLocale,
 ): Promise<CsvImportResult> {
-   return invoke<CsvImportResult>("import_product_csv", { input });
+   return invoke<CsvImportResult>("import_product_csv", {
+      input,
+      locale: resolveLocale(locale),
+   });
 }
 
 /**
@@ -159,11 +185,19 @@ export async function importProductCsv(
  * returns a row-by-row summary plus aggregate counts.
  *
  * Does NOT modify the database — preview only.
+ *
+ * `locale` is forwarded to the Rust command so backend validation messages
+ * (missing required columns) reach the UI in the active locale. When omitted,
+ * the wrapper reads the active UI locale.
  */
 export async function previewProductCsv(
    input: CsvPreviewInput,
+   locale?: SupportedLocale,
 ): Promise<CsvPreviewResponse> {
-   return invoke<CsvPreviewResponse>("preview_product_csv", { input });
+   return invoke<CsvPreviewResponse>("preview_product_csv", {
+      input,
+      locale: resolveLocale(locale),
+   });
 }
 
 /**
@@ -243,15 +277,21 @@ export async function pickCsvSavePath(
  *
  * Returns `null` when the user cancels the file dialog. The preview never
  * modifies the database.
+ *
+ * `locale` is forwarded so the preview can report any validation issues in
+ * the active locale.
  */
-export async function importProductCsvPreview(): Promise<{
+export async function importProductCsvPreview(
+   locale?: SupportedLocale,
+): Promise<{
    path: string;
    preview: CsvPreviewResponse;
 } | null> {
+   const effectiveLocale = resolveLocale(locale);
    const path = await pickCsvFile();
    if (!path) return null;
    const content = await readCsvText(path);
-   const preview = await previewProductCsv({ content });
+   const preview = await previewProductCsv({ content }, effectiveLocale);
    return { path, preview };
 }
 

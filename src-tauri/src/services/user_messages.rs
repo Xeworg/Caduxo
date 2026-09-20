@@ -28,6 +28,7 @@
 //! | `AlertDaysExceedsMax` | `Default alert days exceeds maximum of {max}` | `Los días de alerta predeterminados exceden el máximo de {max}` |
 //! | `SkuColumnNotDetected` | `SKU column not detected. Ensure the CSV has a "sku" or "SKU" header.` | `No se detectó la columna SKU. Asegúrate de que el CSV tenga una cabecera "sku" o "SKU".` |
 //! | `DescriptionColumnNotDetected` | `Description column not detected. Ensure the CSV has a "description" or "Descripción" header.` | `No se detectó la columna Descripción. Asegúrate de que el CSV tenga una cabecera "description" o "Descripción".` |
+//! | `LocationRequired` | `Please select a location` | `Selecciona una ubicación` |
 
 use crate::error::AppError;
 use crate::pdf::locale::Locale;
@@ -35,14 +36,33 @@ use crate::pdf::locale::Locale;
 /// A typed description of a user-visible message.
 #[derive(Debug, Clone)]
 pub enum UserMessage {
-    InvalidDateFormat { label: String, value: String },
-    InvertedDateRange { from: String, to: String },
-    QuantityNonNegative { value: f64 },
-    QuantityPositive { value: f64 },
+    InvalidDateFormat {
+        label: String,
+        value: String,
+    },
+    InvertedDateRange {
+        from: String,
+        to: String,
+    },
+    QuantityNonNegative {
+        value: f64,
+    },
+    QuantityPositive {
+        value: f64,
+    },
     AlertDaysNegative,
-    AlertDaysExceedsMax { max: i32 },
+    AlertDaysExceedsMax {
+        max: i32,
+    },
     SkuColumnNotDetected,
     DescriptionColumnNotDetected,
+    /// Emitted when the create-lot flow requires a location but the input
+    /// has none. The English canonical used to live as a hardcoded Spanish
+    /// string in `services::expiry_lots::create_expiry_lot`; aligning it
+    /// lets `localize_validation` translate it at the IPC boundary while
+    /// preserving a stable persisted database sentinel (`Sin ubicacion`)
+    /// elsewhere.
+    LocationRequired,
 }
 
 /// Returns the user-visible message string for the given kind in the given locale.
@@ -98,6 +118,8 @@ pub fn user_message(kind: UserMessage, locale: Locale) -> String {
         (UserMessage::DescriptionColumnNotDetected, L::Es) => {
             "No se detectó la columna Descripción. Asegúrate de que el CSV tenga una cabecera \"description\" o \"Descripción\".".to_string()
         }
+        (UserMessage::LocationRequired, L::En) => "Please select a location".to_string(),
+        (UserMessage::LocationRequired, L::Es) => "Selecciona una ubicación".to_string(),
     }
 }
 
@@ -108,7 +130,10 @@ pub fn parse_user_message_kind(message: &str) -> Option<UserMessage> {
     // We implement a simple prefix-based parser for the messages we own.
     // This is the inverse of `user_message` for known English variants.
 
-    if message.starts_with("Invalid ") && message.contains(" format: `") && message.contains("` (expected YYYY-MM-DD)") {
+    if message.starts_with("Invalid ")
+        && message.contains(" format: `")
+        && message.contains("` (expected YYYY-MM-DD)")
+    {
         // Format: "Invalid {label} format: `{value}` (expected YYYY-MM-DD)"
         if let Some(rest) = message.strip_prefix("Invalid ") {
             if let Some(format_pos) = rest.find(" format: `") {
@@ -129,7 +154,9 @@ pub fn parse_user_message_kind(message: &str) -> Option<UserMessage> {
         }
     }
 
-    if message == "Quantity must be non-negative, got " || message.starts_with("Quantity must be non-negative, got ") {
+    if message == "Quantity must be non-negative, got "
+        || message.starts_with("Quantity must be non-negative, got ")
+    {
         if let Some(val_str) = message.strip_prefix("Quantity must be non-negative, got ") {
             if let Ok(v) = val_str.parse::<f64>() {
                 return Some(UserMessage::QuantityNonNegative { value: v });
@@ -165,6 +192,10 @@ pub fn parse_user_message_kind(message: &str) -> Option<UserMessage> {
         return Some(UserMessage::DescriptionColumnNotDetected);
     }
 
+    if message == "Please select a location" {
+        return Some(UserMessage::LocationRequired);
+    }
+
     None
 }
 
@@ -172,7 +203,8 @@ pub fn parse_user_message_kind(message: &str) -> Option<UserMessage> {
 /// known user-facing strings. Otherwise returns the original error unchanged.
 /// Developer-only errors (`DomainError::Internal`) are returned as-is.
 pub fn localize_validation(err: AppError, locale: Locale) -> AppError {
-    let crate::error::AppError::Domain(crate::error::DomainError::Validation { message }) = err else {
+    let crate::error::AppError::Domain(crate::error::DomainError::Validation { message }) = err
+    else {
         return err;
     };
     if let Some(kind) = parse_user_message_kind(&message) {
@@ -260,7 +292,10 @@ mod tests {
     #[test]
     fn alert_days_negative_es() {
         let got = es(UserMessage::AlertDaysNegative);
-        assert_eq!(got, "Los días de alerta predeterminados no pueden ser negativos");
+        assert_eq!(
+            got,
+            "Los días de alerta predeterminados no pueden ser negativos"
+        );
     }
 
     #[test]
@@ -272,7 +307,10 @@ mod tests {
     #[test]
     fn alert_days_exceeds_max_es() {
         let got = es(UserMessage::AlertDaysExceedsMax { max: 365 });
-        assert_eq!(got, "Los días de alerta predeterminados exceden el máximo de 365");
+        assert_eq!(
+            got,
+            "Los días de alerta predeterminados exceden el máximo de 365"
+        );
     }
 
     #[test]
@@ -285,6 +323,39 @@ mod tests {
     fn sku_column_not_detected_es() {
         let got = es(UserMessage::SkuColumnNotDetected);
         assert!(got.contains("No se detectó la columna SKU"));
+    }
+
+    #[test]
+    fn location_required_en() {
+        let got = en(UserMessage::LocationRequired);
+        assert_eq!(got, "Please select a location");
+    }
+
+    #[test]
+    fn location_required_es() {
+        let got = es(UserMessage::LocationRequired);
+        assert_eq!(got, "Selecciona una ubicación");
+    }
+
+    #[test]
+    fn parse_location_required_roundtrips() {
+        let en_msg = en(UserMessage::LocationRequired);
+        let parsed = parse_user_message_kind(&en_msg);
+        assert!(matches!(parsed, Some(UserMessage::LocationRequired)));
+        assert_eq!(en_msg, en(parsed.unwrap()));
+    }
+
+    #[test]
+    fn localize_validation_translates_location_required() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::Validation {
+            message: "Please select a location".into(),
+        });
+        let localized = localize_validation(err, Locale::Es);
+        let AppError::Domain(DomainError::Validation { message }) = localized else {
+            panic!("expected Validation");
+        };
+        assert_eq!(message, "Selecciona una ubicación");
     }
 
     #[test]
@@ -331,13 +402,24 @@ mod tests {
     }
 
     #[test]
-    fn localize_validation_ignores_internal_error() {
+    fn localize_validation_ignores_non_validation_error() {
+        // `DomainError::Internal` was removed from the error model; we now
+        // exercise the pass-through branch with a non-Validation variant
+        // (NotFound) to assert that `localize_validation` returns any
+        // non-Validation domain error untouched instead of mapping it to a
+        // Validation surface.
         use crate::error::{AppError, DomainError};
-        let err = AppError::Domain(DomainError::Internal {
-            message: "internal error".into(),
+        let err = AppError::Domain(DomainError::NotFound {
+            resource: "expiry_lot",
+            id: "missing".into(),
         });
         let result = localize_validation(err, Locale::Es);
-        // Should return the original error unchanged (Internal, not Validation)
-        matches!(result, AppError::Domain(DomainError::Internal { .. }));
+        match result {
+            AppError::Domain(DomainError::NotFound { resource, id }) => {
+                assert_eq!(resource, "expiry_lot");
+                assert_eq!(id, "missing");
+            }
+            other => panic!("expected NotFound unchanged, got {other:?}"),
+        }
     }
 }

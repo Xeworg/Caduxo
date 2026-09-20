@@ -23,6 +23,8 @@ use crate::dto::expiry_lots::{
     ExpiryLotUpdate, LotResolutionEventResponse,
 };
 use crate::error::{AppError, DomainError};
+use crate::pdf::locale::Locale;
+use crate::services::user_messages::{user_message, UserMessage};
 
 /// Valid resolution type values.
 const VALID_RESOLUTIONS: &[&str] = &["consumed", "sold", "discarded", "donated", "other"];
@@ -79,6 +81,11 @@ fn quantities_equal(a: f64, b: f64) -> bool {
 const QUANTITY_EQ_TOLERANCE: f64 = 1e-9;
 
 /// Validates an ISO-8601 date string (YYYY-MM-DD).
+///
+/// Emits the canonical English `InvalidDateFormat` variant so the command
+/// layer can localise it via `localize_validation`. The label "expiry date"
+/// matches the UserMessage catalog exactly; changing it here requires
+/// updating `parse_user_message_kind` for round-trip coverage.
 fn validate_expiry_date(date: &str) -> Result<(), DomainError> {
     let has_strict_shape = date.len() == 10
         && date.as_bytes()[4] == b'-'
@@ -89,14 +96,26 @@ fn validate_expiry_date(date: &str) -> Result<(), DomainError> {
             .all(|(idx, byte)| matches!(idx, 4 | 7) || byte.is_ascii_digit());
     if !has_strict_shape {
         return Err(DomainError::Validation {
-            message: format!("Invalid expiry date format: `{date}` (expected YYYY-MM-DD)"),
+            message: user_message(
+                UserMessage::InvalidDateFormat {
+                    label: "expiry date".into(),
+                    value: date.into(),
+                },
+                Locale::En,
+            ),
         });
     }
 
     NaiveDate::parse_from_str(date, "%Y-%m-%d")
         .map(|_| ())
         .map_err(|_| DomainError::Validation {
-            message: format!("Invalid expiry date format: `{date}` (expected YYYY-MM-DD)"),
+            message: user_message(
+                UserMessage::InvalidDateFormat {
+                    label: "expiry date".into(),
+                    value: date.into(),
+                },
+                Locale::En,
+            ),
         })
 }
 
@@ -279,8 +298,12 @@ pub async fn create_expiry_lot(
     let location_id = if let Some(ref loc) = input.location_id {
         Some(loc.clone())
     } else if require_location {
+        // Emit the canonical English `LocationRequired` text so the command
+        // layer can localise it via `localize_validation`. The persisted
+        // sentinel name `Sin ubicacion` is unrelated — it stays in the
+        // database as a stable identifier for unset-location lots.
         return Err(DomainError::Validation {
-            message: "Selecciona una ubicación".to_string(),
+            message: user_message(UserMessage::LocationRequired, Locale::En),
         }
         .into());
     } else {
@@ -1903,7 +1926,7 @@ mod tests {
                 err,
                 crate::error::AppError::Domain(crate::error::DomainError::Validation {
         message,
-                }) if message == "Selecciona una ubicación"
+                }) if message == "Please select a location"
             ));
         Ok(())
     }

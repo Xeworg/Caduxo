@@ -26,6 +26,8 @@ use crate::dto::csv_io::{
 };
 use crate::dto::dashboard::DashboardFilters;
 use crate::error::{AppError, DomainError, InfrastructureError};
+use crate::pdf::locale::Locale;
+use crate::services::user_messages::{user_message, UserMessage};
 
 // ============================================================
 // Header detection
@@ -141,18 +143,19 @@ pub async fn preview_product_csv(
     let mapping = resolve_mapping(&headers, input.mapping);
 
     // Both required fields must resolve; otherwise we cannot classify rows.
+    //
+    // Both messages are emitted as the canonical English UserMessage text so
+    // the command layer can localise them via `localize_validation`. The
+    // `starts_with` parser in `user_messages` matches these prefixes, which
+    // keeps Spanish UI flows free of English backend validation strings.
     if mapping.sku.is_none() {
         return Err(AppError::Domain(DomainError::Validation {
-            message:
-                "SKU column not detected. Provide a column named `sku`, `code`, or `reference`."
-                    .to_string(),
+            message: user_message(UserMessage::SkuColumnNotDetected, Locale::En),
         }));
     }
     if mapping.description.is_none() {
         return Err(AppError::Domain(DomainError::Validation {
-            message:
-                "Description column not detected. Provide a column named `description` or `name`."
-                    .to_string(),
+            message: user_message(UserMessage::DescriptionColumnNotDetected, Locale::En),
         }));
     }
 
@@ -715,12 +718,15 @@ pub async fn import_product_csv(
 
     if mapping.sku.is_none() {
         return Err(AppError::Domain(DomainError::Validation {
-            message: "SKU column not mapped. Cannot import.".to_string(),
+            // Same canonical text as `preview_product_csv`; lets a single
+            // UserMessage variant cover both auto-detect and explicit-mapping
+            // failure paths and keeps round-trip coverage with the parser.
+            message: user_message(UserMessage::SkuColumnNotDetected, Locale::En),
         }));
     }
     if mapping.description.is_none() {
         return Err(AppError::Domain(DomainError::Validation {
-            message: "Description column not mapped. Cannot import.".to_string(),
+            message: user_message(UserMessage::DescriptionColumnNotDetected, Locale::En),
         }));
     }
 

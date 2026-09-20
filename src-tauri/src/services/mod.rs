@@ -16,3 +16,4 @@ pub mod settings;
 pub mod stores;
 pub mod unit_audit;
 pub mod unit_definitions;
+pub mod user_messages;
