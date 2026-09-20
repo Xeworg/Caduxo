@@ -82,7 +82,7 @@
 </script>
 
 <div class="overlay">
-  <div class="modal">
+  <div class="mapper-box">
     <header class="modal-header">
       <h2>{$LL.csvImport.mapColumns()}</h2>
       <p class="subtitle">
@@ -252,7 +252,7 @@
     z-index: 200;
   }
 
-  .modal {
+  .mapper-box {
     background: #fff;
     border-radius: 10px;
     width: min(680px, 95vw);
@@ -260,6 +260,14 @@
     display: flex;
     flex-direction: column;
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+    /* DaisyUI v5 ships `.modal { opacity: 0; visibility: hidden;
+       pointer-events: none; ... }` as the base rule and only animates
+       the modal in when nested inside `<dialog class="modal" open>` (or
+       a `.modal-toggle:checked + .modal` / `.modal-open` / `:popover-
+       open` / `:target` trigger). ColumnMapper.svelte is the second
+       surface that hit this trap (after the CalendarPage LotDetail
+       overlay in commit ca1e147) — renamed to `.mapper-box` so the
+       DaisyUI base rule does not match. */
   }
 
   .modal-header {
