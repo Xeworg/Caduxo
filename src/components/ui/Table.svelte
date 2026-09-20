@@ -110,9 +110,12 @@
   narrow-table surfaces (e.g. dashboard lot picker) the table
   composes inline. The wrapper is the place where themed scrollbar
   utilities attach in PR 11.
+
+  Tailwind classes referenced here (for the JIT scanner):
+    overflow-x-auto scrollbar-thin scrollbar-thumb-base-300
 -->
 {#if scrollable}
-  <div class="overflow-x-auto">
+  <div class="overflow-x-auto scrollbar-thin scrollbar-thumb-base-300">
     <table
       {id}
       class={tableClasses}
