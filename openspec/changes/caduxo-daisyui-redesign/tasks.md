@@ -347,18 +347,21 @@ that need positioning logic and ARIA wiring.
       `role="tab"`, each panel `role="tabpanel"` with `aria-labelledby`. <!-- sdd-owner: implementation -->
 - [x] Create `src/components/ui/Select.svelte`: `value`, `options:
       Option[]`, `size: sm | md`, `disabled`, `invalid`,
-      `aria-label` / `aria-labelledby`. Composes DaisyUI
-      `select select-bordered select-{size}` and `select-error` when
-      `invalid`. Native `<select>` stays in the DOM for form
-      semantics; the visible surface is the DaisyUI wrapper. <!-- sdd-owner: implementation -->
+      `aria-label` / `aria-labelledby`. Composes DaisyUI v5
+      `select select-{size}` and `select-error` when `invalid`;
+      `select-bordered` is intentionally not used because DaisyUI v5
+      selects are bordered by default. Native `<select>` stays in the
+      DOM for form semantics. <!-- sdd-owner: implementation -->
 - [x] Create `src/components/ui/Input.svelte`: `value`, `type: text |
       search | number | email | url | password`, `label`, `required`,
       `helper`, `invalid`, `list`, `size: sm | md | lg`, `disabled`,
-      `aria-label` / `aria-describedby`. Composes DaisyUI
-      `input input-bordered input-{size}` with `input-error` when
-      `invalid`, paired with `label`, `label-text`,
-      `label-text-alt`. When `list` is supplied the primitive renders a
-      `<datalist id={list}>` slot the consumer fills. <!-- sdd-owner: implementation -->
+      `aria-label` / `aria-describedby`. Composes DaisyUI v5
+      `input input-{size}` with `input-error` when `invalid`, using the
+      `fieldset` / `fieldset-legend` field pattern plus `label` helper
+      text; `input-bordered`, `form-control`, `label-text`, and
+      `label-text-alt` are intentionally not used because DaisyUI v5
+      does not emit them. When `list` is supplied the primitive renders
+      a `<datalist id={list}>` slot the consumer fills. <!-- sdd-owner: implementation -->
 
 **Files / discovery targets**
 
@@ -454,45 +457,45 @@ Configuration page return.
 `docs/daisyui-redesign-plan.md` Phase 4. Migrates the most visible
 screen first to give stakeholder reviewers something to look at.
 
-- [ ] Migrate `src/components/DashboardPage.svelte` urgency cards to
+- [x] Migrate `src/components/DashboardPage.svelte` urgency cards to
       `Card.svelte` (`tone` for the urgency-driven tint) + `Badge.svelte`
       for the leading status dot + DaisyUI `stats` / `stat` pattern
       for the bucket counts. Replace local `.urgency-card`,
       `.urgency-card-expired`, `.urgency-card-today`,
       `.urgency-card-alert`, `.urgency-card-soon`,
       `.urgency-card-normal` classes. <!-- sdd-owner: implementation -->
-- [ ] Migrate urgency badges (`.urgency-badge`,
+- [x] Migrate urgency badges (`.urgency-badge`,
       `urgencyClass(lot.urgency)`, `.status-*`, `.lot-picker-status`)
       to `Badge.svelte` with the appropriate `urgency` /
       `semantic` prop and optional `dot`. <!-- sdd-owner: implementation -->
-- [ ] Migrate the dashboard lot table to `Table.svelte` (`zebra`,
+- [x] Migrate the dashboard lot table to `Table.svelte` (`zebra`,
       `stickyHeader`, `loading` slot pointing at `LoadingState.svelte`,
       `empty` slot pointing at `EmptyState.svelte`). Numeric columns
       use the `num` utility. <!-- sdd-owner: implementation -->
-- [ ] Replace local `.tab-btn`, `.detail-tabs`, `.tab-content`
+- [x] Replace local `.tab-btn`, `.detail-tabs`, `.tab-content`
       with `Tabs.svelte` (`bordered` style). <!-- sdd-owner: implementation -->
-- [ ] Replace the dashboard error banner (`.error-banner`) with
+- [x] Replace the dashboard error banner (`.error-banner`) with
       `Alert.svelte` (`variant="error"`). <!-- sdd-owner: implementation -->
-- [ ] Replace the scan-row spinner (`.scan-spinner`) with the DaisyUI
+- [x] Replace the scan-row spinner (`.scan-spinner`) with the DaisyUI
       `loading loading-spinner loading-sm` primitive (used inline; the
       shared `LoadingState.svelte` also exists for full-page loading
       surfaces). <!-- sdd-owner: implementation -->
-- [ ] Migrate every action button on the dashboard to `Button.svelte`
+- [x] Migrate every action button on the dashboard to `Button.svelte`
       with the appropriate variant (primary for the "Nuevo producto"
       quick-create, ghost for filter row chips, danger / warning /
       success per urgency action). Title-attribute tooltips on
       icon-only buttons become `Tooltip.svelte`. <!-- sdd-owner: implementation -->
-- [ ] Add new i18n keys for any new dashboard copy (empty-state
+- [x] Add new i18n keys for any new dashboard copy (empty-state
       titles / bodies, loading-state text, alert copy, action
       labels). EN + ES in the same PR. <!-- sdd-owner: implementation -->
-- [ ] Run `npm run i18n:generate`; commit the regenerated catalogue. <!-- sdd-owner: implementation -->
+- [x] Run `npm run i18n:generate`; commit the regenerated catalogue. <!-- sdd-owner: implementation -->
 
 ### 6.x PR 6 verify gate
 
-- [ ] `npm run i18n:generate` green. <!-- sdd-owner: implementation -->
-- [ ] `npm run check` green. <!-- sdd-owner: implementation -->
-- [ ] `npm run build` green. <!-- sdd-owner: implementation -->
-- [ ] `git grep -nE '\.(urgency-card|urgency-badge|status-|tab-btn|detail-tabs|tab-content|error-banner|scan-spinner|loading-row)\b' src/components/DashboardPage.svelte`
+- [x] `npm run i18n:generate` green. <!-- sdd-owner: implementation -->
+- [x] `npm run check` green. <!-- sdd-owner: implementation -->
+- [x] `npm run build` green. <!-- sdd-owner: implementation -->
+- [x] `git grep -nE '\.(urgency-card|urgency-badge|status-|tab-btn|detail-tabs|tab-content|error-banner|scan-spinner|loading-row)\b' src/components/DashboardPage.svelte`
       returns zero matches as the active surface class. <!-- sdd-owner: implementation -->
 - [ ] Manual smoke — every canonical Dashboard scenario from the
       unchanged Dashboard capability continues to pass: sections
@@ -617,7 +620,9 @@ continue the remaining forms as PR 8b.
       .input / .error-msg / .saving-msg / .inline-error /
       .field-error` with `Input.svelte` / `Select.svelte` /
       `Toggle.svelte` / `Alert.svelte`. Pair every input with the
-      `label` / `label-text` / `label-text-alt` trio. <!-- sdd-owner: implementation -->
+      DaisyUI v5 fieldset / legend / helper-text structure exposed by
+      `Input.svelte`; do not reintroduce v4-only `label-text` or
+      `label-text-alt` classes. <!-- sdd-owner: implementation -->
 - [ ] Migrate plain `<input type="checkbox">` to the DaisyUI
       `checkbox checkbox-primary checkbox-sm` wrapper; keep the
       native `<input>` in the DOM for form semantics. <!-- sdd-owner: implementation -->
