@@ -822,40 +822,75 @@ preserved exactly per the spec's
 "DatePicker and CategoryPicker keyboard contracts are preserved"
 requirement.
 
-- [ ] Restyle `src/components/CalendarMonth.svelte`: day cells,
+- [x] Restyle `src/components/CalendarMonth.svelte`: day cells,
       selected state, today ring, badge dots. Use the `num` utility
       for the right-aligned badge dots (current `CalendarMonth` is
       already end-aligned — confirm). Preserve year picker, decade
       navigation, badge dot count, and out-of-range guards
-      unchanged. <!-- sdd-owner: implementation -->
-- [ ] Restyle `src/components/CalendarPage.svelte`: page header,
+      unchanged. (PR 10 landed; commit b4f629c on feat/daisyui-redesign;
+      chevron nav + month/year labels migrate to Button.svelte +
+      Tooltip.svelte; year-chips stay bespoke; day-cells keep
+      per-cell class: bindings + roving tabindex; all CSS hex
+      literals → theme tokens.) <!-- sdd-owner: implementation -->
+- [x] Restyle `src/components/CalendarPage.svelte`: page header,
       prev/next chevron buttons (now `Button.svelte variant="ghost"
       size="icon"` with `Tooltip.svelte` labels), month / year labels,
       and the day-detail panel column headers. Preserve the
-      keyboard surface verbatim. <!-- sdd-owner: implementation -->
-- [ ] Restyle `src/components/DatePicker.svelte`: the popover root
+      keyboard surface verbatim. (PR 10 landed; commit b4f629c on
+      feat/daisyui-redesign; refresh button → Button.svelte +
+      Tooltip.svelte; badge-count → Badge.svelte semantic="info";
+      Table block (PR 9b) left untouched; loading/error/diagnostic +
+      LotDetail modal overlay left verbatim per spec carve-out.) <!-- sdd-owner: implementation -->
+- [x] Restyle `src/components/DatePicker.svelte`: the popover root
       acquires `class="dropdown dropdown-content ..."` (along with the
       existing positioning classes). Hand-rolled outside-click /
       scroll / resize listeners, fixed positioning, ISO bind
       contract, year-range enforcement, validation rules, and
-      `clearable` semantics stay unchanged. <!-- sdd-owner: implementation -->
-- [ ] Restyle `src/components/inputs/CategoryPicker.svelte`: the
+      `clearable` semantics stay unchanged. (PR 10 landed; commit
+      b4f629c on feat/daisyui-redesign; calendar/clear icons →
+      Button.svelte variant="ghost" (via positioning wrappers
+      `.dp-icon-slot` / `.dp-clear-slot` since the Button primitive
+      does not accept a `class` prop); trigger input stays bespoke
+      (WAI-ARIA combobox / date-input pattern); today button stays
+      bespoke with theme tokens; popover root acquires
+      `dropdown dropdown-content` alongside hand-rolled `position:
+      fixed`; all CSS hex literals → theme tokens.) <!-- sdd-owner: implementation -->
+- [x] Restyle `src/components/inputs/CategoryPicker.svelte`: the
       popover root acquires `class="dropdown dropdown-content ..."`
       alongside the existing positioning. Preserves the chip /
       pseudo-row semantics, arrow-key / Enter / Escape / Backspace
-      keyboard contract, and `aria-activedescendant` semantics. <!-- sdd-owner: implementation -->
-- [ ] Migrate the `<details>` / `<summary>` panels in
+      keyboard contract, and `aria-activedescendant` semantics. (PR
+      10 landed; commit b4f629c on feat/daisyui-redesign; close-icon →
+      Button.svelte variant="ghost" size="sm"; popover root
+      acquires `dropdown dropdown-content`; chip / combobox /
+      option CSS → theme tokens; chip semantics + WAI-ARIA combobox
+      pattern preserved verbatim.) <!-- sdd-owner: implementation -->
+- [x] Migrate the `<details>` / `<summary>` panels in
       `UnitReviewPage.svelte` ("Map to preset", "Keep as custom") to
-      DaisyUI `collapse collapse-arrow` with proper ARIA roles. <!-- sdd-owner: implementation -->
+      DaisyUI `collapse collapse-arrow` with proper ARIA roles. (PR
+      10 landed; commit b4f629c on feat/daisyui-redesign; both
+      `<details>` migrated to `collapse collapse-arrow` with
+      `collapse-title` / `collapse-content`; Display name → Input.svelte
+      (id preserved for `getElementById` lookup); radios stay
+      bespoke (no Radio primitive); submit / leave / done /
+      backToDashboard → Button.svelte; alert banners → Alert.svelte;
+      product-count → Badge.svelte semantic="neutral"; obsolete CSS
+      rules removed.) <!-- sdd-owner: implementation -->
 - [ ] Add new i18n keys for any new tooltip or helper copy on these
-      surfaces. EN + ES in the same PR. <!-- sdd-owner: implementation -->
-- [ ] Run `npm run i18n:generate`; commit the regenerated catalogue. <!-- sdd-owner: implementation -->
+      surfaces. EN + ES in the same PR. (PR 10 worker noted no new
+      keys required — all migrated copy reuses existing keys;
+      `npm run i18n:generate` reports "all files are up to date".) <!-- sdd-owner: implementation -->
+- [ ] Run `npm run i18n:generate`; commit the regenerated catalogue.
+      (No regeneration needed — no new keys added; see above.) <!-- sdd-owner: implementation -->
 
 ### 10.x PR 10 verify gate
 
-- [ ] `npm run i18n:generate` green. <!-- sdd-owner: implementation -->
-- [ ] `npm run check` green. <!-- sdd-owner: implementation -->
-- [ ] `npm run build` green. <!-- sdd-owner: implementation -->
+- [ ] `npm run i18n:generate` green. (re-run by parent after PR 10
+      worker handoff; placeholders in apply-progress.md.) <!-- sdd-owner: implementation -->
+- [ ] `npm run check` green. (re-run by parent after PR 10 worker
+      handoff; placeholders in apply-progress.md.) <!-- sdd-owner: implementation -->
+- [ ] `npm run build` green. (re-run by parent after PR 10 worker
+      handoff; placeholders in apply-progress.md.) <!-- sdd-owner: implementation -->
 - [ ] Manual smoke — every canonical DatePicker scenario from the
       unchanged DatePicker capability continues to pass without
       modification (year range, ISO bind, manual text input
