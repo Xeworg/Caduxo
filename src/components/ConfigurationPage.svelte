@@ -1,23 +1,35 @@
 <!--
-  ConfigurationPage.svelte — settings surface (PR 5 of
+  ConfigurationPage.svelte — settings surface (PR 8a finish of
   caduxo-daisyui-redesign).
 
-  Replaces the bespoke `<select class="locale-select">` with the
-  shared `Select.svelte` primitive, and the bespoke
-  `toggle-wrap` / `toggle-track` / `toggle-thumb` markup with the
-  shared `Toggle.svelte` primitive. Adds a new "Theme" section that
-  uses the `themeStore` rune + `AVAILABLE_THEMES` to render a list
-  picker and surfaces IPC failures via the `Alert.svelte` primitive.
+  PR 5 already migrated the language selector (Select), the
+  location-required toggle (Toggle), and the theme switcher section
+  (Select + Alert). PR 8a finishes the page chrome:
+    - Each settings section now lives inside a Card.svelte primitive
+      (`tone="default"`).
+    - The `.loading-msg` plain-text placeholder is replaced with
+      `LoadingState.svelte` (text variant).
+    - The `.saving-msg` is replaced with `LoadingState.svelte`
+      (spinner variant) so the in-flight save reads as a status.
+    - The `.error-msg` plain-text surface is replaced with
+      `Alert.svelte variant="error"` for both the load-error path
+      and the locale-save-error path.
+    - The `.theme-error` wrapper becomes a plain block (the
+      Alert.svelte inside already owns the error chrome).
+    - The page-header + page-title remain as plain elements; the
+      page itself is the Configuration route, not a DaisyUI surface.
 
-  No business logic changes — only the visual chrome and the i18n
-  keypath for the new section copy (`configuration.theme.*`).
+  No business logic changes — only the form chrome.
 
   Tailwind classes referenced here (for the JIT scanner):
     select select-md select-error
     toggle toggle-primary toggle-md
-    alert alert-error alert-soft
+    alert alert-error alert-info alert-soft
     menu menu-sm rounded-box
-    flex items-start justify-between gap-5
+    card card-body card-title bg-base-100 border-base-300
+    shadow-sm flex items-start justify-between gap-5
+    loading loading-spinner loading-md
+    skeleton
 -->
 <script lang="ts">
     import { onMount } from "svelte";
@@ -38,6 +50,8 @@
     import Select from "./ui/Select.svelte";
     import Toggle from "./ui/Toggle.svelte";
     import Alert from "./ui/Alert.svelte";
+    import Card from "./ui/Card.svelte";
+    import LoadingState from "./ui/LoadingState.svelte";
     import {
         AVAILABLE_THEMES,
         setTheme,
@@ -220,13 +234,15 @@
     </div>
 
     {#if loading}
-        <p class="loading-msg">{$LL.common.loading()}</p>
+        <LoadingState variant="text" label={$LL.common.loading()} />
     {:else if errorMsg && !settings}
-        <p class="error-msg">{errorMsg}</p>
+        <Alert variant="error">{errorMsg}</Alert>
     {:else}
         <!-- ─── Language section ────────────────────────────────────────────── -->
-        <section class="settings-section">
-            <h2 class="section-title">{$LL.configuration.language.sectionTitle()}</h2>
+        <Card tone="default">
+            <h2 class="section-title">
+                {$LL.configuration.language.sectionTitle()}
+            </h2>
 
             <div class="setting-row">
                 <div class="setting-info">
@@ -265,13 +281,17 @@
             </div>
 
             {#if localeErrorMsg}
-                <p class="error-msg">{localeErrorMsg}</p>
+                <div class="section-status">
+                    <Alert variant="error">{localeErrorMsg}</Alert>
+                </div>
             {/if}
-        </section>
+        </Card>
 
         <!-- ─── Lots section ─────────────────────────────────────────────── -->
-        <section class="settings-section">
-            <h2 class="section-title">{$LL.configuration.section.lots()}</h2>
+        <Card tone="default">
+            <h2 class="section-title">
+                {$LL.configuration.section.lots()}
+            </h2>
 
             <div class="setting-row">
                 <div class="setting-info">
@@ -301,16 +321,25 @@
             </div>
 
             {#if savingLocation}
-                <p class="saving-msg">{$LL.configuration.language.saving()}</p>
+                <div class="section-status">
+                    <LoadingState
+                        variant="spinner"
+                        label={$LL.configuration.language.saving()}
+                    />
+                </div>
             {/if}
             {#if errorMsg}
-                <p class="error-msg">{errorMsg}</p>
+                <div class="section-status">
+                    <Alert variant="error">{errorMsg}</Alert>
+                </div>
             {/if}
-        </section>
+        </Card>
 
         <!-- ─── Theme section (PR 5) ────────────────────────────────────── -->
-        <section class="settings-section">
-            <h2 class="section-title">{$LL.settings.theme.title()}</h2>
+        <Card tone="default">
+            <h2 class="section-title">
+                {$LL.settings.theme.title()}
+            </h2>
 
             <div class="setting-row">
                 <div class="setting-info">
@@ -349,13 +378,11 @@
             </div>
 
             {#if themeError}
-                <div class="theme-error">
-                    <Alert variant="error">
-                        {themeError}
-                    </Alert>
+                <div class="section-status">
+                    <Alert variant="error">{themeError}</Alert>
                 </div>
             {/if}
-        </section>
+        </Card>
     {/if}
 </div>
 
@@ -364,10 +391,13 @@
         max-width: 680px;
         margin: 0 auto;
         padding: 28px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
     }
 
     .page-header {
-        margin-bottom: 28px;
+        margin-bottom: 12px;
     }
 
     .page-title {
@@ -377,23 +407,11 @@
         margin: 0;
     }
 
-    .loading-msg {
-        color: var(--color-secondary);
-        font-size: 0.9rem;
-    }
-
-    /* ─── Section ──────────────────────────────────────────────────────────────── */
-
-    .settings-section {
-        background: var(--color-base-100);
-        border: 1px solid var(--color-base-300);
-        border-radius: 0.75rem;
-        padding: 20px 24px;
-        box-shadow: 0 1px 3px rgb(0 0 0 / 0.06);
-        margin-bottom: 16px;
-    }
-
-    .section-title {
+    /* ─── Section title inside the Card primitive ─────────────────────────────
+       The Card primitive owns the outer chrome (border, padding, shadow); the
+       h2 stays visible inside the card-body so the section name keeps the
+       same affordance as before. */
+    :global(.card-body) .section-title {
         font-size: 0.95rem;
         font-weight: 600;
         color: var(--color-secondary);
@@ -461,25 +479,8 @@
         font-style: italic;
     }
 
-    .theme-error {
+    /* ─── Section status (loading / error) ───────────────────────────────────── */
+    .section-status {
         margin-top: 12px;
-    }
-
-    /* ─── Status messages ─────────────────────────────────────────────────────── */
-
-    .saving-msg {
-        margin-top: 10px;
-        font-size: 0.82rem;
-        color: var(--color-secondary);
-    }
-
-    .error-msg {
-        margin-top: 10px;
-        font-size: 0.82rem;
-        color: var(--color-error);
-        background: color-mix(in oklch, var(--color-error) 8%, transparent);
-        border: 1px solid color-mix(in oklch, var(--color-error) 30%, transparent);
-        border-radius: 0.375rem;
-        padding: 8px 12px;
     }
 </style>

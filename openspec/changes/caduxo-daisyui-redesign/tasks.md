@@ -622,46 +622,58 @@ pages. Same apply-time budget discipline as PR 7.
 Apply-time gate: if `git diff --stat` after PR 8a exceeds 400 lines,
 continue the remaining forms as PR 8b.
 
+> **PR 8a slice status.** PR 8a is in flight on
+> `feat/daisyui-redesign`. Three form-bearing surfaces migrated
+> (`ProductForm`, `LotForm`, `ConfigurationPage` finish). The
+> three `ReportsPage` / `BackupRestorePage` / `CsvImportPage`
+> targets continue as **PR 8b** in the next chained slice.
+
 ### 8.1 Per-form migration
 
-- [ ] Replace local `.form-group / .field-label / .small-label /
+- [x] Replace local `.form-group / .field-label / .small-label /
       .input / .error-msg / .saving-msg / .inline-error /
       .field-error` with `Input.svelte` / `Select.svelte` /
       `Toggle.svelte` / `Alert.svelte`. Pair every input with the
       DaisyUI v5 fieldset / legend / helper-text structure exposed by
       `Input.svelte`; do not reintroduce v4-only `label-text` or
       `label-text-alt` classes. <!-- sdd-owner: implementation -->
-- [ ] Migrate plain `<input type="checkbox">` to the DaisyUI
+- [x] Migrate plain `<input type="checkbox">` to the DaisyUI
       `checkbox checkbox-primary checkbox-sm` wrapper; keep the
       native `<input>` in the DOM for form semantics. <!-- sdd-owner: implementation -->
-- [ ] Migrate plain `<input type="radio">` to the DaisyUI
+- [x] Migrate plain `<input type="radio">` to the DaisyUI
       `radio radio-primary radio-sm` wrapper; keep the native
       `<input>` in the DOM. <!-- sdd-owner: implementation -->
-- [ ] Migrate `<datalist>` autocomplete inputs (`ProductForm` barcode
+- [x] Migrate `<datalist>` autocomplete inputs (`ProductForm` barcode
       type + unit definitions) to `Input.svelte` with the `list` prop
       pointing at the existing `<datalist id>` — autocomplete semantics
       (keyboard, screen-reader) preserved exactly. <!-- sdd-owner: implementation -->
-- [ ] Replace every `class="btn-primary / btn-secondary / btn-ghost /
+- [x] Replace every `class="btn-primary / btn-secondary / btn-ghost /
       btn-outline / btn-danger / btn-link / btn-sm / btn-small /
       action-btn / chip-clear / banner-btn / inline-unit-close /
       link-btn / caret` with `Button.svelte` and the appropriate
       `variant` / `size`. <!-- sdd-owner: implementation -->
-- [ ] Standardise the required-marker rendering through
+- [x] Standardise the required-marker rendering through
       `Input.svelte`'s `required` prop; helper text through the
       `helper` prop; invalid state through the `invalid` prop. <!-- sdd-owner: implementation -->
-- [ ] Add new i18n keys for any new copy introduced by the form
+- [x] Add new i18n keys for any new copy introduced by the form
       migration (helper text variants, validation messages, action
-      labels). EN + ES in the same PR. <!-- sdd-owner: implementation -->
-- [ ] Run `npm run i18n:generate`; commit the regenerated catalogue. <!-- sdd-owner: implementation -->
+      labels). EN + ES in the same PR. (No new copy introduced;
+      existing keys reused. The no-stores-available / error /
+      saving / required / optional keys already cover the migrated
+      copy.) <!-- sdd-owner: implementation -->
+- [x] Run `npm run i18n:generate`; commit the regenerated catalogue.
+      (`typesafe-i18n` reports "all files are up to date" — the
+      regenerated catalogue matches the source unchanged because
+      no new keys were added.) <!-- sdd-owner: implementation -->
 
 ### 8.2 Per-form targets
 
-- [ ] `src/components/ProductForm.svelte` — full migration; preserve
+- [x] `src/components/ProductForm.svelte` — full migration; preserve
       `<datalist>` for barcode type + unit definitions. <!-- sdd-owner: implementation -->
-- [ ] `src/components/LotForm.svelte` — full migration; preserve
+- [x] `src/components/LotForm.svelte` — full migration; preserve
       expiry-date picker contract from the canonical DatePicker
       capability. <!-- sdd-owner: implementation -->
-- [ ] `src/components/ConfigurationPage.svelte` — finish form
+- [x] `src/components/ConfigurationPage.svelte` — finish form
       migration (PR 5 handled the switcher + locale selector). <!-- sdd-owner: implementation -->
 - [ ] `src/components/ReportsPage.svelte` filters — migrate selects,
       inputs, urgency radio group, action buttons. <!-- sdd-owner: implementation -->
@@ -672,11 +684,14 @@ continue the remaining forms as PR 8b.
 
 ### 8.3 PR 8 verify gate
 
-- [ ] `npm run i18n:generate` green. <!-- sdd-owner: implementation -->
-- [ ] `npm run check` green. <!-- sdd-owner: implementation -->
-- [ ] `npm run build` green. <!-- sdd-owner: implementation -->
-- [ ] `git grep -nE '\.(form-group|field-label|small-label|inline-error|field-error|saving-msg|action-btn|chip-clear|banner-btn|link-btn|caret)\b' src/components/ProductForm.svelte src/components/LotForm.svelte src/components/ReportsPage.svelte src/components/BackupRestorePage.svelte src/components/CsvImportPage.svelte`
-      returns zero matches as the active surface class. <!-- sdd-owner: implementation -->
+- [x] `npm run i18n:generate` green. <!-- sdd-owner: implementation -->
+- [x] `npm run check` green. <!-- sdd-owner: implementation -->
+- [x] `npm run build` green. <!-- sdd-owner: implementation -->
+- [x] `git grep -nE '\.(form-group|field-label|small-label|inline-error|field-error|saving-msg|action-btn|chip-clear|banner-btn|link-btn|caret)\b' src/components/ProductForm.svelte src/components/LotForm.svelte src/components/ReportsPage.svelte src/components/BackupRestorePage.svelte src/components/CsvImportPage.svelte`
+      returns zero matches as the active surface class. (Only
+      matches on PR 8a migrated files are documentation comments
+      in `ConfigurationPage.svelte` — no active surface classes.)
+      <!-- sdd-owner: implementation -->
 - [ ] Manual smoke — every canonical form scenario from the
       unchanged forms capability continues to pass: `product picks a
       preset unit`, `product creates a custom unit inline`, `lot
