@@ -294,3 +294,188 @@ dist/assets/index-C4_4UfT0.js   327.36 kB │ gzip: 94.47 kB
 - **Chain strategy:** stacked-to-main for PR 1 → PR 2 (parent
   ratified), feature-branch-chain from PR 3 onward. PR 2 lands on
   the same branch as PR 1; no merge commit splits the two.
+
+## PR 3 — Shared UI primitives batch A
+
+**Status:** Complete on `feat/daisyui-redesign`. Pure presentational
+primitives; no surface migration in this PR. Not pushed per session
+preflight.
+
+**Branch:** `feat/daisyui-redesign` (continuation of PR 1 + PR 2; per
+the parent's ratified chain strategy, PR 3 onward uses
+`feature-branch-chain`, so this is the last PR that stacks onto the
+implementation branch without its own feature branch cut).
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `src/components/ui/Button.svelte` | New primitive — DaisyUI `btn` with 9 variants (`primary`, `secondary`, `ghost`, `outline`, `danger`, `warning`, `success`, `link`, `icon`), 4 sizes (`xs`, `sm`, `md`, `lg`), `disabled` + `loading` states, optional `iconStart` / `iconEnd` snippets. The `icon` variant is square-shaped and requires `aria-label`. Loading state renders the DaisyUI `loading loading-spinner loading-sm` and disables interaction via `aria-busy` + `disabled`. Reduced-motion users see the spinner without slide-in (Tailwind `motion-reduce:transition-none` + the global reset in `src/app.css`). |
+| `src/components/ui/Card.svelte` | New primitive — DaisyUI `card` + `card-body` with optional `header` / `footer` snippets and a `tone: default \| muted \| warning \| error \| success \| info` prop. The `muted` tone composes `bg-base-200`; status tones compose `border-{tone}`. When `labelled` is true the wrapper surfaces `role="region"` + `aria-labelledby`. |
+| `src/components/ui/Badge.svelte` | New primitive — two parallel APIs: `urgency: expired \| today \| alert \| soon \| normal` (domain tokens, take precedence) and `semantic: success \| warning \| error \| info \| neutral`. Optional leading `status status-{semantic}` dot. The `expired` urgency variant composes `motion-safe:animate-urgency-pulse` — the keyframes land in PR 12; the class is a no-op until then and the global reset keeps it static for reduced-motion users. |
+| `src/components/ui/Alert.svelte` | New primitive — DaisyUI `alert alert-{variant}` + `alert-soft` with a leading inline-SVG heroicon (no icon library; SVGs are inline so the primitive stays zero-dependency). Variants `success \| warning \| error \| info`. `role` defaults to `alert` for error / warning, `status` for success / info. `dismissible` surfaces a trailing close button whose `aria-label` is the consumer-supplied `dismissLabel` (no default string). `actions` slot for inline buttons. |
+| `src/components/ui/EmptyState.svelte` | New primitive — centered column with `text-base-content/70`, a 64-px heroicon from a closed name map (`inbox \| calendar \| document \| tag \| search \| warning \| info \| none`), consumer-supplied `title` + `body`, optional `actions` slot. No hardcoded English copy. |
+| `src/components/ui/LoadingState.svelte` | New primitive — three variants: `skeleton` (N rows of DaisyUI `skeleton`; reduced-motion users see a static grey block via the global reset), `spinner` (DaisyUI `loading loading-spinner loading-md`), `text` (consumer-supplied label). `aria-live="polite"` toggled by `announce` (defaults to `true` for `spinner`/`text`, `false` for `skeleton`). `rows` clamped to `[1, 50]`. |
+| `src/components/ui/Toggle.svelte` | New primitive — DaisyUI `toggle toggle-primary toggle-{size}` wrapping a real `<input type="checkbox">` in the DOM for form semantics. Visible `label` (renders next to the toggle) OR plain `aria-label` for screen-reader-only. `size: sm \| md`. |
+| `src/components/ui/Tooltip.svelte` | New primitive — DaisyUI `tooltip tooltip-{position} tooltip-open` on hover + `:focus-visible`. Renders the consumer-supplied `text` via `data-tip` (DaisyUI's hook for tooltip content). The child element receives `aria-describedby={id}` (auto-generated when not supplied) so screen readers announce the tooltip on focus. Keyboard-reachable because DaisyUI shows the tooltip on `:focus-visible` as well as hover. |
+
+### Tasks completed (PR 3)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| 3.0.1 Button.svelte | ✅ done | 9 variants × 4 sizes × disabled / loading / icon-only covered. |
+| 3.0.2 Card.svelte | ✅ done | `tone` covers default / muted / warning / error / success / info. `role="region"` + `aria-labelledby` only when `labelled` is true. |
+| 3.0.3 Badge.svelte | ✅ done | `urgency` (closed 5-value union) maps to `semantic` (closed 5-value union); `urgency` wins on conflict. Pulse class wired but no-op until PR 12 keyframes. |
+| 3.0.4 Alert.svelte | ✅ done | Inline-SVG heroicon per variant. `role` defaults to match screen-reader semantics. `dismissible` requires the consumer to pass `dismissLabel` (no default). |
+| 3.0.5 EmptyState.svelte | ✅ done | Closed 8-value icon map (`inbox \| calendar \| document \| tag \| search \| warning \| info \| none`); all icons inline-SVG. |
+| 3.0.6 LoadingState.svelte | ✅ done | `rows` clamped; `aria-live` defaults by variant. |
+| 3.0.7 Toggle.svelte | ✅ done | Native `<input type="checkbox">` stays in the DOM; visible `label` OR `aria-label` (mutually exclusive at the consumer's choice). |
+| 3.0.8 Tooltip.svelte | ✅ done | Auto-generated id when not supplied; child receives `aria-describedby`. |
+
+### Cross-cutting requirements
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| No hard-coded user-facing strings | ✅ done | Every primitive passes visible copy via slots / props. `Alert` and `LoadingState` have NO default English strings — the consumer must supply `dismissLabel` / `label` (typically bound to `$LL.common.*`). The default `"Loading"` and `"Dismiss"` strings audited and removed in the same PR. |
+| Theme-aware via DaisyUI tokens | ✅ done | All colour / border / shadow utilities resolve to DaisyUI semantic tokens (`primary`, `base-100/200/300`, `success`, `warning`, `error`, `info`, `neutral`). No hex / rgb literals anywhere in the 8 primitives. |
+| Reduced-motion compatibility | ✅ done | Global reset in `src/app.css` (PR 1) clamps every animation / transition to `0.001ms` for reduced-motion users. Primitives additionally compose `motion-reduce:transition-none` on Button / Alert / Tooltip / Toggle so colour / opacity transitions are also flat. The expired-urgency pulse is gated on `motion-safe:` so it does NOT fire under reduced motion. |
+| Accessible labels for icon-only / loading / disabled / alert / tooltip / toggle | ✅ done | Button `icon` variant requires `aria-label`. Alert `dismissible` requires `dismissLabel` for the close button. LoadingState exposes `label` for `aria-label` on spinner / text variants. Toggle accepts either a visible `label` OR a plain `aria-label`. Tooltip child element receives `aria-describedby={id}` for keyboard activation. Alert `role` defaults to `alert` for error / warning and `status` for success / info (screen-reader conventions). |
+
+### Checks run + results
+
+```text
+$ npm run i18n:generate
+[typesafe-i18n] ... all files are up to date
+[typesafe-i18n] generating files completed
+✅ green (no i18n catalogue changes — primitives carry no copy)
+
+$ npm run check
+> svelte-check --tsconfig ./tsconfig.json --threshold error
+svelte-check found 0 errors and 0 warnings
+✅ green
+
+$ npm run build
+> vite build
+✓ 205 modules transformed.
+dist/index.html                   0.39 kB │ gzip:  0.26 kB
+dist/assets/index-FtgyXQm0.css  228.88 kB │ gzip: 33.65 kB
+dist/assets/index-ib6ep-OC.js   327.36 kB │ gzip: 94.47 kB
+✓ built in 1.68s
+✅ green
+```
+
+### Focused sanity checks
+
+- **Import graph audit.** All 8 primitives only import from `svelte`
+  (the `Snippet` type). No external icon library, no `$LL` calls in
+  primitives, no cross-primitive imports. The primitives are leaf
+  nodes — PR 5+ consumers are free to compose them in any
+  combination without circular dependency risk.
+- **No existing consumer.** `grep -rE "components/ui/" src/
+  --include="*.svelte" --include="*.ts"` (excluding the directory
+  itself) returns zero matches. As designed — PR 3 ships the
+  primitives; PR 5 (Configuration theme switcher) is the first
+  consumer.
+- **DaisyUI class emission.** The CSS bundle contains all 24 newly
+  referenced classes:
+  `tooltip-top` / `tooltip-right` / `tooltip-bottom` / `tooltip-left`
+  / `tooltip-open`, `alert-soft` / `alert-success` / `alert-warning`
+  / `alert-error` / `alert-info`, `badge-warning` / `badge-success`
+  / `badge-error` / `badge-info` / `badge-neutral` / `badge-sm`,
+  `toggle-primary` / `toggle-sm` / `toggle-md`, `skeleton`,
+  `status-success` / `status-warning` / `status-error` / `status-info`
+  / `status-neutral`, `loading-spinner` / `loading-sm` / `loading-md`.
+  Tailwind v4 + DaisyUI v5 emitted every class that appears as a
+  literal in the source — the JIT scanner saw them during the build
+  pass.
+- **No migration of existing surfaces.** `git grep -nE
+  '\.(urgency-card|urgency-badge|status-|tab-btn|detail-tabs|tab-content|error-banner|scan-spinner|loading-row|modal-overlay|modal-box|modal-box-wide|modal-header|modal-body|modal-footer|modal-close|modal-loading|form-group|field-label|small-label|inline-error|field-error|saving-msg|action-btn|chip-clear|banner-btn|link-btn|caret|lot-table|reports-table|reports-empty|lot-picker|lot-picker-item|lot-picker-status|info-list|checks-list|confirm-box|toggle-wrap|toggle-track|toggle-thumb)\b'
+  src/components/*.svelte` was NOT run — the parent instructed PR 3
+  to add primitives, not migrate surfaces. PRs 6+ own the grep
+  gates for their respective legacy class families.
+
+### Deviations from design
+
+- **Diff is over budget.** The PR 3 task forecast was ~280 net
+  additions; the actual diff is 8 files / 830 insertions. Per the
+  work-unit rule "Budget is not code-golf — slice by work unit or
+  report the overage", this is a `size:exception` recommendation to
+  the parent (not a code-shrinking fix). The actual line count
+  exceeds the forecast because:
+    1. JSDoc-style contract comments at the top of every primitive
+       (~10 lines each × 8 = ~80 lines). These document the API
+       surface so PR 5+ consumers do not have to re-read the design
+       spec to wire the primitives.
+    2. Tailwind / DaisyUI class-emission hints at the top of every
+       file (~5 lines each × 8 = ~40 lines). The hints keep the JIT
+       scanner from missing dynamic class tokens.
+    3. Inline-SVG heroicons. `Alert` ships 4 variant icons (~30 lines
+       of SVG paths) and `EmptyState` ships 8 icons (~30 lines).
+       Design §2.3 explicitly required inline SVG ("no icon
+       dependency; inline SVG only") — the design's forecast
+       under-counted this.
+    4. Explicit TypeScript prop interfaces and union types. Every
+       primitive declares its variant / size / semantic unions
+       explicitly so svelte-check enforces the contract at the
+       call site. ~15 lines per primitive of pure type definition.
+
+  An honest split (PR 3a: Button / Card / Badge / Alert, PR 3b:
+  EmptyState / LoadingState / Toggle / Tooltip) lands at ~486 + ~344
+  lines. PR 3a would still exceed the 400-line review budget and
+  the split would land the same total code across two PRs instead
+  of one work unit. The parent explicitly asked for "PR 3" as a
+  single slice; this commit ships the slice. The parent can
+  ratify the exception or ask for a split in the next turn.
+- **`motion-safe:animate-urgency-pulse` is wired but inert.** PR 12
+  defines the `@keyframes urgency-pulse` block in `src/app.css`.
+  Until then, the class is a no-op for both reduced- and
+  non-reduced-motion users; the badge is visually distinct through
+  colour + text alone. The wiring is correct so PR 12 lands the
+  animation without further changes to `Badge.svelte`.
+- **`dismissLabel` and `label` have no English defaults.** The
+  parent instructed "No hard-coded user-facing strings inside
+  primitives unless they are accessibility fallbacks explicitly
+  supplied by props / slots." The initial drafts shipped `"Dismiss"`
+  and `"Loading…"` as fallback strings; those were removed in this
+  PR so consumers MUST pass `dismissLabel` (Alert) / `label`
+  (LoadingState). PR 5 will be the first to exercise these props.
+
+### Bundle size
+
+| Asset | Before PR 3 | After PR 3 | Delta |
+|-------|-------------|-------------|-------|
+| `dist/assets/index-*.css` | 225.65 kB (33.13 kB gzip) | 228.88 kB (33.65 kB gzip) | +3.23 kB (+1.4%) |
+| `dist/assets/index-*.js`  | 327.36 kB (94.47 kB gzip) | 327.36 kB (94.47 kB gzip) | 0 |
+
+CSS growth is 1.4 % — well within the design's 20 % regression
+gate (risk #8 in the proposal). The growth covers the 24 new
+DaisyUI v5 class families introduced by the primitives.
+
+### Remaining work (next chained PR)
+
+- **PR 4** — Shared UI primitives batch B (Modal, Table, Tabs,
+  Select, Input). Modal needs focus-trap lifecycle + ARIA wiring;
+  the others are lighter. Forecast ~260 net additions (design
+  §6) — verify at apply time, split if the actual exceeds 400.
+- **PR 5** — App shell navbar migration (`src/App.svelte`) +
+  Configuration theme switcher. Lands the `theme` namespace in
+  `src/i18n/en/index.ts` and `src/i18n/es/index.ts`, the
+  `themeStore.svelte.ts` consumer, the `app-shell-gradient`
+  keyframes, and the first consumer of PR 3's primitives
+  (`Toggle.svelte` replaces the bespoke toggle; `Alert.svelte`
+  surfaces IPC failure on the switcher; `Button.svelte` /
+  `Card.svelte` / `Tooltip.svelte` populate the rest of the
+  Configuration surface).
+
+### Workload / PR boundary
+
+- **PR 3 actual diff:** 8 files changed, 830 insertions(+), 0
+  deletions(-). Over the 400-line review budget — see the
+  "Deviations from design" section for the `size:exception`
+  recommendation.
+- **Chain strategy:** feature-branch-chain from PR 3 onward
+  (parent ratified). PR 3 still stacks onto `feat/daisyui-redesign`
+  because the parent asked for it as a single work unit. PR 4 will
+  cut its own feature branch off `feat/daisyui-redesign` per the
+  chain strategy.
+

@@ -264,42 +264,42 @@ through the existing fallback path.
 `docs/daisyui-redesign-plan.md` Phase 2 batch A. Pure presentational
 primitives; no surface migration in this PR.
 
-- [ ] Create `src/components/ui/Button.svelte` per design §2.3: variants
+- [x] Create `src/components/ui/Button.svelte` per design §2.3: variants
       `primary | secondary | ghost | outline | danger | warning |
       success | link | icon`; sizes `xs | sm | md | lg`; `disabled`,
       `loading`, optional `iconStart` / `iconEnd` snippets;
       `aria-label` required when `variant === "icon"`. Composes DaisyUI
       `btn btn-{variant}` and `loading loading-spinner loading-sm`. <!-- sdd-owner: implementation -->
-- [ ] Create `src/components/ui/Card.svelte`: optional `header`,
+- [x] Create `src/components/ui/Card.svelte`: optional `header`,
       `footer`, `tone: default | muted | warning | error | success`
       props; composes `card card-body`, with `bg-base-200` for the muted
       tone and the matching `border-{tone}` modifier for status tones.
       Surfaces `role="region"` + `aria-labelledby` when `labelled`. <!-- sdd-owner: implementation -->
-- [ ] Create `src/components/ui/Badge.svelte`: `urgency: expired | today
+- [x] Create `src/components/ui/Badge.svelte`: `urgency: expired | today
       | alert | soon | normal` and `semantic: success | warning | error
       | info | neutral` props (urgency takes precedence); optional
       `dot` for a leading status dot; sizes `sm | md`. The expired
       variant optionally renders `motion-safe:animate-urgency-pulse`
       (keyframes defined in PR 12). <!-- sdd-owner: implementation -->
-- [ ] Create `src/components/ui/Alert.svelte`: `variant: success | error
+- [x] Create `src/components/ui/Alert.svelte`: `variant: success | error
       | warning | info`; optional `dismissible`, `title`; `actions`
       slot. Composes `alert alert-{variant}` with a leading inline SVG
       heroicon (no icon dependency; inline SVG only). <!-- sdd-owner: implementation -->
-- [ ] Create `src/components/ui/EmptyState.svelte`: `title`, `body`,
+- [x] Create `src/components/ui/EmptyState.svelte`: `title`, `body`,
       optional `icon` (name resolved to an inline-SVG heroicon map in
       the component file), optional `actions` slot. Composes centered
       column with `text-base-content/70`. <!-- sdd-owner: implementation -->
-- [ ] Create `src/components/ui/LoadingState.svelte`: `variant:
+- [x] Create `src/components/ui/LoadingState.svelte`: `variant:
       skeleton | spinner | text`; `rows` (default 3) for the skeleton
       variant; `label` for the text variant; `announce` flag toggles
       `aria-live="polite"`. Skeleton composes DaisyUI `skeleton` —
       reduced-motion users see a static grey block via the global
       reset. <!-- sdd-owner: implementation -->
-- [ ] Create `src/components/ui/Toggle.svelte`: `checked`, `label`,
+- [x] Create `src/components/ui/Toggle.svelte`: `checked`, `label`,
       `size: sm | md`, `disabled`. Composes DaisyUI `toggle
       toggle-primary toggle-{size}`; the underlying
       `<input type="checkbox">` stays in the DOM for form semantics. <!-- sdd-owner: implementation -->
-- [ ] Create `src/components/ui/Tooltip.svelte`: `text`, `position:
+- [x] Create `src/components/ui/Tooltip.svelte`: `text`, `position:
       top | bottom | left | right`, optional `id`; composes DaisyUI
       `tooltip tooltip-{position}` and `tooltip-open` on hover /
       `:focus-visible`; child element receives `aria-describedby={id}`.
