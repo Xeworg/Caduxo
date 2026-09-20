@@ -12,6 +12,8 @@
 //! PDF/CSV consumer.
 
 use std::borrow::Cow;
+use std::fmt;
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
@@ -50,6 +52,30 @@ impl ReportType {
         }
     }
 
+    /// Returns the short, title-cased display label for the report type in
+    /// the given locale. Suitable for compact surfaces like the PDF header
+    /// subtitle (`"Expired: Expired lots"`); for the longer, full-sentence
+    /// description used in the metadata block, use
+    /// [`ReportType::description`].
+    ///
+    /// This is the **single source of truth** for built-in report-type
+    /// labels. Adding a new locale must only require touching this method
+    /// (and `description`) — renderers must not duplicate the per-variant
+    /// mapping.
+    pub fn label(&self, locale: crate::pdf::locale::Locale) -> Cow<'static, str> {
+        use crate::pdf::locale::Locale as L;
+        match (self, locale) {
+            (ReportType::InAlertWindow, L::En) => Cow::Borrowed("In alert window"),
+            (ReportType::InAlertWindow, L::Es) => Cow::Borrowed("En ventana de alerta"),
+            (ReportType::Expired, L::En) => Cow::Borrowed("Expired"),
+            (ReportType::Expired, L::Es) => Cow::Borrowed("Vencidos"),
+            (ReportType::Next30Days, L::En) => Cow::Borrowed("Next 30 days"),
+            (ReportType::Next30Days, L::Es) => Cow::Borrowed("Próximos 30 días"),
+            (ReportType::Custom, L::En) => Cow::Borrowed("Custom"),
+            (ReportType::Custom, L::Es) => Cow::Borrowed("Personalizado"),
+        }
+    }
+
     /// Returns a human-readable label for the report type in the given locale.
     /// Used in the report metadata so the preview UI / PDF can show a stable
     /// description without having to map snake_case values back to UI labels.
@@ -69,6 +95,40 @@ impl ReportType {
         }
     }
 }
+
+impl FromStr for ReportType {
+    type Err = ReportTypeParseError;
+
+    /// Parses a snake_case report-type discriminator (the same shape used by
+    /// [`ReportType::as_str`] and the `report_type` field of
+    /// [`ReportMetadata`]) back into a [`ReportType`].
+    ///
+    /// Round-trip invariant: `s.parse::<ReportType>().ok().map(|r| r.as_str()) == Some(s)`
+    /// for every built-in variant.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "in_alert_window" => Ok(ReportType::InAlertWindow),
+            "expired" => Ok(ReportType::Expired),
+            "next_30_days" => Ok(ReportType::Next30Days),
+            "custom" => Ok(ReportType::Custom),
+            other => Err(ReportTypeParseError(other.to_string())),
+        }
+    }
+}
+
+/// Error returned when a string cannot be parsed into a [`ReportType`].
+/// The wrapped string preserves the original input so callers can surface
+/// it in error messages or logs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReportTypeParseError(pub String);
+
+impl fmt::Display for ReportTypeParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unknown report type: {:?}", self.0)
+    }
+}
+
+impl std::error::Error for ReportTypeParseError {}
 
 // ============================================================
 // Filters
@@ -159,4 +219,137 @@ pub struct ReportMetadata {
 pub struct ReportData {
     pub metadata: ReportMetadata,
     pub lots: Vec<crate::dto::dashboard::DashboardLotRow>,
+}
+
+// ============================================================
+// Tests
+// ============================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pdf::locale::Locale;
+    use std::str::FromStr;
+
+    #[test]
+    fn label_is_localized_for_every_variant() {
+        // Every (variant, locale) pair must produce a stable label so the
+        // PDF header subtitle and any future surface share one source of
+        // truth. Adding a new locale must only require editing
+        // `ReportType::label` and `ReportType::description`.
+        let cases = [
+            (ReportType::InAlertWindow, Locale::En, "In alert window"),
+            (
+                ReportType::InAlertWindow,
+                Locale::Es,
+                "En ventana de alerta",
+            ),
+            (ReportType::Expired, Locale::En, "Expired"),
+            (ReportType::Expired, Locale::Es, "Vencidos"),
+            (ReportType::Next30Days, Locale::En, "Next 30 days"),
+            (ReportType::Next30Days, Locale::Es, "Próximos 30 días"),
+            (ReportType::Custom, Locale::En, "Custom"),
+            (ReportType::Custom, Locale::Es, "Personalizado"),
+        ];
+        for (rt, locale, expected) in cases {
+            assert_eq!(
+                rt.label(locale).as_ref(),
+                expected,
+                "wrong label for {rt:?} in {locale:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn label_is_shorter_than_or_equal_to_description() {
+        // The label is the title-cased short form used in compact surfaces
+        // (PDF header subtitle). The description is the full-sentence
+        // version. Both must be non-empty and the label must not be longer
+        // than the description — that is the actual contract that lets the
+        // renderer substitute the label in tight layouts without overflow.
+        // We intentionally do NOT assert that the description starts with
+        // the label, because some locales surface the description as a
+        // sentence that rephrases the topic rather than appending to it
+        // (e.g. English `In alert window` / `Lots in their alert window`).
+        for rt in [
+            ReportType::InAlertWindow,
+            ReportType::Expired,
+            ReportType::Next30Days,
+            ReportType::Custom,
+        ] {
+            for locale in [Locale::En, Locale::Es] {
+                let label = rt.label(locale);
+                let description = rt.description(locale);
+                assert!(
+                    !label.is_empty(),
+                    "label for {rt:?}/{locale:?} must not be empty"
+                );
+                assert!(
+                    !description.is_empty(),
+                    "description for {rt:?}/{locale:?} must not be empty"
+                );
+                assert!(
+                    label.len() <= description.len(),
+                    "label `{label}` should not be longer than description `{description}` for {rt:?}/{locale:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn label_returns_borrowed_for_known_variants() {
+        // Returning `Cow::Borrowed` for built-in variants keeps the per-render
+        // allocation profile flat; this guards against an accidental `format!`
+        // regression that would allocate a new `String` per call.
+        for rt in [
+            ReportType::InAlertWindow,
+            ReportType::Expired,
+            ReportType::Next30Days,
+            ReportType::Custom,
+        ] {
+            for locale in [Locale::En, Locale::Es] {
+                assert!(
+                    matches!(rt.label(locale), Cow::Borrowed(_)),
+                    "{rt:?}/{locale:?} label should be Cow::Borrowed, got {:?}",
+                    rt.label(locale)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn from_str_roundtrips_through_as_str_for_every_variant() {
+        // The round-trip invariant — `as_str` → `from_str` → original
+        // variant — is what lets the PDF renderer rely on the metadata
+        // string to recover a `ReportType`.
+        for rt in [
+            ReportType::InAlertWindow,
+            ReportType::Expired,
+            ReportType::Next30Days,
+            ReportType::Custom,
+        ] {
+            let parsed = ReportType::from_str(rt.as_str())
+                .unwrap_or_else(|e| panic!("from_str({:?}) failed: {e}", rt.as_str()));
+            assert_eq!(parsed, rt);
+        }
+    }
+
+    #[test]
+    fn from_str_rejects_unknown_strings_and_preserves_input() {
+        let err = ReportType::from_str("future_type").expect_err("must reject unknown input");
+        assert_eq!(err.0, "future_type");
+
+        let err = ReportType::from_str("").expect_err("must reject empty input");
+        assert_eq!(err.0, "");
+    }
+
+    #[test]
+    fn parse_error_display_includes_input_for_diagnostics() {
+        let err = ReportType::from_str("not-a-type").expect_err("must reject");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not-a-type"),
+            "error message should include the offending input, got: {msg}"
+        );
+    }
 }

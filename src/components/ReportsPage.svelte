@@ -200,7 +200,7 @@
           rows: result.rows_written,
           rowWord,
           pages: result.page_count,
-          pagesWord: pageWord,
+          pageWord,
         });
         setTimeout(() => (successMsg = ""), 5000);
       }

@@ -862,13 +862,13 @@ type RootTranslation = {
 			to: string
 		}
 		/**
-		 * E​x​p​o​r​t​e​d​ ​{​r​o​w​s​}​ ​{​r​o​w​W​o​r​d​}​ ​a​c​r​o​s​s​ ​{​p​a​g​e​s​}​ ​p​a​g​e​{​p​a​g​e​s​W​o​r​d​}
+		 * E​x​p​o​r​t​e​d​ ​{​r​o​w​s​}​ ​{​r​o​w​W​o​r​d​}​ ​a​c​r​o​s​s​ ​{​p​a​g​e​s​}​ ​{​p​a​g​e​W​o​r​d​}
 		 * @param {unknown} pages
-		 * @param {unknown} pagesWord
+		 * @param {unknown} pageWord
 		 * @param {unknown} rows
 		 * @param {unknown} rowWord
 		 */
-		exportSuccess: RequiredParams<'pages' | 'pagesWord' | 'rows' | 'rowWord'>
+		exportSuccess: RequiredParams<'pages' | 'pageWord' | 'rows' | 'rowWord'>
 		/**
 		 * p​a​g​e
 		 */
@@ -4126,9 +4126,9 @@ export type TranslationFunctions = {
 			to: () => LocalizedString
 		}
 		/**
-		 * Exported {rows} {rowWord} across {pages} page{pagesWord}
+		 * Exported {rows} {rowWord} across {pages} {pageWord}
 		 */
-		exportSuccess: (arg: { pages: unknown, pagesWord: unknown, rows: unknown, rowWord: unknown }) => LocalizedString
+		exportSuccess: (arg: { pages: unknown, pageWord: unknown, rows: unknown, rowWord: unknown }) => LocalizedString
 		/**
 		 * page
 		 */

@@ -249,7 +249,7 @@ const en: BaseTranslation = {
       from: "from=",
       to: "to=",
     },
-    exportSuccess: "Exported {rows} {rowWord} across {pages} page{pagesWord}",
+    exportSuccess: "Exported {rows} {rowWord} across {pages} {pageWord}",
     pageWord: "page",
     rowWord: "row",
   },

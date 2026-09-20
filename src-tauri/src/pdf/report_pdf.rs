@@ -28,6 +28,7 @@
 //! written to the path provided by the caller; the function does not log
 //! row contents.
 
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
@@ -39,7 +40,7 @@ use printpdf::{
 use serde::Serialize;
 
 use crate::dto::dashboard::DashboardLotRow;
-use crate::dto::reports::{ReportData, ReportFilters, ReportMetadata};
+use crate::dto::reports::{ReportData, ReportFilters, ReportMetadata, ReportType};
 use crate::error::{AppError, InfrastructureError};
 use crate::pdf::locale::{self, Locale, PdfMessages};
 
@@ -168,7 +169,7 @@ pub fn render_report(
         let layer = doc.get_page(*page_idx_ref).get_layer(*layer_idx_ref);
         let page_num = page_idx + 1;
 
-        draw_header(&layer, &data.metadata, &msgs, &bold, &regular);
+        draw_header(&layer, &data.metadata, &msgs, &bold, &regular, locale);
         draw_table_header(&layer, &msgs, &bold);
 
         let start_row = page_idx * DATA_ROWS_PER_PAGE;
@@ -222,6 +223,7 @@ fn draw_header(
     msgs: &PdfMessages,
     bold: &IndirectFontRef,
     regular: &IndirectFontRef,
+    locale: Locale,
 ) {
     let title_x = MARGIN_LEFT_MM;
     let title_y = PAGE_HEIGHT_MM - MARGIN_TOP_MM - 8.0;
@@ -235,11 +237,7 @@ fn draw_header(
 
     // Report type + description on the left, generated_at on the right.
     let subtitle_y = title_y - 6.5;
-    let subtitle = format!(
-        "{}: {}",
-        capitalize(metadata.report_type.as_str()),
-        metadata.description
-    );
+    let subtitle = report_subtitle(metadata, locale);
     layer.use_text(
         truncate(&subtitle, 90),
         FONT_SIZE_SUBTITLE,
@@ -525,6 +523,29 @@ fn capitalize(s: &str) -> String {
     }
 }
 
+/// Resolves the `report_type` metadata string to a short localized display
+/// label. Uses [`ReportType::label`] as the single source of truth for the
+/// built-in variants so adding a new locale only requires updating the
+/// domain type, not the renderer.
+///
+/// When the metadata string is not a known report-type code (e.g. a future
+/// enum variant arrives before the renderer is updated), we fall back to a
+/// capitalised version of the raw metadata so the header still shows
+/// something sensible.
+fn localized_report_type_label(raw: &str, locale: Locale) -> Cow<'static, str> {
+    match raw.parse::<ReportType>() {
+        Ok(rt) => rt.label(locale),
+        Err(_) => Cow::Owned(capitalize(raw)),
+    }
+}
+
+/// Builds the localized `Label: description` line that the PDF header shows
+/// under the document title.
+fn report_subtitle(metadata: &ReportMetadata, locale: Locale) -> String {
+    let label = localized_report_type_label(metadata.report_type.as_str(), locale);
+    format!("{label}: {}", metadata.description)
+}
+
 /// Truncates `s` to at most `max_chars` characters, appending `…` when truncated.
 fn truncate(s: &str, max_chars: usize) -> String {
     let mut out = String::with_capacity(s.len());
@@ -552,7 +573,6 @@ fn approximate_text_width_mm(text: &str, font_size_pt: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dto::reports::ReportType;
     use crate::pdf::locale::pdf_messages;
 
     fn make_metadata(locale: Locale) -> ReportMetadata {
@@ -833,5 +853,110 @@ mod tests {
         let result = render_report(&data, &out, Locale::En).expect("render");
         let expected = 60_usize.div_ceil(DATA_ROWS_PER_PAGE);
         assert_eq!(result.page_count, expected);
+    }
+
+    // --- Localized subtitle line --------------------------------------
+
+    fn metadata_with_type(report_type: &str, description: &str, locale: Locale) -> ReportMetadata {
+        let mut m = make_metadata(locale);
+        m.report_type = report_type.to_string();
+        m.description = description.to_string();
+        m
+    }
+
+    #[test]
+    fn report_subtitle_uses_localized_label_in_english() {
+        let m = metadata_with_type(
+            "in_alert_window",
+            ReportType::InAlertWindow.description(Locale::En).as_ref(),
+            Locale::En,
+        );
+        let line = report_subtitle(&m, Locale::En);
+        assert!(line.starts_with("In alert window:"), "got: {line}");
+        assert!(
+            line.ends_with(": Lots in their alert window"),
+            "description must be preserved after the colon, got: {line}"
+        );
+    }
+
+    #[test]
+    fn report_subtitle_uses_localized_label_in_spanish() {
+        let m = metadata_with_type(
+            "in_alert_window",
+            ReportType::InAlertWindow.description(Locale::Es).as_ref(),
+            Locale::Es,
+        );
+        let line = report_subtitle(&m, Locale::Es);
+        assert!(line.starts_with("En ventana de alerta:"), "got: {line}");
+        assert!(
+            line.ends_with(": Lotes en ventana de alerta"),
+            "description must be preserved after the colon, got: {line}"
+        );
+    }
+
+    #[test]
+    fn report_subtitle_does_not_leak_snake_case_for_any_type() {
+        // Regression: every built-in report type used to render the raw
+        // snake_case code (e.g. `In_alert_window:`) in the PDF header.
+        for (raw_type, expected_en_label) in [
+            ("in_alert_window", "In alert window"),
+            ("expired", "Expired"),
+            ("next_30_days", "Next 30 days"),
+            ("custom", "Custom"),
+        ] {
+            let m = metadata_with_type(raw_type, "any description", Locale::En);
+            let line = report_subtitle(&m, Locale::En);
+            assert!(
+                line.starts_with(&format!("{expected_en_label}:")),
+                "expected localized label `{expected_en_label}` for `{raw_type}`, got `{line}`"
+            );
+            assert!(
+                !line.contains('_'),
+                "subtitle `{line}` must not contain underscores (would leak snake_case)"
+            );
+        }
+    }
+
+    #[test]
+    fn report_subtitle_falls_back_to_capitalised_metadata_for_unknown_type() {
+        // Forward-compat: an unknown report_type (e.g. a future enum variant
+        // that hasn't been wired into ReportType::label yet) must not panic;
+        // the renderer should fall back to a capitalised version of the
+        // metadata string so the header is still informative.
+        let m = metadata_with_type("future_type", "any description", Locale::En);
+        let line = report_subtitle(&m, Locale::En);
+        assert!(
+            line.starts_with("Future_type:"),
+            "fallback label should be capitalised metadata, got `{line}`"
+        );
+        // The caller-supplied description is preserved after the colon.
+        assert!(line.ends_with(": any description"), "got: {line}");
+    }
+
+    #[test]
+    fn report_subtitle_label_source_matches_report_type_label_for_all_builtins() {
+        // Centralization guard: for every built-in variant and every
+        // supported locale, the renderer's subtitle label must equal the
+        // value returned by `ReportType::label`. This prevents the renderer
+        // from re-introducing a duplicate hardcoded label map; adding a new
+        // locale should only require editing the domain type.
+        let builtins = [
+            ("in_alert_window", ReportType::InAlertWindow),
+            ("expired", ReportType::Expired),
+            ("next_30_days", ReportType::Next30Days),
+            ("custom", ReportType::Custom),
+        ];
+        for (raw_type, rt) in builtins {
+            for locale in [Locale::En, Locale::Es] {
+                let m = metadata_with_type(raw_type, "any description", locale);
+                let line = report_subtitle(&m, locale);
+                let expected_prefix = format!("{}:", rt.label(locale).as_ref());
+                assert!(
+                    line.starts_with(&expected_prefix),
+                    "subtitle `{line}` should start with `{expected_prefix}` \
+                     for {rt:?}/{locale:?} (single-source-of-truth invariant)"
+                );
+            }
+        }
     }
 }

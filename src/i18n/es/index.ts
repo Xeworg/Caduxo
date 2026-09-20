@@ -247,7 +247,7 @@ const es: BaseTranslation = {
       from: "desde=",
       to: "hasta=",
     },
-    exportSuccess: "Exportados {rows} {rowWord} en {pages} página{pagesWord}",
+    exportSuccess: "Exportados {rows} {rowWord} en {pages} {pageWord}",
     pageWord: "página",
     rowWord: "fila",
   },
