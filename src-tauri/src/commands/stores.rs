@@ -177,10 +177,36 @@ pub async fn update_settings(
             });
         }
     }
+    if let Some(ref value) = input.theme {
+        validate_theme_value(value, loc)?;
+    }
     let pool = state.pool().await;
     settings_service::update_settings(&pool, input)
         .await
         .map_err(AppError::into)
+}
+
+/// Validates a theme preference at the IPC boundary.
+///
+/// The v1 curated set is `{"caduxo-light", "dark"}`. Any other value is
+/// rejected as `CommandError::Validation` with a locale-aware message so the
+/// persisted row stays untouched. The function is the single source of
+/// truth for theme validation; `update_settings` and the unit tests both
+/// call it so a future change to the curated set lands in one place.
+///
+/// PR 2 (caduxo-daisyui-redesign) wires the first theme-aware setting.
+fn validate_theme_value(value: &str, loc: Locale) -> Result<(), CommandError> {
+    if value == "caduxo-light" || value == "dark" {
+        return Ok(());
+    }
+    Err(CommandError::Validation {
+        message: user_message(
+            UserMessage::ThemeNotAllowed {
+                value: value.to_string(),
+            },
+            loc,
+        ),
+    })
 }
 
 /// Returns true if at least one active store exists (used as a precondition check).
@@ -190,4 +216,82 @@ pub async fn has_store(state: State<'_, AppState>) -> Result<bool, CommandError>
     store_service::has_store(&pool)
         .await
         .map_err(AppError::into)
+}
+
+#[cfg(test)]
+mod tests {
+    // PR 2 (caduxo-daisyui-redesign) — command-boundary theme validation.
+    // The IPC gate rejects values outside the curated v1 set
+    // (`caduxo-light`, `dark`) at the boundary so the persisted row stays
+    // untouched and the rejection reaches the UI in the active locale.
+    use super::validate_theme_value;
+    use crate::error::CommandError;
+    use crate::pdf::locale::Locale;
+
+    #[test]
+    fn validate_theme_accepts_caduxo_light_in_english() {
+        let result = validate_theme_value("caduxo-light", Locale::En);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_theme_accepts_caduxo_light_in_spanish() {
+        let result = validate_theme_value("caduxo-light", Locale::Es);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_theme_accepts_dark_in_english() {
+        let result = validate_theme_value("dark", Locale::En);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_theme_accepts_dark_in_spanish() {
+        let result = validate_theme_value("dark", Locale::Es);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_theme_rejects_synthwave_in_english() {
+        let err = validate_theme_value("synthwave", Locale::En).unwrap_err();
+        match err {
+            CommandError::Validation { message } => {
+                assert_eq!(
+                    message,
+                    "theme must be one of {caduxo-light, dark}, got `synthwave`"
+                );
+            }
+            other => panic!("expected CommandError::Validation, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_theme_rejects_synthwave_in_spanish() {
+        let err = validate_theme_value("synthwave", Locale::Es).unwrap_err();
+        match err {
+            CommandError::Validation { message } => {
+                assert_eq!(
+                    message,
+                    "el tema debe ser uno de {caduxo-light, dark}, se recibió `synthwave`"
+                );
+            }
+            other => panic!("expected CommandError::Validation, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_theme_rejects_empty_string() {
+        let err = validate_theme_value("", Locale::En).unwrap_err();
+        assert!(matches!(err, CommandError::Validation { .. }));
+    }
+
+    #[test]
+    fn validate_theme_rejects_uppercase_dark() {
+        // Curation is case-sensitive on purpose; the v1 set is the literal
+        // strings `"caduxo-light"` and `"dark"`. An uppercase variant must
+        // be rejected so a typo never reaches persistence.
+        let err = validate_theme_value("Dark", Locale::En).unwrap_err();
+        assert!(matches!(err, CommandError::Validation { .. }));
+    }
 }

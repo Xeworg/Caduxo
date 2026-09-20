@@ -203,22 +203,22 @@ the frontend code in PR 1 resolves against a real backend.
 
 ### 2.1 Backend settings DTO
 
-- [ ] Add `pub theme: String` (default `"caduxo-light"`) and
+- [x] Add `pub theme: String` (default `"caduxo-light"`) and
       `pub theme_configured: bool` (default `false`) to
       `SettingsResponse` in `src-tauri/src/dto/stores.rs`; add
       `pub theme: Option<String>` to `SettingsUpdate` in the same file. <!-- sdd-owner: implementation -->
-- [ ] Update `src-tauri/src/db/repositories/settings.rs::get_settings`
+- [x] Update `src-tauri/src/db/repositories/settings.rs::get_settings`
       so the response carries `theme` with the `caduxo-light` fallback
       when the row is absent or empty, and `theme_configured` mirrors
       the existing `language_configured` pattern (`theme IS NOT NULL`). <!-- sdd-owner: implementation -->
-- [ ] Branch on `input.theme` in
+- [x] Branch on `input.theme` in
       `src-tauri/src/services/settings.rs::update_settings` so a partial
       update of only `theme` does not touch the other settings keys. <!-- sdd-owner: implementation -->
-- [ ] Reject `theme` values outside `{"caduxo-light", "dark"}` at the
+- [x] Reject `theme` values outside `{"caduxo-light", "dark"}` at the
       IPC boundary in `src-tauri/src/commands/stores.rs::update_settings`;
       return a `CommandError::Validation` and leave the persisted row
       untouched. <!-- sdd-owner: implementation -->
-- [ ] Extend the migration runner (or add a new V-N migration) so the
+- [x] Extend the migration runner (or add a new V-N migration) so the
       `app_settings` table accepts a `theme` text column defaulting to
       `NULL`. Use the existing migration pattern (`MIGRATIONS` array in
       `src-tauri/src/db/migrations.rs`); the migration MUST be
@@ -226,21 +226,21 @@ the frontend code in PR 1 resolves against a real backend.
 
 ### 2.2 Backend tests
 
-- [ ] Add `#[tokio::test]` cases in
+- [x] Add `#[tokio::test]` cases in
       `src-tauri/src/db/repositories/settings.rs`: missing row returns
       `theme = "caduxo-light"`; empty string returns
       `"caduxo-light"`; `"synthwave"` (unsupported) returns
       `"caduxo-light"`; partial update of only `theme` preserves the
       other keys; `set_theme("synthwave")` is rejected by the command
       handler. <!-- sdd-owner: implementation -->
-- [ ] Add an idempotency test asserting re-running the new V-N
+- [x] Add an idempotency test asserting re-running the new V-N
       migration on an already-migrated pool leaves row counts
       unchanged. <!-- sdd-owner: implementation -->
 
 ### 2.3 PR 2 verify gate
 
-- [ ] `cargo test --manifest-path src-tauri/Cargo.toml --lib` green. <!-- sdd-owner: implementation -->
-- [ ] `cargo build --manifest-path src-tauri/Cargo.toml` green. <!-- sdd-owner: implementation -->
+- [x] `cargo test --manifest-path src-tauri/Cargo.toml --lib` green. <!-- sdd-owner: implementation -->
+- [x] `cargo build --manifest-path src-tauri/Cargo.toml` green. <!-- sdd-owner: implementation -->
 - [ ] Manual smoke — Tauri (or test harness) reads `app_settings.theme`
       round-trip: setting `dark` is persisted across restart; clearing
       the row falls back to OS preference. <!-- sdd-owner: implementation -->

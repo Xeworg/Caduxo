@@ -124,6 +124,13 @@ pub enum UserMessage {
     LanguageNotAllowed {
         value: String,
     },
+    /// Settings validation: theme is not one of the allowed values
+    /// (`caduxo-light`, `dark`). Mirrors `LanguageNotAllowed` so the
+    /// `update_settings` command can localise the rejection at the IPC
+    /// boundary and leave the persisted row untouched.
+    ThemeNotAllowed {
+        value: String,
+    },
     /// Product catalog business rule: a barcode cannot be added to a
     /// product that has been soft-archived.
     ProductArchivedForBarcode,
@@ -394,6 +401,12 @@ pub fn user_message(kind: UserMessage, locale: Locale) -> String {
         }
         (UserMessage::LanguageNotAllowed { value }, L::Es) => {
             format!("el idioma debe ser uno de {{en, es}}, se recibió `{value}`")
+        }
+        (UserMessage::ThemeNotAllowed { value }, L::En) => {
+            format!("theme must be one of {{caduxo-light, dark}}, got `{value}`")
+        }
+        (UserMessage::ThemeNotAllowed { value }, L::Es) => {
+            format!("el tema debe ser uno de {{caduxo-light, dark}}, se recibió `{value}`")
         }
         (UserMessage::ProductArchivedForBarcode, L::En) => {
             "Cannot add barcode to an archived product".to_string()
@@ -760,6 +773,10 @@ pub fn parse_user_message_kind(message: &str) -> Option<UserMessage> {
         return Some(UserMessage::LanguageNotAllowed { value });
     }
 
+    if let Some(value) = parse_theme_not_allowed(message) {
+        return Some(UserMessage::ThemeNotAllowed { value });
+    }
+
     if message == "Cannot add barcode to an archived product" {
         return Some(UserMessage::ProductArchivedForBarcode);
     }
@@ -1000,6 +1017,17 @@ fn parse_resolve_quantity_exceeds_remaining(message: &str) -> Option<(f64, Strin
 /// captured value. Returns `None` for malformed input.
 fn parse_language_not_allowed(message: &str) -> Option<String> {
     const PREFIX: &str = "language must be one of {en, es}, got `";
+    if !message.starts_with(PREFIX) || !message.ends_with('`') {
+        return None;
+    }
+    let inner = message.strip_prefix(PREFIX)?.strip_suffix('`')?;
+    Some(inner.to_string())
+}
+
+/// Parses `theme must be one of {caduxo-light, dark}, got \`{value}\`` back
+/// into the captured value. Returns `None` for malformed input.
+fn parse_theme_not_allowed(message: &str) -> Option<String> {
+    const PREFIX: &str = "theme must be one of {caduxo-light, dark}, got `";
     if !message.starts_with(PREFIX) || !message.ends_with('`') {
         return None;
     }

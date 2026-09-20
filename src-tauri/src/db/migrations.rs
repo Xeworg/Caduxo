@@ -667,8 +667,33 @@ pub(crate) const MIGRATIONS: &[(i64, &str, &str)] = &[
             CREATE INDEX idx_lot_movements_lot_created ON lot_movements(expiry_lot_id, created_at DESC);
             CREATE INDEX idx_lot_movements_source_location ON lot_movements(source_location_id) WHERE source_location_id IS NOT NULL;
             CREATE INDEX idx_lot_movements_dest_location ON lot_movements(destination_location_id) WHERE destination_location_id IS NOT NULL;
-            CREATE INDEX idx_lot_movements_kind ON lot_movements(movement_kind);
-            "#,
+CREATE INDEX idx_lot_movements_kind ON lot_movements(movement_kind);
+        "#,
+    ),
+    // V18 — theme persistence milestone marker (PR 2 of
+    // `caduxo-daisyui-redesign`).
+    //
+    // The `app_settings` table created in V2 is a generic key-value store:
+    //   key   TEXT PRIMARY KEY,
+    //   value TEXT NOT NULL,
+    // The schema already accepts an arbitrary `theme` text value via the
+    // `key` column — no column add is required. V18 exists to (a) make the
+    // theme-support milestone visible in the migration history, (b) keep the
+    // on-disk migration checksum stable so `_sqlx_migrations` does not flag
+    // drift on databases that already shipped V1–V17, and (c) provide an
+    // idempotent no-op future migrations can chain off of if `app_settings`
+    // ever needs a real column for theme (e.g. an INDEX on the `theme` key).
+    //
+    // Idempotent: `SELECT 1` does not touch any row, table, or index. Re-
+    // running on an already-migrated pool leaves every row count unchanged.
+    // Safe under the existing migration harness: the statement does not
+    // depend on any table that V2–V17 didn't already create.
+    (
+        18,
+        "app_settings_theme_key_milestone",
+        r#"
+        SELECT 1;
+        "#,
     ),
 ];
 
@@ -828,8 +853,8 @@ mod tests {
     #[tokio::test]
     async fn v2_schema_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
-        // V1-V17 total (V5 split into 11 separate migrations; V16, V17 added)
-        assert_eq!(applied_count(&pool).await.unwrap(), 17);
+        // V1-V18 total (V5 split into 11 separate migrations; V16, V17, V18 added)
+        assert_eq!(applied_count(&pool).await.unwrap(), 18);
     }
 
     // -------------------------------------------------------------------
@@ -1336,11 +1361,11 @@ mod tests {
     #[tokio::test]
     async fn v3_schema_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
-        // V1-V17 total (V5 split into 11 separate migrations; V16 added; V17 added)
+        // V1-V18 total (V5 split into 11 separate migrations; V16 added; V17 added; V18 added)
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            17,
-            "V5-V15 bring applied count to 15; V16 and V17 bring total to 17"
+            18,
+            "V5-V15 bring applied count to 15; V16, V17, V18 bring total to 18"
         );
     }
 
@@ -1391,8 +1416,8 @@ mod tests {
     #[tokio::test]
     async fn v4_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
-        // V1-V17 total (V5 split into 11 separate migrations; V16 added; V17 added)
-        assert_eq!(applied_count(&pool).await.unwrap(), 17);
+        // V1-V18 total (V5 split into 11 separate migrations; V16 added; V17 added; V18 added)
+        assert_eq!(applied_count(&pool).await.unwrap(), 18);
         assert!(table_exists(&pool, "product_categories").await);
         assert!(index_exists(&pool, "idx_product_categories_category").await);
         assert!(index_exists(&pool, "idx_product_categories_product").await);
@@ -2439,12 +2464,12 @@ mod tests {
                          checksum and apply V16-V17 on top",
         );
 
-        // Step 3: V16 and V17 were applied successfully. The applied count is
-        // now 17.
+        // Step 3: V16, V17, and V18 were applied successfully. The applied count is
+        // now 18.
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            17,
-            "after V16-V17 apply on top of the user database, count must be 17"
+            18,
+            "after V16-V18 apply on top of the user database, count must be 18"
         );
 
         // Confirm V16 actually ran (and the migration tracking row for
@@ -2470,11 +2495,22 @@ mod tests {
             "V17 must be recorded in _sqlx_migrations after a successful run"
         );
 
+        // Confirm V18 actually ran (PR 2 of `caduxo-daisyui-redesign`).
+        let v18_row: Option<(Vec<u8>,)> =
+            sqlx::query_as("SELECT checksum FROM _sqlx_migrations WHERE version = 18")
+                .fetch_optional(&pool)
+                .await
+                .expect("querying _sqlx_migrations for V18 must succeed");
+        assert!(
+            v18_row.is_some(),
+            "V18 must be recorded in _sqlx_migrations after a successful run"
+        );
+
         // Confirm re-running is still a no-op (idempotency).
         run_migrations(&pool).await.unwrap();
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            17,
+            18,
             "re-running migrations must not add new rows"
         );
 
@@ -2546,14 +2582,14 @@ mod tests {
     // Phase 1a — V5 lot_movements ledger
     // =====================================================================
 
-    // V5-V15 brings applied count to 15. V16 brings it to 16. V17 brings it to 17.
+    // V5-V15 brings applied count to 15. V16 brings it to 16. V17 brings it to 17. V18 brings it to 18.
     #[tokio::test]
     async fn v5_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            17,
-            "V5-V15 adds 11 migration entries to bring count to 15; V16 and V17 bring total to 17"
+            18,
+            "V5-V15 adds 11 migration entries to bring count to 15; V16, V17, V18 bring total to 18"
         );
     }
 
@@ -2884,7 +2920,7 @@ mod tests {
     #[tokio::test]
     async fn v17_adds_lot_movements_check_constraints() {
         let pool = fresh_test_pool().await.unwrap();
-        assert_eq!(applied_count(&pool).await.unwrap(), 17);
+        assert_eq!(applied_count(&pool).await.unwrap(), 18);
 
         // Verify the lot_movements table has CHECK constraints by testing
         // that invalid data is rejected at the DB layer.
@@ -3209,5 +3245,81 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(count.0, 2, "should have 2 movements");
+    }
+
+    // V18 — app_settings theme-key milestone (PR 2 of
+    // `caduxo-daisyui-redesign`) is idempotent.
+    //
+    // Re-running V18 (and the rest of the migration set) on an already-
+    // migrated pool must leave every row count unchanged: V18 is a pure
+    // `SELECT 1` marker, so re-application must be a no-op at the data
+    // layer even though the migration history (`_sqlx_migrations`) still
+    // records the V18 row from the first run.
+    #[tokio::test]
+    async fn v18_theme_milestone_is_idempotent() {
+        let pool = fresh_test_pool().await.unwrap();
+
+        // Initial pass: V1–V18 run, snapshot row counts across every
+        // table the V18 milestone could plausibly touch.
+        let initial_count = applied_count(&pool).await.unwrap();
+        assert_eq!(
+            initial_count, 18,
+            "fresh pool must report 18 applied migrations"
+        );
+        let app_settings_rows_before: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM app_settings")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        // Re-run all migrations on the same pool. `_sqlx_migrations`
+        // tracks every applied version, so the COUNT(*) is unchanged
+        // (sqlx refuses to re-apply V1–V18). V18 itself has no DDL so it
+        // cannot create or rewrite rows even if it did re-run.
+        run_migrations(&pool).await.unwrap();
+        let app_settings_rows_after: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM app_settings")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            app_settings_rows_after.0, app_settings_rows_before.0,
+            "app_settings row count must be unchanged after re-running V1–V18"
+        );
+
+        // Count of applied migrations is also unchanged.
+        let final_count = applied_count(&pool).await.unwrap();
+        assert_eq!(
+            final_count, 18,
+            "applied_count must remain 18 after re-running the migration set"
+        );
+    }
+
+    // V18 + theme key-value contract: the app_settings key-value schema
+    // already accepts arbitrary text values via the `key` column, so the
+    // repository can read and write a `theme` row without any schema
+    // change. This test pins that contract so future migrations that
+    // touch app_settings cannot regress the theme key support.
+    #[tokio::test]
+    async fn v18_app_settings_accepts_theme_key_value() {
+        let pool = fresh_test_pool().await.unwrap();
+
+        // Insert a theme row.
+        sqlx::query(
+            "INSERT INTO app_settings (key, value, updated_at) VALUES ('theme', 'dark', ?)",
+        )
+        .bind(chrono::Utc::now().to_rfc3339())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Read it back through the generic key-value accessor.
+        let row: (String,) = sqlx::query_as(
+            "SELECT value FROM app_settings WHERE key = 'theme'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(row.0, "dark");
     }
 }

@@ -11,7 +11,7 @@ pub async fn get_settings(pool: &DbPool) -> Result<SettingsResponse, AppError> {
 }
 
 /// Updates settings: last_selected_store_id, require_initial_location_on_lot_create,
-/// and language.
+/// language, and theme.
 pub async fn update_settings(
     pool: &DbPool,
     input: SettingsUpdate,
@@ -26,6 +26,11 @@ pub async fn update_settings(
     }
     if let Some(value) = input.language.as_deref() {
         repo::set_language_setting(pool, value)
+            .await
+            .map_err(AppError::from)?;
+    }
+    if let Some(value) = input.theme.as_deref() {
+        repo::set_theme_setting(pool, value)
             .await
             .map_err(AppError::from)?;
     }
@@ -68,6 +73,7 @@ mod tests {
                 last_selected_store_id: None,
                 require_initial_location_on_lot_create: None,
                 language: Some("es".to_string()),
+                theme: None,
             },
         )
         .await?;
@@ -101,6 +107,7 @@ mod tests {
                 last_selected_store_id: Some(store.id.clone()),
                 require_initial_location_on_lot_create: None,
                 language: None,
+                theme: None,
             },
         )
         .await?;
@@ -112,10 +119,76 @@ mod tests {
                 last_selected_store_id: None,
                 require_initial_location_on_lot_create: None,
                 language: None,
+                theme: None,
             },
         )
         .await?;
         assert!(cleared.last_selected_store_id.is_none());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn update_settings_partial_theme_update_preserves_other_keys(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+
+        // Seed every other setting first so the partial update can prove
+        // it does not touch any sibling key.
+        let store = store_create(
+            &pool,
+            StoreCreate {
+                name: "Theme Test Shop".into(),
+                code: Some("THEME-01".into()),
+                notes: None,
+            },
+        )
+        .await?;
+        update_settings(
+            &pool,
+            SettingsUpdate {
+                last_selected_store_id: Some(store.id.clone()),
+                require_initial_location_on_lot_create: Some(false),
+                language: Some("es".to_string()),
+                theme: None,
+            },
+        )
+        .await?;
+
+        // Send a theme-only partial update. Language, store id, and
+        // require_initial_location_on_lot_create MUST be preserved.
+        //
+        // Note: `last_selected_store_id: None` is the existing "clear"
+        // semantic — the implementation branch only protects the
+        // Option-typed keys (language, theme, require_initial_location_*),
+        // mirroring the language pattern. To prove the theme update is
+        // partial, we re-supply the store id verbatim so the assertion
+        // below confirms it round-trips unchanged.
+        let updated = update_settings(
+            &pool,
+            SettingsUpdate {
+                last_selected_store_id: Some(store.id.clone()),
+                require_initial_location_on_lot_create: None,
+                language: None,
+                theme: Some("dark".to_string()),
+            },
+        )
+        .await?;
+        assert_eq!(updated.theme, "dark");
+        assert!(updated.theme_configured);
+        assert_eq!(updated.last_selected_store_id, Some(store.id.clone()));
+        assert!(!updated.require_initial_location_on_lot_create);
+        assert_eq!(updated.language, "es");
+        assert!(updated.language_configured);
+
+        // Re-read to make sure the partial update persisted the way the
+        // snapshot reports.
+        let settings = get_settings(&pool).await?;
+        assert_eq!(settings.theme, "dark");
+        assert!(settings.theme_configured);
+        assert_eq!(settings.last_selected_store_id, Some(store.id.clone()));
+        assert!(!settings.require_initial_location_on_lot_create);
+        assert_eq!(settings.language, "es");
+        assert!(settings.language_configured);
         Ok(())
     }
 }
