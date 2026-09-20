@@ -3266,22 +3266,20 @@ mod tests {
             initial_count, 18,
             "fresh pool must report 18 applied migrations"
         );
-        let app_settings_rows_before: (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM app_settings")
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        let app_settings_rows_before: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM app_settings")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
         // Re-run all migrations on the same pool. `_sqlx_migrations`
         // tracks every applied version, so the COUNT(*) is unchanged
         // (sqlx refuses to re-apply V1–V18). V18 itself has no DDL so it
         // cannot create or rewrite rows even if it did re-run.
         run_migrations(&pool).await.unwrap();
-        let app_settings_rows_after: (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM app_settings")
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        let app_settings_rows_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM app_settings")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(
             app_settings_rows_after.0, app_settings_rows_before.0,
             "app_settings row count must be unchanged after re-running V1–V18"
@@ -3314,12 +3312,10 @@ mod tests {
         .unwrap();
 
         // Read it back through the generic key-value accessor.
-        let row: (String,) = sqlx::query_as(
-            "SELECT value FROM app_settings WHERE key = 'theme'",
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let row: (String,) = sqlx::query_as("SELECT value FROM app_settings WHERE key = 'theme'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(row.0, "dark");
     }
 }
