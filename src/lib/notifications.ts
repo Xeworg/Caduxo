@@ -17,6 +17,11 @@ import {
  requestPermission,
  sendNotification,
 } from "@tauri-apps/plugin-notification";
+import {
+   DEFAULT_LOCALE,
+   locale as activeLocale,
+   type SupportedLocale,
+} from "../i18n/locale.svelte.js";
 import { LL as i18nLL } from "../i18n/i18n-svelte.js";
 import { get } from "svelte/store";
 
@@ -59,31 +64,63 @@ export interface MarkNotificationShownInput {
  notification_date?: string | null;
 }
 
+// ─── Locale plumbing ─────────────────────────────────────────────────────────
+
+/**
+ * Returns the active UI locale, used as the implicit default for the
+ * `locale` parameter accepted by the backend-mutating wrappers in this
+ * file. Callers that already hold a `SupportedLocale` can pass it
+ * explicitly; otherwise the wrapper reads `activeLocale.current` and falls
+ * back to `DEFAULT_LOCALE` while the rune is still uninitialised.
+ */
+function resolveLocale(locale?: SupportedLocale): SupportedLocale {
+   if (locale) return locale;
+   const current = activeLocale?.current;
+   return (current ?? DEFAULT_LOCALE) as SupportedLocale;
+}
+
 // ─── Backend command wrappers ──────────────────────────────────────────────────
 
 /**
  * Returns active lots whose alert window contains `today`, excluding any lot
  * already logged for `today`. Defaults to today (UTC) when `today` is omitted.
+ *
+ * `locale` is forwarded to the Rust command so the strict `YYYY-MM-DD`
+ * `notification_date` validation reaches the UI in the active locale. When
+ * omitted, the wrapper reads the active UI locale.
  */
 export async function listDueNotifications(
  today?: string | null,
+ locale?: SupportedLocale,
 ): Promise<DueNotificationLot[]> {
- return invoke<DueNotificationLot[]>("list_due_notifications", { today });
+ return invoke<DueNotificationLot[]>("list_due_notifications", {
+  today,
+  locale: resolveLocale(locale),
+ });
 }
 
 /**
  * Records that a notification was shown for (lot_id, date). Idempotent.
  * Returns NotFound for unknown lot ids.
+ *
+ * `locale` is forwarded to the Rust command so the strict `YYYY-MM-DD`
+ * `notification_date` validation and the unknown-lot-id boundary reach the
+ * UI in the active locale. When omitted, the wrapper reads the active UI
+ * locale.
  */
 export async function markNotificationShown(
  input: MarkNotificationShownInput,
+ locale?: SupportedLocale,
 ): Promise<void> {
  // The Rust command returns NotificationLogResponse but the frontend does not
  // need to read it; `void` in TypeScript matches the caller's intent.
- await invoke("mark_notification_shown", { input });
+ await invoke("mark_notification_shown", {
+  input,
+  locale: resolveLocale(locale),
+ });
 }
 
-// ─── OS notification permission ───────────────────────────────────────────────
+// ─── OS notification permission ──────────────────────────────────────────────
 
 /**
  * Checks whether OS notifications are currently permitted.
