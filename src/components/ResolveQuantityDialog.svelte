@@ -1,6 +1,5 @@
 <script lang="ts">
     import { LL } from "../i18n/i18n-svelte.js";
-    import { locale } from "../i18n/locale.svelte.js";
     import {
         resolveExpiryLot,
         listLotResolutionEvents,
@@ -61,7 +60,11 @@
     }
 
     function formatDateTime(value: string): string {
-        return new Date(value).toLocaleString(locale.current === "es" ? "es-MX" : "en-US");
+        // Delegate to the locale-aware typesafe-i18n `dateTime` formatter
+        // exposed via `$LL.lotMovements.resolution.eventDateTime`. Avoids
+        // branching on `en`/`es` at the call site.
+        if (!value) return "";
+        return $LL.lotMovements.resolution.eventDateTime({ value });
     }
 
     async function submit() {

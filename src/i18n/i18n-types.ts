@@ -827,6 +827,16 @@ type RootTranslation = {
 			 * R​e​p​o​r​t​ ​r​o​w​s
 			 */
 			reportRows: string
+			/**
+			 * {​d​a​t​e​|​s​h​o​r​t​D​a​t​e​}
+			 * @param {unknown} date
+			 */
+			shortDate: RequiredParams<'date|shortDate'>
+			/**
+			 * {​q​t​y​|​q​u​a​n​t​i​t​y​}
+			 * @param {unknown} qty
+			 */
+			qtyFormatted: RequiredParams<'qty|quantity'>
 		}
 		filterSummary: {
 			/**
@@ -861,13 +871,9 @@ type RootTranslation = {
 			to: string
 		}
 		/**
-		 * E​x​p​o​r​t​e​d​ ​{​r​o​w​s​}​ ​{​r​o​w​W​o​r​d​}​ ​a​c​r​o​s​s​ ​{​p​a​g​e​s​}​ ​{​p​a​g​e​W​o​r​d​}
-		 * @param {unknown} pages
-		 * @param {unknown} pageWord
-		 * @param {unknown} rows
-		 * @param {unknown} rowWord
+		 * E​x​p​o​r​t​e​d​ ​{​{​?​?​ ​r​o​w​|​?​?​ ​r​o​w​s​}​}​ ​a​c​r​o​s​s​ ​{​{​?​?​ ​p​a​g​e​|​?​?​ ​p​a​g​e​s​}​}
 		 */
-		exportSuccess: RequiredParams<'pages' | 'pageWord' | 'rows' | 'rowWord'>
+		exportSuccess: string
 		/**
 		 * p​a​g​e
 		 */
@@ -1875,6 +1881,11 @@ type RootTranslation = {
 			 * R​e​s​o​l​v​e
 			 */
 			resolve: string
+			/**
+			 * {​v​a​l​u​e​|​d​a​t​e​T​i​m​e​}
+			 * @param {unknown} value
+			 */
+			eventDateTime: RequiredParams<'value|dateTime'>
 		}
 		/**
 		 * C​u​r​r​e​n​t​ ​i​n​v​e​n​t​o​r​y​ ​a​t​ ​t​h​i​s​ ​l​o​c​a​t​i​o​n​:​ ​{​c​u​r​r​e​n​t​}
@@ -4091,6 +4102,14 @@ export type TranslationFunctions = {
 			 * Report rows
 			 */
 			reportRows: () => LocalizedString
+			/**
+			 * {date|shortDate}
+			 */
+			shortDate: (arg: { date: unknown }) => LocalizedString
+			/**
+			 * {qty|quantity}
+			 */
+			qtyFormatted: (arg: { qty: unknown }) => LocalizedString
 		}
 		filterSummary: {
 			/**
@@ -4123,9 +4142,9 @@ export type TranslationFunctions = {
 			to: () => LocalizedString
 		}
 		/**
-		 * Exported {rows} {rowWord} across {pages} {pageWord}
+		 * Exported {{?? row|?? rows}} across {{?? page|?? pages}}
 		 */
-		exportSuccess: (arg: { pages: unknown, pageWord: unknown, rows: unknown, rowWord: unknown }) => LocalizedString
+		exportSuccess: (arg: { pages: number | string | boolean, rows: number | string | boolean }) => LocalizedString
 		/**
 		 * page
 		 */
@@ -5115,6 +5134,10 @@ export type TranslationFunctions = {
 			 * Resolve
 			 */
 			resolve: () => LocalizedString
+			/**
+			 * {value|dateTime}
+			 */
+			eventDateTime: (arg: { value: unknown }) => LocalizedString
 		}
 		/**
 		 * Current inventory at this location: {current}
@@ -6473,4 +6496,8 @@ export type TranslationFunctions = {
 	}
 }
 
-export type Formatters = {}
+export type Formatters = {
+	dateTime: (value: unknown) => unknown
+	quantity: (value: unknown) => unknown
+	shortDate: (value: unknown) => unknown
+}

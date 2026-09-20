@@ -241,6 +241,10 @@ const es: BaseTranslation = {
       urgency: "Urgencia",
       batch: "Lote",
       reportRows: "Filas del reporte",
+      // Envoltorios de formatters sensibles al locale para no ramificar
+      // en `en`/`es` desde las plantillas.
+      shortDate: "{date|shortDate}",
+      qtyFormatted: "{qty|quantity}",
     },
     filterSummary: {
       store: "tienda=",
@@ -251,7 +255,7 @@ const es: BaseTranslation = {
       from: "desde=",
       to: "hasta=",
     },
-    exportSuccess: "Exportados {rows} {rowWord} en {pages} {pageWord}",
+    exportSuccess: "Exportados {{rows:?? fila|?? filas}} en {{pages:?? página|?? páginas}}",
     pageWord: "página",
     rowWord: "fila",
   },
@@ -530,6 +534,9 @@ const es: BaseTranslation = {
       notesPlaceholder: "p. ej. Usado en producción, envase dañado…",
       resolving: "Resolviendo…",
       resolve: "Resolver",
+      // Formateador de fecha y hora sensible al locale para el historial
+      // de resoluciones.
+      eventDateTime: "{value|dateTime}",
     },
     currentInventory: "Inventario actual en esta ubicación: {current}",
     unitsFallback: "unidad(es)",

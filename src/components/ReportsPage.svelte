@@ -190,17 +190,12 @@
       };
       const result = await exportReportPdfWithDialog(request, locale.current);
       if (result) {
-        const rowWord = locale.current === "es"
-          ? (result.rows_written === 1 ? "fila" : "filas")
-          : (result.rows_written === 1 ? "row" : "rows");
-        const pageWord = locale.current === "es"
-          ? (result.page_count === 1 ? "página" : "páginas")
-          : (result.page_count === 1 ? "page" : "pages");
+        // Pluralization is handled by typesafe-i18n's inline plural
+        // parts inside `reports.exportSuccess`, so we just hand over the
+        // numeric counts — no caller-composed singular/plural words.
         successMsg = $LL.reports.exportSuccess({
           rows: result.rows_written,
-          rowWord,
           pages: result.page_count,
-          pageWord,
         });
         setTimeout(() => (successMsg = ""), 5000);
       }
@@ -232,14 +227,16 @@
   }
 
   function formatDate(dateStr: string): string {
-    if (!dateStr || dateStr.length !== 10) return dateStr;
-    const [y, m, d] = dateStr.split("-");
-    return `${d}/${m}/${y}`;
+    // Delegate to the locale-aware typesafe-i18n `shortDate` formatter
+    // exposed via `$LL.reports.table.shortDate`. Pass-through for empty
+    // input so the table can render an empty cell without an error.
+    if (!dateStr) return "";
+    return $LL.reports.table.shortDate({ date: dateStr });
   }
 
   function formatQty(qty: number): string {
-    if (Number.isInteger(qty)) return qty.toString();
-    return qty.toString();
+    if (qty === null || qty === undefined) return "";
+    return $LL.reports.table.qtyFormatted({ qty });
   }
 
   function formatDays(days: number): string {

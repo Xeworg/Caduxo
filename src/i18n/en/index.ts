@@ -243,6 +243,10 @@ const en: BaseTranslation = {
       urgency: "Urgency",
       batch: "Batch",
       reportRows: "Report rows",
+      // Locale-aware formatters wrapped in dictionary keys so the templates
+      // do not branch on `en`/`es` directly.
+      shortDate: "{date|shortDate}",
+      qtyFormatted: "{qty|quantity}",
     },
     filterSummary: {
       store: "store=",
@@ -253,7 +257,7 @@ const en: BaseTranslation = {
       from: "from=",
       to: "to=",
     },
-    exportSuccess: "Exported {rows} {rowWord} across {pages} {pageWord}",
+    exportSuccess: "Exported {{rows:?? row|?? rows}} across {{pages:?? page|?? pages}}",
     pageWord: "page",
     rowWord: "row",
   },
@@ -533,6 +537,8 @@ const en: BaseTranslation = {
       notesPlaceholder: "e.g. Used in production, damaged packaging…",
       resolving: "Resolving…",
       resolve: "Resolve",
+      // Locale-aware date-time formatter for resolution history rows.
+      eventDateTime: "{value|dateTime}",
     },
     currentInventory: "Current inventory at this location: {current}",
     unitsFallback: "unit(s)",
