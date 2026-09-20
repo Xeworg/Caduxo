@@ -1,5 +1,6 @@
 <script lang="ts">
     import { LL } from "../i18n/i18n-svelte.js";
+    import { humanizeError } from "../lib/errors.js";
     import {
         archiveExpiryLot,
         ARCHIVE_REASONS,
@@ -59,7 +60,7 @@
             });
             onArchived();
         } catch (e: unknown) {
-            errorMsg = String(e);
+            errorMsg = humanizeError(e);
         } finally {
             submitting = false;
         }

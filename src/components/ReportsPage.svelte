@@ -28,6 +28,7 @@
   } from "../lib/stores.js";
   import { locale } from "../i18n/locale.svelte.js";
   import { LL } from "../i18n/i18n-svelte.js";
+  import { humanizeError } from "../lib/errors.js";
 
   // ─── View state ──────────────────────────────────────────────────────────
 
@@ -106,7 +107,7 @@
       categories = categoryList;
       unitCatalog = await listUnitDefinitions().catch(() => []);
     } catch (e: unknown) {
-      errorMsg = String(e);
+      errorMsg = humanizeError(e);
     }
   });
 
@@ -172,7 +173,7 @@
       preview = await previewReport(request, locale.current);
       view = "preview";
     } catch (e: unknown) {
-      errorMsg = humanizeError(String(e));
+      errorMsg = humanizeError(e);
     } finally {
       loading = false;
     }
@@ -200,7 +201,7 @@
         setTimeout(() => (successMsg = ""), 5000);
       }
     } catch (e: unknown) {
-      errorMsg = humanizeError(String(e));
+      errorMsg = humanizeError(e);
     } finally {
       exporting = false;
     }
@@ -213,18 +214,6 @@
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
-
-  function humanizeError(raw: string): string {
-    // Tauri command errors come back as "{ kind: 'validation', detail: { message: '...' } }".
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed?.detail?.message) return parsed.detail.message;
-      if (parsed?.message) return parsed.message;
-    } catch {
-      // not JSON, return raw
-    }
-    return raw;
-  }
 
   function formatDate(dateStr: string): string {
     // Delegate to the locale-aware typesafe-i18n `shortDate` formatter

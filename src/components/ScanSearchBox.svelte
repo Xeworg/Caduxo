@@ -6,6 +6,7 @@
     type ScanNotFoundResult,
   } from "../lib/products.js";
   import { LL } from "../i18n/i18n-svelte.js";
+  import { humanizeError } from "../lib/errors.js";
 
   // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@
       // Clear the input after a successful scan regardless of outcome.
       scanValue = "";
     } catch (e) {
-      errorMsg = $LL.scan.searchError({ msg: String(e) });
+      errorMsg = $LL.scan.searchError({ msg: humanizeError(e) });
     } finally {
       scanning = false;
     }

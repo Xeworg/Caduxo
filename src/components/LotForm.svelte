@@ -15,6 +15,7 @@
         type StoreLocationResponse,
     } from "../lib/stores.js";
     import { LL } from "../i18n/i18n-svelte.js";
+    import { humanizeError } from "../lib/errors.js";
 
     // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -109,7 +110,7 @@
                 expiryDate = d.toISOString().slice(0, 10);
             }
         } catch (e: unknown) {
-            errorMsg = String(e);
+            errorMsg = humanizeError(e);
         } finally {
             loadingStores = false;
         }
@@ -191,7 +192,7 @@
                 onSaved(saved);
             }
         } catch (e: unknown) {
-            errorMsg = String(e);
+            errorMsg = humanizeError(e);
         } finally {
             submitting = false;
         }

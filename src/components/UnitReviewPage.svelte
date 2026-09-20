@@ -8,6 +8,7 @@
     type UnitReviewActionResult,
   } from "../lib/unit_definitions.js";
   import { LL } from "../i18n/i18n-svelte.js";
+  import { humanizeError } from "../lib/errors.js";
 
   /** Called when the user dismisses or finishes the review. */
   export let onDone: () => void;
@@ -51,7 +52,7 @@
         listUnitDefinitions(),
       ]);
     } catch (e) {
-      error = String(e);
+      error = humanizeError(e);
     } finally {
       loading = false;
     }
@@ -68,7 +69,7 @@
       actionResult = result;
       groups = groups.filter((g) => g.raw_value !== rawValue);
     } catch (e) {
-      error = String(e);
+      error = humanizeError(e);
     } finally {
       actionInProgress = null;
     }
@@ -85,7 +86,7 @@
       actionResult = result;
       groups = groups.filter((g) => g.raw_value !== rawValue);
     } catch (e) {
-      error = String(e);
+      error = humanizeError(e);
     } finally {
       actionInProgress = null;
     }
@@ -102,7 +103,7 @@
       actionResult = result;
       groups = groups.filter((g) => g.raw_value !== rawValue);
     } catch (e) {
-      error = String(e);
+      error = humanizeError(e);
     } finally {
       actionInProgress = null;
     }

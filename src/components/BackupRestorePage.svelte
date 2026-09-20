@@ -6,6 +6,7 @@
     type RestoreValidation,
   } from "../lib/backup_restore.js";
   import { LL } from "../i18n/i18n-svelte.js";
+  import { humanizeError } from "../lib/errors.js";
 
   // ─── State ────────────────────────────────────────────────────────────────
 
@@ -41,7 +42,7 @@
       }
       // null means cancelled
     } catch (e) {
-      exportError = String(e);
+      exportError = humanizeError(e);
     } finally {
       exporting = false;
     }
@@ -65,7 +66,7 @@
         }
       }
     } catch (e) {
-      validationError = String(e);
+      validationError = humanizeError(e);
     } finally {
       validating = false;
     }
@@ -88,7 +89,7 @@
       // On success, reload the page to reflect restored data
       window.location.reload();
     } catch (e) {
-      restoreError = String(e);
+      restoreError = humanizeError(e);
     } finally {
       restoring = false;
     }

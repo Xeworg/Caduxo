@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { LL } from "../i18n/i18n-svelte.js";
+  import { humanizeError } from "../lib/errors.js";
   import {
     listLotMovements,
     getLotLocationBalances,
@@ -60,7 +61,7 @@
         getLotLocationBalances(lotId),
       ]);
     } catch (e) {
-      errorMsg = String(e);
+      errorMsg = humanizeError(e);
     } finally {
       loading = false;
     }

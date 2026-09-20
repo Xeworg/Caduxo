@@ -13,6 +13,7 @@
   } from "../lib/csv.js";
   import ColumnMapper from "./ColumnMapper.svelte";
   import { LL } from "../i18n/i18n-svelte.js";
+  import { humanizeError } from "../lib/errors.js";
 
   // ── Stage machine ────────────────────────────────────────────────────────
 
@@ -45,7 +46,7 @@
         filePath: path,
       };
     } catch (err) {
-      errorMsg = String(err);
+      errorMsg = humanizeError(err);
     }
   }
 
@@ -66,7 +67,7 @@
         filePath: path,
       };
     } catch (err) {
-      errorMsg = String(err);
+      errorMsg = humanizeError(err);
     }
   }
 
@@ -86,7 +87,7 @@
       });
       stage = { name: "result", result, strategy: selectedStrategy };
     } catch (err) {
-      errorMsg = String(err);
+      errorMsg = humanizeError(err);
     } finally {
       importingCommit = false;
     }

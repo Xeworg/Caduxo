@@ -3,6 +3,7 @@
     import { createCategory, type CategoryResponse } from "../../lib/products.js";
     import { tick } from "svelte";
     import { LL } from "../../i18n/i18n-svelte.js";
+    import { humanizeError } from "../../lib/errors.js";
 
     // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -241,7 +242,7 @@
             // Close popover and reset
             closePopover();
         } catch (e: unknown) {
-            const msg = String(e);
+            const msg = humanizeError(e);
             if (/duplicate|case|already|exists/i.test(msg)) {
                 createError = $LL.categoryPicker.alreadyExists({ name });
             } else {

@@ -13,6 +13,7 @@
         type SupportedLocale,
     } from "../i18n/locale.svelte.js";
     import { LL } from "../i18n/i18n-svelte.js";
+    import { humanizeError } from "../lib/errors.js";
 
     // Per-locale display names. The dictionary keys live in
     // `configuration.language.names` keyed by `SupportedLocale` code, so
@@ -56,7 +57,7 @@
                 ? settings.language
                 : locale.current;
         } catch (e) {
-            errorMsg = $LL.configuration.language.loadErrorPrefix() + String(e);
+            errorMsg = $LL.configuration.language.loadErrorPrefix() + humanizeError(e);
         } finally {
             loading = false;
         }
@@ -81,10 +82,12 @@
                     language_configured: true,
                 };
             }
-        } catch {
-            // Roll back on failure
+        } catch (e) {
+            // Roll back on failure — use the actual caught error so the
+            // structured `CommandError` shape (Tauri) does not collapse to a
+            // hard-coded literal string.
             currentLocale = prev;
-            localeErrorMsg = $LL.configuration.language.saveErrorPrefix() + String("Failed");
+            localeErrorMsg = $LL.configuration.language.saveErrorPrefix() + humanizeError(e);
         }
     }
 
@@ -106,7 +109,7 @@
         } catch (e) {
             // Rollback on failure
             requireLocation = !newValue;
-            errorMsg = $LL.common.error() + ": " + String(e);
+            errorMsg = $LL.common.error() + ": " + humanizeError(e);
         } finally {
             savingLocation = false;
         }

@@ -16,6 +16,7 @@
       import CategoryPicker from "./inputs/CategoryPicker.svelte";
       import { onMount } from "svelte";
       import { LL } from "../i18n/i18n-svelte.js";
+    import { humanizeError } from "../lib/errors.js";
 
       // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -205,7 +206,7 @@
       defaultUnit = created.display_name;
       resetInlineUnit();
     } catch (e: unknown) {
-      const msg = String(e);
+      const msg = humanizeError(e);
       // Recoverable DuplicateField error.
         if (/duplicate|already exists|unique/i.test(msg)) {
         unitError = $LL.lotForm.keyAlreadyExistsGeneric({ key });
@@ -277,7 +278,7 @@
           }
           onSaved(saved);
         } catch (e: unknown) {
-          errorMsg = String(e);
+          errorMsg = humanizeError(e);
         } finally {
           submitting = false;
         }

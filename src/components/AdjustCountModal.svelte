@@ -3,6 +3,7 @@
   import { LL } from "../i18n/i18n-svelte.js";
   import { locale } from "../i18n/locale.svelte.js";
   import type { UnitKind } from "../lib/products.js";
+  import { humanizeError } from "../lib/errors.js";
 
   // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -95,7 +96,7 @@
       }, locale.current);
       onCreated();
     } catch (e) {
-      errorMsg = String(e);
+      errorMsg = humanizeError(e);
       submitting = false;
     }
   }

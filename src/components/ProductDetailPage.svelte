@@ -25,6 +25,7 @@
         type StoreLocationResponse,
     } from "../lib/stores.js";
     import { LL } from "../i18n/i18n-svelte.js";
+    import { humanizeError } from "../lib/errors.js";
 
     // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -73,7 +74,7 @@
             detail = await getProduct(productId);
             lots = await listExpiryLotsByProduct(productId);
         } catch (e: unknown) {
-            errorMsg = String(e);
+            errorMsg = humanizeError(e);
         } finally {
             loading = false;
         }
@@ -114,7 +115,7 @@
             await load();
             resetBarcodeForm();
         } catch (e: unknown) {
-            barcodeError = String(e);
+            barcodeError = humanizeError(e);
         } finally {
             addingBarcode = false;
         }
@@ -125,7 +126,7 @@
             await removeProductBarcode({ id: b.id });
             await load();
         } catch (e: unknown) {
-            errorMsg = String(e);
+            errorMsg = humanizeError(e);
         }
     }
 
@@ -136,7 +137,7 @@
             confirmingArchive = false;
             onArchived();
         } catch (e: unknown) {
-            errorMsg = String(e);
+            errorMsg = humanizeError(e);
         }
     }
 
@@ -176,7 +177,7 @@
                 detailLotLocations = await listStoreLocations(detailLot.store_id);
             }
         } catch (e: unknown) {
-            lotError = String(e);
+            lotError = humanizeError(e);
         } finally {
             detailLotLoading = false;
         }

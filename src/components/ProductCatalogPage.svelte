@@ -11,6 +11,7 @@
   import CategoryPicker from "./inputs/CategoryPicker.svelte";
   import { exportProductsWithDialog } from "../lib/csv.js";
   import { LL } from "../i18n/i18n-svelte.js";
+  import { humanizeError } from "../lib/errors.js";
   import ProductForm from "./ProductForm.svelte";
   import ProductDetailPage from "./ProductDetailPage.svelte";
 
@@ -44,7 +45,7 @@
       categories = await listCategories();
       await runSearch("");
     } catch (e: unknown) {
-      errorMsg = String(e);
+      errorMsg = humanizeError(e);
     } finally {
       loading = false;
     }
@@ -63,7 +64,7 @@
       appliedQuery = query;
       results = await searchProducts({ query });
     } catch (e: unknown) {
-      errorMsg = String(e);
+      errorMsg = humanizeError(e);
     } finally {
       searching = false;
     }
@@ -151,7 +152,7 @@
             );
           }
         } catch (e: unknown) {
-          errorMsg = String(e);
+          errorMsg = humanizeError(e);
           setTimeout(() => (errorMsg = ""), 5000);
         } finally {
               exporting = false;

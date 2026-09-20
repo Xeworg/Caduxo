@@ -17,6 +17,7 @@
     type SettingsResponse,
   } from "../lib/stores.js";
   import { LL } from "../i18n/i18n-svelte.js";
+  import { humanizeError } from "../lib/errors.js";
 
   // ── State ──────────────────────────────────────────────────────────────────
 
@@ -62,7 +63,7 @@
       }
       await refreshStores();
     } catch (e: unknown) {
-      errorMsg = String(e);
+      errorMsg = humanizeError(e);
     } finally {
       loading = false;
     }
@@ -158,7 +159,7 @@
           storeFormOpen = false;
         } catch (e: unknown) {
 
-      flash(String(e), "error");
+      flash(humanizeError(e), "error");
     }
   }
 
@@ -213,7 +214,7 @@
           locationFormOpen = false;
         } catch (e: unknown) {
 
-      flash(String(e), "error");
+      flash(humanizeError(e), "error");
     }
   }
 

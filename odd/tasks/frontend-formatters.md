@@ -64,4 +64,4 @@ Centralize frontend locale-sensitive formatting so report export messages, repor
 - `npm run i18n:generate` — observed idempotent; generated files unchanged.
 - `npx svelte-check --tsconfig ./tsconfig.json --threshold error` — observed: 0 errors, 0 warnings.
 - Verified no scoped `locale.current === "es"` branches remain, generated formatter types match dictionaries, ISO date-only parse is local, and `ResolveQuantityDialog.svelte` has no stale `locale` import.
-- Commit: pending at verification time.
+- Commit: `cc21f99 feat: centralize frontend locale formatters`.

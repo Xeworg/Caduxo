@@ -13,6 +13,7 @@
   } from "../lib/expiry_lots.js";
   import { listStores, listStoreLocations, type StoreLocationResponse } from "../lib/stores.js";
   import LotMovementsPanel from "./LotMovementsPanel.svelte";
+  import { humanizeError } from "../lib/errors.js";
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -240,7 +241,7 @@ const watchdog = window.setTimeout(() => {
           window.clearTimeout(watchdog);
           if (myGen !== loadGeneration) return;
           console.error("[CalendarPage] loadLots failed", e);
-          const message = e instanceof Error ? e.message : String(e);
+          const message = humanizeError(e);
           loadStage = `failed: ${message}`;
           errorMsg = message;
 } finally {
@@ -315,7 +316,7 @@ const watchdog = window.setTimeout(() => {
     loadAllStoreLocations(),
       ]);
     } catch (e) {
-      errorMsg = String(e);
+      errorMsg = humanizeError(e);
       showLotDetail = false;
     } finally {
       detailLoading = false;

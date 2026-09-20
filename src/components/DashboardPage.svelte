@@ -39,6 +39,7 @@
   import UnitReviewPage from "./UnitReviewPage.svelte";
   import LotMovementsPanel from "./LotMovementsPanel.svelte";
   import { LL } from "../i18n/i18n-svelte.js";
+  import { humanizeError } from "../lib/errors.js";
 
   // ─── State ──────────────────────────────────────────────────────────────────
 
@@ -144,7 +145,7 @@
         selectedStoreId = stores[0].id;
       }
     } catch (e) {
-      errorMsg = String(e);
+      errorMsg = humanizeError(e);
     }
   }
 
@@ -153,7 +154,7 @@
       locations = await listStoreLocations(storeId);
       selectedLocationId = null;
     } catch (e) {
-      errorMsg = String(e);
+      errorMsg = humanizeError(e);
     }
   }
 
@@ -170,7 +171,7 @@
       lots = data.lots;
           errorMsg = "";
         } catch (e) {
-          errorMsg = String(e);
+          errorMsg = humanizeError(e);
         }
       }
 
@@ -224,7 +225,7 @@
             );
           }
         } catch (e) {
-          errorMsg = String(e);
+          errorMsg = humanizeError(e);
         } finally {
           exporting = false;
         }
@@ -271,7 +272,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
           detailProduct = await getProduct(lot.product_id);
           await loadProductDetailLots(lot.product_id);
         } catch (e) {
-          errorMsg = String(e);
+          errorMsg = humanizeError(e);
           showProductDetail = false;
         } finally {
           detailLoading = false;
@@ -312,7 +313,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
           }
           detailAllLocations = await loadAllStoreLocations();
         } catch (e) {
-          errorMsg = String(e);
+          errorMsg = humanizeError(e);
         } finally {
           detailLotsLoading = false;
         }
@@ -334,7 +335,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
           const fresh = await getExpiryLot(detailSelectedLotId);
           detailLots = detailLots.map((l) => (l.id === fresh.id ? fresh : l));
         } catch (e) {
-          errorMsg = String(e);
+          errorMsg = humanizeError(e);
         }
       }
 
@@ -354,7 +355,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
     loadAllStoreLocations(),
       ]);
     } catch (e) {
-      errorMsg = String(e);
+      errorMsg = humanizeError(e);
       showLotDetail = false;
     } finally {
       detailLotLoading = false;
