@@ -568,12 +568,12 @@ remaining three modals as PR 7b.
       `real physical quantity` input becomes `Input.svelte`. <!-- sdd-owner: implementation -->
 - [x] `src/components/ArchiveLotDialog.svelte` — migrate shell;
       confirmation button stays as `Button.svelte variant="danger"`. <!-- sdd-owner: implementation -->
-- [ ] `src/components/RegisterExitModal.svelte` — migrate shell;
+- [x] `src/components/RegisterExitModal.svelte` — migrate shell;
       motivo select becomes `Select.svelte`; notes textarea remains
       inline (textareas are out of scope for `Input.svelte`). <!-- sdd-owner: implementation -->
-- [ ] `src/components/ResolveQuantityDialog.svelte` — migrate shell;
+- [x] `src/components/ResolveQuantityDialog.svelte` — migrate shell;
       quantity input becomes `Input.svelte`. <!-- sdd-owner: implementation -->
-- [ ] `DashboardPage.svelte` inline product / lot / quick-create
+- [x] `DashboardPage.svelte` inline product / lot / quick-create
       overlays — migrate all three to `Modal.svelte`. <!-- sdd-owner: implementation -->
 
 ### 7.3 PR 7 verify gate

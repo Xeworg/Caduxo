@@ -1,3 +1,13 @@
+<!--
+  ResolveQuantityDialog.svelte — Migrated to Modal.svelte primitive in
+  caduxo-daisyui-redesign PR 7b. Shell markup replaced with the
+  shared primitive; the quantity input now uses Input.svelte per
+  the spec. Resolution select and notes textarea stay inline (the
+  resolution select is a five-value domain tuple not in scope;
+  textareas are out of scope for Input.svelte). Business state,
+  validation, submit handlers, history panel, and visible copy
+  preserved verbatim.
+-->
 <script lang="ts">
     import { LL } from "../i18n/i18n-svelte.js";
     import { humanizeError } from "../lib/errors.js";
@@ -8,6 +18,9 @@
         type ExpiryLotResolveResult,
         type LotResolutionEventResponse,
     } from "../lib/expiry_lots.js";
+    import Modal from "./ui/Modal.svelte";
+    import Input from "./ui/Input.svelte";
+    import Button from "./ui/Button.svelte";
 
     // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -20,7 +33,25 @@
 
     // ── Local state ────────────────────────────────────────────────────────────
 
-    let quantity = 1;
+    /** Backs the `<Modal>` primitive via two-way binding. */
+    let visible = true;
+    /** Element to receive focus when the modal closes (the trigger row). */
+    let returnFocusTo: HTMLElement | null = null;
+
+    /**
+     * Two-way bridge between `quantityAsString` (bound to the
+     * `<Input>` primitive's `value: string` contract) and
+     * `quantity: number` (consumed by the submit handler + the
+     * validation guards). The HTML `<input type="number">` round-
+     * trips through a string, so we keep both representations in
+     * sync.
+     */
+    let quantityAsString = "1";
+    $: quantity =
+        quantityAsString === "" || quantityAsString === "-"
+            ? 0
+            : Number(quantityAsString);
+
     let resolution: "consumed" | "sold" | "discarded" | "donated" | "other" = "consumed";
     let notes = "";
 
@@ -93,20 +124,31 @@
             submitting = false;
         }
     }
+
+    function handleCancel() {
+        if (submitting) return;
+        onClose();
+    }
+
+    function handleClose() {
+        if (submitting) return;
+        onClose();
+    }
 </script>
 
-<div class="overlay" role="dialog" aria-modal="true" aria-labelledby="resolve-title">
-    <div class="dialog">
+<Modal
+    bind:open={visible}
+    size="md"
+    showClose
+    closeLabel={$LL.lotMovements.modal.close()}
+    {returnFocusTo}
+    oncancel={handleCancel}
+    onclose={handleClose}
+    titleId="resolve-title"
+>
+    {#snippet children()}
         <header class="dialog-header">
             <h3 id="resolve-title">{$LL.lotMovements.resolution.resolveQuantity()}</h3>
-            <button
-                type="button"
-                class="btn-close"
-                title={$LL.lotMovements.modal.close()}
-                on:click={onClose}
-            >
-                ✕
-            </button>
         </header>
 
         {#if errorMsg}
@@ -124,23 +166,30 @@
             </span>
         </div>
 
-        <form on:submit|preventDefault={submit}>
+        <form
+            onsubmit={(e) => {
+                e.preventDefault();
+                submit();
+            }}
+            class="resolve-form"
+        >
             <div class="grid-2">
-                <label>
-                    {$LL.lotMovements.resolution.quantityToResolve()}
-                    <input
-                        type="number"
-                        bind:value={quantity}
-                        min="0.01"
-                        max={lot.quantity}
-                        step="0.01"
-                        required
-                    />
-                </label>
+                <Input
+                    id="resolve-qty"
+                    type="number"
+                    label={$LL.lotMovements.resolution.quantityToResolve()}
+                    bind:value={quantityAsString}
+                    disabled={submitting}
+                />
 
                 <label>
                     {$LL.lotMovements.resolution.resolutionType()}
-                    <select bind:value={resolution}>
+                    <select
+                        bind:value={resolution}
+                        disabled={submitting}
+                        class="select select-md w-full motion-reduce:transition-none"
+                        aria-label={$LL.lotMovements.resolution.resolutionType()}
+                    >
                         <option value="consumed">{$LL.lotMovements.resolution.consumed()}</option>
                         <option value="sold">{$LL.lotMovements.resolution.sold()}</option>
                         <option value="discarded">{$LL.lotMovements.resolution.discarded()}</option>
@@ -153,29 +202,13 @@
             <label>
                 {$LL.lotMovements.resolution.notesOptional()}
                 <textarea
+                    class="textarea w-full motion-reduce:transition-none"
                     bind:value={notes}
                     placeholder={$LL.lotMovements.resolution.notesPlaceholder()}
                     rows="2"
+                    disabled={submitting}
                 ></textarea>
             </label>
-
-            <div class="form-actions">
-                <button
-                    type="submit"
-                    class="btn-primary"
-                    disabled={submitting}
-                >
-                    {submitting ? $LL.lotMovements.resolution.resolving() : $LL.lotMovements.resolution.resolve()}
-                </button>
-                <button
-                    type="button"
-                    class="btn-secondary"
-                    on:click={onClose}
-                    disabled={submitting}
-                >
-                    {$LL.lotMovements.modal.cancel()}
-                </button>
-            </div>
         </form>
 
         <!-- Resolution history -->
@@ -206,92 +239,80 @@
         {:else}
             <p class="no-history">{$LL.lotMovements.resolution.noHistory()}</p>
         {/if}
-    </div>
-</div>
+    {/snippet}
+
+    {#snippet footer()}
+        <Button
+            variant="primary"
+            onclick={submit}
+            disabled={submitting}
+            loading={submitting}
+        >
+            {submitting ? $LL.lotMovements.resolution.resolving() : $LL.lotMovements.resolution.resolve()}
+        </Button>
+        <Button
+            variant="ghost"
+            onclick={handleClose}
+            disabled={submitting}
+        >
+            {$LL.lotMovements.modal.cancel()}
+        </Button>
+    {/snippet}
+</Modal>
 
 <style>
-    .overlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.45);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 50;
-    }
-
-    .dialog {
-        background: #fff;
-        border-radius: 12px;
-        padding: 24px;
-        width: min(520px, calc(100vw - 32px));
-        max-height: calc(100vh - 64px);
-        overflow-y: auto;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-    }
-
+    /* ── Header ────────────────────────────────────────────────────────────── */
     .dialog-header {
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        margin-bottom: 12px;
     }
 
     .dialog-header h3 {
         margin: 0;
         font-size: 1.05rem;
+        color: var(--color-base-content, #0f172a);
     }
 
-    .btn-close {
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-size: 1rem;
-        padding: 2px 8px;
-        color: #6b7280;
-        border-radius: 4px;
-    }
-
-    .btn-close:hover {
-        background: #f3f4f6;
-        color: #374151;
-    }
-
+    /* ── Alert ─────────────────────────────────────────────────────────────── */
     .alert {
         padding: 10px 14px;
         border-radius: 6px;
         font-size: 0.9rem;
+        margin-bottom: 12px;
     }
 
     .alert-error {
-        background: #fee2e2;
-        color: #991b1b;
-        border: 1px solid #fca5a5;
+        background: color-mix(in oklch, var(--color-error) 12%, transparent);
+        color: var(--color-error);
+        border: 1px solid color-mix(in oklch, var(--color-error) 30%, transparent);
     }
 
+    /* ── Lot summary ───────────────────────────────────────────────────────── */
     .lot-summary {
-        background: #f9fafb;
-        border: 1px solid #e5e7eb;
+        background: var(--color-base-200, #f9fafb);
+        border: 1px solid var(--color-base-300, #e5e7eb);
         border-radius: 7px;
         padding: 10px 14px;
         font-size: 0.85rem;
-        color: #374151;
+        color: var(--color-base-content, #374151);
+        margin-bottom: 14px;
     }
 
     .batch {
-        background: #e5e7eb;
+        background: var(--color-base-300, #e5e7eb);
         border-radius: 4px;
         padding: 1px 5px;
         font-size: 0.75rem;
         margin-right: 4px;
     }
 
-    form {
+    /* ── Form ──────────────────────────────────────────────────────────────── */
+    .resolve-form {
         display: flex;
         flex-direction: column;
         gap: 14px;
+        margin-bottom: 4px;
     }
 
     label {
@@ -299,24 +320,7 @@
         flex-direction: column;
         gap: 4px;
         font-size: 0.85rem;
-        color: #374151;
-    }
-
-    label input[type="number"],
-    label textarea,
-    label select {
-        padding: 7px 10px;
-        border: 1px solid #d1d5db;
-        border-radius: 6px;
-        font-size: 0.9rem;
-        font-family: inherit;
-    }
-
-    label input:focus,
-    label textarea:focus,
-    label select:focus {
-        outline: 2px solid #3b82f6;
-        border-color: #3b82f6;
+        color: var(--color-base-content, #374151);
     }
 
     .grid-2 {
@@ -325,62 +329,17 @@
         gap: 12px;
     }
 
-    .form-actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-    }
-
-    .btn-primary {
-        background: #2563eb;
-        color: #fff;
-        border: none;
-        border-radius: 6px;
-        padding: 8px 16px;
-        font-size: 0.9rem;
-        cursor: pointer;
-        font-family: inherit;
-    }
-
-    .btn-primary:hover:not(:disabled) {
-        background: #1d4ed8;
-    }
-
-    .btn-primary:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-    }
-
-    .btn-secondary {
-        background: #fff;
-        color: #374151;
-        border: 1px solid #d1d5db;
-        border-radius: 6px;
-        padding: 8px 16px;
-        font-size: 0.9rem;
-        cursor: pointer;
-        font-family: inherit;
-    }
-
-    .btn-secondary:hover:not(:disabled) {
-        background: #f9fafb;
-    }
-
-    .btn-secondary:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-    }
-
     /* History */
     .history {
-        border-top: 1px solid #f3f4f6;
+        border-top: 1px solid var(--color-base-200, #f3f4f6);
         padding-top: 12px;
+        margin-top: 14px;
     }
 
     .history h4 {
         margin: 0 0 8px;
         font-size: 0.85rem;
-        color: #6b7280;
+        color: var(--color-base-content, #6b7280);
     }
 
     .history-list {
@@ -398,7 +357,7 @@
         gap: 8px;
         font-size: 0.82rem;
         padding: 6px 8px;
-        background: #f9fafb;
+        background: var(--color-base-200, #f9fafb);
         border-radius: 5px;
         flex-wrap: wrap;
     }
@@ -414,30 +373,30 @@
     }
 
     .badge-consumed {
-        background: #dcfce7;
-        color: #166534;
+        background: color-mix(in oklch, var(--color-success) 18%, transparent);
+        color: var(--color-success, #166534);
     }
 
     .badge-discarded {
-        background: #fee2e2;
-        color: #991b1b;
+        background: color-mix(in oklch, var(--color-error) 15%, transparent);
+        color: var(--color-error, #991b1b);
     }
 
     .badge-sold,
     .badge-donated,
     .badge-other {
-        background: #dbeafe;
-        color: #1e40af;
+        background: color-mix(in oklch, var(--color-info) 15%, transparent);
+        color: var(--color-info, #1e40af);
     }
 
     .event-notes {
-        color: #6b7280;
+        color: var(--color-base-content, #6b7280);
         flex: 1;
         font-style: italic;
     }
 
     .event-date {
-        color: #9ca3af;
+        color: var(--color-base-content, #9ca3af);
         font-size: 0.74rem;
         margin-left: auto;
     }
@@ -445,8 +404,8 @@
     .loading,
     .no-history {
         font-size: 0.82rem;
-        color: #9ca3af;
+        color: var(--color-base-content, #9ca3af);
         font-style: italic;
-        margin: 0;
+        margin: 12px 0 0;
     }
 </style>

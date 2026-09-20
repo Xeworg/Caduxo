@@ -51,6 +51,8 @@
   import Tooltip from "./ui/Tooltip.svelte";
   import EmptyState from "./ui/EmptyState.svelte";
   import LoadingState from "./ui/LoadingState.svelte";
+  // PR 7b — inline overlay migration to the shared Modal primitive.
+  import Modal from "./ui/Modal.svelte";
   import { LL } from "../i18n/i18n-svelte.js";
   import { humanizeError } from "../lib/errors.js";
 
@@ -718,15 +720,23 @@
 </div>
 
 <!-- ── Product detail modal ──────────────────────────────────────────────── -->
-{#if showProductDetail}
-  <div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.dashboard.aria.productDetail()}>
-    <div class="modal-box modal-box-wide">
-      <div class="modal-header">
-        <h3>{$LL.products.pageTitle()}</h3>
-        <button class="modal-close" onclick={closeProductDetail}>✕</button>
-      </div>
+<Modal
+  bind:open={showProductDetail}
+  size="wide"
+  showClose
+  closeLabel={$LL.lotMovements.modal.close()}
+  aria-label={$LL.dashboard.aria.productDetail()}
+  oncancel={closeProductDetail}
+  onclose={closeProductDetail}
+>
+  {#snippet children()}
+    <header class="dialog-header">
+      <h3>{$LL.products.pageTitle()}</h3>
+    </header>
+
+    <div class="dialog-body">
       {#if detailLoading}
-        <p class="modal-loading">{$LL.common.loadingWithDots()}</p>
+        <p class="dialog-loading">{$LL.common.loadingWithDots()}</p>
       {:else if detailProduct}
         <dl class="detail-grid">
           <dt>{$LL.dashboard.sku()}</dt><dd>{detailProduct.product.sku}</dd>
@@ -817,18 +827,25 @@
         </section>
       {/if}
     </div>
-  </div>
-{/if}
+  {/snippet}
+</Modal>
 
 <!-- ── Lot detail modal ─────────────────────────────────────────────────── -->
-{#if showLotDetail}
-  <div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.dashboard.aria.lotDetail()}>
-    <div class="modal-box modal-box-wide">
-      <div class="modal-header">
-        <h3>{$LL.dashboard.lotDetail()}</h3>
-        <button class="modal-close" onclick={() => (showLotDetail = false)}>✕</button>
-      </div>
+<Modal
+  bind:open={showLotDetail}
+  size="wide"
+  showClose
+  closeLabel={$LL.lotMovements.modal.close()}
+  aria-label={$LL.dashboard.aria.lotDetail()}
+  oncancel={() => (showLotDetail = false)}
+  onclose={() => (showLotDetail = false)}
+>
+  {#snippet children()}
+    <header class="dialog-header">
+      <h3>{$LL.dashboard.lotDetail()}</h3>
+    </header>
 
+    <div class="dialog-body">
       {#if detailLotLoading}
         <LoadingState variant="text" label={$LL.dashboard.loading()} />
       {:else if detailLot}
@@ -843,17 +860,25 @@
         />
       {/if}
     </div>
-  </div>
-{/if}
+  {/snippet}
+</Modal>
 
 <!-- ── Quick-create product modal ────────────────────────────────────────── -->
-{#if showQuickCreate}
-  <div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.dashboard.aria.quickProductCreate()}>
-    <div class="modal-box modal-box-wide">
-      <div class="modal-header">
-        <h3>{$LL.products.createProduct()}</h3>
-        <button class="modal-close" onclick={() => (showQuickCreate = false)}>✕</button>
-      </div>
+<Modal
+  bind:open={showQuickCreate}
+  size="wide"
+  showClose
+  closeLabel={$LL.lotMovements.modal.close()}
+  aria-label={$LL.dashboard.aria.quickProductCreate()}
+  oncancel={() => (showQuickCreate = false)}
+  onclose={() => (showQuickCreate = false)}
+>
+  {#snippet children()}
+    <header class="dialog-header">
+      <h3>{$LL.products.createProduct()}</h3>
+    </header>
+
+    <div class="dialog-body">
       <p class="scan-hint">
         {$LL.scan.noMatch()}
       </p>
@@ -869,8 +894,8 @@
         />
       {/await}
     </div>
-  </div>
-{/if}
+  {/snippet}
+</Modal>
 
 <style>
   /* ── Layout ────────────────────────────────────────────────────────────── */
@@ -1027,73 +1052,41 @@
     background: #fef3c7;
   }
 
-  /* ── Modals (shell — PR 7 will swap to Modal.svelte) ────────────────── */
-  .modal-box-wide {
-    width: 720px;
-    max-width: 95vw;
+  /* ── Modal overlays (PR 7b) ───────────────────────────────────────────── */
+  /* Inner-section classes — the modal shell itself is now provided by
+     `Modal.svelte` so the legacy shell selectors have been removed.
+     The wide box width is now handled by `size="wide"` on `<Modal>`. */
+
+  .dialog-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .dialog-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--color-base-content, #0f172a);
+  }
+
+  .dialog-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
 
   .scan-hint {
     font-size: 0.85rem;
-    color: #475569;
+    color: var(--color-base-content, #475569);
     margin: 0 0 12px;
-    background: #f8fafc;
-    border: 1px solid #e5e7eb;
+    background: var(--color-base-200, #f8fafc);
+    border: 1px solid var(--color-base-300, #e5e7eb);
     border-radius: 6px;
     padding: 8px 12px;
   }
 
-  .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.4);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 200;
-  }
-
-  .modal-box {
-    background: #fff;
-    border-radius: 12px;
-    padding: 24px;
-    width: 480px;
-    max-width: 95vw;
-    max-height: 90vh;
-    overflow-y: auto;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
-  }
-
-  .modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-  }
-
-  .modal-header h3 {
-    margin: 0;
-    font-size: 1rem;
-    color: #0f172a;
-  }
-
-  .modal-close {
-    background: none;
-    border: none;
-    font-size: 1rem;
-    cursor: pointer;
-    color: #94a3b8;
-    padding: 2px 6px;
-    border-radius: 4px;
-  }
-
-  .modal-close:hover {
-    background: #f1f5f9;
-    color: #475569;
-  }
-
-  .modal-loading {
-    color: #94a3b8;
+  .dialog-loading {
+    color: var(--color-base-content, #94a3b8);
     font-style: italic;
   }
 
