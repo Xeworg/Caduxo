@@ -110,35 +110,6 @@ export async function getLotLocationBalances(
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Maps movement kind to Spanish display label.
- */
-export function getKindLabel(kind: string, direction?: string | null): string {
- const kindLabels: Record<string, string> = {
-  "entry:initial": "Entrada inicial",
-  transfer: "Transferencia",
-  "exit:sale": "Venta",
-  "exit:waste": "Merma",
-  "exit:expired": "Vencido",
-  "exit:damaged": "Dañado",
-  "exit:internal_consumption": "Consumo interno",
-  "exit:return_to_supplier": "Devolución a proveedor",
-  "exit:inventory_adjustment": "Ajuste de inventario (salida)",
-  "exit:other": "Otro",
-  inventory_adjustment: "Ajuste de inventario",
- };
-
- const base = kindLabels[kind] ?? kind;
-
- if (kind === "inventory_adjustment" && direction) {
-  return direction === "increase"
-   ? "Ajuste de inventario (+)"
-   : "Ajuste de inventario (−)";
- }
-
- return base;
-}
-
-/**
  * Formats a movement quantity with sign prefix for inventory_adjustment.
  */
 export function formatMovementQuantity(
