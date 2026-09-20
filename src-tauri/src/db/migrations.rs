@@ -667,8 +667,8 @@ pub(crate) const MIGRATIONS: &[(i64, &str, &str)] = &[
             CREATE INDEX idx_lot_movements_lot_created ON lot_movements(expiry_lot_id, created_at DESC);
             CREATE INDEX idx_lot_movements_source_location ON lot_movements(source_location_id) WHERE source_location_id IS NOT NULL;
             CREATE INDEX idx_lot_movements_dest_location ON lot_movements(destination_location_id) WHERE destination_location_id IS NOT NULL;
-CREATE INDEX idx_lot_movements_kind ON lot_movements(movement_kind);
-        "#,
+            CREATE INDEX idx_lot_movements_kind ON lot_movements(movement_kind);
+            "#,
     ),
     // V18 — theme persistence milestone marker (PR 2 of
     // `caduxo-daisyui-redesign`).
