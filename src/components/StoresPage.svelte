@@ -621,7 +621,11 @@
   /* ── Store layout ──────────────────────────────────────────────────────── */
   .stores-layout {
     display: grid;
-    grid-template-columns: 240px 1fr;
+    /* 300 px = 140 px (Nombre de tienda) + 60 px (Código) + 70 px (Activo
+       badge) + ~30 px cell padding. The 240 px that the pre-migration
+       sidebar used is too narrow once the Table primitive distributes
+       column widths evenly across the available track. */
+    grid-template-columns: 300px 1fr;
     gap: 20px;
     align-items: start;
   }
@@ -629,15 +633,15 @@
   /* Grid items default to `min-width: auto`, which prevents them from
      shrinking below the natural width of their content. The sidebar's
      `Table.svelte` contains long store names / codes that would push
-     the column past 240 px; `min-width: 0` lets the grid track keep
-     its declared 240 px. */
+     the column past 300 px; `min-width: 0` lets the grid track keep
+     its declared width. */
   .store-list {
     min-width: 0;
   }
 
   /* The Table primitive renders a native `<table>` (class `table`).
      Native tables auto-size to their content; force them to fill the
-     sidebar's 240 px and use `table-layout: fixed` so columns share
+     sidebar's 300 px and use `table-layout: fixed` so columns share
      the width instead of competing for it. The `:global()` is required
      because Svelte CSS scoping does not reach into the Table
      primitive's rendered HTML. */
@@ -646,11 +650,26 @@
     table-layout: fixed;
   }
 
-  .store-list :global(table th),
-  .store-list :global(table td) {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    word-break: break-word;
+  /* Per-column text rules — the previous blanket `word-break: break-word`
+     was too aggressive and broke the short "Activo" badge text mid-word;
+     the previous `text-overflow: ellipsis` on every cell truncated the
+     "Nombre de tienda" / "Código" headers to "Nom..." / "Códi...". The
+     Name column wraps freely (a long store name can take two lines), the
+     Code column stays single-line and right-aligned (codes are
+     numeric-ish), the Status column stays single-line so the Badge
+     primitive does not wrap. */
+  .store-list :global(table th:nth-child(1)),
+  .store-list :global(table td:nth-child(1)) {
+    overflow-wrap: anywhere;
+  }
+  .store-list :global(table th:nth-child(2)),
+  .store-list :global(table td:nth-child(2)) {
+    white-space: nowrap;
+    text-align: right;
+  }
+  .store-list :global(table th:nth-child(3)),
+  .store-list :global(table td:nth-child(3)) {
+    white-space: nowrap;
   }
 
   /* ── Store sidebar (Table primitive hosts the table; only the
