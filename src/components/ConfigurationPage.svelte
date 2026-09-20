@@ -114,20 +114,19 @@
         <section class="settings-section">
             <h2 class="section-title">{$LL.configuration.language.sectionTitle()}</h2>
 
-            <!-- Detected hint: shown only when the locale came from OS/browser detection -->
-            {#if translationSource.current === "detected"}
-                <p class="detected-hint">
-                    {#if currentLocale === "es"}
-                        {$LL.configuration.language.detectedHintEs()}
-                    {:else}
-                        {$LL.configuration.language.detectedHintEn()}
-                    {/if}
-                </p>
-            {/if}
-
             <div class="setting-row">
                 <div class="setting-info">
                     <span class="setting-label">{$LL.configuration.language.label()}</span>
+                    <!-- Shown next to the selector only while the value comes from OS/browser detection. -->
+                    {#if translationSource.current === "detected"}
+                        <span class="detected-hint">
+                            {#if currentLocale === "es"}
+                                {$LL.configuration.language.detectedHintEs()}
+                            {:else}
+                                {$LL.configuration.language.detectedHintEn()}
+                            {/if}
+                        </span>
+                    {/if}
                 </div>
 
                 <select
@@ -228,13 +227,13 @@
     /* ─── Detected hint ──────────────────────────────────────────────────────── */
 
     .detected-hint {
+        align-self: flex-start;
         font-size: 0.82rem;
         color: #2563eb;
         background: #eff6ff;
         border: 1px solid #bfdbfe;
         border-radius: 6px;
-        padding: 6px 12px;
-        margin: 0 0 12px 0;
+        padding: 4px 10px;
     }
 
     /* ─── Locale select ──────────────────────────────────────────────────────── */
