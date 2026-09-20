@@ -2,9 +2,11 @@
   import {
     type CsvColumnMapping,
     type CsvPreviewResponse,
+    type CsvPreviewRow,
     type CsvPreviewRowStatus,
     type CsvImportResult,
     type CsvImportRowOutcome,
+    type CsvImportRowResult,
     type ConflictStrategy,
     previewProductCsv,
     importProductCsv,
@@ -95,6 +97,69 @@
 
   // ── Helpers ─────────────────────────────────────────────────────────────
 
+  /**
+   * Stable reason codes emitted by the backend for CSV row reasons. Must
+   * stay in lock-step with the `REASON_CODE_*` constants in
+   * `src-tauri/src/services/csv_io.rs`. See the matching `csvImport.reasonCodes`
+   * i18n namespace for the localized strings.
+   */
+  const REASON_CODES = {
+    requiredFieldSku: "required_field_sku",
+    requiredFieldDescription: "required_field_description",
+    skuAlreadyExists: "sku_already_exists",
+    skuConflictManual: "sku_conflict_manual",
+    barcodeBelongsToOtherProduct: "barcode_belongs_to_other_product",
+    barcodeConflictManual: "barcode_conflict_manual",
+    alertDaysNegative: "alert_days_negative",
+    alertDaysTooLarge: "alert_days_too_large",
+    alertDaysRangeInvalid: "alert_days_range_invalid",
+    dbError: "db_error",
+    genericValidation: "generic_validation",
+  } as const;
+
+  /**
+   * Resolves a backend reason code to a localized string, falling back to
+   * the raw `fallback` text when the code is missing or unknown. Context
+   * fields (`sku`, `barcode`) are interpolated into the matching
+   * parameterized keys when present.
+   */
+  function localizeReason(
+    code: string | null | undefined,
+    fallback: string,
+    ctx: { sku?: string; barcode?: string },
+  ): string {
+    switch (code) {
+      case REASON_CODES.requiredFieldSku:
+        return $LL.csvImport.reasonCodes.requiredFieldSku();
+      case REASON_CODES.requiredFieldDescription:
+        return $LL.csvImport.reasonCodes.requiredFieldDescription();
+      case REASON_CODES.skuAlreadyExists:
+        return $LL.csvImport.reasonCodes.skuAlreadyExists({
+          sku: ctx.sku ?? "",
+        });
+      case REASON_CODES.skuConflictManual:
+        return $LL.csvImport.reasonCodes.skuConflictManual();
+      case REASON_CODES.barcodeBelongsToOtherProduct:
+        return $LL.csvImport.reasonCodes.barcodeBelongsToOtherProduct({
+          barcode: ctx.barcode ?? "",
+        });
+      case REASON_CODES.barcodeConflictManual:
+        return $LL.csvImport.reasonCodes.barcodeConflictManual();
+      case REASON_CODES.alertDaysNegative:
+        return $LL.csvImport.reasonCodes.alertDaysNegative();
+      case REASON_CODES.alertDaysTooLarge:
+        return $LL.csvImport.reasonCodes.alertDaysTooLarge();
+      case REASON_CODES.alertDaysRangeInvalid:
+        return $LL.csvImport.reasonCodes.alertDaysRangeInvalid();
+      case REASON_CODES.dbError:
+        return $LL.csvImport.reasonCodes.dbError();
+      case REASON_CODES.genericValidation:
+        return $LL.csvImport.reasonCodes.genericValidation();
+      default:
+        return fallback;
+    }
+  }
+
   function rowBadge(status: CsvPreviewRowStatus): { label: string; cls: string } {
     if (status.kind === "ok") return { label: $LL.csvImport.badge.ok(), cls: "badge-ok" };
     if (status.kind === "duplicate_sku") return { label: $LL.csvImport.badge.dupSku(), cls: "badge-warn" };
@@ -113,15 +178,27 @@
     return { label: "?", cls: "badge-error" };
   }
 
-  function outcomeReason(outcome: CsvImportRowOutcome): string {
-    if (outcome.action === "skipped") return outcome.reason;
-    if (outcome.action === "invalid") return outcome.reason;
+  function outcomeReason(row: CsvImportRowResult): string {
+    const outcome = row.outcome;
+    if (outcome.action === "skipped") {
+      return localizeReason(outcome.reason_code, outcome.reason, {
+        sku: row.sku ?? "",
+        barcode: row.barcode ?? "",
+      });
+    }
+    if (outcome.action === "invalid") {
+      return localizeReason(outcome.reason_code, outcome.reason, {
+        sku: row.sku ?? "",
+        barcode: row.barcode ?? "",
+      });
+    }
     if (outcome.action === "created") return $LL.csvImport.actions.skuCreated({ sku: outcome.sku });
     if (outcome.action === "updated") return $LL.csvImport.actions.skuUpdated({ sku: outcome.sku });
     return "";
   }
 
-  function rowDetailMessage(status: CsvPreviewRowStatus): string {
+  function rowDetailMessage(row: CsvPreviewRow): string {
+    const status = row.status;
     if (status.kind === "duplicate_sku") {
       return $LL.csvImport.detailRow.alreadyHasSku({ sku: status.existing_sku });
     }
@@ -132,7 +209,10 @@
       return $LL.csvImport.detailRow.missingField({ field: status.field });
     }
     if (status.kind === "invalid") {
-      return status.reason;
+      return localizeReason(status.reason_code, status.reason, {
+        sku: row.sku ?? "",
+        barcode: row.barcode ?? "",
+      });
     }
     if (status.kind === "unknown_unit") {
       const suggested = status.suggested_keys.join(", ");
@@ -300,7 +380,7 @@
             <tbody>
               {#each preview.rows as row}
                 {@const badge = rowBadge(row.status)}
-                {@const detailMsg = rowDetailMessage(row.status)}
+                {@const detailMsg = rowDetailMessage(row)}
                 <tr class={badge.cls}>
                   <td class="row-num">{row.row_index}</td>
                   <td class="cell-mono">{row.sku ?? "—"}</td>
@@ -389,7 +469,7 @@
                   <td>{row.description || "—"}</td>
                   <td class="cell-mono cell-muted">{row.barcode || "—"}</td>
                   <td><span class="badge {badge.cls}">{badge.label}</span></td>
-                  <td class="detail-cell">{outcomeReason(row.outcome)}</td>
+                  <td class="detail-cell">{outcomeReason(row)}</td>
                 </tr>
               {/each}
             </tbody>

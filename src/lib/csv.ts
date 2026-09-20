@@ -55,7 +55,18 @@ export type CsvPreviewRowStatus =
         existing_barcode: string;
      }
    | { kind: "missing_required"; field: string }
-   | { kind: "invalid"; reason: string }
+   | {
+        kind: "invalid";
+        /** Human-readable English fallback text from the backend. */
+        reason: string;
+        /**
+         * Stable code the frontend dispatches on for localized rendering.
+         * `null` / `undefined` means no localized counterpart (legacy rows
+         * or domain-validation text from `domain::validation`); the UI
+         * falls back to `reason` in that case.
+         */
+        reason_code?: string | null;
+     }
    | {
         kind: "unknown_unit";
         raw_value: string;
@@ -113,9 +124,21 @@ export interface CsvImportInput {
 /** Per-row import outcome. */
 export type CsvImportRowOutcome =
    | { action: "created"; product_id: string; sku: string }
-   | { action: "skipped"; reason: string }
+   | {
+        action: "skipped";
+        /** Human-readable English fallback text from the backend. */
+        reason: string;
+        /** Stable code the frontend dispatches on for localized rendering. */
+        reason_code?: string | null;
+     }
    | { action: "updated"; product_id: string; sku: string }
-   | { action: "invalid"; reason: string };
+   | {
+        action: "invalid";
+        /** Human-readable English fallback text from the backend. */
+        reason: string;
+        /** Stable code the frontend dispatches on for localized rendering. */
+        reason_code?: string | null;
+     };
 
 /** Summary of a single imported row. */
 export interface CsvImportRowResult {

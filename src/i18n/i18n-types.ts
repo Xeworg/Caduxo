@@ -2603,6 +2603,55 @@ type RootTranslation = {
 		 * T​h​e​ ​a​c​t​i​v​e​ ​d​a​t​a​b​a​s​e​ ​i​s​ ​s​t​o​r​e​d​ ​i​n​ ​t​h​e​ ​a​p​p​'​s​ ​l​o​c​a​l​ ​d​a​t​a​ ​d​i​r​e​c​t​o​r​y​.​ ​T​h​e​ ​b​a​c​k​u​p​ ​e​x​p​o​r​t​ ​l​e​t​s​ ​y​o​u​ ​c​h​o​o​s​e​ ​w​h​e​r​e​ ​t​o​ ​s​a​v​e​ ​y​o​u​r​ ​c​o​p​y​.
 		 */
 		locationA: string
+		checks: {
+			/**
+			 * F​i​l​e​ ​d​o​e​s​ ​n​o​t​ ​e​x​i​s​t
+			 */
+			fileNotFound: string
+			/**
+			 * V​a​l​i​d​ ​S​Q​L​i​t​e​ ​d​a​t​a​b​a​s​e​ ​h​e​a​d​e​r
+			 */
+			sqliteHeaderValid: string
+			/**
+			 * F​i​l​e​ ​i​s​ ​n​o​t​ ​a​ ​v​a​l​i​d​ ​S​Q​L​i​t​e​ ​d​a​t​a​b​a​s​e​ ​(​i​n​v​a​l​i​d​ ​h​e​a​d​e​r​)
+			 */
+			sqliteHeaderInvalid: string
+			/**
+			 * A​l​l​ ​{​n​}​ ​r​e​q​u​i​r​e​d​ ​t​a​b​l​e​s​ ​p​r​e​s​e​n​t
+			 * @param {unknown} n
+			 */
+			requiredTablesPresent: RequiredParams<'n'>
+			/**
+			 * O​n​e​ ​o​r​ ​m​o​r​e​ ​r​e​q​u​i​r​e​d​ ​C​a​d​u​x​o​ ​t​a​b​l​e​s​ ​a​r​e​ ​m​i​s​s​i​n​g
+			 */
+			requiredTablesMissing: string
+			/**
+			 * S​c​h​e​m​a​ ​v​e​r​s​i​o​n​:​ ​{​v​}
+			 * @param {unknown} v
+			 */
+			schemaVersionDetected: RequiredParams<'v'>
+			/**
+			 * I​n​t​e​g​r​i​t​y​ ​c​h​e​c​k​ ​p​a​s​s​e​d​ ​(​f​i​r​s​t​ ​1​0​0​ ​p​a​g​e​s​)
+			 */
+			integrityCheckOk: string
+			/**
+			 * I​n​t​e​g​r​i​t​y​ ​c​h​e​c​k​ ​w​a​r​n​i​n​g​s​ ​d​e​t​e​c​t​e​d
+			 */
+			integrityCheckFailed: string
+			/**
+			 * S​c​h​e​m​a​ ​c​h​e​c​k​ ​f​a​i​l​e​d​ ​t​o​ ​r​u​n
+			 */
+			schemaCheckFailed: string
+			/**
+			 * S​c​h​e​m​a​ ​v​e​r​s​i​o​n​ ​{​v​}​ ​i​s​ ​n​o​t​ ​a​ ​v​a​l​i​d​ ​C​a​d​u​x​o​ ​d​a​t​a​b​a​s​e
+			 * @param {unknown} v
+			 */
+			schemaVersionInvalid: RequiredParams<'v'>
+			/**
+			 * S​c​h​e​m​a​ ​v​e​r​s​i​o​n​ ​i​s​ ​c​o​m​p​a​t​i​b​l​e
+			 */
+			schemaVersionCompatible: string
+		}
 	}
 	csvImport: {
 		/**
@@ -2901,6 +2950,54 @@ type RootTranslation = {
 			 * @param {unknown} sku
 			 */
 			skuUpdated: RequiredParams<'sku'>
+		}
+		reasonCodes: {
+			/**
+			 * R​e​q​u​i​r​e​d​ ​f​i​e​l​d​ ​m​i​s​s​i​n​g​:​ ​S​K​U
+			 */
+			requiredFieldSku: string
+			/**
+			 * R​e​q​u​i​r​e​d​ ​f​i​e​l​d​ ​m​i​s​s​i​n​g​:​ ​d​e​s​c​r​i​p​t​i​o​n
+			 */
+			requiredFieldDescription: string
+			/**
+			 * S​K​U​ ​{​s​k​u​}​ ​a​l​r​e​a​d​y​ ​e​x​i​s​t​s
+			 * @param {unknown} sku
+			 */
+			skuAlreadyExists: RequiredParams<'sku'>
+			/**
+			 * S​K​U​ ​c​o​n​f​l​i​c​t​ ​r​e​q​u​i​r​e​s​ ​m​a​n​u​a​l​ ​r​e​s​o​l​u​t​i​o​n
+			 */
+			skuConflictManual: string
+			/**
+			 * B​a​r​c​o​d​e​ ​{​b​a​r​c​o​d​e​}​ ​b​e​l​o​n​g​s​ ​t​o​ ​a​n​o​t​h​e​r​ ​p​r​o​d​u​c​t
+			 * @param {unknown} barcode
+			 */
+			barcodeBelongsToOtherProduct: RequiredParams<'barcode'>
+			/**
+			 * B​a​r​c​o​d​e​ ​c​o​n​f​l​i​c​t​ ​r​e​q​u​i​r​e​s​ ​m​a​n​u​a​l​ ​r​e​s​o​l​u​t​i​o​n
+			 */
+			barcodeConflictManual: string
+			/**
+			 * A​l​e​r​t​ ​d​a​y​s​ ​c​a​n​n​o​t​ ​b​e​ ​n​e​g​a​t​i​v​e
+			 */
+			alertDaysNegative: string
+			/**
+			 * A​l​e​r​t​ ​d​a​y​s​ ​e​x​c​e​e​d​s​ ​t​h​e​ ​m​a​x​i​m​u​m​ ​a​l​l​o​w​e​d
+			 */
+			alertDaysTooLarge: string
+			/**
+			 * A​l​e​r​t​ ​d​a​y​s​ ​m​u​s​t​ ​b​e​ ​b​e​t​w​e​e​n​ ​0​ ​a​n​d​ ​3​6​5​0
+			 */
+			alertDaysRangeInvalid: string
+			/**
+			 * D​a​t​a​b​a​s​e​ ​e​r​r​o​r​ ​w​h​i​l​e​ ​v​a​l​i​d​a​t​i​n​g​ ​t​h​e​ ​r​o​w
+			 */
+			dbError: string
+			/**
+			 * R​o​w​ ​f​a​i​l​e​d​ ​v​a​l​i​d​a​t​i​o​n
+			 */
+			genericValidation: string
 		}
 	}
 	unitReview: {
@@ -5831,6 +5928,52 @@ export type TranslationFunctions = {
 		 * The active database is stored in the app's local data directory. The backup export lets you choose where to save your copy.
 		 */
 		locationA: () => LocalizedString
+		checks: {
+			/**
+			 * File does not exist
+			 */
+			fileNotFound: () => LocalizedString
+			/**
+			 * Valid SQLite database header
+			 */
+			sqliteHeaderValid: () => LocalizedString
+			/**
+			 * File is not a valid SQLite database (invalid header)
+			 */
+			sqliteHeaderInvalid: () => LocalizedString
+			/**
+			 * All {n} required tables present
+			 */
+			requiredTablesPresent: (arg: { n: unknown }) => LocalizedString
+			/**
+			 * One or more required Caduxo tables are missing
+			 */
+			requiredTablesMissing: () => LocalizedString
+			/**
+			 * Schema version: {v}
+			 */
+			schemaVersionDetected: (arg: { v: unknown }) => LocalizedString
+			/**
+			 * Integrity check passed (first 100 pages)
+			 */
+			integrityCheckOk: () => LocalizedString
+			/**
+			 * Integrity check warnings detected
+			 */
+			integrityCheckFailed: () => LocalizedString
+			/**
+			 * Schema check failed to run
+			 */
+			schemaCheckFailed: () => LocalizedString
+			/**
+			 * Schema version {v} is not a valid Caduxo database
+			 */
+			schemaVersionInvalid: (arg: { v: unknown }) => LocalizedString
+			/**
+			 * Schema version is compatible
+			 */
+			schemaVersionCompatible: () => LocalizedString
+		}
 	}
 	csvImport: {
 		/**
@@ -6122,6 +6265,52 @@ export type TranslationFunctions = {
 			 * SKU {sku} updated
 			 */
 			skuUpdated: (arg: { sku: unknown }) => LocalizedString
+		}
+		reasonCodes: {
+			/**
+			 * Required field missing: SKU
+			 */
+			requiredFieldSku: () => LocalizedString
+			/**
+			 * Required field missing: description
+			 */
+			requiredFieldDescription: () => LocalizedString
+			/**
+			 * SKU {sku} already exists
+			 */
+			skuAlreadyExists: (arg: { sku: unknown }) => LocalizedString
+			/**
+			 * SKU conflict requires manual resolution
+			 */
+			skuConflictManual: () => LocalizedString
+			/**
+			 * Barcode {barcode} belongs to another product
+			 */
+			barcodeBelongsToOtherProduct: (arg: { barcode: unknown }) => LocalizedString
+			/**
+			 * Barcode conflict requires manual resolution
+			 */
+			barcodeConflictManual: () => LocalizedString
+			/**
+			 * Alert days cannot be negative
+			 */
+			alertDaysNegative: () => LocalizedString
+			/**
+			 * Alert days exceeds the maximum allowed
+			 */
+			alertDaysTooLarge: () => LocalizedString
+			/**
+			 * Alert days must be between 0 and 3650
+			 */
+			alertDaysRangeInvalid: () => LocalizedString
+			/**
+			 * Database error while validating the row
+			 */
+			dbError: () => LocalizedString
+			/**
+			 * Row failed validation
+			 */
+			genericValidation: () => LocalizedString
 		}
 	}
 	unitReview: {

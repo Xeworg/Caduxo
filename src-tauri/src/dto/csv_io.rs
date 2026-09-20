@@ -67,7 +67,17 @@ pub enum CsvPreviewRowStatus {
     /// A required field is missing or empty.
     MissingRequired { field: String },
     /// A value failed validation (e.g. negative alert days, malformed barcode).
-    Invalid { reason: String },
+    ///
+    /// `reason` keeps the existing English canonical text as a fallback for
+    /// older frontends and tooling. `reason_code` is the stable identifier the
+    /// frontend dispatches on for localized rendering; `None` means the row
+    /// is reported without a typed code (legacy or domain-validation errors
+    /// that bubble up from `domain::validation` use `None` and let the
+    /// frontend fall back to `reason`).
+    Invalid {
+        reason: String,
+        reason_code: Option<String>,
+    },
     /// The `default_unit` value in the CSV row does not match any catalog unit.
     /// This is non-blocking (warn-and-continue); the row can still be imported.
     /// The frontend renders a per-row badge with up to 3 suggested keys.
@@ -194,11 +204,23 @@ pub enum CsvImportRowOutcome {
     /// Row was successfully created as a new product.
     Created { product_id: String, sku: String },
     /// Row was skipped because the SKU or barcode already exists.
-    Skipped { reason: String },
+    ///
+    /// `reason` keeps the existing English canonical text as a fallback;
+    /// `reason_code` is the stable identifier the frontend dispatches on.
+    Skipped {
+        reason: String,
+        reason_code: Option<String>,
+    },
     /// Row was updated (product fields changed, barcodes added).
     Updated { product_id: String, sku: String },
     /// Row was skipped because it was invalid.
-    Invalid { reason: String },
+    ///
+    /// `reason` keeps the existing English canonical text as a fallback;
+    /// `reason_code` is the stable identifier the frontend dispatches on.
+    Invalid {
+        reason: String,
+        reason_code: Option<String>,
+    },
 }
 
 /// Summary of a single imported row (minimal, for the result table).

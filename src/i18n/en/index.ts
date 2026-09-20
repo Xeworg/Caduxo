@@ -715,6 +715,24 @@ const en: BaseTranslation = {
     whereA: "Any location you choose — external drive, cloud folder, or local directory. Standard SQLite files can be opened with most database tools.",
     locationQ: "Current database location",
     locationA: "The active database is stored in the app's local data directory. The backup export lets you choose where to save your copy.",
+    // Localized check messages emitted by the backup-restore backend. The
+    // frontend dispatches on the matching code in
+    // `src-tauri/src/services/backup_restore.rs` and falls back to the raw
+    // `checks[i]` text when the code is missing or unrecognized. See
+    // `src/components/BackupRestorePage.svelte` for the dispatch table.
+    checks: {
+      fileNotFound: "File does not exist",
+      sqliteHeaderValid: "Valid SQLite database header",
+      sqliteHeaderInvalid: "File is not a valid SQLite database (invalid header)",
+      requiredTablesPresent: "All {n} required tables present",
+      requiredTablesMissing: "One or more required Caduxo tables are missing",
+      schemaVersionDetected: "Schema version: {v}",
+      integrityCheckOk: "Integrity check passed (first 100 pages)",
+      integrityCheckFailed: "Integrity check warnings detected",
+      schemaCheckFailed: "Schema check failed to run",
+      schemaVersionInvalid: "Schema version {v} is not a valid Caduxo database",
+      schemaVersionCompatible: "Schema version is compatible",
+    },
   },
 
   csvImport: {
@@ -800,6 +818,25 @@ const en: BaseTranslation = {
       invalid: "Invalid",
       skuCreated: "SKU {sku} created",
       skuUpdated: "SKU {sku} updated",
+    },
+    // Localized reason codes emitted by the backend. The frontend
+    // dispatches on the matching code in `src-tauri/src/services/csv_io.rs`
+    // and falls back to the raw `reason` text when the code is missing or
+    // unrecognized. See `src/components/CsvImportPage.svelte` for the
+    // dispatch table.
+    reasonCodes: {
+      requiredFieldSku: "Required field missing: SKU",
+      requiredFieldDescription: "Required field missing: description",
+      skuAlreadyExists: "SKU {sku} already exists",
+      skuConflictManual: "SKU conflict requires manual resolution",
+      barcodeBelongsToOtherProduct:
+        "Barcode {barcode} belongs to another product",
+      barcodeConflictManual: "Barcode conflict requires manual resolution",
+      alertDaysNegative: "Alert days cannot be negative",
+      alertDaysTooLarge: "Alert days exceeds the maximum allowed",
+      alertDaysRangeInvalid: "Alert days must be between 0 and 3650",
+      dbError: "Database error while validating the row",
+      genericValidation: "Row failed validation",
     },
   },
 

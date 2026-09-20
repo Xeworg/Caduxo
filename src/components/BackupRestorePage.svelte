@@ -100,6 +100,82 @@
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
+
+  /**
+   * Stable check codes emitted by the backend. Must stay in lock-step with
+   * the `CHECK_CODE_*` constants in
+   * `src-tauri/src/services/backup_restore.rs`. See the matching
+   * `backupRestore.checks` i18n namespace for the localized strings.
+   */
+  const CHECK_CODES = {
+    fileNotFound: "file_not_found",
+    sqliteHeaderValid: "sqlite_header_valid",
+    sqliteHeaderInvalid: "sqlite_header_invalid",
+    requiredTablesPresent: "required_tables_present",
+    requiredTablesMissing: "required_tables_missing",
+    schemaVersionDetected: "schema_version_detected",
+    integrityCheckOk: "integrity_check_ok",
+    integrityCheckFailed: "integrity_check_failed",
+    schemaCheckFailed: "schema_check_failed",
+    schemaVersionInvalid: "schema_version_invalid",
+    schemaVersionCompatible: "schema_version_compatible",
+  } as const;
+
+  /**
+   * Number of tables the backend requires in a Caduxo backup. Mirrors
+   * `REQUIRED_TABLES.len()` in `services::backup_restore`; kept as a
+   * constant here so the localized "All N required tables present" message
+   * shows the same number the backend emits in the English fallback.
+   */
+  const REQUIRED_TABLES_COUNT = 8;
+
+  /**
+   * Resolves a backend check code to a localized string, falling back to
+   * the raw `fallback` text when the code is missing or unknown. Schema
+   * version placeholders are extracted from the fallback so the localized
+   * "Schema version: N" message carries the same N the backend reports.
+   */
+  function localizeCheck(
+    code: string | null | undefined,
+    fallback: string,
+  ): string {
+    switch (code) {
+      case CHECK_CODES.fileNotFound:
+        return $LL.backupRestore.checks.fileNotFound();
+      case CHECK_CODES.sqliteHeaderValid:
+        return $LL.backupRestore.checks.sqliteHeaderValid();
+      case CHECK_CODES.sqliteHeaderInvalid:
+        return $LL.backupRestore.checks.sqliteHeaderInvalid();
+      case CHECK_CODES.requiredTablesPresent:
+        return $LL.backupRestore.checks.requiredTablesPresent({
+          n: REQUIRED_TABLES_COUNT,
+        });
+      case CHECK_CODES.requiredTablesMissing:
+        return $LL.backupRestore.checks.requiredTablesMissing();
+      case CHECK_CODES.schemaVersionDetected: {
+        const match = fallback.match(/Schema version:\s*(-?\d+)/);
+        return $LL.backupRestore.checks.schemaVersionDetected({
+          v: match?.[1] ?? "0",
+        });
+      }
+      case CHECK_CODES.integrityCheckOk:
+        return $LL.backupRestore.checks.integrityCheckOk();
+      case CHECK_CODES.integrityCheckFailed:
+        return $LL.backupRestore.checks.integrityCheckFailed();
+      case CHECK_CODES.schemaCheckFailed:
+        return $LL.backupRestore.checks.schemaCheckFailed();
+      case CHECK_CODES.schemaVersionInvalid: {
+        const match = fallback.match(/Schema version\s*(-?\d+)/);
+        return $LL.backupRestore.checks.schemaVersionInvalid({
+          v: match?.[1] ?? "0",
+        });
+      }
+      case CHECK_CODES.schemaVersionCompatible:
+        return $LL.backupRestore.checks.schemaVersionCompatible();
+      default:
+        return fallback;
+    }
+  }
 </script>
 
 <div class="page">
@@ -149,8 +225,8 @@
       <div class="validation-summary">
         <h3>{$LL.backupRestore.backupValidated()}</h3>
         <ul class="checks-list">
-          {#each validation.checks as check}
-            <li>{check}</li>
+          {#each validation.checks as check, i}
+            <li>{localizeCheck(validation.checkCodes[i], check)}</li>
           {/each}
         </ul>
 
@@ -181,8 +257,8 @@
       <div class="validation-summary">
         <h3>{$LL.backupRestore.cannotRestore()}</h3>
         <ul class="checks-list">
-          {#each validation.checks as check}
-            <li>{check}</li>
+          {#each validation.checks as check, i}
+            <li>{localizeCheck(validation.checkCodes[i], check)}</li>
           {/each}
         </ul>
 

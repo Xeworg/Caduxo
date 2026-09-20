@@ -713,6 +713,24 @@ const es: BaseTranslation = {
     whereA: "Cualquier ubicación que elijas — disco externo, carpeta en la nube o directorio local. Los archivos SQLite estándar se pueden abrir con la mayoría de herramientas de bases de datos.",
     locationQ: "Ubicación actual de la base de datos",
     locationA: "La base de datos activa se almacena en el directorio local de datos de la app. La exportación de respaldo te permite elegir dónde guardar tu copia.",
+    // Localized check messages emitted by the backup-restore backend. The
+    // frontend dispatches on the matching code in
+    // `src-tauri/src/services/backup_restore.rs` and falls back to the raw
+    // `checks[i]` text when the code is missing or unrecognized. See
+    // `src/components/BackupRestorePage.svelte` for the dispatch table.
+    checks: {
+      fileNotFound: "El archivo no existe",
+      sqliteHeaderValid: "Encabezado de base de datos SQLite válido",
+      sqliteHeaderInvalid: "El archivo no es una base de datos SQLite válida (encabezado no válido)",
+      requiredTablesPresent: "Las {n} tablas requeridas están presentes",
+      requiredTablesMissing: "Faltan una o más tablas requeridas de Caduxo",
+      schemaVersionDetected: "Versión del esquema: {v}",
+      integrityCheckOk: "Verificación de integridad aprobada (primeras 100 páginas)",
+      integrityCheckFailed: "Se detectaron advertencias en la verificación de integridad",
+      schemaCheckFailed: "No se pudo ejecutar la verificación del esquema",
+      schemaVersionInvalid: "La versión {v} del esquema no es una base de datos Caduxo válida",
+      schemaVersionCompatible: "La versión del esquema es compatible",
+    },
   },
 
   csvImport: {
@@ -798,6 +816,25 @@ const es: BaseTranslation = {
       invalid: "Inválidos",
       skuCreated: "SKU {sku} creado",
       skuUpdated: "SKU {sku} actualizado",
+    },
+    // Localized reason codes emitted by the backend. The frontend
+    // dispatches on the matching code in `src-tauri/src/services/csv_io.rs`
+    // and falls back to the raw `reason` text when the code is missing or
+    // unrecognized. See `src/components/CsvImportPage.svelte` for the
+    // dispatch table.
+    reasonCodes: {
+      requiredFieldSku: "Falta el campo obligatorio: SKU",
+      requiredFieldDescription: "Falta el campo obligatorio: descripción",
+      skuAlreadyExists: "El SKU {sku} ya existe",
+      skuConflictManual: "Conflicto de SKU: requiere resolución manual",
+      barcodeBelongsToOtherProduct:
+        "El código de barras {barcode} pertenece a otro producto",
+      barcodeConflictManual: "Conflicto de código de barras: requiere resolución manual",
+      alertDaysNegative: "Los días de alerta no pueden ser negativos",
+      alertDaysTooLarge: "Los días de alerta exceden el máximo permitido",
+      alertDaysRangeInvalid: "Los días de alerta deben estar entre 0 y 3650",
+      dbError: "Error de base de datos al validar la fila",
+      genericValidation: "La fila no pasó la validación",
     },
   },
 

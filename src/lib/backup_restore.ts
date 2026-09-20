@@ -25,7 +25,16 @@ export interface RestoreValidation {
  isValidSqlite: boolean;
  hasExpectedSchema: boolean;
  isVersionCompatible: boolean;
+ /** Human-readable English fallback text for each check. */
  checks: string[];
+ /**
+  * Stable check codes aligned by index with `checks`. Each entry is `Some`
+  * (a string) when the service emits a typed code for that check, or `null`
+  * when the row has no localized counterpart. The frontend dispatches by
+  * code and falls back to the matching `checks[i]` string when the code is
+  * `null` / `undefined` or unrecognized.
+  */
+ checkCodes: (string | null)[];
  detectedSchemaVersion: number | null;
  canRestore: boolean;
 }

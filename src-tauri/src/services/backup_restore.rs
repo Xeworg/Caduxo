@@ -38,6 +38,53 @@ const REQUIRED_TABLES: &[&str] = &[
     "app_settings",
 ];
 
+// ─── Stable check codes ──────────────────────────────────────────────────────
+//
+// These string codes travel alongside `RestoreValidation::checks` so the
+// frontend can dispatch localized messages. The constants are kept inline
+// here (and mirrored as string literals in
+// `src/components/BackupRestorePage.svelte`) so we don't expand the DTO
+// surface just to host code names. Existing checks always emit a code; the
+// `Option<String>` element type on `check_codes` is reserved for future
+// checks that intentionally have no localized counterpart.
+
+/// Backup file does not exist on disk.
+const CHECK_CODE_FILE_NOT_FOUND: &str = "file_not_found";
+/// SQLite magic header was recognized.
+const CHECK_CODE_SQLITE_HEADER_VALID: &str = "sqlite_header_valid";
+/// SQLite magic header was NOT recognized.
+const CHECK_CODE_SQLITE_HEADER_INVALID: &str = "sqlite_header_invalid";
+/// All required Caduxo tables are present.
+const CHECK_CODE_REQUIRED_TABLES_PRESENT: &str = "required_tables_present";
+/// One or more required Caduxo tables are missing.
+const CHECK_CODE_REQUIRED_TABLES_MISSING: &str = "required_tables_missing";
+/// Schema version read from the migrations table.
+const CHECK_CODE_SCHEMA_VERSION_DETECTED: &str = "schema_version_detected";
+/// Bounded `PRAGMA integrity_check` reported `ok`.
+const CHECK_CODE_INTEGRITY_CHECK_OK: &str = "integrity_check_ok";
+/// Bounded `PRAGMA integrity_check` reported warnings.
+const CHECK_CODE_INTEGRITY_CHECK_FAILED: &str = "integrity_check_failed";
+/// Schema/integrity check failed to run at all (e.g. DB could not be opened
+/// read-only).
+const CHECK_CODE_SCHEMA_CHECK_FAILED: &str = "schema_check_failed";
+/// Detected schema version is below the supported minimum (1).
+const CHECK_CODE_SCHEMA_VERSION_INVALID: &str = "schema_version_invalid";
+/// Detected schema version is in the supported range.
+const CHECK_CODE_SCHEMA_VERSION_COMPATIBLE: &str = "schema_version_compatible";
+
+/// Pushes a human-readable check and its stable code into the parallel
+/// arrays kept on [`RestoreValidation`]. Kept private to this module so the
+/// two arrays cannot drift.
+fn push_check(
+    checks: &mut Vec<String>,
+    codes: &mut Vec<Option<String>>,
+    message: impl Into<String>,
+    code: &'static str,
+) {
+    checks.push(message.into());
+    codes.push(Some(code.to_string()));
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /// Exports a copy of the active database to `destination` and returns the path,
@@ -82,7 +129,8 @@ pub async fn export_backup(
 /// 3. Schema version is readable and ≥ 1.
 /// 4. Bounded `PRAGMA integrity_check` passes.
 pub async fn validate_backup(backup_path: &Path) -> Result<RestoreValidation, AppError> {
-    let mut checks = Vec::new();
+    let mut checks: Vec<String> = Vec::new();
+    let mut check_codes: Vec<Option<String>> = Vec::new();
     let mut has_expected_schema = true;
     let mut is_version_compatible = true;
     let mut can_restore = true;
@@ -90,13 +138,19 @@ pub async fn validate_backup(backup_path: &Path) -> Result<RestoreValidation, Ap
 
     // ── Check 1: File exists ───────────────────────────────────────────
     if !backup_path.exists() {
-        checks.push("File does not exist.".to_string());
+        push_check(
+            &mut checks,
+            &mut check_codes,
+            "File does not exist.",
+            CHECK_CODE_FILE_NOT_FOUND,
+        );
         can_restore = false;
         return Ok(RestoreValidation {
             is_valid_sqlite: false,
             has_expected_schema: false,
             is_version_compatible: false,
             checks,
+            check_codes,
             detected_schema_version: None,
             can_restore,
         });
@@ -111,9 +165,19 @@ pub async fn validate_backup(backup_path: &Path) -> Result<RestoreValidation, Ap
     .map_err(|e| InfrastructureError::BackupIo(format!("header check task error: {e}")))?;
 
     if is_valid_sqlite {
-        checks.push("Valid SQLite database header.".to_string());
+        push_check(
+            &mut checks,
+            &mut check_codes,
+            "Valid SQLite database header.",
+            CHECK_CODE_SQLITE_HEADER_VALID,
+        );
     } else {
-        checks.push("File is not a valid SQLite database (invalid header).".to_string());
+        push_check(
+            &mut checks,
+            &mut check_codes,
+            "File is not a valid SQLite database (invalid header).",
+            CHECK_CODE_SQLITE_HEADER_INVALID,
+        );
         can_restore = false;
     }
 
@@ -134,29 +198,56 @@ pub async fn validate_backup(backup_path: &Path) -> Result<RestoreValidation, Ap
     } = schema_result;
 
     if let Some(err) = schema_error {
-        checks.push(err);
+        push_check(
+            &mut checks,
+            &mut check_codes,
+            err,
+            CHECK_CODE_SCHEMA_CHECK_FAILED,
+        );
         has_expected_schema = false;
         is_version_compatible = false;
         can_restore = false;
     } else {
         if all_tables_present {
-            checks.push(format!(
-                "All {} required tables present.",
-                REQUIRED_TABLES.len()
-            ));
+            push_check(
+                &mut checks,
+                &mut check_codes,
+                format!("All {} required tables present.", REQUIRED_TABLES.len()),
+                CHECK_CODE_REQUIRED_TABLES_PRESENT,
+            );
         } else {
-            checks.push("One or more required Caduxo tables are missing.".to_string());
+            push_check(
+                &mut checks,
+                &mut check_codes,
+                "One or more required Caduxo tables are missing.",
+                CHECK_CODE_REQUIRED_TABLES_MISSING,
+            );
             has_expected_schema = false;
             can_restore = false;
         }
 
         detected_version = Some(version);
-        checks.push(format!("Schema version: {version}"));
+        push_check(
+            &mut checks,
+            &mut check_codes,
+            format!("Schema version: {version}"),
+            CHECK_CODE_SCHEMA_VERSION_DETECTED,
+        );
 
         if integrity_ok {
-            checks.push("Integrity check passed (first 100 pages).".to_string());
+            push_check(
+                &mut checks,
+                &mut check_codes,
+                "Integrity check passed (first 100 pages).",
+                CHECK_CODE_INTEGRITY_CHECK_OK,
+            );
         } else {
-            checks.push("Integrity check warnings detected.".to_string());
+            push_check(
+                &mut checks,
+                &mut check_codes,
+                "Integrity check warnings detected.",
+                CHECK_CODE_INTEGRITY_CHECK_FAILED,
+            );
             can_restore = false;
         }
     }
@@ -164,13 +255,21 @@ pub async fn validate_backup(backup_path: &Path) -> Result<RestoreValidation, Ap
     // ── Check 4: Version compatibility ──────────────────────────────────
     let detected_v = detected_version.unwrap_or(0);
     if detected_v < 1 {
-        checks.push(format!(
-            "Schema version {detected_v} is not a valid Caduxo database.",
-        ));
+        push_check(
+            &mut checks,
+            &mut check_codes,
+            format!("Schema version {detected_v} is not a valid Caduxo database."),
+            CHECK_CODE_SCHEMA_VERSION_INVALID,
+        );
         is_version_compatible = false;
         can_restore = false;
     } else {
-        checks.push("Schema version is compatible.".to_string());
+        push_check(
+            &mut checks,
+            &mut check_codes,
+            "Schema version is compatible.",
+            CHECK_CODE_SCHEMA_VERSION_COMPATIBLE,
+        );
     }
 
     Ok(RestoreValidation {
@@ -178,6 +277,7 @@ pub async fn validate_backup(backup_path: &Path) -> Result<RestoreValidation, Ap
         has_expected_schema,
         is_version_compatible,
         checks,
+        check_codes,
         detected_schema_version: detected_version,
         can_restore,
     })
@@ -604,6 +704,26 @@ mod tests {
         assert!(validation.is_version_compatible);
         assert!(validation.can_restore);
         assert_eq!(validation.detected_schema_version, Some(2));
+
+        // check_codes must stay parallel to checks (same length, no Nones for
+        // current checks). Lock the expected code sequence so a future
+        // refactor cannot silently drop a code.
+        assert_eq!(validation.check_codes.len(), validation.checks.len());
+        let codes: Vec<&str> = validation
+            .check_codes
+            .iter()
+            .map(|c| c.as_deref().expect("every emitted check has a code"))
+            .collect();
+        assert_eq!(
+            codes,
+            vec![
+                CHECK_CODE_SQLITE_HEADER_VALID,
+                CHECK_CODE_REQUIRED_TABLES_PRESENT,
+                CHECK_CODE_SCHEMA_VERSION_DETECTED,
+                CHECK_CODE_INTEGRITY_CHECK_OK,
+                CHECK_CODE_SCHEMA_VERSION_COMPATIBLE,
+            ]
+        );
     }
 
     #[tokio::test]
@@ -620,6 +740,11 @@ mod tests {
             .checks
             .iter()
             .any(|c| c.contains("not a valid SQLite")));
+        assert_eq!(validation.check_codes.len(), validation.checks.len());
+        assert!(validation
+            .check_codes
+            .iter()
+            .any(|c| c.as_deref() == Some(CHECK_CODE_SQLITE_HEADER_INVALID)));
     }
 
     #[tokio::test]
@@ -634,6 +759,12 @@ mod tests {
             .checks
             .iter()
             .any(|c| c.contains("does not exist")));
+        // The missing-file early return emits a single code.
+        assert_eq!(validation.checks.len(), 1);
+        assert_eq!(
+            validation.check_codes.as_slice(),
+            &[Some(CHECK_CODE_FILE_NOT_FOUND.to_string())]
+        );
     }
 
     #[tokio::test]
