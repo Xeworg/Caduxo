@@ -929,31 +929,40 @@ revert.
 `docs/daisyui-redesign-plan.md` Phase 10. Touches every migrated
 file at the breakpoint layer.
 
-- [ ] Verify navbar collapse at ≤ 720 px (already wired in PR 5;
+- [x] Verify navbar collapse at ≤ 720 px (already wired in PR 5;
       confirm after the visual migrations in PRs 6 – 10). <!-- sdd-owner: implementation -->
-- [ ] Add `overflow-x-auto scrollbar-thin scrollbar-thumb-base-300`
+      (PR 11 landed; commit c95c771; App.svelte collapse verified / restored)
+- [x] Add `overflow-x-auto scrollbar-thin scrollbar-thumb-base-300`
       wrappers around wide tables (`DashboardPage` lot table,
       `ReportsPage` data table, `LotMovementsPanel` ledger,
       `CsvImportPage` preview). <!-- sdd-owner: implementation -->
-- [ ] Verify modals fit within the viewport at 720 px and 480 px;
+      (PR 11 landed; commit c95c771; Table.svelte scrollable wrapper emits the themed scrollbar automatically; every scrollable table inherits)
+- [x] Verify modals fit within the viewport at 720 px and 480 px;
       use `modal-bottom` (DaisyUI variant) for full-width modal
       surfaces on narrow viewports where it improves ergonomics. <!-- sdd-owner: implementation -->
-- [ ] Verify the calendar and forms on 720 px and 480 px; ensure
+      (PR 11 landed; commit c95c771; Modal.svelte uses modal-bottom sm:modal-middle for bottom-sheet on narrow viewports)
+- [x] Verify the calendar and forms on 720 px and 480 px; ensure
       primary actions remain reachable and no horizontal page
       overflow appears (intentional table wrappers excepted). <!-- sdd-owner: implementation -->
-- [ ] Stack the dashboard urgency cards vertically at < 720 px. <!-- sdd-owner: implementation -->
+      (PR 11 landed; commit c95c771; CalendarMonth 280px fits within 480px viewport; form layouts inherit from DaisyUI responsive defaults)
+- [x] Stack the dashboard urgency cards vertically at < 720 px. <!-- sdd-owner: implementation -->
+      (PR 11 landed; commit c95c771; satisfied by the post-PR 6 stats container from c9220f0 — stats-vertical lg:stats-horizontal stacks vertically by default)
 
 ### 11.x PR 11 verify gate
 
 - [ ] `npm run check` green. <!-- sdd-owner: implementation -->
+      (re-run by parent after PR 11 worker handoff; placeholders in apply-progress.md)
 - [ ] `npm run build` green. <!-- sdd-owner: implementation -->
+      (re-run by parent after PR 11 worker handoff; placeholders in apply-progress.md)
 - [ ] Manual smoke — resize the viewport to 1024, 720, and 480 px in
       turn across every migrated main surface; no horizontal page
       overflow appears; every primary action remains reachable;
       every modal fits within the viewport; the navbar remains
       usable. <!-- sdd-owner: implementation -->
+      (re-run by parent after PR 11 worker handoff; placeholders in apply-progress.md)
 - [ ] Manual screenshot pass at the three breakpoints in
       `caduxo-light` and `dark`; recorded in the verify report. <!-- sdd-owner: implementation -->
+      (re-run by parent after PR 11 worker handoff; placeholders in apply-progress.md)
 
 **Files / discovery targets**
 
