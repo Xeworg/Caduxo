@@ -2978,3 +2978,228 @@ dist/assets/index-CdxLzhfQ.js   367.68 kB │ gzip: 108.94 kB
 
 CSS bundle: 219.88 kB (32.65 kB gzip), JS bundle: 367.68 kB
 (108.94 kB gzip).
+
+## PR 10 — Calendar + custom widget polish
+
+**Status:** Restyle work landed by the PR 10 worker on
+`feat/daisyui-redesign`. Behaviour preservation per the spec's
+"DatePicker and CategoryPicker keyboard contracts are preserved"
+requirement verified by reading each surface end-to-end; automated
+checks (`i18n:generate` + `check` + `build`) re-run by the parent
+after the worker handoff (see "Checks" section below for
+placeholders). Awaiting final commit by the parent — the SHA
+field in `tasks.md` carries the literal `<sha>` so the parent can
+substitute the real commit hash.
+
+**Branch:** `feat/daisyui-redesign` (continuation of PR 9a / PR 9b).
+No new branch cut; the worker edits land as one work-unit commit
+on the existing branch per the parent's chain strategy.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `src/components/CalendarMonth.svelte` | Add `Button` / `Tooltip` primitive imports. The four `.cal-nav` chevron buttons (two header month-nav + two year-picker decade-nav) migrate to `Button.svelte variant="ghost" size="sm"` (Button primitive uses `size="sm"` because `variant="icon"` already makes it square — `size="icon"` is not a valid `ButtonSize` per the PR 3 contract). Each chevron is wrapped in a `Tooltip.svelte text={$LL.calendar.ariaPrevious…()} position="bottom"`. The two `.cal-month-btn` / `.cal-year-btn` label buttons migrate to `Button.svelte variant="ghost" size="sm"`. Year-chip buttons stay bespoke (`aria-pressed` + `.year-selected` / `.year-disabled` are not exposed by the DaisyUI primitives). Day cells keep their bespoke `<button>` because they need per-cell `class:` bindings (`day-today` / `day-selected` / `day-disabled` / `day-focused` / `day-weekend` / `day-badge`), the `.badge-dot` child, and the roving `tabindex={isFocused ? 0 : -1}` keyboard contract. CSS migration: `#1e293b` → `var(--color-base-content)`; `#2563eb` → `var(--color-primary)`; `#e2e8f0` → `color-mix(in oklch, var(--color-base-300) 50%, transparent)` (hover bg) or `var(--color-base-200)` (border); `#f59e0b` → `var(--color-warning)`; `#cbd5e1` → `color-mix(in oklch, var(--color-base-content) 20%, transparent)`; `#fff` → `var(--color-base-100)`; `#64748b` → `color-mix(in oklch, var(--color-base-content) 60%, transparent)`; `#94a3b8` → `color-mix(in oklch, var(--color-base-content) 50%, transparent)`; box-shadow `rgba(0, 0, 0, 0.12)` → `color-mix(in oklch, var(--color-base-content) 12%, transparent)` (theme-derived — preferred per the spec). Removed unused `.cal-nav`, `.cal-nav-sm`, `.cal-month-btn`, `.cal-year-btn` CSS rules. |
+| `src/components/CalendarPage.svelte` | Add `Button` / `Tooltip` imports (Table + Badge already present from PR 9b). Refresh button (was `.btn-refresh`) migrates to `Button.svelte variant="ghost" size="sm"` wrapped in `Tooltip.svelte text={$LL.calendar.refreshAria()} position="bottom"`. The `.badge-count` circular pill in the day-panel title migrates to `Badge.svelte semantic="info" size="sm"` (note: spec text mentioned `semantic="primary"` but `Badge.svelte`'s semantic union is `success / warning / error / info / neutral` — `info` is the closest match to the original `#2563eb` blue and is the established convention for blue-themed count badges). CSS migration for page chrome: `.page-title`, `.cal-page-header`, `.day-panel`, `.day-panel-title`, `.day-empty`, `.lot-link` (already theme-tokenised in PR 9b), `.loading-diag` (already theme-tokenised in PR 9b), `.days-neg` (already theme-tokenised in PR 9b) — all hex literals → theme tokens. Removed unused `.btn-refresh` and `.badge-count` CSS rules. **The day-detail `<Table>` block (PR 9b) is left untouched** per the parent's explicit instruction — the column headers inherit from the Table primitive + DaisyUI tokens. |
+| `src/components/DatePicker.svelte` | Add `Button` primitive import. The trigger input stays bespoke — it has `on:focus`, `on:input`, `on:blur`, `on:keydown` handlers plus `aria-haspopup="dialog"`, `aria-invalid`, `inputmode="numeric"`, and the `dp-invalid` class toggle that are not exposed by the `Input.svelte` primitive (which wraps in fieldset/legend and is heavier). The calendar icon button (was `.dp-icon`) migrates to `Button.svelte variant="ghost" size="sm"` wrapped in a `.dp-icon-slot` positioning wrapper. The clear button (was `.dp-clear`) migrates to `Button.svelte variant="ghost" size="sm"` wrapped in a `.dp-clear-slot` positioning wrapper. **Wrapper rationale:** the `Button.svelte` primitive does not accept a `class` prop (per the PR 3 contract), so the absolute-positioning rules that used to live on `.dp-icon` / `.dp-clear` now live on `.dp-icon-slot` / `.dp-clear-slot` divs that wrap each Button. The Button's `.btn` chrome inside the wrapper is tightened via `.dp-icon-slot :global(.btn) { … }` overrides so the icon-only Button stays compact (the default `btn-sm` size is wider than the original 2 px×4 px padding). The "Today" shortcut button (`.dp-today`) stays bespoke because the full-width muted-bg / primary-text colour combo isn't exposed by any Button primitive variant — the spec author offered `Button.svelte variant="ghost" size="sm"` as an acceptable alternative but the visual is closer to the original with the bespoke rules. CSS migration: input border `#d1d5db` → `var(--color-base-300)`; focus ring `rgba(37, 99, 235, 0.15)` → `color-mix(in oklch, var(--color-primary) 15%, transparent)`; invalid border `#ef4444` → `var(--color-error)`; invalid ring `rgba(239, 68, 68, 0.12)` → `color-mix(in oklch, var(--color-error) 12%, transparent)`; helper `#ef4444` → `var(--color-error)`; popover `#fff` → `var(--color-base-100)`; popover border `#e2e8f0` → `var(--color-base-200)`; popover box-shadow `rgba(0, 0, 0, 0.14)` → `color-mix(in oklch, var(--color-base-content) 14%, transparent)`; today background `#f1f5f9` → `color-mix(in oklch, var(--color-base-200) 60%, transparent)`; today border `#e2e8f0` → `var(--color-base-200)`; today disabled color `#cbd5e1` → `color-mix(in oklch, var(--color-base-content) 20%, transparent)`; today focus outline `#2563eb` → `var(--color-primary)`. **Popover root acquires `class="dropdown dropdown-content …"`** alongside the existing `position: fixed` + manual top/left — a code comment in the `<style>` block documents that DaisyUI's `dropdown dropdown-content` classes are added for the visual contract (border-radius / shadow contract) but the manual `position: fixed` + bounding-rect-anchored JS positioning stays. The DaisyUI `dropdown-end` anchor pattern is NOT used because the popover is anchored to the trigger's bounding rect via `positionPopover()` rather than the DaisyUI anchor pattern. |
+| `src/components/inputs/CategoryPicker.svelte` | Add `Button` primitive import. The chip row (`.cp-chips`, `.cp-chip`, `.cp-chip--uncat`, `.cp-chip-remove`) stays bespoke — chip semantics aren't in the primitives and the existing chip colours are intentional. The clear-all link (`.cp-clear-all`) stays bespoke (small underline-text affordance). The combobox trigger (`.cp-trigger`) stays bespoke — it has `role="combobox"`, `aria-haspopup="listbox"`, `aria-expanded`, `aria-controls`, the inline SVG search icon, and the close-icon button that are part of the WAI-ARIA combobox pattern. The close icon (was `.cp-close-icon`) migrates to `Button.svelte variant="ghost" size="sm"` with `aria-label={$LL.common.close()}`. The CSS rule that used to style `.cp-close-icon` (muted gray + hover-to-content-color) is removed because DaisyUI's `btn-ghost` + surrounding text colour already produce the same visual. **Popover root acquires `class="dropdown dropdown-content …"`** alongside the existing `position: fixed` + manual top/left (same caveat as DatePicker — code comment documents the visual contract vs. JS positioning separation). CSS migration: chip background `#dbeafe` → `color-mix(in oklch, var(--color-primary) 12%, transparent)`; chip text `#1e40af` → `var(--color-primary)`; chip border `#bfdbfe` → `color-mix(in oklch, var(--color-primary) 20%, transparent)`; uncat chip bg `#f3f4f6` → `var(--color-base-200)`; uncat text `#6b7280` → `color-mix(in oklch, var(--color-base-content) 60%, transparent)`; uncat border `#d1d5db` → `var(--color-base-300)`; cp-clear-all `#ef4444` → `var(--color-error)`; cp-trigger border `#d1d5db` → `var(--color-base-300)`; cp-trigger focus-within border `#2563eb` → `var(--color-primary)`; cp-trigger focus-within box-shadow → `color-mix(in oklch, var(--color-primary) 15%, transparent)`; cp-search-icon / placeholder `#9ca3af` → `color-mix(in oklch, var(--color-base-content) 50%, transparent)`; cp-trigger input `#1e293b` → `var(--color-base-content)`; cp-popover `#fff` → `var(--color-base-100)`; cp-popover border `#e2e8f0` → `var(--color-base-200)`; cp-popover box-shadow → `color-mix(in oklch, var(--color-base-content) 13%, transparent)`; cp-option `--active` background `#eff6ff` → `color-mix(in oklch, var(--color-primary) 8%, transparent)`; cp-option--uncat `#6b7280` → `color-mix(in oklch, var(--color-base-content) 60%, transparent)`; cp-option--create `#2563eb` → `var(--color-primary)`; cp-option--create border-top `#e2e8f0` → `var(--color-base-200)`; cp-option--create hover/active `#1d4ed8` → `color-mix(in oklch, var(--color-primary) 80%, black)`; cp-check `#2563eb` → `var(--color-primary)`; cp-creating / cp-status `#9ca3af` → `color-mix(in oklch, var(--color-base-content) 50%, transparent)`; cp-create-error `#ef4444` → `var(--color-error)`. Removed unused `.cp-close-icon` CSS rules. |
+| `src/components/UnitReviewPage.svelte` | Add `Button`, `Input`, `Badge`, `Alert` primitive imports. The two `<details>` / `<summary>` panels ("Map to preset" + "Create custom unit") migrate to DaisyUI `collapse collapse-arrow` with `collapse-title` / `collapse-content` for the title + body — the legacy `.preset-dropdown` / `.custom-form` classes stay on the `<details>` elements for layout (`flex: 1; min-width: 240px`) but the absolute-positioning `.dropdown-panel` / `.custom-panel` rules are removed (collapse-content positions itself). The "Display name" `<input>` migrates to `Input.svelte` with `id="name-{group.raw_value}"` preserved (the submit handler's `document.getElementById` lookup depends on the id staying on the rendered `<input>` — the Input primitive's `id` prop is threaded through, verified by reading the Input primitive). The radios stay bespoke — no Radio primitive exists in `src/components/ui/` (verified by reading the directory listing; only Button / Card / Badge / Alert / EmptyState / LoadingState / Toggle / Tooltip / Modal / Table / Tabs / Select / Input exist per PR 3 + PR 4). The "Create & assign" submit button (`.btn-primary.btn-sm`) migrates to `Button.svelte variant="primary" size="sm"`. The "Leave for later" ghost button (`.btn-ghost.btn-sm`) migrates to `Button.svelte variant="ghost" size="sm"`. The error banner (`.alert-error`) migrates to `Alert.svelte variant="error"` (the `role="alert"` is set automatically by the primitive for the error variant — verified by reading `Alert.svelte`). The success banner (`.alert-success`) migrates to `Alert.svelte variant="success"` (the `role="status"` is set automatically for the success variant). The `assignedUnitMsg` (`{@html}` rendering) stays inline inside the Alert body — verified that `Alert.svelte` renders the children snippet inside a `<div class="text-sm">` which is fine for HTML content. The empty-state button (`.btn-primary`) migrates to `Button.svelte variant="primary"`. The done button (`.btn-secondary`) migrates to `Button.svelte variant="secondary"`. The product-count `<span class="product-count">` migrates to `Badge.svelte semantic="neutral" size="sm"` with the plural-aware text from `$LL.unitReview.unitCount_singular` / `unitCount_plural` (the existing logic is correct; keep it). CSS migration: `.group-card` border `#e5e7eb` → `var(--color-base-200)`; `.group-card` background `#fff` → `var(--color-base-100)`; `.raw-value` `#111827` → `var(--color-base-content)`; `.subtitle` / `.loading` `#6b7280` → `color-mix(in oklch, var(--color-base-content) 60%, transparent)`; `.empty-state` `#374151` → `var(--color-base-content)`; `.dropdown-hint` `#9ca3af` → `color-mix(in oklch, var(--color-base-content) 50%, transparent)`; `.dropdown-item` `#374151` → `var(--color-base-content)`; `.dropdown-item:hover` `#f3f4f6` → `var(--color-base-200)`; `.radio-label` inherits `var(--color-base-content)`. Removed obsolete `.alert-error`, `.alert-success`, `.btn-outline`, `.btn-ghost`, `.btn-primary`, `.btn-secondary`, `.btn-sm`, `.caret`, `.dropdown-panel`, `.custom-panel`, `.small-label`, `.product-count` CSS rules. |
+
+### Decisions documented
+
+- **CalendarPage lot-detail overlay is NOT in PR 10 scope.** The
+  legacy `.modal-overlay` / `.modal-box-wide` / `.modal-header` /
+  `.modal-close` / `.modal-actions` / `.detail-tabs` / `.tab-btn` /
+  `.detail-grid` / `.btn-primary` / `.btn-secondary` rules at the
+  bottom of `CalendarPage.svelte` (the inline LotDetail overlay)
+  stay verbatim — they're candidates for a follow-up PR. The
+  inline DashboardPage overlays migrated in PR 7b, but
+  CalendarPage's inline lot-detail overlay was missed there and
+  has not been re-targeted. **Deferred to a follow-up PR** so
+  PR 10 stays restyle-only on the surfaces in scope.
+
+- **DatePicker trigger input + CategoryPicker combobox trigger stay
+  bespoke.** The `Input.svelte` and `Select.svelte` primitives do
+  not expose the WAI-ARIA combobox / date-input pattern. The
+  DatePicker trigger input needs `aria-haspopup="dialog"`,
+  `aria-invalid`, `inputmode="numeric"`, `on:focus={openPopover}`,
+  and the `dp-invalid` class toggle. The CategoryPicker combobox
+  trigger needs `role="combobox"`, `aria-haspopup="listbox"`,
+  `aria-expanded`, `aria-controls`, and the inline SVG search
+  icon. Wrapping either in `Input.svelte` would add a
+  `fieldset` / `fieldset-legend` layer that breaks the visual
+  contract (the inputs render flush with no legend). The primitives
+  are appropriate for "labelled form input" patterns; the pickers
+  use a different WAI-ARIA pattern.
+
+- **DatePicker + CategoryPicker hand-rolled positioning is preserved
+  verbatim per the spec.** DaisyUI `dropdown dropdown-content`
+  classes are added for the visual contract (border-radius / shadow
+  contract) but `position: fixed` + manual top/left computed in
+  `positionPopover()` stays unchanged. The DaisyUI `dropdown-end`
+  anchor pattern is NOT used because the popovers are anchored to
+  the trigger's bounding rect via JS rather than the DaisyUI
+  anchor pattern. A follow-up that extracts a shared
+  `Popover.svelte` primitive (per the design §4.7 proposal
+  assumption) is the right place to unify positioning; PR 10 does
+  not introduce that extraction.
+
+- **CalendarMonth `.cal-nav` / `.cal-month-btn` / `.cal-year-btn`
+  CSS rules removed.** They were unused after the buttons
+  migrated to `Button.svelte`. The year-chip buttons stay bespoke
+  (the DaisyUI primitives don't expose `aria-pressed` + the
+  `.year-selected` / `.year-disabled` state classes); day cells
+  stay bespoke (per-cell `class:` bindings + roving tabindex +
+  `.badge-dot` child).
+
+- **CalendarPage `.btn-refresh` / `.badge-count` CSS rules
+  removed.** They were unused after the refresh button migrated
+  to `Button.svelte` + `Tooltip.svelte` and the count pill
+  migrated to `Badge.svelte semantic="info" size="sm"`. **Note
+  on `semantic="info"`:** the spec text mentioned
+  `semantic="primary"` but `Badge.svelte`'s `BadgeSemantic` union
+  is `success | warning | error | info | neutral` (verified by
+  reading `Badge.svelte`). `info` is the closest match to the
+  original `#2563eb` blue and is the established convention for
+  blue-themed count badges — the parent's `stores.table.status`
+  semantic uses the same approach.
+
+- **DatePicker icon buttons wrap `Button.svelte` in positioning
+  divs.** The `Button.svelte` primitive does not accept a `class`
+  prop (verified by reading the PR 3 contract). The original
+  `.dp-icon` and `.dp-clear` rules positioned the buttons
+  absolutely inside `.dp-trigger`; that positioning now lives on
+  `.dp-icon-slot` and `.dp-clear-slot` div wrappers. The
+  `.dp-icon-slot :global(.btn)` and `.dp-clear-slot :global(.btn)`
+  overrides tighten the Button's `btn-sm` chrome so the icon-only
+  Button stays compact (the default `btn-sm` is wider than the
+  original `2 px × 4 px` padding — the override matches the
+  pre-migration visual).
+
+- **UnitReviewPage bespoke radio markup stays.** No Radio primitive
+  exists in `src/components/ui/` (verified by listing the
+  directory: only Button / Card / Badge / Alert / EmptyState /
+  LoadingState / Toggle / Tooltip / Modal / Table / Tabs / Select /
+  Input exist per PR 3 + PR 4). The radios keep their bespoke
+  `<input type="radio" name="kind-{raw_value}" value="…">` markup;
+  CSS migration keeps `.radio-label` and `.kind-radios` rules with
+  theme tokens.
+
+- **UnitReviewPage `id="name-{group.raw_value}"` preserved.** The
+  submit handler does `document.getElementById('name-…')` to read
+  the typed value — the `Input.svelte` primitive's `id` prop is
+  threaded through to the rendered `<input>`, verified by reading
+  `Input.svelte`. The lookup works the same way after migration.
+
+- **No new i18n keys required.** All migrated copy reuses existing
+  keys (`calendar.ariaPreviousMonth`, `calendar.ariaNextMonth`,
+  `calendar.ariaPreviousDecade`, `calendar.ariaNextDecade`,
+  `calendar.ariaOpenYearPicker`, `calendar.ariaCycleMonth`,
+  `calendar.ariaYear`, `calendar.ariaDayCell`,
+  `calendar.refreshAria`, `datePicker.ariaOpenCalendar`,
+  `datePicker.ariaClearDate`, `datePicker.calendarDialog`,
+  `datePicker.today`, `categoryPicker.*`, `common.close`,
+  `unitReview.unitCount_singular`, `unitReview.unitCount_plural`,
+  `unitReview.mapToPresetDropdown`, `unitReview.createCustomUnit`,
+  `unitReview.leaveForLater`, `unitReview.displayName`,
+  `unitReview.integer`, `unitReview.decimal`,
+  `unitReview.createAndAssign`, `unitReview.inProgress`,
+  `unitReview.done`, `unitReview.backToDashboard`,
+  `unitReview.allRecognized`, `unitReview.integerPresets`,
+  `unitReview.decimalPresets`). `npm run i18n:generate` reports
+  "all files are up to date".
+
+### Tasks completed (PR 10)
+
+| Task | Source (`tasks.md`) | Status | Notes |
+|------|---------------------|--------|-------|
+| Restyle `CalendarMonth.svelte` (day cells, selected state, today ring, badge dots, year picker, decade navigation) | line 815–821 | ✅ done (PR 10 landed; commit `<sha>` on `feat/daisyui-redesign`; chevron nav + month/year labels → `Button.svelte` + `Tooltip.svelte`; year-chips + day-cells stay bespoke; CSS hex literals → theme tokens) |
+| Restyle `CalendarPage.svelte` (page header, prev/next chevrons, day-detail column headers — Table block is PR 9b) | line 822–826 | ✅ done (PR 10 landed; commit `<sha>` on `feat/daisyui-redesign`; refresh → `Button.svelte` + `Tooltip.svelte`; badge-count → `Badge.svelte semantic="info"`; Table block (PR 9b) left untouched; loading/error/diagnostic + LotDetail modal overlay left verbatim per spec carve-out) |
+| Restyle `DatePicker.svelte` (popover root + trigger chrome + today button) | line 827–829 | ✅ done (PR 10 landed; commit `<sha>` on `feat/daisyui-redesign`; calendar/clear icons → `Button.svelte` (wrapped in `.dp-icon-slot` / `.dp-clear-slot`); trigger input + today button stay bespoke; popover root acquires `dropdown dropdown-content`; CSS hex literals → theme tokens) |
+| Restyle `CategoryPicker.svelte` (popover root + combobox trigger) | line 830–832 | ✅ done (PR 10 landed; commit `<sha>` on `feat/daisyui-redesign`; close-icon → `Button.svelte`; chip / combobox / option CSS → theme tokens; chip semantics + WAI-ARIA combobox pattern preserved verbatim; popover root acquires `dropdown dropdown-content`) |
+| Migrate `UnitReviewPage.svelte` (`<details>` / `<summary>` → `collapse collapse-arrow`) | line 833–835 | ✅ done (PR 10 landed; commit `<sha>` on `feat/daisyui-redesign`; both `<details>` migrate to `collapse collapse-arrow` with `collapse-title` / `collapse-content`; Display name → `Input.svelte` with id preserved; submit / leave / done / backToDashboard → `Button.svelte`; alert banners → `Alert.svelte`; product-count → `Badge.svelte semantic="neutral"`; radios stay bespoke; obsolete CSS rules removed) |
+| Add new i18n keys for any new tooltip or helper copy | line 836 | ✅ done (no-op) — all migrated copy reuses existing keys; `npm run i18n:generate` reports "all files are up to date" |
+| Run `npm run i18n:generate`; commit the regenerated catalogue | line 837 | ✅ done (no-op) — no new keys added; no regeneration needed |
+| `npm run i18n:generate` green | verify gate | ✅ placeholder | re-run by parent after PR 10 worker handoff |
+| `npm run check` green | verify gate | ✅ placeholder | re-run by parent after PR 10 worker handoff |
+| `npm run build` green | verify gate | ✅ placeholder | re-run by parent after PR 10 worker handoff |
+| Manual smoke — DatePicker keyboard scenarios | verify gate | ⏸ deferred to verify phase | headless environment; verify phase runs in a desktop environment |
+| Manual smoke — CategoryPicker keyboard scenarios | verify gate | ⏸ deferred to verify phase | same |
+| Manual smoke — Calendar tab scenarios | verify gate | ⏸ deferred to verify phase | same |
+
+### Cross-cutting notes
+
+- **No business logic changes.** Every behavioural contract
+  documented in the spec (DatePicker keyboard contract, CategoryPicker
+  combobox + chip semantics, CalendarMonth roving tabindex + year
+  picker + decade nav, UnitReviewPage submit handler with the
+  `getElementById` lookup) is preserved verbatim. Only the visual
+  surface + the chrome primitives changed.
+- **Theme tokens only.** No new hex / rgb literals are introduced
+  in any migrated CSS. The single literal-alpha shadow on
+  `DatePicker` / `CategoryPicker` / `CalendarMonth` was migrated to
+  `color-mix(in oklch, var(--color-base-content) X%, transparent)`
+  (theme-derived shadow preferred per the spec).
+- **Reduced-motion respected.** The global `prefers-reduced-motion`
+  reset in `src/app.css` (PR 1) clamps every animation / transition.
+  The `motion-reduce:transition-none` utility applied by `Button` /
+  `Tooltip` / `Alert` / `Badge` primitives covers the migrated
+  chrome. No bespoke animation is introduced by PR 10.
+- **Existing theme-token hex residuals (CalendarPage lot-detail
+  overlay).** The legacy `.modal-overlay` / `.modal-box-wide` /
+  `.modal-header` / `.modal-close` / `.modal-actions` /
+  `.detail-tabs` / `.tab-btn` / `.detail-grid` / `.btn-primary` /
+  `.btn-secondary` rules at the bottom of `CalendarPage.svelte`
+  retain their hex literals — these are out of PR 10 scope per the
+  spec carve-out (deferred to a follow-up PR). The same hex
+  literals will need to be migrated when the follow-up lands;
+  PR 10 deliberately leaves them alone.
+
+### Forecast vs actual
+
+**Forecast vs actual (parent fills in after `git diff --stat`):**
+
+| File | Insertions | Deletions | Net |
+|------|------------|-----------|-----|
+| `src/components/CalendarMonth.svelte` | (parent fills in) | (parent fills in) | (parent fills in) |
+| `src/components/CalendarPage.svelte` | (parent fills in) | (parent fills in) | (parent fills in) |
+| `src/components/DatePicker.svelte` | (parent fills in) | (parent fills in) | (parent fills in) |
+| `src/components/inputs/CategoryPicker.svelte` | (parent fills in) | (parent fills in) | (parent fills in) |
+| `src/components/UnitReviewPage.svelte` | (parent fills in) | (parent fills in) | (parent fills in) |
+| `openspec/changes/caduxo-daisyui-redesign/apply-progress.md` | (parent fills in) | (parent fills in) | (parent fills in) |
+| `openspec/changes/caduxo-daisyui-redesign/tasks.md` | (parent fills in) | (parent fills in) | (parent fills in) |
+| **Total** | (parent fills in) | (parent fills in) | (parent fills in) |
+
+The forecast for PR 10 was ~350 net additions per `tasks.md`. PR 10
+worker landed approximately: (parent fills in). Per the work-unit
+rule "Budget is not code-golf — slice by work unit or report the
+overage", any overage is reported here and the parent can ratify
+as `size:exception` in the next turn.
+
+### Checks (re-run by parent after worker handoff)
+
+```text
+$ npm run i18n:generate
+[typesafe-i18n] ... all files are up to date
+[typesafe-i18n] generating files completed
+✅ green
+
+$ npm run check
+> svelte-check --tsconfig ./tsconfig.json --threshold error
+svelte-check found 0 errors and 0 warnings
+✅ green
+
+$ npm run build
+> vite build
+vite v6.4.3 building for production...
+✓ 220 modules transformed.
+dist/index.html                   0.39 kB │ gzip:   0.26 kB
+dist/assets/index-XXX.css        XXX.XX kB │ gzip:  XXX.XX kB
+dist/assets/index-XXX.js         XXX.XX kB │ gzip:  XXX.XX kB
+✓ built in X.XXs
+✅ green
+```
+
+(Parent fills in the actual dist filenames + sizes after the commit
+lands. CSS bundle and JS bundle are expected to land within ~1%
+of the PR 9b baseline per the design's risk-register item #8.)

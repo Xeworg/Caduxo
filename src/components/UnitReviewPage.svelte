@@ -9,6 +9,10 @@
   } from "../lib/unit_definitions.js";
   import { LL } from "../i18n/i18n-svelte.js";
   import { humanizeError } from "../lib/errors.js";
+  import Button from "./ui/Button.svelte";
+  import Input from "./ui/Input.svelte";
+  import Badge from "./ui/Badge.svelte";
+  import Alert from "./ui/Alert.svelte";
 
   /** Called when the user dismisses or finishes the review. */
   export let onDone: () => void;
@@ -128,7 +132,7 @@
   </div>
 
   {#if error}
-    <div class="alert-error" role="alert">{error}</div>
+    <Alert variant="error">{error}</Alert>
   {/if}
 
   {#if loading}
@@ -136,9 +140,9 @@
   {:else if groups.length === 0}
     <div class="empty-state">
       <p>{$LL.unitReview.allRecognized()}</p>
-      <button type="button" class="btn-primary" on:click={onDone}>
+      <Button variant="primary" onclick={onDone}>
         {$LL.unitReview.backToDashboard()}
-      </button>
+      </Button>
     </div>
   {:else}
     <div class="group-list">
@@ -147,21 +151,20 @@
         <div class="group-card" class:disabled={inProgress}>
           <div class="group-header">
             <span class="raw-value">"{group.raw_value}"</span>
-            <span class="product-count">
+            <Badge semantic="neutral" size="sm">
               {group.product_count === 1
                 ? $LL.unitReview.unitCount_singular({ n: group.product_count })
                 : $LL.unitReview.unitCount_plural({ n: group.product_count })}
-            </span>
+            </Badge>
           </div>
 
           <div class="action-row">
-            <!-- Map to preset -->
-            <details class="preset-dropdown">
-              <summary class="btn-outline btn-sm">
+            <!-- Map to preset (DaisyUI collapse-arrow) -->
+            <details class="preset-dropdown collapse collapse-arrow">
+              <summary class="collapse-title">
                 {$LL.unitReview.mapToPresetDropdown()}
-                <span class="caret">▾</span>
               </summary>
-              <div class="dropdown-panel">
+              <div class="collapse-content">
                 <p class="dropdown-hint">{$LL.unitReview.integerPresets()}</p>
                 {#each presetsByKind.integer as preset (preset.id)}
                   <button
@@ -187,21 +190,17 @@
               </div>
             </details>
 
-            <!-- Keep as custom -->
-            <details class="custom-form">
-              <summary class="btn-outline btn-sm">
+            <!-- Keep as custom (DaisyUI collapse-arrow) -->
+            <details class="custom-form collapse collapse-arrow">
+              <summary class="collapse-title">
                 {$LL.unitReview.createCustomUnit()}
-                <span class="caret">▾</span>
               </summary>
-              <div class="custom-panel">
-                <label class="small-label">
-                  {$LL.unitReview.displayName()}
-                  <input
-                    type="text"
-                    value={group.raw_value}
-                    id="name-{group.raw_value}"
-                  />
-                </label>
+              <div class="collapse-content">
+                <Input
+                  id="name-{group.raw_value}"
+                  value={group.raw_value}
+                  label={$LL.unitReview.displayName()}
+                />
                 <div class="kind-radios">
                   <label class="radio-label">
                     <input type="radio" name="kind-{group.raw_value}" value="integer" checked />
@@ -212,11 +211,11 @@
                     {$LL.unitReview.decimal()}
                   </label>
                 </div>
-                <button
-                  type="button"
-                  class="btn-primary btn-sm"
+                <Button
+                  variant="primary"
+                  size="sm"
                   disabled={inProgress}
-                  on:click={() => {
+                  onclick={() => {
                     const nameInput = document.getElementById(
                       `name-${group.raw_value}`,
                     ) as HTMLInputElement;
@@ -231,36 +230,36 @@
                   }}
                 >
                   {inProgress ? $LL.unitReview.inProgress() : $LL.unitReview.createAndAssign()}
-                </button>
+                </Button>
               </div>
             </details>
 
             <!-- Leave for later -->
-            <button
-              type="button"
-              class="btn-ghost btn-sm"
+            <Button
+              variant="ghost"
+              size="sm"
               disabled={inProgress}
-              on:click={() => leaveForLater(group.raw_value)}
+              onclick={() => leaveForLater(group.raw_value)}
             >
               {$LL.unitReview.leaveForLater()}
-            </button>
+            </Button>
           </div>
         </div>
       {/each}
     </div>
 
     {#if actionResult}
-      <div class="alert-success" role="status">
+      <Alert variant="success">
         {successMessage}
         {#if assignedUnitMsg}
           {@html assignedUnitMsg}
         {/if}
-      </div>
+      </Alert>
     {/if}
 
-    <button type="button" class="btn-secondary" on:click={onDone}>
+    <Button variant="secondary" onclick={onDone}>
       {$LL.unitReview.done()}
-    </button>
+    </Button>
   {/if}
 </div>
 
@@ -282,39 +281,24 @@
 
   .subtitle {
     margin: 0;
-    color: #6b7280;
+    color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
     font-size: 0.9rem;
   }
 
-  .alert-error {
-    background: #fee2e2;
-    border: 1px solid #fca5a5;
-    color: #991b1b;
-    padding: 10px 14px;
-    border-radius: 8px;
-    margin-bottom: 16px;
-    font-size: 0.9rem;
-  }
-
-  .alert-success {
-    background: #dcfce7;
-    border: 1px solid #86efac;
-    color: #166534;
-    padding: 10px 14px;
-    border-radius: 8px;
-    margin-top: 16px;
-    font-size: 0.9rem;
-  }
+  /* The error / success banners are rendered via the `Alert.svelte`
+     primitive so the bespoke `.alert-error` / `.alert-success` styling
+     rules are intentionally omitted — DaisyUI `alert-{variant} alert-soft`
+     provides the same visual contract. */
 
   .loading {
-    color: #6b7280;
+    color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
     font-style: italic;
   }
 
   .empty-state {
     text-align: center;
     padding: 40px 20px;
-    color: #374151;
+    color: var(--color-base-content);
   }
 
   .empty-state p {
@@ -328,10 +312,10 @@
   }
 
   .group-card {
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--color-base-200);
     border-radius: 8px;
     padding: 14px;
-    background: #fff;
+    background: var(--color-base-100);
     transition: opacity 0.2s;
   }
 
@@ -350,12 +334,7 @@
   .raw-value {
     font-weight: 600;
     font-size: 1rem;
-    color: #111827;
-  }
-
-  .product-count {
-    font-size: 0.85rem;
-    color: #6b7280;
+    color: var(--color-base-content);
   }
 
   .action-row {
@@ -365,71 +344,22 @@
     align-items: flex-start;
   }
 
-  .btn-outline {
-    background: #fff;
-    border: 1px solid #d1d5db;
-    color: #374151;
-    border-radius: 6px;
-    padding: 5px 10px;
-    font-size: 0.85rem;
-    cursor: pointer;
-  }
-
-  .btn-outline:hover {
-    background: #f9fafb;
-    border-color: #9ca3af;
-  }
-
-  .btn-ghost {
-    background: transparent;
-    border: none;
-    color: #6b7280;
-    cursor: pointer;
-    font-size: 0.85rem;
-    padding: 5px 8px;
-    border-radius: 4px;
-  }
-
-  .btn-ghost:hover {
-    background: #f3f4f6;
-    color: #374151;
-  }
-
-  .btn-ghost:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .btn-sm {
-    font-size: 0.85rem;
-  }
-
-  .caret {
-    font-size: 0.7rem;
-    margin-left: 4px;
-  }
-
+  /* The collapse-arrow wrapper inherits DaisyUI's collapse border + arrow
+     indicator. The preset list and custom-unit form live inside
+     `.collapse-content` so the legacy `.dropdown-panel` / `.custom-panel`
+     absolute-positioning hacks are no longer needed. The preset / custom
+     dropdown classes stay so consumers can target specific overrides
+     without having to re-derive the DaisyUI class list. */
   .preset-dropdown,
   .custom-form {
-    position: relative;
-  }
-
-  .dropdown-panel {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    padding: 8px;
-    margin-top: 4px;
-    min-width: 200px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    z-index: 10;
-    position: absolute;
+    flex: 1;
+    min-width: 240px;
   }
 
   .dropdown-hint {
     font-size: 0.75rem;
     font-weight: 600;
-    color: #9ca3af;
+    color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
     margin: 4px 0 2px;
     text-transform: uppercase;
   }
@@ -444,46 +374,16 @@
     cursor: pointer;
     border-radius: 4px;
     font-size: 0.85rem;
-    color: #374151;
+    color: var(--color-base-content);
   }
 
   .dropdown-item:hover:not(:disabled) {
-    background: #f3f4f6;
+    background: var(--color-base-200);
   }
 
   .dropdown-item:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-
-  .custom-panel {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    padding: 10px;
-    margin-top: 4px;
-    min-width: 240px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    z-index: 10;
-    position: absolute;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .small-label {
-    font-size: 0.85rem;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .small-label input[type="text"] {
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
-    padding: 4px 8px;
-    font-size: 0.85rem;
-    width: 100%;
   }
 
   .kind-radios {
@@ -497,5 +397,6 @@
     gap: 4px;
     font-size: 0.85rem;
     cursor: pointer;
+    color: var(--color-base-content);
   }
 </style>

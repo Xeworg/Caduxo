@@ -16,6 +16,8 @@
   import { humanizeError } from "../lib/errors.js";
   import Table from "./ui/Table.svelte";
   import Badge from "./ui/Badge.svelte";
+  import Button from "./ui/Button.svelte";
+  import Tooltip from "./ui/Tooltip.svelte";
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -342,15 +344,17 @@ function onLotCancel() {
 <div class="cal-page">
   <div class="cal-page-header">
     <h2 class="page-title">{$LL.calendar.pageTitle()}</h2>
-    <button
-      type="button"
-      class="btn-refresh"
-      on:click={loadLots}
-      disabled={loading}
-      aria-label={$LL.calendar.refreshAria()}
-    >
-      ⟳ {$LL.calendar.refresh()}
-    </button>
+    <Tooltip text={$LL.calendar.refreshAria()} position="bottom">
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label={$LL.calendar.refreshAria()}
+        disabled={loading}
+        onclick={loadLots}
+      >
+        ⟳ {$LL.calendar.refresh()}
+      </Button>
+    </Tooltip>
   </div>
 
       {#if loading && lots.length === 0}
@@ -388,7 +392,7 @@ function onLotCancel() {
         <h3 class="day-panel-title">
           {$LL.calendar.dayPanelTitle({ date: formatDate(selectedDate) })}
           {#if dayRows.length > 0}
-            <span class="badge-count">{dayRows.length}</span>
+            <Badge semantic="info" size="sm">{dayRows.length}</Badge>
           {/if}
         </h3>
 
@@ -548,29 +552,8 @@ function onLotCancel() {
   .page-title {
     font-size: 1.3rem;
     font-weight: 700;
-    color: #1e293b;
+    color: var(--color-base-content);
     margin: 0;
-  }
-
-  .btn-refresh {
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 5px 12px;
-    font-size: 0.85rem;
-    font-family: inherit;
-    color: #2563eb;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-
-  .btn-refresh:hover:not(:disabled) {
-    background: #e2e8f0;
-  }
-
-  .btn-refresh:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   /* ── Layout ──────────────────────────────────────────────────────────────── */
@@ -587,8 +570,8 @@ function onLotCancel() {
 
   .day-panel {
     flex: 1;
-    background: #fff;
-    border: 1px solid #e2e8f0;
+    background: var(--color-base-100);
+    border: 1px solid var(--color-base-200);
     border-radius: 12px;
     padding: 16px;
     min-width: 0;
@@ -597,28 +580,15 @@ function onLotCancel() {
   .day-panel-title {
     font-size: 1rem;
     font-weight: 600;
-    color: #1e293b;
+    color: var(--color-base-content);
     margin: 0 0 12px 0;
     display: flex;
     align-items: center;
     gap: 8px;
   }
 
-  .badge-count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: #2563eb;
-    color: #fff;
-    font-size: 0.75rem;
-    font-weight: 700;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-  }
-
   .day-empty {
-    color: #64748b;
+    color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
     font-size: 0.9rem;
     text-align: center;
     padding: 20px 0;
