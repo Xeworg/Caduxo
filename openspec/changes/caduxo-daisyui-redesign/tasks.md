@@ -76,59 +76,59 @@ gates every subsequent chained PR.**
 
 ### 1.1 Baseline + branch
 
-- [ ] Create branch `feat/daisyui-redesign` off `main` (do NOT start from
+- [x] Create branch `feat/daisyui-redesign` off `main` (do NOT start from
       `feat/daisyui-redesign-plan`; that branch carries only the planning
       doc and will be retired once work starts). <!-- sdd-owner: implementation -->
-- [ ] Write `docs/redesign-baseline.md` listing the current visual state
+- [x] Write `docs/redesign-baseline.md` listing the current visual state
       of every main surface (Dashboard, Stores, Products, Product
       detail, Calendar, Reports, CSV Import, Backup/Restore,
       Configuration, Unit Review) with explicit notes on viewport
       widths (1440, 1024, 720 px), existing modal shells, and the OS
       chrome that today leaks into the Configuration locale selector.
       No UI code changes. <!-- sdd-owner: implementation -->
-- [ ] Capture baseline screenshots (or annotated textual descriptions
+- [x] Capture baseline screenshots (or annotated textual descriptions
       when a screenshot is impractical) and link them from the baseline
       doc. <!-- sdd-owner: implementation -->
 
 ### 1.2 Dependencies + Vite plugin + scripts
 
-- [ ] Add `tailwindcss@^4`, `@tailwindcss/vite@^4`, and `daisyui@^5` to
+- [x] Add `tailwindcss@^4`, `@tailwindcss/vite@^4`, and `daisyui@^5` to
       `dependencies` in `package.json`; run `npm install` and confirm
       the lockfile updates without breaking existing entries. <!-- sdd-owner: implementation -->
-- [ ] Update `vite.config.ts` so the plugin chain is
+- [x] Update `vite.config.ts` so the plugin chain is
       `plugins: [tailwindcss(), svelte()]`, with `tailwindcss()` first
       so Tailwind's class-collection pass sees every Svelte component's
       class usage during the same build pass. Preserve the existing
       `clearScreen`, `build.target = "es2022"`, `server.strictPort`,
       and `server.port = 1420`. <!-- sdd-owner: implementation -->
-- [ ] Add `"check": "svelte-check --tsconfig ./tsconfig.json --threshold error"`
+- [x] Add `"check": "svelte-check --tsconfig ./tsconfig.json --threshold error"`
       to `package.json` scripts so every subsequent phase can call
       `npm run check` as the canonical check command. <!-- sdd-owner: implementation -->
 
 ### 1.3 Stylesheet entry + main.ts switch
 
-- [ ] Create `src/app.css` containing `@import "tailwindcss";` followed
+- [x] Create `src/app.css` containing `@import "tailwindcss";` followed
       by `@plugin "daisyui" { themes: caduxo-light --default, dark;
       root: ":root"; logs: false; }` plus the `caduxo-light` custom
       theme block derived from the existing palette
       (`#2563eb` primary, `#f6f8fb` base-100, slate neutrals, semantic
       red / amber / green / blue). Use the oklch starting values from
       design §3.2 and tune during the verify pass. <!-- sdd-owner: implementation -->
-- [ ] Add project motion tokens to `src/app.css` via Tailwind v4
+- [x] Add project motion tokens to `src/app.css` via Tailwind v4
       `@theme`: `--duration-fast: 120ms`, `--duration-base: 180ms`,
       `--duration-slow: 240ms`, `--duration-pulse: 1800ms`,
       `--ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1)`,
       `--ease-in-out-soft: cubic-bezier(0.4, 0, 0.2, 1)`. <!-- sdd-owner: implementation -->
-- [ ] Add a `@media (prefers-reduced-motion: reduce)` global reset to
+- [x] Add a `@media (prefers-reduced-motion: reduce)` global reset to
       `src/app.css` that clamps every animation / transition to
       `0.001ms` and forces `scroll-behavior: auto`. The reset targets
       `*, *::before, *::after` so no animated surface escapes the gate. <!-- sdd-owner: implementation -->
-- [ ] Add a `@utility num { font-variant-numeric: tabular-nums;
+- [x] Add a `@utility num { font-variant-numeric: tabular-nums;
       text-align: end; }` Tailwind v4 utility to `src/app.css` for
       numeric column alignment (used by PR 9 tables). <!-- sdd-owner: implementation -->
 - [ ] Add `app-shell-gradient` keyframes / utility if the dashboard
       header band uses one; otherwise defer until PR 6. <!-- sdd-owner: implementation -->
-- [ ] Update `src/main.ts` to import `./app.css` instead of `./style.css`.
+- [x] Update `src/main.ts` to import `./app.css` instead of `./style.css`.
       Leave `src/style.css` in place during the migration; it is
       retired in PR 13 once the grep gate passes. <!-- sdd-owner: implementation -->
 
@@ -162,10 +162,10 @@ gates every subsequent chained PR.**
 
 ### 1.6 PR 1 verify gate
 
-- [ ] `npm run i18n:generate` green. <!-- sdd-owner: implementation -->
-- [ ] `npm run check` (svelte-check --threshold error) green; no new
+- [x] `npm run i18n:generate` green. <!-- sdd-owner: implementation -->
+- [x] `npm run check` (svelte-check --threshold error) green; no new
       errors or warnings introduced by the Vite plugin chain. <!-- sdd-owner: implementation -->
-- [ ] `npm run build` exits green. <!-- sdd-owner: implementation -->
+- [x] `npm run build` exits green. <!-- sdd-owner: implementation -->
 - [ ] Manual launch — `npm run dev` boots in the dev browser; no
       console errors, Svelte HMR works, the existing UI renders without
       widespread preflight breakage. If Tauri is available locally,

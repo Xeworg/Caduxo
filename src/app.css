@@ -1,0 +1,113 @@
+/*
+ * Caduxo application stylesheet entry.
+ *
+ * PR 1 (foundation) of openspec/changes/caduxo-daisyui-redesign.
+ *   - Imports Tailwind v4 and registers DaisyUI v5 with two themes:
+ *     `caduxo-light` (default, custom brand) and DaisyUI built-in `dark`.
+ *   - Adds project motion tokens via Tailwind v4 `@theme`.
+ *   - Adds a global `prefers-reduced-motion: reduce` reset that clamps
+ *     every animation / transition to 0.001ms.
+ *   - Adds a `num` utility for numeric column alignment (used by the
+ *     shared Table primitive in PR 9).
+ *
+ * No page migration happens in PR 1 — this file only wires the
+ * foundation. See docs/daisyui-redesign-plan.md and the design phase
+ * for the per-component migration map.
+ */
+
+/* ─── Tailwind + DaisyUI plugin registration ──────────────────────────── */
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: caduxo-light --default, dark;
+  root: ":root";
+  logs: false;
+}
+
+/* ─── caduxo-light custom brand theme ─────────────────────────────────── */
+/* Tokens derived from the existing palette: `#2563eb` primary,
+ * `#f6f8fb` base background, slate neutrals, semantic
+ * red / amber / green / blue. oklch values are starting points; the
+ * verify pass tunes contrast for AA against body / headings / inputs /
+ * badges / alerts / primary button labels. */
+@plugin "daisyui/theme" {
+  name: "caduxo-light";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-primary: oklch(54% 0.18 264);
+  --color-primary-content: oklch(98% 0.005 264);
+
+  --color-base-100: oklch(98% 0.005 240);
+  --color-base-200: oklch(96% 0.008 240);
+  --color-base-300: oklch(92% 0.01 240);
+  --color-base-content: oklch(20% 0.02 264);
+
+  --color-secondary: oklch(60% 0.06 240);
+  --color-secondary-content: oklch(98% 0.005 264);
+
+  --color-accent: oklch(70% 0.12 200);
+  --color-accent-content: oklch(20% 0.02 264);
+
+  --color-neutral: oklch(28% 0.02 264);
+  --color-neutral-content: oklch(98% 0.005 264);
+
+  --color-info: oklch(70% 0.12 230);
+  --color-info-content: oklch(20% 0.02 264);
+
+  --color-success: oklch(70% 0.16 145);
+  --color-success-content: oklch(20% 0.02 264);
+
+  --color-warning: oklch(80% 0.18 75);
+  --color-warning-content: oklch(20% 0.02 264);
+
+  --color-error: oklch(62% 0.22 25);
+  --color-error-content: oklch(98% 0.005 264);
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* ─── Project motion tokens ───────────────────────────────────────────── */
+/* Centralised so the verify gate can grep for hand-written
+ * `transition: ... 0.Xs` literals and reject them in favour of these
+ * tokens (PR 12). Reference via Tailwind utilities
+ * (`duration-fast`, `ease-out-soft`, …). */
+@theme {
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 240ms;
+  --duration-pulse: 1800ms;
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-soft: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Global reduced-motion reset ─────────────────────────────────────── */
+/* Safety net so no animated surface escapes the gate. The reset
+ * targets every element (including ::before / ::after pseudo-elements)
+ * so DaisyUI's built-in animations and primitives' custom transitions
+ * are all clamped when the user prefers reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─── Foundation utilities ────────────────────────────────────────────── */
+/* Tabular-nums + right alignment for numeric table columns. Consumed
+ * by `<td class="num">` in the shared Table primitive (PR 9). */
+@utility num {
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}

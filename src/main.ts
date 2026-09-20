@@ -1,5 +1,11 @@
 import { mount } from "svelte";
-import "./style.css";
+// PR 1 (foundation) of the daisyui redesign switches the stylesheet
+// entry from the legacy `./style.css` to `./app.css` (Tailwind v4 +
+// DaisyUI v5 + caduxo-light custom theme + motion tokens + reduced-
+// motion reset). `./style.css` is retained in place during the
+// migration and retired in PR 13 once the grep gate confirms zero
+// production references to its classes.
+import "./app.css";
 import App from "./App.svelte";
 import { initLocale } from "./i18n/locale.svelte.js";
 
