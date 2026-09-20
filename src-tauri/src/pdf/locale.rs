@@ -94,8 +94,19 @@ pub struct PdfMessages {
     pub filter_prefix_location: Cow<'static, str>,
     /// "category=" / "categoría=".
     pub filter_prefix_category: Cow<'static, str>,
+    /// "category ({n})" / "categoría ({n})".
+    ///
+    /// Currently unused at render time: the renderer routes single-category
+    /// filters through the singular key=value prefix above
+    /// (`category=` / `categoría=`) and multiple-category filters through
+    /// [`Self::filter_prefix_categories_other`]. This field is kept on the
+    /// struct so the full CLDR-style plural pair is available without
+    /// another locale.rs edit if a future slice wants to surface the count
+    /// form for the single-category case.
+    #[allow(dead_code)]
+    pub filter_prefix_categories_one: Cow<'static, str>,
     /// "categories ({n})" / "categorías ({n})".
-    pub filter_prefix_categories_n: Cow<'static, str>,
+    pub filter_prefix_categories_other: Cow<'static, str>,
     /// "urgency=" / "urgencia=".
     pub filter_prefix_urgency: Cow<'static, str>,
     /// "from=" / "desde=".
@@ -107,9 +118,14 @@ pub struct PdfMessages {
     pub columns: [Cow<'static, str>; 8],
     /// Notice shown when the report has no rows.
     pub empty_notice: Cow<'static, str>,
-    /// "{n} ago" / "hace {n} días". The `{n}` placeholder is replaced at
+    /// Store/location separator used inside the table body.
+    pub store_location_separator: Cow<'static, str>,
+    /// "{n} day ago" / "hace {n} día". The `{n}` placeholder is replaced at
     /// render time.
-    pub days_ago_template: Cow<'static, str>,
+    pub days_ago_one: Cow<'static, str>,
+    /// "{n} days ago" / "hace {n} días". The `{n}` placeholder is replaced at
+    /// render time.
+    pub days_ago_other: Cow<'static, str>,
     /// "Page {n} of {m}" / "Página {n} de {m}".
     pub footer_page_of: Cow<'static, str>,
     /// "Caduxo · Expiry Tracker" / "Caduxo · Control de caducidades".
@@ -126,7 +142,8 @@ pub fn pdf_messages(locale: Locale) -> PdfMessages {
             filter_prefix_store: Cow::Borrowed("store="),
             filter_prefix_location: Cow::Borrowed("location="),
             filter_prefix_category: Cow::Borrowed("category="),
-            filter_prefix_categories_n: Cow::Borrowed("categories ({n})"),
+            filter_prefix_categories_one: Cow::Borrowed("category ({n})"),
+            filter_prefix_categories_other: Cow::Borrowed("categories ({n})"),
             filter_prefix_urgency: Cow::Borrowed("urgency="),
             filter_prefix_from: Cow::Borrowed("from="),
             filter_prefix_to: Cow::Borrowed("to="),
@@ -141,7 +158,9 @@ pub fn pdf_messages(locale: Locale) -> PdfMessages {
                 Cow::Borrowed("Batch"),
             ],
             empty_notice: Cow::Borrowed("No rows match the current report filters."),
-            days_ago_template: Cow::Borrowed("{n} ago"),
+            store_location_separator: Cow::Borrowed(" / "),
+            days_ago_one: Cow::Borrowed("{n} day ago"),
+            days_ago_other: Cow::Borrowed("{n} days ago"),
             footer_page_of: Cow::Borrowed("Page {n} of {m}"),
             brand: Cow::Borrowed("Caduxo · Expiry Tracker"),
         },
@@ -152,7 +171,8 @@ pub fn pdf_messages(locale: Locale) -> PdfMessages {
             filter_prefix_store: Cow::Borrowed("tienda="),
             filter_prefix_location: Cow::Borrowed("ubicación="),
             filter_prefix_category: Cow::Borrowed("categoría="),
-            filter_prefix_categories_n: Cow::Borrowed("categorías ({n})"),
+            filter_prefix_categories_one: Cow::Borrowed("categoría ({n})"),
+            filter_prefix_categories_other: Cow::Borrowed("categorías ({n})"),
             filter_prefix_urgency: Cow::Borrowed("urgencia="),
             filter_prefix_from: Cow::Borrowed("desde="),
             filter_prefix_to: Cow::Borrowed("hasta="),
@@ -167,7 +187,9 @@ pub fn pdf_messages(locale: Locale) -> PdfMessages {
                 Cow::Borrowed("Lote"),
             ],
             empty_notice: Cow::Borrowed("Ninguna fila coincide con los filtros actuales."),
-            days_ago_template: Cow::Borrowed("hace {n} días"),
+            store_location_separator: Cow::Borrowed(" / "),
+            days_ago_one: Cow::Borrowed("hace {n} día"),
+            days_ago_other: Cow::Borrowed("hace {n} días"),
             footer_page_of: Cow::Borrowed("Página {n} de {m}"),
             brand: Cow::Borrowed("Caduxo · Control de caducidades"),
         },
@@ -243,9 +265,14 @@ mod tests {
                 es.filter_prefix_category.as_ref(),
             ),
             (
-                "filter_prefix_categories_n",
-                en.filter_prefix_categories_n.as_ref(),
-                es.filter_prefix_categories_n.as_ref(),
+                "filter_prefix_categories_one",
+                en.filter_prefix_categories_one.as_ref(),
+                es.filter_prefix_categories_one.as_ref(),
+            ),
+            (
+                "filter_prefix_categories_other",
+                en.filter_prefix_categories_other.as_ref(),
+                es.filter_prefix_categories_other.as_ref(),
             ),
             (
                 "filter_prefix_urgency",
@@ -268,9 +295,19 @@ mod tests {
                 es.empty_notice.as_ref(),
             ),
             (
-                "days_ago_template",
-                en.days_ago_template.as_ref(),
-                es.days_ago_template.as_ref(),
+                "store_location_separator",
+                en.store_location_separator.as_ref(),
+                es.store_location_separator.as_ref(),
+            ),
+            (
+                "days_ago_one",
+                en.days_ago_one.as_ref(),
+                es.days_ago_one.as_ref(),
+            ),
+            (
+                "days_ago_other",
+                en.days_ago_other.as_ref(),
+                es.days_ago_other.as_ref(),
             ),
             (
                 "footer_page_of",
@@ -306,7 +343,11 @@ mod tests {
         assert_eq!(es.filter_prefix_store.as_ref(), "tienda=");
         assert_eq!(es.filter_prefix_location.as_ref(), "ubicación=");
         assert_eq!(es.filter_prefix_category.as_ref(), "categoría=");
-        assert_eq!(es.filter_prefix_categories_n.as_ref(), "categorías ({n})");
+        assert_eq!(es.filter_prefix_categories_one.as_ref(), "categoría ({n})");
+        assert_eq!(
+            es.filter_prefix_categories_other.as_ref(),
+            "categorías ({n})"
+        );
         assert_eq!(es.filter_prefix_urgency.as_ref(), "urgencia=");
         assert_eq!(es.filter_prefix_from.as_ref(), "desde=");
         assert_eq!(es.filter_prefix_to.as_ref(), "hasta=");
@@ -335,7 +376,8 @@ mod tests {
             en.empty_notice.as_ref(),
             "No rows match the current report filters."
         );
-        assert_eq!(en.days_ago_template.as_ref(), "{n} ago");
+        assert_eq!(en.days_ago_one.as_ref(), "{n} day ago");
+        assert_eq!(en.days_ago_other.as_ref(), "{n} days ago");
         assert_eq!(en.footer_page_of.as_ref(), "Page {n} of {m}");
         assert_eq!(en.brand.as_ref(), "Caduxo · Expiry Tracker");
     }

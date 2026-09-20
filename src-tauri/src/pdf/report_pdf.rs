@@ -176,7 +176,7 @@ pub fn render_report(
         let end_row = (start_row + DATA_ROWS_PER_PAGE).min(total_rows);
         let mut y = BODY_TOP_Y - TABLE_HEADER_ROW_HEIGHT_MM;
         for lot in &data.lots[start_row..end_row] {
-            draw_table_row(&layer, y, lot, &msgs, &regular);
+            draw_table_row(&layer, y, lot, &msgs, &regular, locale);
             y -= ROW_HEIGHT_MM;
         }
 
@@ -246,7 +246,7 @@ fn draw_header(
         regular,
     );
 
-    let generated_at_human = humanize_generated_at(&metadata.generated_at);
+    let generated_at_human = humanize_generated_at(&metadata.generated_at, locale);
     // Substitute {date} and {n} in the template.
     let meta_line_left = msgs
         .header_generated
@@ -335,14 +335,15 @@ fn draw_table_row(
     lot: &DashboardLotRow,
     msgs: &PdfMessages,
     regular: &IndirectFontRef,
+    locale: Locale,
 ) {
     let baseline = y - 4.0;
     let cells: [String; 8] = [
         truncate(&lot.sku, 18),
         truncate(&lot.description, 36),
-        truncate(&format_store_location(lot), 30),
-        format!("{} {}", format_qty(lot.quantity), lot.unit),
-        format_date_dd_mm_yyyy(&lot.expiry_date),
+        truncate(&format_store_location(lot, msgs), 30),
+        format!("{} {}", format_qty(lot.quantity, locale), lot.unit),
+        format_iso_date_for_locale(&lot.expiry_date, locale),
         format_days(lot.days_remaining, msgs),
         lot.alert_days_before.to_string(),
         truncate(lot.batch_code.as_deref().unwrap_or(""), 16),
@@ -427,48 +428,93 @@ fn pdf_error(e: printpdf::Error) -> AppError {
 // String helpers
 // ============================================================
 
-fn format_qty(qty: f64) -> String {
+/// Formats a quantity value with locale-appropriate decimal separator.
+///
+/// - Integer-valued inputs are always stripped of the trailing `.0`, in both
+///   locales. This keeps existing `format!("{qty}")` behaviour for whole
+///   numbers.
+/// - Fractional values use `.` for English and `,` for Spanish. The number of
+///   fractional digits is preserved (no rounding) by reusing Rust's default
+///   `Display` formatting for `f64`.
+fn format_qty(qty: f64, locale: Locale) -> String {
     if qty.fract() == 0.0 {
         format!("{}", qty as i64)
     } else {
-        format!("{qty}")
+        let rendered = format!("{qty}");
+        match locale {
+            Locale::En => rendered,
+            Locale::Es => rendered.replace('.', ","),
+        }
     }
 }
 
-fn format_date_dd_mm_yyyy(date_str: &str) -> String {
+/// Formats an ISO-8601 `YYYY-MM-DD` date string for the given locale.
+///
+/// - English (US convention): `MM/DD/YYYY`.
+/// - Spanish (most common European/LatAm convention): `DD/MM/YYYY`.
+///
+/// Anything that does not match the `YYYY-MM-DD` shape is returned unchanged
+/// so that malformed inputs never crash the renderer.
+fn format_iso_date_for_locale(date_str: &str, locale: Locale) -> String {
     if date_str.len() == 10 && date_str.as_bytes()[4] == b'-' && date_str.as_bytes()[7] == b'-' {
         let bytes = date_str.as_bytes();
         let day = std::str::from_utf8(&bytes[8..10]).unwrap_or("");
         let month = std::str::from_utf8(&bytes[5..7]).unwrap_or("");
         let year = std::str::from_utf8(&bytes[0..4]).unwrap_or("");
-        format!("{day}/{month}/{year}")
+        match locale {
+            Locale::En => format!("{month}/{day}/{year}"),
+            Locale::Es => format!("{day}/{month}/{year}"),
+        }
     } else {
         date_str.to_string()
     }
 }
 
+/// Formats the relative-day cell shown in the "Days" column.
+///
+/// Negative values mean "expired by N days" and use the locale's singular
+/// (`days_ago_one`) form for `-1` and plural (`days_ago_other`) form for any
+/// other negative value. Non-negative values are rendered as the bare number
+/// (`"0"`, `"7"`).
 fn format_days(days: i64, msgs: &PdfMessages) -> String {
     if days < 0 {
-        msgs.days_ago_template.replace("{n}", &(-days).to_string())
+        let template = if days == -1 {
+            msgs.days_ago_one.as_ref()
+        } else {
+            msgs.days_ago_other.as_ref()
+        };
+        template.replace("{n}", &(-days).to_string())
     } else {
         days.to_string()
     }
 }
 
-fn format_store_location(lot: &DashboardLotRow) -> String {
+fn format_store_location(lot: &DashboardLotRow, msgs: &PdfMessages) -> String {
     match &lot.location_name {
-        Some(loc) if !loc.is_empty() => format!("{} / {}", lot.store_name, loc),
+        Some(loc) if !loc.is_empty() => {
+            format!("{}{}{}", lot.store_name, msgs.store_location_separator, loc)
+        }
         _ => lot.store_name.clone(),
     }
 }
 
-fn humanize_generated_at(rfc3339: &str) -> String {
+/// Converts an RFC3339 timestamp into the human-readable line shown in the
+/// PDF header, with the date portion rendered in the requested locale.
+///
+/// The time portion is rendered as `HH:MM:SS` (timezone offset and fractional
+/// seconds are stripped). The date portion goes through
+/// [`format_iso_date_for_locale`] so English shows `MM/DD/YYYY` and Spanish
+/// shows `DD/MM/YYYY`.
+///
+/// Inputs that do not contain an RFC3339 `T` separator are returned unchanged
+/// so that malformed timestamps never crash the renderer.
+fn humanize_generated_at(rfc3339: &str, locale: Locale) -> String {
     if let Some(t_pos) = rfc3339.find('T') {
         let date = &rfc3339[..t_pos];
         let rest = &rfc3339[t_pos + 1..];
         let time = rest.split(['+', 'Z', '-']).next().unwrap_or(rest);
         let time = time.split('.').next().unwrap_or(time);
-        format!("{} {}", date, time)
+        format!("{} {}", format_iso_date_for_locale(date, locale), time)
     } else {
         rfc3339.to_string()
     }
@@ -489,15 +535,19 @@ fn format_filters(filters: &ReportFilters, msgs: &PdfMessages) -> String {
     if let Some(ids) = filters.category_ids.as_ref() {
         if !ids.is_empty() {
             if ids.len() == 1 {
+                // Single category: render the actual category id with the
+                // singular key=value prefix (`category=` / `categoría=`).
                 parts.push(format!(
                     "{}{}",
                     msgs.filter_prefix_category,
                     truncate(&ids[0], 16)
                 ));
             } else {
-                // Substitute {n} in "categories ({n})" / "categorías ({n})"
+                // Multiple categories: render the count form
+                // (`categories ({n})` / `categorías ({n})`). CLDR plural form
+                // is always "other" for n >= 2 in both supported locales.
                 let template = msgs
-                    .filter_prefix_categories_n
+                    .filter_prefix_categories_other
                     .replace("{n}", &ids.len().to_string());
                 parts.push(template);
             }
@@ -644,42 +694,143 @@ mod tests {
     }
 
     #[test]
-    fn format_qty_strips_trailing_zero() {
-        assert_eq!(format_qty(4.0), "4");
-        assert_eq!(format_qty(4.5), "4.5");
-        assert_eq!(format_qty(0.125), "0.125");
+    fn format_qty_strips_trailing_zero_for_integer_values() {
+        // Integer-valued quantities must be rendered without a decimal
+        // separator in both locales — this matches the pre-locale behaviour
+        // and avoids surprising users with `4,0` for whole units.
+        assert_eq!(format_qty(4.0, Locale::En), "4");
+        assert_eq!(format_qty(4.0, Locale::Es), "4");
+        assert_eq!(format_qty(0.0, Locale::En), "0");
+        assert_eq!(format_qty(0.0, Locale::Es), "0");
     }
 
     #[test]
-    fn format_date_dd_mm_yyyy_reorders_iso_date() {
-        assert_eq!(format_date_dd_mm_yyyy("2025-01-15"), "15/01/2025");
-        assert_eq!(format_date_dd_mm_yyyy("2099-12-31"), "31/12/2099");
-        assert_eq!(format_date_dd_mm_yyyy("not-a-date"), "not-a-date");
+    fn format_qty_uses_dot_decimal_separator_in_english() {
+        assert_eq!(format_qty(4.5, Locale::En), "4.5");
+        assert_eq!(format_qty(0.125, Locale::En), "0.125");
     }
 
     #[test]
-    fn format_days_uses_english_template_by_default() {
+    fn format_qty_uses_comma_decimal_separator_in_spanish() {
+        // Regression: Spanish PDF output used to render quantities with a
+        // `.` decimal separator (e.g. `4.5 L`) which is not idiomatic in
+        // Spanish-speaking regions.
+        assert_eq!(format_qty(4.5, Locale::Es), "4,5");
+        assert_eq!(format_qty(0.125, Locale::Es), "0,125");
+    }
+
+    #[test]
+    fn format_iso_date_for_locale_uses_mm_dd_yyyy_in_english() {
+        // US English convention.
+        assert_eq!(
+            format_iso_date_for_locale("2025-01-15", Locale::En),
+            "01/15/2025"
+        );
+        assert_eq!(
+            format_iso_date_for_locale("2099-12-31", Locale::En),
+            "12/31/2099"
+        );
+    }
+
+    #[test]
+    fn format_iso_date_for_locale_uses_dd_mm_yyyy_in_spanish() {
+        // Spanish convention (matches most of Europe and Latin America).
+        assert_eq!(
+            format_iso_date_for_locale("2025-01-15", Locale::Es),
+            "15/01/2025"
+        );
+        assert_eq!(
+            format_iso_date_for_locale("2099-12-31", Locale::Es),
+            "31/12/2099"
+        );
+    }
+
+    #[test]
+    fn format_iso_date_for_locale_passes_through_malformed_input() {
+        // Malformed inputs must not crash the renderer.
+        assert_eq!(
+            format_iso_date_for_locale("not-a-date", Locale::En),
+            "not-a-date"
+        );
+        assert_eq!(
+            format_iso_date_for_locale("not-a-date", Locale::Es),
+            "not-a-date"
+        );
+        assert_eq!(
+            format_iso_date_for_locale("2025/01/15", Locale::En),
+            "2025/01/15"
+        );
+    }
+
+    #[test]
+    fn format_days_uses_english_singular_template_for_one_expired_day() {
+        // Regression: English PDF used to render "1 ago" (the prior Spanish
+        // singular bug also affected English in this codebase). Singular for
+        // n == 1 must use the `day` form.
         let msgs = pdf_messages(Locale::En);
-        assert_eq!(format_days(-30, &msgs), "30 ago");
-        assert_eq!(format_days(0, &msgs), "0");
-        assert_eq!(format_days(7, &msgs), "7");
+        assert_eq!(format_days(-1, &msgs), "1 day ago");
     }
 
     #[test]
-    fn format_days_uses_spanish_template_when_locale_is_es() {
+    fn format_days_uses_english_plural_template_for_many_expired_days() {
+        let msgs = pdf_messages(Locale::En);
+        assert_eq!(format_days(-2, &msgs), "2 days ago");
+        assert_eq!(format_days(-30, &msgs), "30 days ago");
+    }
+
+    #[test]
+    fn format_days_uses_spanish_singular_template_for_one_expired_day() {
+        // Regression: Spanish PDF used to render `hace 1 días` for the
+        // singular case. The pluralization rules must select the singular
+        // template for n == 1.
         let msgs = pdf_messages(Locale::Es);
+        assert_eq!(format_days(-1, &msgs), "hace 1 día");
+    }
+
+    #[test]
+    fn format_days_uses_spanish_plural_template_for_many_expired_days() {
+        let msgs = pdf_messages(Locale::Es);
+        assert_eq!(format_days(-2, &msgs), "hace 2 días");
         assert_eq!(format_days(-30, &msgs), "hace 30 días");
-        assert_eq!(format_days(-1, &msgs), "hace 1 días");
+    }
+
+    #[test]
+    fn format_days_renders_non_negative_as_bare_number() {
+        let msgs = pdf_messages(Locale::En);
+        assert_eq!(format_days(0, &msgs), "0");
+        assert_eq!(format_days(7, &msgs), "7");
+        let msgs = pdf_messages(Locale::Es);
         assert_eq!(format_days(0, &msgs), "0");
         assert_eq!(format_days(7, &msgs), "7");
     }
 
     #[test]
-    fn format_store_location_with_and_without_location() {
+    fn format_store_location_uses_locale_separator() {
+        // The separator must come from `PdfMessages.store_location_separator`
+        // for both locales; in this codebase both happen to be `" / "`, but
+        // the value must be sourced from the message table rather than
+        // hardcoded.
         let mut lot = make_lot("S1", "Milk", "2025-01-01", -5);
-        assert_eq!(format_store_location(&lot), "Main");
+
+        let en = pdf_messages(Locale::En);
+        assert_eq!(format_store_location(&lot, &en), "Main");
         lot.location_name = Some("Cold-room".to_string());
-        assert_eq!(format_store_location(&lot), "Main / Cold-room");
+        assert_eq!(format_store_location(&lot, &en), "Main / Cold-room");
+
+        let es = pdf_messages(Locale::Es);
+        lot.location_name = Some("Cámara fría".to_string());
+        assert_eq!(format_store_location(&lot, &es), "Main / Cámara fría");
+    }
+
+    #[test]
+    fn format_store_location_drops_empty_location_name() {
+        // A location row may be present but empty (e.g. the lot lives in the
+        // store itself, with no named sub-location). The renderer must not
+        // emit a dangling separator in that case.
+        let msgs = pdf_messages(Locale::En);
+        let mut lot = make_lot("S1", "Milk", "2025-01-01", -5);
+        lot.location_name = Some(String::new());
+        assert_eq!(format_store_location(&lot, &msgs), "Main");
     }
 
     #[test]
@@ -737,16 +888,37 @@ mod tests {
     }
 
     #[test]
-    fn humanize_generated_at_strips_timezone_and_subseconds() {
+    fn humanize_generated_at_strips_timezone_and_subseconds_in_english() {
+        // English convention renders the date portion as `MM/DD/YYYY`.
         assert_eq!(
-            humanize_generated_at("2025-01-15T10:30:00Z"),
-            "2025-01-15 10:30:00"
+            humanize_generated_at("2025-01-15T10:30:00Z", Locale::En),
+            "01/15/2025 10:30:00"
         );
         assert_eq!(
-            humanize_generated_at("2025-01-15T10:30:00.123+00:00"),
-            "2025-01-15 10:30:00"
+            humanize_generated_at("2025-01-15T10:30:00.123+00:00", Locale::En),
+            "01/15/2025 10:30:00"
         );
-        assert_eq!(humanize_generated_at("not-a-date"), "not-a-date");
+        assert_eq!(
+            humanize_generated_at("not-a-date", Locale::En),
+            "not-a-date"
+        );
+    }
+
+    #[test]
+    fn humanize_generated_at_uses_spanish_date_order() {
+        // Spanish convention renders the date portion as `DD/MM/YYYY`.
+        assert_eq!(
+            humanize_generated_at("2025-01-15T10:30:00Z", Locale::Es),
+            "15/01/2025 10:30:00"
+        );
+        assert_eq!(
+            humanize_generated_at("2025-01-15T10:30:00.123+00:00", Locale::Es),
+            "15/01/2025 10:30:00"
+        );
+        assert_eq!(
+            humanize_generated_at("not-a-date", Locale::Es),
+            "not-a-date"
+        );
     }
 
     #[test]
