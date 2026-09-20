@@ -44,6 +44,12 @@
 //! | `InactiveStoreLocation` | `Cannot add location to an inactive store` | `No se puede agregar una ubicación a una tienda inactiva` |
 //! | `RestoreRequiresConfirmation` | `Restore requires explicit user confirmation.` | `La restauración requiere confirmación explícita del usuario.` |
 //! | `UnitStillReferenced` | `Unit is still referenced by product(s) and cannot be archived` | `La unidad todavía está referenciada por producto(s) y no se puede archivar` |
+//! | `CannotUpdateLotStatus { status }` | `Cannot update lot: status is \`{status}\`` | `No se puede actualizar el lote: el estado es \`{status}\`` |
+//! | `CannotChangeQuantityDirect { quantity, unit }` | `Cannot change quantity of expiry lot directly: quantity must remain {quantity:.2} {unit}. Use movement / adjustment / resolve actions to change it.` | `No se puede cambiar la cantidad del lote de caducidad directamente: la cantidad debe permanecer en {quantity:.2} {unit}. Use las acciones de movimiento / ajuste / resolución para cambiarla.` |
+//! | `CannotArchiveLotStatus { status }` | `Cannot archive lot: status is already \`{status}\`` | `No se puede archivar el lote: el estado ya es \`{status}\`` |
+//! | `LotNoLongerActive` | `Lot is no longer active and cannot be archived` | `El lote ya no está activo y no se puede archivar` |
+//! | `CannotResolveLotStatus { status }` | `Cannot resolve lot: lot is already \`{status}\`` | `No se puede resolver el lote: el lote ya está \`{status}\`` |
+//! | `ResolveQuantityExceedsRemaining { requested, unit, available }` | `Cannot resolve {requested:.2} {unit}: only {available:.2} {unit} remain` | `No se pueden resolver {requested:.2} {unit}: solo quedan {available:.2} {unit}` |
 
 use crate::error::AppError;
 use crate::pdf::locale::Locale;
@@ -125,6 +131,41 @@ pub enum UserMessage {
     /// Unit catalog business rule: a unit cannot be archived while at
     /// least one product still references it.
     UnitStillReferenced,
+    /// Expiry lot business rule: cannot update a lot whose status is not
+    /// `active`. Carries the offending status (e.g. `archived`, `resolved`)
+    /// so the parser can round-trip and the localised message can name it.
+    CannotUpdateLotStatus {
+        status: String,
+    },
+    /// Expiry lot business rule: metadata-only update does not allow
+    /// changing the quantity. The carried `{quantity, unit}` pair names the
+    /// value the lot already holds so the parser can round-trip.
+    CannotChangeQuantityDirect {
+        quantity: f64,
+        unit: String,
+    },
+    /// Expiry lot business rule: cannot archive a lot whose status is not
+    /// `active`. Carries the offending status.
+    CannotArchiveLotStatus {
+        status: String,
+    },
+    /// Expiry lot business rule: a concurrent writer archived the lot
+    /// between our pre-fetch and the transactional UPDATE. Constant text.
+    LotNoLongerActive,
+    /// Expiry lot business rule: cannot resolve a lot whose status is not
+    /// `active`. Carries the offending status.
+    CannotResolveLotStatus {
+        status: String,
+    },
+    /// Expiry lot validation: the requested resolution quantity exceeds
+    /// the remaining lot quantity. Both requested and available are carried
+    /// so the parser can round-trip and the localised message can name
+    /// them; the unit is the same on both sides by construction.
+    ResolveQuantityExceedsRemaining {
+        requested: f64,
+        unit: String,
+        available: f64,
+    },
 }
 
 /// Returns the user-visible message string for the given kind in the given locale.
@@ -257,6 +298,70 @@ pub fn user_message(kind: UserMessage, locale: Locale) -> String {
         }
         (UserMessage::UnitStillReferenced, L::Es) => {
             "La unidad todavía está referenciada por producto(s) y no se puede archivar".to_string()
+        }
+        (UserMessage::CannotUpdateLotStatus { status }, L::En) => {
+            format!("Cannot update lot: status is `{status}`")
+        }
+        (UserMessage::CannotUpdateLotStatus { status }, L::Es) => {
+            format!("No se puede actualizar el lote: el estado es `{status}`")
+        }
+        (
+            UserMessage::CannotChangeQuantityDirect { quantity, unit },
+            L::En,
+        ) => {
+            format!(
+                "Cannot change quantity of expiry lot directly: quantity must remain {quantity:.2} {unit}. Use movement / adjustment / resolve actions to change it."
+            )
+        }
+        (
+            UserMessage::CannotChangeQuantityDirect { quantity, unit },
+            L::Es,
+        ) => {
+            format!(
+                "No se puede cambiar la cantidad del lote de caducidad directamente: la cantidad debe permanecer en {quantity:.2} {unit}. Use las acciones de movimiento / ajuste / resolución para cambiarla."
+            )
+        }
+        (UserMessage::CannotArchiveLotStatus { status }, L::En) => {
+            format!("Cannot archive lot: status is already `{status}`")
+        }
+        (UserMessage::CannotArchiveLotStatus { status }, L::Es) => {
+            format!("No se puede archivar el lote: el estado ya es `{status}`")
+        }
+        (UserMessage::LotNoLongerActive, L::En) => {
+            "Lot is no longer active and cannot be archived".to_string()
+        }
+        (UserMessage::LotNoLongerActive, L::Es) => {
+            "El lote ya no está activo y no se puede archivar".to_string()
+        }
+        (UserMessage::CannotResolveLotStatus { status }, L::En) => {
+            format!("Cannot resolve lot: lot is already `{status}`")
+        }
+        (UserMessage::CannotResolveLotStatus { status }, L::Es) => {
+            format!("No se puede resolver el lote: el lote ya está `{status}`")
+        }
+        (
+            UserMessage::ResolveQuantityExceedsRemaining {
+                requested,
+                unit,
+                available,
+            },
+            L::En,
+        ) => {
+            format!(
+                "Cannot resolve {requested:.2} {unit}: only {available:.2} {unit} remain"
+            )
+        }
+        (
+            UserMessage::ResolveQuantityExceedsRemaining {
+                requested,
+                unit,
+                available,
+            },
+            L::Es,
+        ) => {
+            format!(
+                "No se pueden resolver {requested:.2} {unit}: solo quedan {available:.2} {unit}"
+            )
         }
     }
 }
@@ -394,6 +499,36 @@ pub fn parse_user_message_kind(message: &str) -> Option<UserMessage> {
         return Some(UserMessage::UnitStillReferenced);
     }
 
+    if let Some(status) = parse_backticked_suffix(message, "Cannot update lot: status is `") {
+        return Some(UserMessage::CannotUpdateLotStatus { status });
+    }
+
+    if let Some((quantity, unit)) = parse_change_quantity_direct(message) {
+        return Some(UserMessage::CannotChangeQuantityDirect { quantity, unit });
+    }
+
+    if let Some(status) =
+        parse_backticked_suffix(message, "Cannot archive lot: status is already `")
+    {
+        return Some(UserMessage::CannotArchiveLotStatus { status });
+    }
+
+    if message == "Lot is no longer active and cannot be archived" {
+        return Some(UserMessage::LotNoLongerActive);
+    }
+
+    if let Some(status) = parse_backticked_suffix(message, "Cannot resolve lot: lot is already `") {
+        return Some(UserMessage::CannotResolveLotStatus { status });
+    }
+
+    if let Some((requested, unit, available)) = parse_resolve_quantity_exceeds_remaining(message) {
+        return Some(UserMessage::ResolveQuantityExceedsRemaining {
+            requested,
+            unit,
+            available,
+        });
+    }
+
     None
 }
 
@@ -406,6 +541,77 @@ fn parse_too_long_suffix(message: &str, prefix: &str) -> Option<usize> {
     }
     let inner = message.strip_prefix(prefix)?.strip_suffix(" characters")?;
     inner.parse::<usize>().ok()
+}
+
+/// Parses the status out of a backticked-suffix message of the form
+/// `{prefix}\`{status}\``. Returns `None` when the prefix is missing, the
+/// suffix isn't a closing backtick, or the captured status is empty.
+///
+/// The three expiry-lot dynamic BusinessRule messages (`Cannot update lot`,
+/// `Cannot archive lot`, `Cannot resolve lot`) all share this shape, so the
+/// helper is shared. Backticks inside the captured status are rejected to
+/// keep the format round-trip deterministic — the upstream service uses
+/// literal `\`{status}\`` placeholders that never contain another backtick.
+fn parse_backticked_suffix(message: &str, prefix: &str) -> Option<String> {
+    if !message.starts_with(prefix) || !message.ends_with('`') {
+        return None;
+    }
+    let inner = message.strip_prefix(prefix)?;
+    let inner = inner.strip_suffix('`')?;
+    if inner.is_empty() || inner.contains('`') {
+        return None;
+    }
+    Some(inner.to_string())
+}
+
+/// Parses a `Cannot change quantity of expiry lot directly: ...` message.
+/// Returns the `(quantity, unit)` pair on success.
+///
+/// The format is fixed:
+/// `Cannot change quantity of expiry lot directly: quantity must remain {quantity:.2} {unit}. Use movement / adjustment / resolve actions to change it.`
+///
+/// `{unit}` is everything between `{quantity:.2} ` and the `. Use ...` suffix;
+/// in practice the unit names we persist (e.g. `kg`, `L`, `Kilogramo`) contain
+/// no spaces, so splitting on the first space after the numeric part is
+/// sufficient and unambiguous. A unit with spaces would still parse as the
+/// full trailing run before `. Use movement...`, which the upstream service
+/// would also produce verbatim.
+fn parse_change_quantity_direct(message: &str) -> Option<(f64, String)> {
+    const PREFIX: &str = "Cannot change quantity of expiry lot directly: quantity must remain ";
+    const SUFFIX: &str = ". Use movement / adjustment / resolve actions to change it.";
+    if !message.starts_with(PREFIX) || !message.ends_with(SUFFIX) {
+        return None;
+    }
+    let inner = message.strip_prefix(PREFIX)?.strip_suffix(SUFFIX)?;
+    let (qty_str, unit) = inner.split_once(' ')?;
+    let quantity = qty_str.parse::<f64>().ok()?;
+    Some((quantity, unit.to_string()))
+}
+
+/// Parses a `Cannot resolve {requested:.2} {unit}: only {available:.2} {unit} remain`
+/// message. Returns `(requested, unit, available)` on success.
+///
+/// The format carries the same unit twice (one per quantity). Both sides
+/// must agree for the parse to succeed — the upstream service reuses
+/// `lot.unit` so they always do, but a malformed message with mismatched
+/// units is rejected to keep the round-trip deterministic.
+fn parse_resolve_quantity_exceeds_remaining(message: &str) -> Option<(f64, String, f64)> {
+    const PREFIX: &str = "Cannot resolve ";
+    const MIDDLE: &str = ": only ";
+    const SUFFIX: &str = " remain";
+    if !message.starts_with(PREFIX) || !message.ends_with(SUFFIX) {
+        return None;
+    }
+    let inner = message.strip_prefix(PREFIX)?.strip_suffix(SUFFIX)?;
+    let (first, second) = inner.split_once(MIDDLE)?;
+    let (req_str, first_unit) = first.split_once(' ')?;
+    let (avail_str, second_unit) = second.split_once(' ')?;
+    if first_unit != second_unit {
+        return None;
+    }
+    let requested = req_str.parse::<f64>().ok()?;
+    let available = avail_str.parse::<f64>().ok()?;
+    Some((requested, first_unit.to_string(), available))
 }
 
 /// Parses `language must be one of {en, es}, got \`{value}\`` back into the
@@ -1201,5 +1407,439 @@ mod tests {
         // The English BusinessRule string must be preserved untouched — only
         // `localize_business_rule` knows how to translate it.
         assert_eq!(message, "Cannot add barcode to an archived product");
+    }
+
+    // ─── Expiry lot dynamic BusinessRule + adjacent Validation ──────────────
+    //
+    // The five dynamic messages and one constant here mirror the exact EN
+    // shapes emitted by `services::expiry_lots`. Parser roundtrips guard
+    // byte-for-byte fidelity through `localize_*` at the command boundary.
+
+    #[test]
+    fn cannot_update_lot_status_en() {
+        let got = en(UserMessage::CannotUpdateLotStatus {
+            status: "archived".into(),
+        });
+        assert_eq!(got, "Cannot update lot: status is `archived`");
+    }
+
+    #[test]
+    fn cannot_update_lot_status_es() {
+        let got = es(UserMessage::CannotUpdateLotStatus {
+            status: "archived".into(),
+        });
+        assert_eq!(
+            got,
+            "No se puede actualizar el lote: el estado es `archived`"
+        );
+    }
+
+    #[test]
+    fn cannot_update_lot_status_resolved_en() {
+        // Use the resolved status too — the parser must keep both paths working.
+        let got = en(UserMessage::CannotUpdateLotStatus {
+            status: "resolved".into(),
+        });
+        assert_eq!(got, "Cannot update lot: status is `resolved`");
+    }
+
+    #[test]
+    fn cannot_change_quantity_direct_en() {
+        let got = en(UserMessage::CannotChangeQuantityDirect {
+            quantity: 10.0,
+            unit: "L".into(),
+        });
+        assert_eq!(
+            got,
+            "Cannot change quantity of expiry lot directly: quantity must remain 10.00 L. Use movement / adjustment / resolve actions to change it."
+        );
+    }
+
+    #[test]
+    fn cannot_change_quantity_direct_es() {
+        let got = es(UserMessage::CannotChangeQuantityDirect {
+            quantity: 3.5,
+            unit: "kg".into(),
+        });
+        assert_eq!(
+            got,
+            "No se puede cambiar la cantidad del lote de caducidad directamente: la cantidad debe permanecer en 3.50 kg. Use las acciones de movimiento / ajuste / resolución para cambiarla."
+        );
+    }
+
+    #[test]
+    fn cannot_archive_lot_status_en() {
+        let got = en(UserMessage::CannotArchiveLotStatus {
+            status: "resolved".into(),
+        });
+        assert_eq!(got, "Cannot archive lot: status is already `resolved`");
+    }
+
+    #[test]
+    fn cannot_archive_lot_status_es() {
+        let got = es(UserMessage::CannotArchiveLotStatus {
+            status: "archived".into(),
+        });
+        assert_eq!(
+            got,
+            "No se puede archivar el lote: el estado ya es `archived`"
+        );
+    }
+
+    #[test]
+    fn lot_no_longer_active_en() {
+        let got = en(UserMessage::LotNoLongerActive);
+        assert_eq!(got, "Lot is no longer active and cannot be archived");
+    }
+
+    #[test]
+    fn lot_no_longer_active_es() {
+        let got = es(UserMessage::LotNoLongerActive);
+        assert_eq!(got, "El lote ya no está activo y no se puede archivar");
+    }
+
+    #[test]
+    fn cannot_resolve_lot_status_en() {
+        let got = en(UserMessage::CannotResolveLotStatus {
+            status: "archived".into(),
+        });
+        assert_eq!(got, "Cannot resolve lot: lot is already `archived`");
+    }
+
+    #[test]
+    fn cannot_resolve_lot_status_es() {
+        let got = es(UserMessage::CannotResolveLotStatus {
+            status: "resolved".into(),
+        });
+        assert_eq!(
+            got,
+            "No se puede resolver el lote: el lote ya está `resolved`"
+        );
+    }
+
+    #[test]
+    fn resolve_quantity_exceeds_remaining_en() {
+        let got = en(UserMessage::ResolveQuantityExceedsRemaining {
+            requested: 3.0,
+            unit: "L".into(),
+            available: 10.0,
+        });
+        assert_eq!(got, "Cannot resolve 3.00 L: only 10.00 L remain");
+    }
+
+    #[test]
+    fn resolve_quantity_exceeds_remaining_es() {
+        let got = es(UserMessage::ResolveQuantityExceedsRemaining {
+            requested: 2.5,
+            unit: "kg".into(),
+            available: 5.0,
+        });
+        assert_eq!(got, "No se pueden resolver 2.50 kg: solo quedan 5.00 kg");
+    }
+
+    // ─── Parser roundtrips for expiry-lot dynamic messages ──────────────────
+
+    #[test]
+    fn parse_cannot_update_lot_status_roundtrips() {
+        let en_msg = en(UserMessage::CannotUpdateLotStatus {
+            status: "archived".into(),
+        });
+        match parse_user_message_kind(&en_msg) {
+            Some(UserMessage::CannotUpdateLotStatus { status }) => {
+                assert_eq!(status, "archived")
+            }
+            other => panic!("expected CannotUpdateLotStatus, got {other:?}"),
+        }
+        // Full format round-trip must reproduce the canonical English byte-for-byte.
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_cannot_change_quantity_direct_roundtrips() {
+        let en_msg = en(UserMessage::CannotChangeQuantityDirect {
+            quantity: 10.0,
+            unit: "L".into(),
+        });
+        match parse_user_message_kind(&en_msg) {
+            Some(UserMessage::CannotChangeQuantityDirect { quantity, unit }) => {
+                assert_eq!(quantity, 10.0);
+                assert_eq!(unit, "L");
+            }
+            other => panic!("expected CannotChangeQuantityDirect, got {other:?}"),
+        }
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_cannot_archive_lot_status_roundtrips() {
+        let en_msg = en(UserMessage::CannotArchiveLotStatus {
+            status: "resolved".into(),
+        });
+        match parse_user_message_kind(&en_msg) {
+            Some(UserMessage::CannotArchiveLotStatus { status }) => {
+                assert_eq!(status, "resolved")
+            }
+            other => panic!("expected CannotArchiveLotStatus, got {other:?}"),
+        }
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_lot_no_longer_active_roundtrips() {
+        let en_msg = en(UserMessage::LotNoLongerActive);
+        assert!(matches!(
+            parse_user_message_kind(&en_msg),
+            Some(UserMessage::LotNoLongerActive)
+        ));
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_cannot_resolve_lot_status_roundtrips() {
+        let en_msg = en(UserMessage::CannotResolveLotStatus {
+            status: "archived".into(),
+        });
+        match parse_user_message_kind(&en_msg) {
+            Some(UserMessage::CannotResolveLotStatus { status }) => {
+                assert_eq!(status, "archived")
+            }
+            other => panic!("expected CannotResolveLotStatus, got {other:?}"),
+        }
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_resolve_quantity_exceeds_remaining_roundtrips() {
+        let en_msg = en(UserMessage::ResolveQuantityExceedsRemaining {
+            requested: 3.0,
+            unit: "L".into(),
+            available: 10.0,
+        });
+        match parse_user_message_kind(&en_msg) {
+            Some(UserMessage::ResolveQuantityExceedsRemaining {
+                requested,
+                unit,
+                available,
+            }) => {
+                assert_eq!(requested, 3.0);
+                assert_eq!(unit, "L");
+                assert_eq!(available, 10.0);
+            }
+            other => panic!("expected ResolveQuantityExceedsRemaining, got {other:?}"),
+        }
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    // ─── Parser guards: prefix disambiguation ────────────────────────────────
+
+    #[test]
+    fn parse_backticked_disambiguates_update_vs_archive_lot() {
+        // The three expiry-lot dynamic BusinessRule messages share the
+        // `\`{status}\`` suffix but differ in their prefixes. The parser must
+        // route each one to the correct variant.
+        let update_msg = en(UserMessage::CannotUpdateLotStatus {
+            status: "archived".into(),
+        });
+        let archive_msg = en(UserMessage::CannotArchiveLotStatus {
+            status: "archived".into(),
+        });
+        let resolve_msg = en(UserMessage::CannotResolveLotStatus {
+            status: "archived".into(),
+        });
+        assert!(matches!(
+            parse_user_message_kind(&update_msg),
+            Some(UserMessage::CannotUpdateLotStatus { .. })
+        ));
+        assert!(matches!(
+            parse_user_message_kind(&archive_msg),
+            Some(UserMessage::CannotArchiveLotStatus { .. })
+        ));
+        assert!(matches!(
+            parse_user_message_kind(&resolve_msg),
+            Some(UserMessage::CannotResolveLotStatus { .. })
+        ));
+    }
+
+    #[test]
+    fn parse_backticked_rejects_empty_status() {
+        // A backticked suffix with no captured status (e.g. ``) must not
+        // round-trip — the upstream service always emits at least one
+        // character between the backticks.
+        let msg = "Cannot update lot: status is ``";
+        assert!(parse_user_message_kind(msg).is_none());
+    }
+
+    #[test]
+    fn parse_backticked_rejects_inner_backtick() {
+        // A status containing a backtick would be ambiguous. The upstream
+        // service doesn't emit one, but a malformed input must not round-trip.
+        let msg = "Cannot update lot: status is `weird`status`";
+        assert!(parse_user_message_kind(msg).is_none());
+    }
+
+    #[test]
+    fn parse_change_quantity_direct_rejects_unknown_suffix() {
+        // Missing the `. Use movement / adjustment / resolve actions to change it.`
+        // suffix → must not match.
+        let msg = "Cannot change quantity of expiry lot directly: quantity must remain 10.00 L";
+        assert!(parse_user_message_kind(msg).is_none());
+    }
+
+    #[test]
+    fn parse_change_quantity_direct_rejects_non_numeric_quantity() {
+        let msg = "Cannot change quantity of expiry lot directly: quantity must remain many L. Use movement / adjustment / resolve actions to change it.";
+        assert!(parse_user_message_kind(msg).is_none());
+    }
+
+    #[test]
+    fn parse_resolve_quantity_exceeds_remaining_rejects_mismatched_units() {
+        // A malformed message with different units on the two sides must not
+        // parse — the upstream service reuses `lot.unit` so they always agree.
+        let msg = "Cannot resolve 3.00 L: only 10.00 kg remain";
+        assert!(parse_user_message_kind(msg).is_none());
+    }
+
+    #[test]
+    fn parse_resolve_quantity_exceeds_remaining_rejects_missing_middle() {
+        let msg = "Cannot resolve 3.00 L only 10.00 L remain";
+        assert!(parse_user_message_kind(msg).is_none());
+    }
+
+    #[test]
+    fn parse_resolve_quantity_exceeds_remaining_rejects_missing_suffix() {
+        let msg = "Cannot resolve 3.00 L: only 10.00 L";
+        assert!(parse_user_message_kind(msg).is_none());
+    }
+
+    // ─── localize_business_rule / localize_validation integration ────────────
+
+    #[test]
+    fn localize_business_rule_translates_cannot_update_lot_status() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::BusinessRule {
+            message: "Cannot update lot: status is `archived`".into(),
+        });
+        let localized = localize_business_rule(err, Locale::Es);
+        let AppError::Domain(DomainError::BusinessRule { message }) = localized else {
+            panic!("expected BusinessRule");
+        };
+        assert_eq!(
+            message,
+            "No se puede actualizar el lote: el estado es `archived`"
+        );
+    }
+
+    #[test]
+    fn localize_business_rule_translates_cannot_change_quantity_direct() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::BusinessRule {
+            message: "Cannot change quantity of expiry lot directly: quantity must remain 10.00 L. Use movement / adjustment / resolve actions to change it.".into(),
+        });
+        let localized = localize_business_rule(err, Locale::Es);
+        let AppError::Domain(DomainError::BusinessRule { message }) = localized else {
+            panic!("expected BusinessRule");
+        };
+        assert_eq!(
+            message,
+            "No se puede cambiar la cantidad del lote de caducidad directamente: la cantidad debe permanecer en 10.00 L. Use las acciones de movimiento / ajuste / resolución para cambiarla."
+        );
+    }
+
+    #[test]
+    fn localize_business_rule_translates_cannot_archive_lot_status() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::BusinessRule {
+            message: "Cannot archive lot: status is already `resolved`".into(),
+        });
+        let localized = localize_business_rule(err, Locale::Es);
+        let AppError::Domain(DomainError::BusinessRule { message }) = localized else {
+            panic!("expected BusinessRule");
+        };
+        assert_eq!(
+            message,
+            "No se puede archivar el lote: el estado ya es `resolved`"
+        );
+    }
+
+    #[test]
+    fn localize_business_rule_translates_lot_no_longer_active() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::BusinessRule {
+            message: "Lot is no longer active and cannot be archived".into(),
+        });
+        let localized = localize_business_rule(err, Locale::Es);
+        let AppError::Domain(DomainError::BusinessRule { message }) = localized else {
+            panic!("expected BusinessRule");
+        };
+        assert_eq!(message, "El lote ya no está activo y no se puede archivar");
+    }
+
+    #[test]
+    fn localize_business_rule_translates_cannot_resolve_lot_status() {
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::BusinessRule {
+            message: "Cannot resolve lot: lot is already `archived`".into(),
+        });
+        let localized = localize_business_rule(err, Locale::Es);
+        let AppError::Domain(DomainError::BusinessRule { message }) = localized else {
+            panic!("expected BusinessRule");
+        };
+        assert_eq!(
+            message,
+            "No se puede resolver el lote: el lote ya está `archived`"
+        );
+    }
+
+    #[test]
+    fn localize_validation_translates_resolve_quantity_exceeds_remaining() {
+        // ResolveQuantityExceedsRemaining is a Validation, not a
+        // BusinessRule, so `localize_validation` must own it. Guard against
+        // accidentally wiring it through `localize_business_rule`.
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::Validation {
+            message: "Cannot resolve 3.00 L: only 10.00 L remain".into(),
+        });
+        let localized = localize_validation(err, Locale::Es);
+        let AppError::Domain(DomainError::Validation { message }) = localized else {
+            panic!("expected Validation");
+        };
+        assert_eq!(message, "No se pueden resolver 3.00 L: solo quedan 10.00 L");
+    }
+
+    #[test]
+    fn localize_business_rule_passes_through_resolve_quantity_validation() {
+        // The Validation variant must NOT be touched by `localize_business_rule`
+        // — that would mis-categorize a Validation error as a BusinessRule at
+        // the IPC boundary. Guard against accidental cross-wiring.
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::Validation {
+            message: "Cannot resolve 3.00 L: only 10.00 L remain".into(),
+        });
+        let result = localize_business_rule(err, Locale::Es);
+        let AppError::Domain(DomainError::Validation { message }) = result else {
+            panic!("expected Validation untouched by localize_business_rule");
+        };
+        assert_eq!(message, "Cannot resolve 3.00 L: only 10.00 L remain");
+    }
+
+    #[test]
+    fn localize_validation_passes_through_expiry_lot_business_rule() {
+        // Symmetric guard: the dynamic BusinessRule variants must NOT be
+        // touched by `localize_validation`, only by `localize_business_rule`.
+        use crate::error::{AppError, DomainError};
+        let err = AppError::Domain(DomainError::BusinessRule {
+            message: "Cannot update lot: status is `archived`".into(),
+        });
+        let result = localize_validation(err, Locale::Es);
+        let AppError::Domain(DomainError::BusinessRule { message }) = result else {
+            panic!("expected BusinessRule untouched by localize_validation");
+        };
+        assert_eq!(message, "Cannot update lot: status is `archived`");
     }
 }

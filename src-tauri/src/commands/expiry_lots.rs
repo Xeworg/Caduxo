@@ -8,9 +8,20 @@ use crate::dto::expiry_lots::{
     ExpiryLotUpdate, LotResolutionEventResponse,
 };
 use crate::error::{AppError, CommandError};
+use crate::pdf::locale::Locale;
 use crate::services::expiry_lots as service;
-use crate::services::user_messages::localize_validation;
+use crate::services::user_messages::{localize_business_rule, localize_validation};
 use crate::state::AppState;
+
+/// Resolves an optional BCP-47 locale tag into a [`Locale`], falling back to
+/// English when the frontend does not supply one. Used at every expiry-lot
+/// command boundary that accepts an optional locale so dynamic BusinessRule
+/// messages (status / quantity / unit) and the adjacent resolve-quantity
+/// Validation reach the UI in the active locale while English stays the
+/// safe default for legacy callers that omit the argument.
+fn resolve_locale(locale: Option<String>) -> Locale {
+    locale.as_deref().map(Locale::parse).unwrap_or(Locale::En)
+}
 
 /// Returns all active expiry lots across all stores, ordered by expiry date.
 #[tauri::command]
@@ -63,9 +74,16 @@ pub async fn get_expiry_lot(
 /// defaults when those fields are omitted (None). Fails if no active store
 /// exists.
 ///
-/// `locale` (BCP-47 tag) is forwarded to `localize_validation` so the
-/// `LocationRequired` validation surfaced by the service reaches the UI in
-/// the active locale. Unknown tags fall back to English via `Locale::parse`.
+/// `locale` (BCP-47 tag) is forwarded to `localize_validation` and
+/// `localize_business_rule` so the `LocationRequired` validation surfaced
+/// by the service and the constant store-required BusinessRule reach the UI
+/// in the active locale. Unknown tags fall back to English via
+/// `Locale::parse`.
+///
+/// The argument is required (not `Option<String>`) to preserve the existing
+/// frontend contract: `createExpiryLot` already passes `locale` from the
+/// wrapper. Keeping it required avoids an IPC signature change for active
+/// callers while still chaining both helpers at the boundary.
 #[tauri::command]
 pub async fn create_expiry_lot(
     state: State<'_, AppState>,
@@ -73,22 +91,34 @@ pub async fn create_expiry_lot(
     locale: String,
 ) -> Result<ExpiryLotResponse, CommandError> {
     let pool = state.pool().await;
-    let loc = crate::pdf::locale::Locale::parse(&locale);
+    let loc = resolve_locale(Some(locale));
     service::create_expiry_lot(&pool, input)
         .await
         .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
         .map_err(AppError::into)
 }
 
 /// Updates an existing active expiry lot.
+///
+/// `locale` (BCP-47 tag, optional) is forwarded to `localize_validation`
+/// and `localize_business_rule` so the dynamic BusinessRule messages
+/// (`Cannot update lot: status is ...` and the metadata-only quantity
+/// guard) reach the UI in the active locale. Omitting the argument keeps
+/// English, preserving backwards compatibility with callers that don't yet
+/// pass a locale.
 #[tauri::command]
 pub async fn update_expiry_lot(
     state: State<'_, AppState>,
     input: ExpiryLotUpdate,
+    locale: Option<String>,
 ) -> Result<ExpiryLotResponse, CommandError> {
     let pool = state.pool().await;
+    let loc = resolve_locale(locale);
     service::update_expiry_lot(&pool, input)
         .await
+        .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
         .map_err(AppError::into)
 }
 
@@ -96,28 +126,49 @@ pub async fn update_expiry_lot(
 /// justification. Persists the archive reason + notes in `lot_movements`
 /// as an `exit:other` marker in the same transaction. Archived lots are
 /// excluded from active lists and dashboard queries.
+///
+/// `locale` (BCP-47 tag, optional) is forwarded to `localize_validation`
+/// and `localize_business_rule` so the dynamic BusinessRule messages
+/// (`Cannot archive lot: status is already ...` and the race-recovered
+/// `Lot is no longer active ...`) reach the UI in the active locale.
+/// Omitting the argument keeps English.
 #[tauri::command]
 pub async fn archive_expiry_lot(
     state: State<'_, AppState>,
     input: ArchiveLotInput,
+    locale: Option<String>,
 ) -> Result<(), CommandError> {
     let pool = state.pool().await;
+    let loc = resolve_locale(locale);
     service::archive_expiry_lot(&pool, input)
         .await
+        .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
         .map_err(AppError::into)
 }
 
 /// Resolves (consumes, discards, or transfers) a quantity from an expiry lot.
 /// Records a resolution event and marks the lot as fully resolved when
 /// remaining quantity reaches zero.
+///
+/// `locale` (BCP-47 tag, optional) is forwarded to `localize_validation`
+/// and `localize_business_rule` so both surfaces — the
+/// `Cannot resolve lot: lot is already ...` BusinessRule and the
+/// `Cannot resolve {qty} {unit}: only {n} {unit} remain` Validation —
+/// reach the UI in the active locale. Omitting the argument keeps
+/// English.
 #[tauri::command]
 pub async fn resolve_expiry_lot(
     state: State<'_, AppState>,
     input: ExpiryLotResolve,
+    locale: Option<String>,
 ) -> Result<ExpiryLotResolveResult, CommandError> {
     let pool = state.pool().await;
+    let loc = resolve_locale(locale);
     service::resolve_expiry_lot(&pool, input)
         .await
+        .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
         .map_err(AppError::into)
 }
 

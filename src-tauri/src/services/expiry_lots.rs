@@ -437,7 +437,12 @@ pub async fn update_expiry_lot(
 
     if existing.status != "active" {
         return Err(DomainError::BusinessRule {
-            message: format!("Cannot update lot: status is `{}`", existing.status),
+            message: user_message(
+                UserMessage::CannotUpdateLotStatus {
+                    status: existing.status.clone(),
+                },
+                Locale::En,
+            ),
         }
         .into());
     }
@@ -447,9 +452,12 @@ pub async fn update_expiry_lot(
     // `lot_movements` ledger stays authoritative.
     if !quantities_equal(input.quantity, existing.quantity) {
         return Err(DomainError::BusinessRule {
-            message: format!(
-"Cannot change quantity of expiry lot directly: quantity must remain {:.2} {}. Use movement / adjustment / resolve actions to change it.",
-existing.quantity, existing.unit
+            message: user_message(
+                UserMessage::CannotChangeQuantityDirect {
+                    quantity: existing.quantity,
+                    unit: existing.unit.clone(),
+                },
+                Locale::En,
             ),
         }
         .into());
@@ -527,7 +535,12 @@ pub async fn archive_expiry_lot(pool: &DbPool, input: ArchiveLotInput) -> Result
 
     if lot.status != "active" {
         return Err(DomainError::BusinessRule {
-            message: format!("Cannot archive lot: status is already `{}`", lot.status),
+            message: user_message(
+                UserMessage::CannotArchiveLotStatus {
+                    status: lot.status.clone(),
+                },
+                Locale::En,
+            ),
         }
         .into());
     }
@@ -552,7 +565,7 @@ pub async fn archive_expiry_lot(pool: &DbPool, input: ArchiveLotInput) -> Result
         // Race: another writer archived this lot between our pre-fetch and
         // the transactional UPDATE. Treat as no-longer-archiveable.
         return Err(DomainError::BusinessRule {
-            message: "Lot is no longer active and cannot be archived".to_string(),
+            message: user_message(UserMessage::LotNoLongerActive, Locale::En),
         }
         .into());
     }
@@ -659,7 +672,12 @@ pub async fn resolve_expiry_lot(
 
     if lot.status != "active" {
         return Err(DomainError::BusinessRule {
-            message: format!("Cannot resolve lot: lot is already `{}`", lot.status),
+            message: user_message(
+                UserMessage::CannotResolveLotStatus {
+                    status: lot.status.clone(),
+                },
+                Locale::En,
+            ),
         }
         .into());
     }
@@ -667,9 +685,13 @@ pub async fn resolve_expiry_lot(
     // ── Validate resolved_qty does not exceed remaining quantity. ────────────
     if input.quantity > lot.quantity {
         return Err(AppError::Domain(DomainError::Validation {
-            message: format!(
-                "Cannot resolve {:.2} {}: only {:.2} {} remain",
-                input.quantity, lot.unit, lot.quantity, lot.unit
+            message: user_message(
+                UserMessage::ResolveQuantityExceedsRemaining {
+                    requested: input.quantity,
+                    unit: lot.unit.clone(),
+                    available: lot.quantity,
+                },
+                Locale::En,
             ),
         }));
     }
