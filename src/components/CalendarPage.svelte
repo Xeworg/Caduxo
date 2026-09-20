@@ -671,6 +671,23 @@ function onLotCancel() {
     max-width: 95vw;
     max-height: 90vh;
     overflow-y: auto;
+    /* DaisyUI v5 ships `.modal-box { opacity: 0; scale: .95; translate: 0 2%;
+       transition: ... }` as the base rule and only animates the box in
+       when nested inside `<dialog class="modal" open>` (or a
+       `.modal-toggle:checked + .modal` / `.modal-open` trigger). The
+       legacy LotDetail overlay uses a plain `<div class="modal-overlay">`
+       parent instead of `<dialog>`, so the box stays at opacity 0 even
+       when the overlay renders — the user sees the dark overlay but
+       not the white modal-box. Override the four DaisyUI animation
+       defaults here so the box is visible without a `<dialog>` parent.
+       TODO(PR 13 cleanup): replace this whole modal block with the
+       `<Modal bind:open={...}>` primitive from src/components/ui/ —
+       that handles focus trap, Escape, backdrop click, and the DaisyUI
+       dialog state machine without the manual override. */
+    opacity: 1;
+    scale: 1;
+    translate: 0;
+    transition: none;
   }
 
   .modal-box-wide {
