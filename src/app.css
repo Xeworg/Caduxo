@@ -28,8 +28,16 @@
 
 /* ─── Tailwind + DaisyUI plugin registration ──────────────────────────── */
 @import "tailwindcss";
+/* DaisyUI v5 CSS plugin syntax. The curated set extends the v1
+ * `caduxo-light` (default) + `dark` pair with five extra built-in themes
+ * for visual testing and user selection: `dracula`, `valentine`, `luxury`,
+ * `sunset`, `nord`. We intentionally do NOT use `themes: all` (which would
+ * enable all 35 DaisyUI themes) — each entry below is a deliberate pick.
+ * The backend whitelist in `src-tauri/src/commands/stores.rs::validate_theme_value`
+ * and the frontend `AVAILABLE_THEMES` array in `themeStore.svelte.ts`
+ * must stay in lockstep with this list. */
 @plugin "daisyui" {
-  themes: caduxo-light --default, dark;
+  themes: caduxo-light --default, dark, dracula, valentine, luxury, sunset, nord;
   root: ":root";
   logs: false;
 }

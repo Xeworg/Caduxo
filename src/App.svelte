@@ -1,15 +1,15 @@
 <!--
   App.svelte — top-level shell (PR 5 of caduxo-daisyui-redesign).
 
-  Migrates the bespoke `.nav` / `.nav-btn` / `.nav-brand` markup to a
-  DaisyUI `navbar bg-base-200` with `navbar-start` (Caduxo brand),
-  `navbar-center` (tab buttons rendered as DaisyUI ghost buttons so
-  they pick up `aria-current="page"`), and `navbar-end` (a ≤720 px
+  Migrates the bespoke .nav / .nav-btn / .nav-brand markup to a
+  DaisyUI navbar bg-base-200 with navbar-start (Caduxo brand),
+  navbar-center (tab buttons rendered as DaisyUI ghost buttons so
+  they pick up aria-current="page"), and navbar-end (a ≤720 px
   dropdown that holds the overflow tabs so every tab remains
   reachable via keyboard on small viewports).
 
   Renders the dashboard gradient band
-  (`linear-gradient` from primary 5% → base-100) behind the brand
+  (linear-gradient from primary 5% → base-100) behind the brand
   area on the Dashboard landing tab only, per design §5.9.
 
   Tailwind classes referenced here (for the JIT scanner):
@@ -35,7 +35,7 @@
   type Tab = "dashboard" | "stores" | "products" | "calendar" | "reports" | "import" | "backup" | "settings";
 
   // Tab metadata — the destination tab rune value and the label
-  // accessor. Plain `<button>` elements render the label as visible
+  // accessor. Plain <button> elements render the label as visible
   // text; no icon is used at the navbar level (icons appear in the
   // dashboard urgent-card affordance in PR 6, not here).
   const tabs: Array<{
@@ -75,7 +75,7 @@
     aria-label={$LL.common.mainNav()}
   >
     <!-- Brand area. On the dashboard tab we render the gradient band
-         behind the brand via `app-brand-band` (an absolute child of
+         behind the brand via app-brand-band (an absolute child of
          the navbar). The brand itself is a plain text mark — clicking
          it jumps the user back to the dashboard, which is the project
          convention preserved from the legacy nav. -->
@@ -93,18 +93,18 @@
       </button>
     </div>
 
-    <!-- Desktop tab buttons. On ≥ 720 px they live in `navbar-center`
+    <!-- Desktop tab buttons. On ≥ 720 px they live in navbar-center
          and stay fully visible; on ≤ 720 px they collapse into the
-         dropdown trigger inside `navbar-end` (next block). The CSS
+         dropdown trigger inside navbar-end (next block). The CSS
          hides the row via a media query so the keyboard order
          matches the visual order: brand → tabs (desktop) / brand →
          dropdown (mobile) → overflow dropdown (mobile tabs).
 
-         We render plain `<button>` elements instead of `Button.svelte`
+         We render plain <button> elements instead of Button.svelte
          because the active-tab affordance uses the WAI-ARIA
-         `aria-current="page"` pattern (the canonical signal for nav
-         tabs), and `Button.svelte` is scoped to action buttons that
-         do not need this attribute. The `btn btn-ghost btn-sm`
+         aria-current="page" pattern (the canonical signal for nav
+         tabs), and Button.svelte is scoped to action buttons that
+         do not need this attribute. The btn btn-ghost btn-sm
          class triplet still gives us the DaisyUI visual surface. -->
     <nav class="navbar-center app-tabs" aria-label={$LL.common.mainNav()}>
       {#each tabs as tab (tab.id)}
@@ -121,7 +121,7 @@
     </nav>
 
     <!-- Mobile overflow dropdown (≤ 720 px). DaisyUI v5 ships the
-         `dropdown` + `dropdown-end` + `dropdown-content` shell with
+         dropdown + dropdown-end + dropdown-content shell with
          focus + hover handling; the trigger button is keyboard-
          reachable, and every tab inside the menu keeps its label so
          screen readers can announce each destination. The CSS hides
@@ -152,9 +152,9 @@
           </svg>
         </div>
         <!--
-          DaisyUI's `dropdown-content` opens via `:focus-within` on the
+          DaisyUI's dropdown-content opens via :focus-within on the
           trigger, so closing requires removing focus. The
-          `tabindex="0"` trigger above keeps the menu keyboard-
+          tabindex="0" trigger above keeps the menu keyboard-
           reachable. We render the same eight tab buttons inside the
           menu so every destination stays one focus stop away.
         -->
@@ -212,9 +212,9 @@
     position: sticky;
     top: 0;
     z-index: 100;
-    /* Subtle elevation; DaisyUI's `navbar` does not ship a shadow by
+    /* Subtle elevation; DaisyUI's navbar does not ship a shadow by
        default so the legacy visual weight is preserved without
-       re-introducing the bespoke `.nav` styles. */
+       re-introducing the bespoke .nav styles. */
     box-shadow: 0 1px 3px rgb(0 0 0 / 0.15);
   }
 
@@ -229,15 +229,15 @@
     color: var(--color-primary);
     cursor: pointer;
     /* The brand sits on top of the dashboard gradient band, which is
-       `pointer-events: none`, so clicks always reach the button. */
+       pointer-events: none, so clicks always reach the button. */
     position: relative;
     z-index: 1;
   }
 
-  /* Dashboard-only gradient band. Absolute child of `.navbar-start`
+  /* Dashboard-only gradient band. Absolute child of .navbar-start
      so it spans the brand area at the left of the navbar; the brand
-     button itself is lifted above it with `position: relative;
-     z-index: 1`. The band is decorative and does not animate, per
+     button itself is lifted above it with position: relative;
+     z-index: 1. The band is decorative and does not animate, per
      design §5.9. */
   .app-brand-band {
     position: absolute;
@@ -250,9 +250,9 @@
     pointer-events: none;
   }
 
-  /* Active tab visual state. Applied via the `app-tab-active-btn`
-     class on the desktop `<button>` element when `activeTab` matches.
-     DaisyUI's `btn-ghost` already provides the hover / focus
+  /* Active tab visual state. Applied via the app-tab-active-btn
+     class on the desktop <button> element when activeTab matches.
+     DaisyUI's btn-ghost already provides the hover / focus
      background, so we only paint the accent dot + bolder weight for
      the active tab. */
   .app-tab-active-btn {
@@ -271,7 +271,7 @@
   }
 
   /* Desktop row visible at ≥ 720 px. The mobile overflow dropdown
-     (`.app-overflow`) hides at the same breakpoint. */
+     (.app-overflow) hides at the same breakpoint. */
   .app-tabs {
     display: flex;
     align-items: center;
@@ -291,8 +291,8 @@
     }
   }
 
-  /* DaisyUI dropdown menu uses `inert`-style behaviour; we ensure the
-     trigger is keyboard-visible when focused. The `tabindex="0"`
+  /* DaisyUI dropdown menu uses inert-style behaviour; we ensure the
+     trigger is keyboard-visible when focused. The tabindex="0"
      trigger from the markup gets a focus ring via DaisyUI's global
      focus-visible contract, but we re-assert it here so reduced-
      motion users still see the ring. */

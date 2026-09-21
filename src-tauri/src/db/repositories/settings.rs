@@ -92,9 +92,10 @@ pub async fn get_theme_setting(pool: &SqlitePool) -> Result<Option<String>, sqlx
     get_setting(pool, "theme").await
 }
 
-/// Persists the theme setting. Rejects values outside
-/// `{"caduxo-light", "dark"}` at the command layer; this function accepts
-/// any non-empty string and trusts the caller.
+/// Persists the theme setting. Rejects values outside the curated set
+/// (`caduxo-light`, `dark`, `dracula`, `valentine`, `luxury`, `sunset`,
+/// `nord`) at the command layer; this function accepts any non-empty
+/// string and trusts the caller.
 pub async fn set_theme_setting(pool: &SqlitePool, value: &str) -> Result<(), sqlx::Error> {
     upsert_setting(pool, "theme", value).await
 }
@@ -119,9 +120,15 @@ pub async fn get_settings(pool: &SqlitePool) -> Result<SettingsResponse, sqlx::E
     // empty value, unsupported tag) the response reports the
     // `"caduxo-light"` fallback with `theme_configured: false` so the
     // frontend can run `prefers-color-scheme` detection instead of
-    // honouring an invalid row.
+    // honouring an invalid row. The curated set is sourced from
+    // `services::user_messages::ALLOWED_THEMES` (the IPC validator's
+    // whitelist) so the snapshot logic cannot drift away from the
+    // validation gate.
     let stored_theme = get_theme_setting(pool).await?;
-    let theme_configured = matches!(stored_theme.as_deref(), Some("caduxo-light") | Some("dark"));
+    let theme_configured = stored_theme
+        .as_deref()
+        .map(|v| crate::services::user_messages::ALLOWED_THEMES.contains(&v))
+        .unwrap_or(false);
     let theme = stored_theme
         .filter(|_| theme_configured)
         .unwrap_or_else(|| "caduxo-light".to_string());
@@ -267,7 +274,8 @@ mod tests {
     // ─── Theme handling (PR 2 of caduxo-daisyui-redesign) ──────────────
 
     #[tokio::test]
-    async fn get_theme_setting_missing_row_returns_none() -> Result<(), Box<dyn std::error::Error>> {
+    async fn get_theme_setting_missing_row_returns_none() -> Result<(), Box<dyn std::error::Error>>
+    {
         let pool = fresh_test_pool().await?;
         let val = get_theme_setting(&pool).await?;
         assert!(val.is_none());
@@ -275,8 +283,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_settings_theme_defaults_on_fresh_install(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    async fn get_settings_theme_defaults_on_fresh_install() -> Result<(), Box<dyn std::error::Error>>
+    {
         let pool = fresh_test_pool().await?;
 
         // No `app_settings.theme` row yet: the response must expose a
@@ -310,10 +318,11 @@ mod tests {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let pool = fresh_test_pool().await?;
 
-        // A persisted but unsupported tag (e.g. legacy "synthwave" or a
-        // typo) must NOT be reported as a manual preference — the frontend
-        // falls back to the v1 curated set via detection instead of
-        // honouring an invalid row.
+        // A persisted but unsupported tag (e.g. a real DaisyUI theme like
+        // `synthwave` that is NOT in the curated v1 set, or a typo) must
+        // NOT be reported as a manual preference — the frontend falls back
+        // to the curated set via detection instead of honouring an invalid
+        // row.
         upsert_setting(&pool, "theme", "synthwave").await?;
         let settings = get_settings(&pool).await?;
         assert_eq!(settings.theme, "caduxo-light");
@@ -322,21 +331,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_settings_theme_configured_when_persisted(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    async fn get_settings_theme_configured_when_persisted() -> Result<(), Box<dyn std::error::Error>>
+    {
         let pool = fresh_test_pool().await?;
 
         // Manual pick: configured flag flips true and the value is returned
-        // as-is (no fallback masking).
-        set_theme_setting(&pool, "dark").await?;
-        let settings = get_settings(&pool).await?;
-        assert_eq!(settings.theme, "dark");
-        assert!(settings.theme_configured);
-
-        set_theme_setting(&pool, "caduxo-light").await?;
-        let settings = get_settings(&pool).await?;
-        assert_eq!(settings.theme, "caduxo-light");
-        assert!(settings.theme_configured);
+        // as-is (no fallback masking). Covers the legacy v1 pair plus each
+        // new built-in so the snapshot recognises every curated theme.
+        for value in [
+            "dark",
+            "caduxo-light",
+            "dracula",
+            "valentine",
+            "luxury",
+            "sunset",
+            "nord",
+        ] {
+            set_theme_setting(&pool, value).await?;
+            let settings = get_settings(&pool).await?;
+            assert_eq!(settings.theme, value, "theme mismatch for `{value}`");
+            assert!(
+                settings.theme_configured,
+                "theme_configured must be true for `{value}`"
+            );
+        }
         Ok(())
     }
 

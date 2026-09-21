@@ -965,9 +965,20 @@ const es: BaseTranslation = {
   // vinculada al tema. Mantener los valores de origen sincronizados
   // con `ThemeSource` en
   // `src/components/ui/theme/themeStore.svelte.ts`.
+  //
+  // Las cinco entradas integradas (dracula, valentine, luxury, sunset,
+  // nord) reflejan los temas seleccionados de DaisyUI v5 registrados en
+  // `src/app.css` y aceptados por la lista blanca del backend en
+  // `src-tauri/src/commands/stores.rs::validate_theme_value`. NO usamos
+  // `themes: all` — estos cinco fueron elegidos por producto.
   theme: {
     caduxoLight: "Caduxo Claro",
     dark: "Oscuro",
+    dracula: "Drácula",
+    valentine: "San Valentín",
+    luxury: "Lujo",
+    sunset: "Atardecer",
+    nord: "Nórdico",
     source: {
       manual: "Manual",
       persisted: "Persistido",

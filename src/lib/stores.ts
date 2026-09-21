@@ -8,13 +8,22 @@ import type { SupportedLocale } from "../i18n/locale.svelte.js";
 
 /**
  * Curated DaisyUI theme set shipped at v1 GA. Mirrors the backend
- * `{"caduxo-light", "dark"}` whitelist enforced at the IPC boundary.
+ * `{"caduxo-light", "dark", "dracula", "valentine", "luxury", "sunset", "nord"}`
+ * whitelist enforced at the IPC boundary.
  *
  * Kept narrow on purpose: a future accent-theme follow-up would extend
- * this union. The Rust backend (PR 2 of `caduxo-daisyui-redesign`)
- * rejects anything outside this set at the `update_settings` command.
+ * this union. The Rust backend (`update_settings` command and
+ * `validate_theme_value` in `src-tauri/src/commands/stores.rs`) rejects
+ * anything outside this set at the IPC boundary.
  */
-export type ThemeName = "caduxo-light" | "dark";
+export type ThemeName =
+  | "caduxo-light"
+  | "dark"
+  | "dracula"
+  | "valentine"
+  | "luxury"
+  | "sunset"
+  | "nord";
 
 export interface StoreResponse {
  id: string;

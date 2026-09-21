@@ -966,9 +966,20 @@ const en: BaseTranslation = {
   // and any future cross-page theme affordance. Keep the source values
   // in lockstep with `ThemeSource` in
   // `src/components/ui/theme/themeStore.svelte.ts`.
+  //
+  // The five built-in entries (dracula, valentine, luxury, sunset, nord)
+  // mirror the curated DaisyUI v5 themes registered in `src/app.css` and
+  // accepted by the backend whitelist in
+  // `src-tauri/src/commands/stores.rs::validate_theme_value`. We do NOT
+  // enable `themes: all` — these five were picked by product.
   theme: {
     caduxoLight: "Caduxo Light",
     dark: "Dark",
+    dracula: "Dracula",
+    valentine: "Valentine",
+    luxury: "Luxury",
+    sunset: "Sunset",
+    nord: "Nord",
     source: {
       manual: "Manual",
       persisted: "Persisted",

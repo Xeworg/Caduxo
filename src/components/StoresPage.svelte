@@ -5,15 +5,15 @@
   Migration to shared UI primitives:
     - Table.svelte (zebra) hosts both the store sidebar and the
       per-store location list. Each row is keyboard-activatable via
-      `tabindex="0"` + Enter/Space; the Name cell renders a `<button
-      class="store-link">` so screen readers can announce the row
+      tabindex="0" + Enter/Space; the Name cell renders a <button
+      class="store-link"> so screen readers can announce the row
       action without depending on the row-level click handler.
     - Badge.svelte renders the active / inactive status cell.
-    - EmptyState.svelte replaces the bespoke `.empty-hint` text in
+    - EmptyState.svelte replaces the bespoke .empty-hint text in
       both the store sidebar and the location list (via the Table
-      primitive's `empty` slot).
-    - Button.svelte (variant `ghost`, size `icon`) replaces the
-      bespoke `.btn-icon` edit button for locations.
+      primitive's empty slot).
+    - Button.svelte (variant ghost, size icon) replaces the
+      bespoke .btn-icon edit button for locations.
     - The form blocks (store-form / location-form) and the first-run
       banner are deliberately left untouched — they are PR 8 scope.
 
@@ -612,19 +612,19 @@
     align-items: start;
   }
 
-  /* Grid items default to `min-width: auto`, which prevents them from
+  /* Grid items default to min-width: auto, which prevents them from
      shrinking below the natural width of their content. The sidebar's
-     `Table.svelte` contains long store names / codes that would push
-     the column past 300 px; `min-width: 0` lets the grid track keep
+     Table.svelte contains long store names / codes that would push
+     the column past 300 px; min-width: 0 lets the grid track keep
      its declared width. */
   .store-list {
     min-width: 0;
   }
 
-  /* The Table primitive renders a native `<table>` (class `table`).
+  /* The Table primitive renders a native <table> (class table).
      Native tables auto-size to their content; force them to fill the
-     sidebar's 300 px and use `table-layout: fixed` so columns share
-     the width instead of competing for it. The `:global()` is required
+     sidebar's 300 px and use table-layout: fixed so columns share
+     the width instead of competing for it. The :global() is required
      because Svelte CSS scoping does not reach into the Table
      primitive's rendered HTML. */
   .store-list :global(table) {
@@ -632,9 +632,9 @@
     table-layout: fixed;
   }
 
-  /* Per-column text rules — the previous blanket `word-break: break-word`
+  /* Per-column text rules — the previous blanket word-break: break-word
      was too aggressive and broke the short "Activo" badge text mid-word;
-     the previous `text-overflow: ellipsis` on every cell truncated the
+     the previous text-overflow: ellipsis on every cell truncated the
      "Nombre de tienda" / "Código" headers to "Nom..." / "Códi...". The
      Name column wraps freely (a long store name can take two lines), the
      Code column stays single-line and right-aligned (codes are

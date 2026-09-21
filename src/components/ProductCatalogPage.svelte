@@ -5,9 +5,9 @@
   Migration to shared UI primitives:
     - Table.svelte (zebra) hosts the per-product list. Numeric /
       monospaced cells (SKU + barcode) use the local `.cell-mono`
-      utility; the description cell renders a `<button
-      class="product-link">` so screen readers can announce the
-      row action without depending on the row-level click handler.
+      utility; the description cell renders a product-link button so
+      screen readers can announce the row action without depending on
+      the row-level click handler.
     - Badge.svelte renders the active / archived status cell. Active
       uses `semantic="success"`; archived uses `semantic="neutral"`
       and reuses the existing `$LL.products.archived()` label.

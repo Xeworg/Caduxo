@@ -3423,6 +3423,26 @@ type RootTranslation = {
 		 * D​a​r​k
 		 */
 		dark: string
+		/**
+		 * D​r​a​c​u​l​a
+		 */
+		dracula: string
+		/**
+		 * V​a​l​e​n​t​i​n​e
+		 */
+		valentine: string
+		/**
+		 * L​u​x​u​r​y
+		 */
+		luxury: string
+		/**
+		 * S​u​n​s​e​t
+		 */
+		sunset: string
+		/**
+		 * N​o​r​d
+		 */
+		nord: string
 		source: {
 			/**
 			 * M​a​n​u​a​l
@@ -6773,6 +6793,26 @@ export type TranslationFunctions = {
 		 * Dark
 		 */
 		dark: () => LocalizedString
+		/**
+		 * Dracula
+		 */
+		dracula: () => LocalizedString
+		/**
+		 * Valentine
+		 */
+		valentine: () => LocalizedString
+		/**
+		 * Luxury
+		 */
+		luxury: () => LocalizedString
+		/**
+		 * Sunset
+		 */
+		sunset: () => LocalizedString
+		/**
+		 * Nord
+		 */
+		nord: () => LocalizedString
 		source: {
 			/**
 			 * Manual

@@ -21,8 +21,9 @@ import { getSettings, updateSettings, type ThemeName } from "../../../lib/stores
 
 /**
  * Curated DaisyUI v5 theme set shipped at v1 GA. Mirrors the backend
- * `{"caduxo-light", "dark"}` whitelist enforced at the IPC boundary
- * (PR 2 of caduxo-daisyui-redesign).
+ * `{"caduxo-light", "dark", "dracula", "valentine", "luxury", "sunset", "nord"}`
+ * whitelist enforced at the IPC boundary
+ * (`src-tauri/src/commands/stores.rs::validate_theme_value`).
  *
  * The frontend treats this union as the single source of truth: a
  * future accent-theme follow-up would extend `ThemeName` here and
@@ -39,8 +40,25 @@ export type { ThemeName };
  */
 export type ThemeSource = "manual" | "persisted" | "os" | "fallback";
 
-/** Bundled theme set — single source of truth for the switcher. */
-export const AVAILABLE_THEMES: ThemeName[] = ["caduxo-light", "dark"];
+/**
+ * Bundled theme set — single source of truth for the switcher.
+ *
+ * Order matters: the first entry is the default `caduxo-light` (per
+ * DaisyUI's `--default` flag in `src/app.css`); the second is the
+ * built-in `dark` fallback; the rest are the curated built-in themes
+ * picked for visual testing and user selection. The order is also the
+ * display order in the Configuration page `<Select>`. The backend
+ * whitelist accepts the same set in any order.
+ */
+export const AVAILABLE_THEMES: ThemeName[] = [
+  "caduxo-light",
+  "dark",
+  "dracula",
+  "valentine",
+  "luxury",
+  "sunset",
+  "nord",
+];
 
 interface ThemeState {
   current: ThemeName;

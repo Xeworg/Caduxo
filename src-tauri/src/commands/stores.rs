@@ -12,7 +12,7 @@ use crate::services::settings as settings_service;
 use crate::services::stores as store_service;
 use crate::services::user_messages::{
     localize_business_rule, localize_duplicate_field, localize_internal, localize_not_found,
-    localize_validation, user_message, UserMessage,
+    localize_validation, user_message, UserMessage, ALLOWED_THEMES,
 };
 use crate::state::AppState;
 
@@ -188,15 +188,18 @@ pub async fn update_settings(
 
 /// Validates a theme preference at the IPC boundary.
 ///
-/// The v1 curated set is `{"caduxo-light", "dark"}`. Any other value is
-/// rejected as `CommandError::Validation` with a locale-aware message so the
-/// persisted row stays untouched. The function is the single source of
-/// truth for theme validation; `update_settings` and the unit tests both
-/// call it so a future change to the curated set lands in one place.
+/// The curated v1 set is `{"caduxo-light", "dark", "dracula", "valentine",
+/// "luxury", "sunset", "nord"}` (see `ALLOWED_THEMES` in
+/// `services::user_messages`, which is also the source the rejection
+/// message uses). Any other value is rejected as `CommandError::Validation`
+/// with a locale-aware message so the persisted row stays untouched. The
+/// function is the single source of truth for theme validation;
+/// `update_settings` and the unit tests both call it so a future change
+/// to the curated set lands in one place.
 ///
 /// PR 2 (caduxo-daisyui-redesign) wires the first theme-aware setting.
 fn validate_theme_value(value: &str, loc: Locale) -> Result<(), CommandError> {
-    if value == "caduxo-light" || value == "dark" {
+    if ALLOWED_THEMES.contains(&value) {
         return Ok(());
     }
     Err(CommandError::Validation {
@@ -222,11 +225,18 @@ pub async fn has_store(state: State<'_, AppState>) -> Result<bool, CommandError>
 mod tests {
     // PR 2 (caduxo-daisyui-redesign) — command-boundary theme validation.
     // The IPC gate rejects values outside the curated v1 set
-    // (`caduxo-light`, `dark`) at the boundary so the persisted row stays
-    // untouched and the rejection reaches the UI in the active locale.
+    // (`caduxo-light`, `dark`, `dracula`, `valentine`, `luxury`, `sunset`,
+    // `nord`) at the boundary so the persisted row stays untouched and the
+    // rejection reaches the UI in the active locale. The list is owned by
+    // `services::user_messages::ALLOWED_THEMES`; the IPC validator, the
+    // rejection message, and these tests all read from it (via the
+    // constant's display form for the literal string assertions) so a
+    // future theme addition cannot drift the message away from the
+    // whitelist.
     use super::validate_theme_value;
     use crate::error::CommandError;
     use crate::pdf::locale::Locale;
+    use crate::services::user_messages::ALLOWED_THEMES_DISPLAY;
 
     #[test]
     fn validate_theme_accepts_caduxo_light_in_english() {
@@ -253,13 +263,53 @@ mod tests {
     }
 
     #[test]
+    fn validate_theme_accepts_dracula_in_english() {
+        let result = validate_theme_value("dracula", Locale::En);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_theme_accepts_valentine_in_spanish() {
+        let result = validate_theme_value("valentine", Locale::Es);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_theme_accepts_luxury_in_english() {
+        let result = validate_theme_value("luxury", Locale::En);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_theme_accepts_sunset_in_spanish() {
+        let result = validate_theme_value("sunset", Locale::Es);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_theme_accepts_nord_in_english() {
+        let result = validate_theme_value("nord", Locale::En);
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn validate_theme_rejects_synthwave_in_english() {
+        // `synthwave` is a real DaisyUI theme but is intentionally NOT in
+        // the curated v1 set — the user explicitly asked for `dracula`,
+        // `valentine`, `luxury`, `sunset`, `nord` and not the full
+        // catalog. Keeping a non-selected DaisyUI theme as the rejection
+        // sample also doubles as a regression guard: if someone ever swaps
+        // `ALLOWED_THEMES` for `themes: all`-style coverage, this assertion
+        // would need to change too.
         let err = validate_theme_value("synthwave", Locale::En).unwrap_err();
         match err {
             CommandError::Validation { message } => {
                 assert_eq!(
                     message,
-                    "theme must be one of {caduxo-light, dark}, got `synthwave`"
+                    format!(
+                        "theme must be one of {{{}}}, got `synthwave`",
+                        ALLOWED_THEMES_DISPLAY
+                    )
                 );
             }
             other => panic!("expected CommandError::Validation, got {other:?}"),
@@ -273,7 +323,10 @@ mod tests {
             CommandError::Validation { message } => {
                 assert_eq!(
                     message,
-                    "el tema debe ser uno de {caduxo-light, dark}, se recibió `synthwave`"
+                    format!(
+                        "el tema debe ser uno de {{{}}}, se recibió `synthwave`",
+                        ALLOWED_THEMES_DISPLAY
+                    )
                 );
             }
             other => panic!("expected CommandError::Validation, got {other:?}"),
@@ -289,9 +342,16 @@ mod tests {
     #[test]
     fn validate_theme_rejects_uppercase_dark() {
         // Curation is case-sensitive on purpose; the v1 set is the literal
-        // strings `"caduxo-light"` and `"dark"`. An uppercase variant must
-        // be rejected so a typo never reaches persistence.
+        // strings in `ALLOWED_THEMES`. An uppercase variant must be
+        // rejected so a typo never reaches persistence.
         let err = validate_theme_value("Dark", Locale::En).unwrap_err();
+        assert!(matches!(err, CommandError::Validation { .. }));
+    }
+
+    #[test]
+    fn validate_theme_rejects_uppercase_dracula() {
+        // Same case-sensitivity guarantee for the new built-ins.
+        let err = validate_theme_value("Dracula", Locale::En).unwrap_err();
         assert!(matches!(err, CommandError::Validation { .. }));
     }
 }

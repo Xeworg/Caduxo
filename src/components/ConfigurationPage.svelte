@@ -72,14 +72,28 @@
     }
 
     // Per-theme display names. The dictionary keys live under the
-    // top-level `theme` namespace (`theme.caduxoLight`, `theme.dark`)
-    // so future cross-page theme affordances can share the same copy.
+    // top-level `theme` namespace (e.g. `theme.caduxoLight`,
+    // `theme.dark`, `theme.dracula`, `theme.valentine`, `theme.luxury`,
+    // `theme.sunset`, `theme.nord`) so future cross-page theme
+    // affordances can share the same copy. The switch exhausts every
+    // variant of `ThemeName` so a future theme addition triggers a TS
+    // error here until the matching i18n key is added.
     function themeLabel(name: ThemeName): string {
         switch (name) {
             case "caduxo-light":
                 return $LL.theme.caduxoLight();
             case "dark":
                 return $LL.theme.dark();
+            case "dracula":
+                return $LL.theme.dracula();
+            case "valentine":
+                return $LL.theme.valentine();
+            case "luxury":
+                return $LL.theme.luxury();
+            case "sunset":
+                return $LL.theme.sunset();
+            case "nord":
+                return $LL.theme.nord();
         }
     }
 
