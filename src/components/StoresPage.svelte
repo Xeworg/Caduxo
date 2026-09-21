@@ -603,11 +603,10 @@
   /* ── Store layout ──────────────────────────────────────────────────────── */
   .stores-layout {
     display: grid;
-    /* 300 px = 140 px (Nombre de tienda) + 60 px (Código) + 70 px (Activo
-       badge) + ~30 px cell padding. The 240 px that the pre-migration
-       sidebar used is too narrow once the Table primitive distributes
-       column widths evenly across the available track. */
-    grid-template-columns: 300px 1fr;
+    /* 340 px gives the store table enough room for the Spanish headers
+       (Nombre de tienda / Código / Estado) plus the status badge without
+       visually colliding at desktop widths. */
+    grid-template-columns: 340px 1fr;
     gap: 20px;
     align-items: start;
   }
@@ -615,42 +614,37 @@
   /* Grid items default to min-width: auto, which prevents them from
      shrinking below the natural width of their content. The sidebar's
      Table.svelte contains long store names / codes that would push
-     the column past 300 px; min-width: 0 lets the grid track keep
-     its declared width. */
+     the column past the declared sidebar width; min-width: 0 lets the
+     grid track keep its declared width. */
   .store-list {
     min-width: 0;
   }
 
   /* The Table primitive renders a native <table> (class table).
      Native tables auto-size to their content; force them to fill the
-     sidebar's 300 px and use table-layout: fixed so columns share
-     the width instead of competing for it. The :global() is required
-     because Svelte CSS scoping does not reach into the Table
-     primitive's rendered HTML. */
+     sidebar and use table-layout: fixed with explicit column widths so
+     the header labels cannot collide. The :global() is required because
+     Svelte CSS scoping does not reach into the Table primitive's
+     rendered HTML. */
   .store-list :global(table) {
     width: 100%;
     table-layout: fixed;
   }
 
-  /* Per-column text rules — the previous blanket word-break: break-word
-     was too aggressive and broke the short "Activo" badge text mid-word;
-     the previous text-overflow: ellipsis on every cell truncated the
-     "Nombre de tienda" / "Código" headers to "Nom..." / "Códi...". The
-     Name column wraps freely (a long store name can take two lines), the
-     Code column stays single-line and right-aligned (codes are
-     numeric-ish), the Status column stays single-line so the Badge
-     primitive does not wrap. */
   .store-list :global(table th:nth-child(1)),
   .store-list :global(table td:nth-child(1)) {
+    width: 48%;
     overflow-wrap: anywhere;
   }
   .store-list :global(table th:nth-child(2)),
   .store-list :global(table td:nth-child(2)) {
+    width: 22%;
     white-space: nowrap;
     text-align: right;
   }
   .store-list :global(table th:nth-child(3)),
   .store-list :global(table td:nth-child(3)) {
+    width: 30%;
     white-space: nowrap;
   }
 
