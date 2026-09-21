@@ -48,6 +48,7 @@
   import Tabs from "./ui/Tabs.svelte";
   import Alert from "./ui/Alert.svelte";
   import Button from "./ui/Button.svelte";
+  import Icon from "./ui/Icon.svelte";
   import Listbox from "./ui/Listbox.svelte";
   import Tooltip from "./ui/Tooltip.svelte";
   import EmptyState from "./ui/EmptyState.svelte";
@@ -543,7 +544,11 @@
                 size="xs"
                 onclick={clearStoreFilter}
                 aria-label={$LL.dashboard.clearStoreFilter()}
-              >✕</Button>
+              >
+                {#snippet iconStart()}
+                  <Icon name="x-mark" size="xs" />
+                {/snippet}
+              </Button>
             </Tooltip>
           </span>
         {:else}
@@ -736,7 +741,11 @@
                   size="sm"
                   onclick={() => editLot(lot)}
                   aria-label={$LL.common.edit()}
-                >✏️</Button>
+                >
+                  {#snippet iconStart()}
+                    <Icon name="pencil" size="sm" />
+                  {/snippet}
+                </Button>
               </Tooltip>
               <Tooltip text={$LL.dashboard.viewProductAndMovements()}>
                 <Button
@@ -744,7 +753,11 @@
                   size="sm"
                   onclick={() => viewProduct(lot, lot.lot_id)}
                   aria-label={$LL.dashboard.viewProductAndMovements()}
-                >↓</Button>
+                >
+                  {#snippet iconStart()}
+                    <Icon name="arrow-down-tray" size="sm" />
+                  {/snippet}
+                </Button>
               </Tooltip>
             </td>
           </tr>

@@ -48,6 +48,7 @@
   import Button from "./ui/Button.svelte";
   import Alert from "./ui/Alert.svelte";
   import Table from "./ui/Table.svelte";
+  import Icon from "./ui/Icon.svelte";
   import { LL } from "../i18n/i18n-svelte.js";
   import { humanizeError } from "../lib/errors.js";
 
@@ -307,13 +308,17 @@
         class="action-card action-card-primary"
         onclick={selectAndPreview}
       >
-        <span class="card-icon" aria-hidden="true">📄</span>
+        <span class="card-icon" aria-hidden="true">
+          <Icon name="document-arrow-up" size="lg" />
+        </span>
         <span class="card-title">{$LL.csvImport.selectFile()}</span>
         <span class="card-desc">{$LL.csvImport.selectFileAction()}</span>
       </button>
 
       <div class="action-card action-card-info">
-        <span class="card-icon" aria-hidden="true">ℹ️</span>
+        <span class="card-icon" aria-hidden="true">
+          <Icon name="information-circle" size="lg" />
+        </span>
         <span class="card-title">{$LL.csvImport.expectedColumns()}</span>
         <span class="card-desc">
           {$LL.csvImport.required()}: <code>sku</code>, <code>description</code><br />
@@ -602,6 +607,8 @@
 
   .card-icon {
     font-size: 1.4rem;
+    display: inline-flex;
+    align-items: center;
   }
 
   .card-title {

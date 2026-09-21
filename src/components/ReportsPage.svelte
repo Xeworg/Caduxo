@@ -52,6 +52,7 @@
   import Alert from "./ui/Alert.svelte";
   import Table from "./ui/Table.svelte";
   import EmptyState from "./ui/EmptyState.svelte";
+  import Icon from "./ui/Icon.svelte";
   import {
     previewReport,
     exportReportPdfWithDialog,
@@ -370,6 +371,9 @@
     {#if view === "preview" && preview}
       <div class="page-header-actions">
         <Button variant="ghost" size="sm" onclick={backToConfigure}>
+          {#snippet iconStart()}
+            <Icon name="pencil-square" size="sm" />
+          {/snippet}
           {$LL.reports.actions.editFilters()}
         </Button>
         <Button
@@ -379,6 +383,9 @@
           disabled={exporting || preview.lots.length === 0}
           loading={exporting}
         >
+          {#snippet iconStart()}
+            <Icon name="document-arrow-down" size="sm" />
+          {/snippet}
           {exporting ? $LL.reports.actions.exporting() : $LL.reports.actions.exportPdf()}
         </Button>
       </div>
@@ -489,6 +496,9 @@
         disabled={loading}
         loading={loading}
       >
+        {#snippet iconStart()}
+          <Icon name="eye" size="sm" />
+        {/snippet}
         {loading ? $LL.reports.actions.generating() : $LL.reports.actions.preview()}
       </Button>
     </div>

@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import CalendarMonth from "./CalendarMonth.svelte";
   import Button from "./ui/Button.svelte";
+  import Icon from "./ui/Icon.svelte";
   import { LL } from "../i18n/i18n-svelte.js";
 
   // ── Props ───────────────────────────────────────────────────────────────────
@@ -323,7 +324,9 @@
         aria-label={$LL.datePicker.ariaOpenCalendar()}
         onclick={togglePopover}
       >
-        📅
+        {#snippet iconStart()}
+          <Icon name="calendar" size="sm" />
+        {/snippet}
       </Button>
     </div>
     {#if clearable && value !== ""}
@@ -334,7 +337,9 @@
           aria-label={$LL.datePicker.ariaClearDate()}
           onclick={onClear}
         >
-          ✕
+          {#snippet iconStart()}
+            <Icon name="x-mark" size="xs" />
+          {/snippet}
         </Button>
       </div>
     {/if}

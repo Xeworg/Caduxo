@@ -5,6 +5,7 @@
     import { LL } from "../../i18n/i18n-svelte.js";
     import { humanizeError } from "../../lib/errors.js";
     import Button from "../ui/Button.svelte";
+    import Icon from "../ui/Icon.svelte";
 
     // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -392,7 +393,9 @@
                             class="cp-chip-remove"
                             aria-label={$LL.categoryPicker.removeCategory({ name: $LL.categoryPicker.uncategorized() })}
                             on:click|stopPropagation={() => removeChip(UNCATEGORIZED_SENTINEL)}
-                        >✕</button>
+                        >
+                            <Icon name="x-mark" size="xs" />
+                        </button>
                     </span>
                 {/if}
                 {#each selectedChips as chip (chip.id)}
@@ -403,7 +406,9 @@
                             class="cp-chip-remove"
                             aria-label={$LL.categoryPicker.removeCategory({ name: chip.name })}
                             on:click|stopPropagation={() => removeChip(chip.id)}
-                        >✕</button>
+                        >
+                            <Icon name="x-mark" size="xs" />
+                        </button>
                     </span>
                 {/each}
             </div>
@@ -471,7 +476,11 @@
                     aria-label={$LL.common.close()}
                     onclick={closePopover}
                     id="cp-close-icon"
-                >✕</Button>
+                >
+                    {#snippet iconStart()}
+                        <Icon name="x-mark" size="sm" />
+                    {/snippet}
+                </Button>
             {/if}
         </div>
     </div>
@@ -507,7 +516,9 @@
                     >
                         <span class="cp-option-name">{$LL.categoryPicker.uncategorized()}</span>
                         {#if hasUncategorized}
-                            <span class="cp-check" aria-hidden="true">✓</span>
+                            <span class="cp-check" aria-hidden="true">
+                                <Icon name="check" size="sm" />
+                            </span>
                         {/if}
                     </div>
                 {/if}
@@ -528,7 +539,9 @@
                     >
                         <span class="cp-option-name">{cat.name}</span>
                         {#if isSelected(cat.id)}
-                            <span class="cp-check" aria-hidden="true">✓</span>
+                            <span class="cp-check" aria-hidden="true">
+                                <Icon name="check" size="sm" />
+                            </span>
                         {/if}
                     </div>
                 {/each}
@@ -612,6 +625,8 @@
         line-height: 1;
         border-radius: 3px;
         transition: opacity 0.15s;
+        display: inline-flex;
+        align-items: center;
     }
 
     .cp-chip-remove:hover {
@@ -752,6 +767,8 @@
         color: var(--color-primary);
         font-weight: 600;
         font-size: 0.85rem;
+        display: inline-flex;
+        align-items: center;
     }
 
     .cp-creating {

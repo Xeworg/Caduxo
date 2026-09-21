@@ -5,6 +5,7 @@
   } from "../lib/unit_definitions.js";
   import { LL } from "../i18n/i18n-svelte.js";
   import Button from "./ui/Button.svelte";
+  import Icon from "./ui/Icon.svelte";
 
   /** Called when the user clicks the "Review" button. */
   export let onReview: () => void;
@@ -53,11 +54,16 @@
 
 {#if !loading && showBanner}
   <div class="unit-banner" role="status">
-    <span class="banner-icon" aria-hidden="true">⚠️</span>
+    <span class="banner-icon" aria-hidden="true">
+      <Icon name="exclamation-triangle" size="md" />
+    </span>
     <span class="banner-text">
       {@html bannerMessage}
     </span>
     <Button variant="warning" size="sm" onclick={onReview}>
+      {#snippet iconStart()}
+        <Icon name="exclamation-triangle" size="sm" />
+      {/snippet}
       {$LL.unitReview.review()}
     </Button>
     <Button
@@ -92,6 +98,9 @@
 
   .banner-icon {
     font-size: 1rem;
+    display: inline-flex;
+    align-items: center;
+    color: color-mix(in oklch, var(--color-warning) 70%, var(--color-base-content));
   }
 
   .banner-text {

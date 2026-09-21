@@ -46,6 +46,7 @@
   import Button from "./ui/Button.svelte";
   import Alert from "./ui/Alert.svelte";
   import Table from "./ui/Table.svelte";
+  import Icon from "./ui/Icon.svelte";
   import { LL } from "../i18n/i18n-svelte.js";
   import { humanizeError } from "../lib/errors.js";
 
@@ -234,6 +235,9 @@
       disabled={exporting}
       loading={exporting}
     >
+      {#snippet iconStart()}
+        <Icon name="document-arrow-down" size="sm" />
+      {/snippet}
       {exporting ? $LL.backupRestore.exporting() : $LL.backupRestore.exportButton()}
     </Button>
 
@@ -273,6 +277,9 @@
         disabled={validating}
         loading={validating}
       >
+        {#snippet iconStart()}
+          <Icon name="document-magnifying-glass" size="sm" />
+        {/snippet}
         {validating ? $LL.backupRestore.selecting() : $LL.backupRestore.selectBackupFile()}
       </Button>
 
@@ -313,6 +320,9 @@
 
         {#if !showRestoreConfirm}
           <Button variant="danger" size="sm" onclick={openRestoreConfirm}>
+            {#snippet iconStart()}
+              <Icon name="arrow-uturn-left" size="sm" />
+            {/snippet}
             {$LL.backupRestore.restoreButton()}
           </Button>
         {:else}
@@ -327,6 +337,9 @@
                 disabled={restoring}
                 loading={restoring}
               >
+                {#snippet iconStart()}
+                  <Icon name="exclamation-triangle" size="sm" />
+                {/snippet}
                 {restoring ? $LL.backupRestore.restoring() : $LL.backupRestore.restoreData()}
               </Button>
               <Button
@@ -378,6 +391,9 @@
             size="sm"
             onclick={() => { validation = null; selectedBackupPath = ""; }}
           >
+            {#snippet iconStart()}
+              <Icon name="document-magnifying-glass" size="sm" />
+            {/snippet}
             {$LL.backupRestore.chooseDifferentFile()}
           </Button>
         </p>

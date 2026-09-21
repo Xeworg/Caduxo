@@ -45,6 +45,7 @@
   import EmptyState from "./ui/EmptyState.svelte";
   import Alert from "./ui/Alert.svelte";
   import Button from "./ui/Button.svelte";
+  import Icon from "./ui/Icon.svelte";
 
   // ── State ──────────────────────────────────────────────────────────────────
 
@@ -500,7 +501,9 @@
                           aria-label={$LL.stores.edit()}
                           onclick={() => startEditLocation(loc)}
                         >
-                          ✏️
+                          {#snippet iconStart()}
+                            <Icon name="pencil" size="sm" />
+                          {/snippet}
                         </Button>
                       </td>
                     </tr>

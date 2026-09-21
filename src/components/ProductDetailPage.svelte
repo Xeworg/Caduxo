@@ -32,6 +32,7 @@
     import Button from "./ui/Button.svelte";
     import Alert from "./ui/Alert.svelte";
     import Badge from "./ui/Badge.svelte";
+    import Icon from "./ui/Icon.svelte";
 
     /** Static barcode-type suggestion list shared by the ProductForm
      *  Combobox (PR 8a.1) and this ProductDetailPage Combobox (PR
@@ -358,14 +359,16 @@ on:click={() => (confirmingArchive = false)}
                                     <span class="badge-primary">{$LL.products.detail.primary()}</span>
                                 {/if}
                             </div>
-                            <button
-                                type="button"
-                                class="btn-icon"
-                                title={$LL.products.detail.removeBarcode()}
-                                on:click={() => removeBarcode(b)}
+                            <Button
+                                variant="icon"
+                                size="sm"
+                                aria-label={$LL.products.detail.removeBarcode()}
+                                onclick={() => removeBarcode(b)}
                             >
-                                ✕
-                            </button>
+                                {#snippet iconStart()}
+                                    <Icon name="x-mark" size="sm" />
+                                {/snippet}
+                            </Button>
                         </li>
                     {/each}
                 </ul>
@@ -481,41 +484,49 @@ on:click={() => (confirmingArchive = false)}
                             </div>
                             <div class="lot-actions">
                                 {#if lot.status === "active"}
-                                    <button
-                                        type="button"
-                                        class="btn-icon"
-                                        title={$LL.products.detail.lot.resolveQty()}
-                                        on:click={() => (resolvingLot = lot)}
+                                    <Button
+                                        variant="icon"
+                                        size="sm"
+                                        aria-label={$LL.products.detail.lot.resolveQty()}
+                                        onclick={() => (resolvingLot = lot)}
                                     >
-                                        ↓
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="btn-icon"
-                                        title={$LL.products.detail.lot.editLot()}
-                                        on:click={() => {
+                                        {#snippet iconStart()}
+                                            <Icon name="arrow-down-on-square-stack" size="sm" />
+                                        {/snippet}
+                                    </Button>
+                                    <Button
+                                        variant="icon"
+                                        size="sm"
+                                        aria-label={$LL.products.detail.lot.editLot()}
+                                        onclick={() => {
                                             editingLot = lot;
                                             showLotForm = true;
                                         }}
                                     >
-                                        ✏️
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="btn-icon"
-                                        title={$LL.products.detail.lot.movementHistory()}
-                                        on:click={() => openLotDetail(lot)}
+                                        {#snippet iconStart()}
+                                            <Icon name="pencil" size="sm" />
+                                        {/snippet}
+                                    </Button>
+                                    <Button
+                                        variant="icon"
+                                        size="sm"
+                                        aria-label={$LL.products.detail.lot.movementHistory()}
+                                        onclick={() => openLotDetail(lot)}
                                     >
-                                        📋
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="btn-icon btn-danger-icon"
-                                        title={$LL.products.detail.lot.archiveLot()}
-                                        on:click={() => (archivingLot = lot)}
+                                        {#snippet iconStart()}
+                                            <Icon name="clipboard-document-list" size="sm" />
+                                        {/snippet}
+                                    </Button>
+                                    <Button
+                                        variant="icon"
+                                        size="sm"
+                                        aria-label={$LL.products.detail.lot.archiveLot()}
+                                        onclick={() => (archivingLot = lot)}
                                     >
-                                        🗄
-                                    </button>
+                                        {#snippet iconStart()}
+                                            <Icon name="archive-box-arrow-down" size="sm" />
+                                        {/snippet}
+                                    </Button>
                                 {/if}
                             </div>
                         </li>

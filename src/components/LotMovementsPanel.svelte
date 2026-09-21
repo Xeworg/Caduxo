@@ -44,6 +44,7 @@
   import Alert from "./ui/Alert.svelte";
   import Button from "./ui/Button.svelte";
   import Tooltip from "./ui/Tooltip.svelte";
+  import Icon from "./ui/Icon.svelte";
 
   // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -175,16 +176,25 @@
       <div class="panel-actions">
         <Tooltip text={$LL.lotMovements.actionTitles.moveStock()} position="bottom">
           <Button variant="secondary" size="sm" onclick={() => openActionForm("move")}>
+            {#snippet iconStart()}
+              <Icon name="arrows-right-left" size="sm" />
+            {/snippet}
             {$LL.lotMovements.moveStock()}
           </Button>
         </Tooltip>
         <Tooltip text={$LL.lotMovements.actionTitles.registerExit()} position="bottom">
           <Button variant="danger" size="sm" onclick={() => openActionForm("exit")}>
+            {#snippet iconStart()}
+              <Icon name="arrow-right-on-rectangle" size="sm" />
+            {/snippet}
             {$LL.lotMovements.registerExit()}
           </Button>
         </Tooltip>
         <Tooltip text={$LL.lotMovements.actionTitles.adjustCount()} position="bottom">
           <Button variant="success" size="sm" onclick={() => openActionForm("adjust")}>
+            {#snippet iconStart()}
+              <Icon name="adjustments-horizontal" size="sm" />
+            {/snippet}
             {$LL.lotMovements.adjustCount()}
           </Button>
         </Tooltip>

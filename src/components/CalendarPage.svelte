@@ -20,6 +20,7 @@
   import Modal from "./ui/Modal.svelte";
   import Tabs from "./ui/Tabs.svelte";
   import Tooltip from "./ui/Tooltip.svelte";
+  import Icon from "./ui/Icon.svelte";
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -354,7 +355,10 @@ function onLotCancel() {
         disabled={loading}
         onclick={loadLots}
       >
-        ⟳ {$LL.calendar.refresh()}
+        {#snippet iconStart()}
+          <Icon name="arrow-path" size="sm" />
+        {/snippet}
+        {$LL.calendar.refresh()}
       </Button>
     </Tooltip>
   </div>
