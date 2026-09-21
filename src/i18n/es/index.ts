@@ -559,6 +559,13 @@ const es: BaseTranslation = {
       inventoryAdjustmentIncrease: "Ajuste de inventario (+)",
       inventoryAdjustmentDecrease: "Ajuste de inventario (−)",
     },
+    // Encabezados de columna del libro mayor de movimientos (PR 9a).
+    table: {
+      kind: "Tipo",
+      quantity: "Cant.",
+      locations: "Ubicaciones",
+      time: "Hora",
+    },
     modal: {
       close: "Cerrar",
       cancel: "Cancelar",
@@ -950,6 +957,49 @@ const es: BaseTranslation = {
     dateYearRange: "El año debe estar entre 1900 y 2100",
     dateFieldRequired: "Este campo es obligatorio",
     dateInvalid: "Fecha no válida",
+  },
+
+  // Nombres visibles de tema y etiquetas de origen. Consumido por el
+  // selector de tema en la página de Configuración (PR 5 de
+  // caduxo-daisyui-redesign) y por cualquier futura superficie
+  // vinculada al tema. Mantener los valores de origen sincronizados
+  // con `ThemeSource` en
+  // `src/components/ui/theme/themeStore.svelte.ts`.
+  //
+  // Las cinco entradas integradas (dracula, valentine, luxury, sunset,
+  // nord) reflejan los temas seleccionados de DaisyUI v5 registrados en
+  // `src/app.css` y aceptados por la lista blanca del backend en
+  // `src-tauri/src/commands/stores.rs::validate_theme_value`. NO usamos
+  // `themes: all` — estos cinco fueron elegidos por producto.
+  theme: {
+    caduxoLight: "Caduxo Claro",
+    dark: "Oscuro",
+    dracula: "Drácula",
+    valentine: "San Valentín",
+    luxury: "Lujo",
+    sunset: "Atardecer",
+    nord: "Nórdico",
+    source: {
+      manual: "Manual",
+      persisted: "Persistido",
+      os: "Preferencia del sistema",
+      fallback: "Predeterminado",
+    },
+  },
+
+  // Namespace de ajustes: copia de cada sección de ajustes. Convive
+  // con el namespace `configuration` existente (que contiene
+  // etiquetas de página como `pageTitle` y `section.*`). Las
+  // etiquetas de la sección de tema siguen la instrucción explícita
+  // del PR 5 para introducir el árbol de claves `settings.theme.*`
+  // en el selector de la página de Configuración.
+  settings: {
+    theme: {
+      title: "Tema",
+      description:
+        "Elegí el tema activo. Tu elección se persiste entre reinicios. Si no está definido, la aplicación sigue la preferencia de tu sistema operativo.",
+      error: "No se pudo cambiar el tema: {msg}",
+    },
   },
 };
 

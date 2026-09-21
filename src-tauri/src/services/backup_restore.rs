@@ -978,10 +978,10 @@ mod tests {
             .fetch_one(&restored_pool)
             .await
             .unwrap();
-        // V1-V17 total (V5 split into 11 separate migrations; V16, V17 added)
+        // V1-V18 total (V5 split into 11 separate migrations; V16, V17, V18 added)
         assert_eq!(
-            applied_count, 17,
-            "expected 17 migrations (V1–V17); all should have applied automatically"
+            applied_count, 18,
+            "expected 18 migrations (V1–V18); all should have applied automatically"
         );
 
         // ── Step 4: assert junction table exists and is populated ──────────
@@ -1182,10 +1182,10 @@ mod tests {
             .fetch_one(&restored_pool)
             .await
             .unwrap();
-        // V1–V17 total
+        // V1–V18 total
         assert_eq!(
-            applied_count, 17,
-            "expected 17 migrations (V1–V17) after restore; all should have applied automatically"
+            applied_count, 18,
+            "expected 18 migrations (V1–V18) after restore; all should have applied automatically"
         );
 
         // ── Step 4: assert lot_movements table exists with correct schema ─────

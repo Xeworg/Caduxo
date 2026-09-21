@@ -26,18 +26,35 @@
     listExpiryLotsByProduct,
     type ExpiryLotResponse,
   } from "../lib/expiry_lots.js";
-      import { exportReportWithDialog } from "../lib/csv.js";
-      import { UNCATEGORIZED_SENTINEL } from "../lib/categories.js";
-      import CategoryPicker from "./inputs/CategoryPicker.svelte";
-      import {
-        listUnitDefinitions,
-        type UnitDefinitionResponse,
-      } from "../lib/unit_definitions.js";
+  import { exportReportWithDialog } from "../lib/csv.js";
+  import { UNCATEGORIZED_SENTINEL } from "../lib/categories.js";
+  import CategoryPicker from "./inputs/CategoryPicker.svelte";
+  import {
+    listUnitDefinitions,
+    type UnitDefinitionResponse,
+  } from "../lib/unit_definitions.js";
   import ScanSearchBox from "./ScanSearchBox.svelte";
   import ProductForm from "./ProductForm.svelte";
   import UnitReviewBanner from "./UnitReviewBanner.svelte";
   import UnitReviewPage from "./UnitReviewPage.svelte";
   import LotMovementsPanel from "./LotMovementsPanel.svelte";
+  // PR 6 — shared UI primitives from caduxo-daisyui-redesign.
+
+  import Badge, {
+    type BadgeUrgency,
+    type BadgeSemantic,
+  } from "./ui/Badge.svelte";
+  import Table from "./ui/Table.svelte";
+  import Tabs from "./ui/Tabs.svelte";
+  import Alert from "./ui/Alert.svelte";
+  import Button from "./ui/Button.svelte";
+  import Icon from "./ui/Icon.svelte";
+  import Listbox from "./ui/Listbox.svelte";
+  import Tooltip from "./ui/Tooltip.svelte";
+  import EmptyState from "./ui/EmptyState.svelte";
+  import LoadingState from "./ui/LoadingState.svelte";
+  // PR 7b — inline overlay migration to the shared Modal primitive.
+  import Modal from "./ui/Modal.svelte";
   import { LL } from "../i18n/i18n-svelte.js";
   import { humanizeError } from "../lib/errors.js";
 
@@ -143,6 +160,7 @@
       // Auto-select the first store if only one exists
       if (stores.length === 1) {
         selectedStoreId = stores[0].id;
+        storeFilterValue = stores[0].id;
       }
     } catch (e) {
       errorMsg = humanizeError(e);
@@ -153,6 +171,7 @@
     try {
       locations = await listStoreLocations(storeId);
       selectedLocationId = null;
+      locationFilterValue = "";
     } catch (e) {
       errorMsg = humanizeError(e);
     }
@@ -169,179 +188,202 @@
       const data: DashboardResponse = await listDashboardLots(filters);
       counts = data.counts;
       lots = data.lots;
-          errorMsg = "";
-        } catch (e) {
-          errorMsg = humanizeError(e);
-        }
-      }
+      errorMsg = "";
+    } catch (e) {
+      errorMsg = humanizeError(e);
+    }
+  }
 
-      async function loadUnitCatalog() {
-        try {
-          unitCatalog = await listUnitDefinitions();
-        } catch {
-          // Non-fatal: unit catalog is a convenience display feature.
-        }
-      }
+  async function loadUnitCatalog() {
+    try {
+      unitCatalog = await listUnitDefinitions();
+    } catch {
+      // Non-fatal: unit catalog is a convenience display feature.
+    }
+  }
 
-      /**
-       * Returns the effective unit display name for a lot row.
-       * When the product has a catalog link (default_unit_id), uses the catalog
-       * display_name; otherwise falls back to the raw lot.unit text.
-       */
-      function getUnitDisplayName(lot: DashboardLotRow): string {
-        if (lot.default_unit_id && lot.default_unit_id !== "") {
-          const match = unitCatalog.find((u) => u.id === lot.default_unit_id);
-          if (match) return match.display_name;
-        }
-        return lot.unit;
-      }
+  /**
+   * Returns the effective unit display name for a lot row.
+   * When the product has a catalog link (default_unit_id), uses the catalog
+   * display_name; otherwise falls back to the raw lot.unit text.
+   */
+  function getUnitDisplayName(lot: DashboardLotRow): string {
+    if (lot.default_unit_id && lot.default_unit_id !== "") {
+      const match = unitCatalog.find((u) => u.id === lot.default_unit_id);
+      if (match) return match.display_name;
+    }
+    return lot.unit;
+  }
 
-          function clearStoreFilter() {
-        selectedStoreId = null;
-        selectedLocationId = null;
-        locations = [];
-      }
+  function clearStoreFilter() {
+    selectedStoreId = null;
+    selectedLocationId = null;
+    locations = [];
+    storeFilterValue = "";
+    locationFilterValue = "";
+  }
 
-      // ─── CSV export (Slice 10a) ────────────────────────────────────────────────
+  /** Resets every dashboard filter back to the default view. */
+  function clearAllFilters() {
+    activePreset = "all";
+    selectedStoreId = null;
+    selectedLocationId = null;
+    storeFilterValue = "";
+    locationFilterValue = "";
+  }
 
-      async function exportReport() {
-        exporting = true;
-        try {
-          const result = await exportReportWithDialog({
-            store_id: selectedStoreId,
-            location_id: selectedLocationId,
-            preset: activePreset,
-            urgency: null,
-          });
-          if (result) {
-            errorMsg = "";
-            // Use a transient success indicator via errorMsg reset path:
-            // a small ephemeral log line keeps the wiring minimal.
-            // (A dedicated success banner can land in Slice 10b alongside the
-            // import commit and mapping modal.)
-            // eslint-disable-next-line no-console
-            console.info(
-              `Exported ${result.rows_written} lot row(s) to ${result.path}`,
-            );
-          }
-        } catch (e) {
-          errorMsg = humanizeError(e);
-        } finally {
-          exporting = false;
-        }
-      }
+  // ─── CSV export (Slice 10a) ────────────────────────────────────────────────
 
-      // ─── Scan handler ──────────────────────────────────────────────────────────
-
-function handleScanFound(productId: string, hasLots: boolean) {
-        // Jump to product detail if the product already has lots, otherwise show detail.
-        if (hasLots) {
-          // Find the lot row from the dashboard to open product detail with that lot pre-selected.
-          const row = lots.find((l) => l.product_id === productId);
-          if (row) {
-            viewProduct(row, row.lot_id);
-          }
-        } else {
-          viewProduct({ lot_id: "", product_id: productId } as DashboardLotRow);
-        }
-      }
-
-      function handleScanNotFound(scannedValue: string) {
-        quickCreateScannedValue = scannedValue;
-        showQuickCreate = true;
-      }
-
-      async function onQuickCreateSaved(product: ProductResponse) {
-        showQuickCreate = false;
-        // Reload categories in case a new one was added inline.
-        categories = await listCategories();
-        // Navigate to product detail for lot entry.
-        viewProduct({ lot_id: "", product_id: product.id } as DashboardLotRow);
-      }
-
-      // ─── Row actions ────────────────────────────────────────────────────────────
-
-async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null = null) {
-        detailLoading = true;
-        showProductDetail = true;
-        detailProduct = null;
-        detailLots = [];
-        detailSelectedLotId = preselectLotId;
-        detailAllLocations = [];
-        try {
-          detailProduct = await getProduct(lot.product_id);
-          await loadProductDetailLots(lot.product_id);
-        } catch (e) {
-          errorMsg = humanizeError(e);
-          showProductDetail = false;
-        } finally {
-          detailLoading = false;
-        }
-      }
-
-      /**
-       * Loads every active/resolved/archived expiry lot for the given product and
-       * caches the per-store location catalog so the movements panel can resolve
-       * transfer/exit/adjust location names. Reuses the same `listExpiryLotsByProduct`
-       * + `listStoreLocations` calls used by the dedicated Product Detail page.
-       */
-      async function loadAllStoreLocations(): Promise<StoreLocationResponse[]> {
-        const activeStores = stores.length > 0
-          ? stores.filter((store) => store.is_active)
-          : (await listStores()).filter((store) => store.is_active);
-        const locationLists = await Promise.all(
-          activeStores.map((store) =>
-            listStoreLocations(store.id)
-              .then((locations) => locations.map((location) => ({ ...location, store_name: store.name })))
-              .catch(() => [] as StoreLocationResponse[]),
-          ),
+  async function exportReport() {
+    exporting = true;
+    try {
+      const result = await exportReportWithDialog({
+        store_id: selectedStoreId,
+        location_id: selectedLocationId,
+        preset: activePreset,
+        urgency: null,
+      });
+      if (result) {
+        errorMsg = "";
+        // eslint-disable-next-line no-console
+        console.info(
+          `Exported ${result.rows_written} lot row(s) to ${result.path}`,
         );
-        return locationLists.flat();
       }
+    } catch (e) {
+      errorMsg = humanizeError(e);
+    } finally {
+      exporting = false;
+    }
+  }
 
-      async function loadProductDetailLots(productId: string) {
-        detailLotsLoading = true;
-        try {
-          detailLots = await listExpiryLotsByProduct(productId);
-          // Keep the current selection if it still exists; otherwise pick the
-          // first active lot (and fall back to the first available lot).
-          const stillExists = detailSelectedLotId
-            && detailLots.some((l) => l.id === detailSelectedLotId);
-          if (!stillExists) {
-            const firstActive = detailLots.find((l) => l.status === "active");
-            detailSelectedLotId = firstActive?.id ?? detailLots[0]?.id ?? null;
-          }
-          detailAllLocations = await loadAllStoreLocations();
-        } catch (e) {
-          errorMsg = humanizeError(e);
-        } finally {
-          detailLotsLoading = false;
-        }
+  // ─── Scan handler ──────────────────────────────────────────────────────────
+
+  function handleScanFound(productId: string, hasLots: boolean) {
+    if (hasLots) {
+      const row = lots.find((l) => l.product_id === productId);
+      if (row) {
+        viewProduct(row, row.lot_id);
       }
+    } else {
+      viewProduct({ lot_id: "", product_id: productId } as DashboardLotRow);
+    }
+  }
 
-      /** Closes the product-detail modal and clears its transient state. */
-      function closeProductDetail() {
-        showProductDetail = false;
-        detailProduct = null;
-        detailLots = [];
-        detailSelectedLotId = null;
-        detailAllLocations = [];
+  function handleScanNotFound(scannedValue: string) {
+    quickCreateScannedValue = scannedValue;
+    showQuickCreate = true;
+  }
+
+  async function onQuickCreateSaved(product: ProductResponse) {
+    showQuickCreate = false;
+    categories = await listCategories();
+    viewProduct({ lot_id: "", product_id: product.id } as DashboardLotRow);
+  }
+
+  // ─── Row actions ────────────────────────────────────────────────────────────
+
+  async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null = null) {
+    detailLoading = true;
+    showProductDetail = true;
+    detailProduct = null;
+    detailLots = [];
+    detailSelectedLotId = preselectLotId;
+    detailAllLocations = [];
+    try {
+      detailProduct = await getProduct(lot.product_id);
+      await loadProductDetailLots(lot.product_id);
+    } catch (e) {
+      errorMsg = humanizeError(e);
+      showProductDetail = false;
+    } finally {
+      detailLoading = false;
+    }
+  }
+
+  async function loadAllStoreLocations(): Promise<StoreLocationResponse[]> {
+    const activeStores = stores.length > 0
+      ? stores.filter((store) => store.is_active)
+      : (await listStores()).filter((store) => store.is_active);
+    const locationLists = await Promise.all(
+      activeStores.map((store) =>
+        listStoreLocations(store.id)
+          .then((locations) => locations.map((location) => ({ ...location, store_name: store.name })))
+          .catch(() => [] as StoreLocationResponse[]),
+      ),
+    );
+    return locationLists.flat();
+  }
+
+  async function loadProductDetailLots(productId: string) {
+    detailLotsLoading = true;
+    try {
+      detailLots = await listExpiryLotsByProduct(productId);
+      const stillExists = detailSelectedLotId
+        && detailLots.some((l) => l.id === detailSelectedLotId);
+      if (!stillExists) {
+        const firstActive = detailLots.find((l) => l.status === "active");
+        detailSelectedLotId = firstActive?.id ?? detailLots[0]?.id ?? null;
       }
+      detailAllLocations = await loadAllStoreLocations();
+    } catch (e) {
+      errorMsg = humanizeError(e);
+    } finally {
+      detailLotsLoading = false;
+    }
+  }
 
-      /** Refreshes the currently selected lot row after a movement is created. */
-      async function refreshSelectedLot() {
-        if (!detailSelectedLotId) return;
-        try {
-          const fresh = await getExpiryLot(detailSelectedLotId);
-          detailLots = detailLots.map((l) => (l.id === fresh.id ? fresh : l));
-        } catch (e) {
-          errorMsg = humanizeError(e);
-        }
-      }
+  function closeProductDetail() {
+    showProductDetail = false;
+    detailProduct = null;
+    detailLots = [];
+    detailSelectedLotId = null;
+    detailAllLocations = [];
+  }
 
-      /** The lot row currently highlighted in the picker (or null). */
-      $: detailSelectedLot =
-        detailLots.find((l) => l.id === detailSelectedLotId) ?? null;
+  async function refreshSelectedLot() {
+    if (!detailSelectedLotId) return;
+    try {
+      const fresh = await getExpiryLot(detailSelectedLotId);
+      detailLots = detailLots.map((l) => (l.id === fresh.id ? fresh : l));
+    } catch (e) {
+      errorMsg = humanizeError(e);
+    }
+  }
+
+  $: detailSelectedLot =
+    detailLots.find((l) => l.id === detailSelectedLotId) ?? null;
+
+  // ─── Filter control bridges (Listbox value contract is `string`) ─────────
+  // The dashboard's source of truth remains `selectedStoreId` /
+  // `selectedLocationId` (`string | null`). The Listbox primitives need a
+  // concrete `string` to bind to, so we use `""` as the "all" sentinel.
+  // We deliberately do NOT use `bind:value` here (it would create a
+  // reactive cycle because every `selectedStoreId` write would re-derive
+  // `storeFilterValue`, which the Listbox would then write back into
+  // `selectedStoreId`). Instead, we drive the Listbox with `value` + an
+  // `onchange` callback, and seed the bridge once from the current
+  // source-of-truth.
+  let storeFilterValue: string = selectedStoreId ?? "";
+  let locationFilterValue: string = selectedLocationId ?? "";
+
+  $: storeFilterOptions = [
+    { value: "", label: $LL.dashboard.allStores() },
+    ...stores.map((store) => ({ value: store.id, label: store.name })),
+  ];
+
+  $: locationFilterOptions = [
+    { value: "", label: $LL.dashboard.allLocations() },
+    ...locations.map((loc) => ({ value: loc.id, label: loc.name })),
+  ];
+
+  function onStoreFilterChange(value: string) {
+    selectedStoreId = value === "" ? null : value;
+  }
+
+  function onLocationFilterChange(value: string) {
+    selectedLocationId = value === "" ? null : value;
+  }
 
   async function editLot(lot: DashboardLotRow) {
     detailLotLoading = true;
@@ -351,8 +393,8 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
     lotDetailLocations = [];
     try {
       [detailLot, lotDetailLocations] = await Promise.all([
-    getExpiryLot(lot.lot_id),
-    loadAllStoreLocations(),
+        getExpiryLot(lot.lot_id),
+        loadAllStoreLocations(),
       ]);
     } catch (e) {
       errorMsg = humanizeError(e);
@@ -362,7 +404,7 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
     }
   }
 
-  // ─── Urgency helpers ────────────────────────────────────────────────────────
+  // ─── Urgency / status helpers ───────────────────────────────────────────────
 
   function urgencyLabel(urgency: string): string {
     switch (urgency) {
@@ -374,13 +416,33 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
     }
   }
 
-  function urgencyClass(urgency: string): string {
+  /** Maps the backend urgency value to the closed BadgeUrgency union. */
+  function toBadgeUrgency(urgency: string): BadgeUrgency {
     switch (urgency) {
-      case "expired": return "badge-expired";
-      case "today": return "badge-today";
-      case "alert_window": return "badge-alert";
-      case "next_30_days": return "badge-soon";
-      default: return "badge-normal";
+      case "expired": return "expired";
+      case "today": return "today";
+      case "alert_window": return "alert";
+      case "next_30_days": return "soon";
+      default: return "normal";
+    }
+  }
+
+  /** Maps the backend lot-status value to a Badge semantic colour. */
+  function toLotStatusSemantic(status: string): BadgeSemantic {
+    switch (status) {
+      case "active": return "success";
+      case "resolved": return "info";
+      case "archived": return "neutral";
+      default: return "neutral";
+    }
+  }
+
+  function lotStatusLabel(status: string): string {
+    switch (status) {
+      case "active": return $LL.dashboard.active();
+      case "resolved": return $LL.dashboard.resolved();
+      case "archived": return $LL.dashboard.archived();
+      default: return status;
     }
   }
 
@@ -389,82 +451,160 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
     const [y, m, d] = dateStr.split("-");
     return `${d}/${m}/${y}`;
   }
-
-  
 </script>
+
+<!--
+  Reusable snippet: the canonical `<tr>` row that becomes the table header
+  for the dashboard lot table. Hoisted to the component scope so every
+  conditional `<Table>` render can reference the same row without
+  duplication.
+-->
+{#snippet lotTableHead()}
+  <tr>
+    <th>{$LL.dashboard.sku()}</th>
+    <th>{$LL.dashboard.description()}</th>
+    <th>{$LL.dashboard.store()} / {$LL.dashboard.location()}</th>
+    <th>{$LL.dashboard.qty()}</th>
+    <th>{$LL.dashboard.expiryDate()}</th>
+    <th>{$LL.dashboard.daysLeft()}</th>
+    <th>{$LL.dashboard.urgencyLabel()}</th>
+    <th>{$LL.dashboard.batch()}</th>
+    <th>{$LL.common.actions()}</th>
+  </tr>
+{/snippet}
+
+<!--
+  Tabs panel snippets for the lot-detail modal. Hoisted to the component
+  scope so the `items={[…]}` array can reference them by name; Svelte 5
+  hoists `{#snippet}` declarations to the top of the component, which
+  makes this forward-reference safe.
+-->
+{#snippet lotDetailPanel()}
+  {#if detailLot}
+    <dl class="detail-grid">
+      <dt>{$LL.dashboard.lotId()}</dt><dd class="cell-sku">{detailLot.id.slice(0, 8)}…</dd>
+      <dt>{$LL.dashboard.qty()}</dt><dd>{detailLot.quantity} {detailLot.unit}</dd>
+      <dt>{$LL.dashboard.expiryDate()}</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
+      <dt>{$LL.dashboard.alertDaysBefore()}</dt><dd>{detailLot.alert_days_before}</dd>
+      <dt>{$LL.dashboard.batch()}</dt><dd>{detailLot.batch_code ?? "—"}</dd>
+      <dt>{$LL.dashboard.status()}</dt><dd>{detailLot.status}</dd>
+      {#if detailLot.resolution}
+        <dt>{$LL.lotMovements.resolution.resolveQuantity()}</dt><dd>{detailLot.resolution}</dd>
+      {/if}
+      {#if detailLot.notes}
+        <dt>{$LL.lotForm.notes()}</dt><dd>{detailLot.notes}</dd>
+      {/if}
+    </dl>
+  {/if}
+{/snippet}
+
+{#snippet lotHistoryPanel()}
+  {#if detailLot}
+    <LotMovementsPanel
+      lotId={detailLot.id}
+      lotQuantity={detailLot.quantity}
+      lotUnit={detailLot.unit}
+      lotStatus={detailLot.status}
+      locations={lotDetailLocations}
+      allLocations={lotDetailLocations}
+      unitType={detailLot.unit_type}
+      onMovementCreated={async () => {
+        detailLot = await getExpiryLot(detailLot!.id);
+      }}
+    />
+  {/if}
+{/snippet}
 
 <!-- Dashboard layout -->
 <div class="dashboard">
 
-      <!-- ── Header ─────────────────────────────────────────────────────────── -->
-      <header class="dash-header">
-        <div class="dash-title-row">
-          <h2>{$LL.dashboard.pageTitle()}</h2>
-          <div class="dash-title-actions">
-            <button
-              class="btn-secondary btn-small"
-              on:click={exportReport}
-              disabled={exporting}
-              title={$LL.dashboard.actions.exportCsvTitle()}
-            >
-              {exporting ? $LL.dashboard.actions.exporting() : $LL.dashboard.actions.exportCsv()}
-            </button>
-            {#if selectedStoreId}
-              <span class="store-chip">
-                {stores.find((s) => s.id === selectedStoreId)?.name ?? $LL.dashboard.store()}
-                <button class="chip-clear" on:click={clearStoreFilter} title={$LL.dashboard.clearStoreFilter()}>✕</button>
-              </span>
-            {:else}
-              <span class="store-chip store-chip-all">{$LL.dashboard.allStores()}</span>
-            {/if}
-          </div>
-        </div>
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <header class="dash-header">
+    <div class="dash-title-row">
+      <h2>{$LL.dashboard.pageTitle()}</h2>
+      <div class="dash-title-actions">
+        <Tooltip text={$LL.dashboard.actions.exportCsvTitle()} position="bottom">
+          <Button
+            variant="secondary"
+            size="sm"
+            onclick={exportReport}
+            disabled={exporting}
+            loading={exporting}
+          >
+            {exporting ? $LL.dashboard.actions.exporting() : $LL.dashboard.actions.exportCsv()}
+          </Button>
+        </Tooltip>
 
-        <!-- Always-visible scan/search input -->
-        <div class="scan-row">
-          <ScanSearchBox
-            placeholder={$LL.scan.placeholder()}
-            onFound={handleScanFound}
-            onNotFound={handleScanNotFound}
-          />
-        </div>
-
-        <!-- Unit audit banner (appears when unrecognized units exist) -->
-        {#if !showUnitReview}
-          <UnitReviewBanner
-            onReview={() => {
-              showUnitReview = true;
-            }}
-          />
+        {#if selectedStoreId}
+          <span class="store-chip">
+            {stores.find((s) => s.id === selectedStoreId)?.name ?? $LL.dashboard.store()}
+            <Tooltip text={$LL.dashboard.clearStoreFilter()} position="left">
+              <Button
+                variant="ghost"
+                size="xs"
+                onclick={clearStoreFilter}
+                aria-label={$LL.dashboard.clearStoreFilter()}
+              >
+                {#snippet iconStart()}
+                  <Icon name="x-mark" size="xs" />
+                {/snippet}
+              </Button>
+            </Tooltip>
+          </span>
         {:else}
-          <UnitReviewPage onDone={() => {
-            showUnitReview = false;
-            // Refresh the dashboard to pick up any unit-link changes.
-            loadDashboard();
-          }} />
+          <span class="store-chip store-chip-all">{$LL.dashboard.allStores()}</span>
         {/if}
+      </div>
+    </div>
+
+    <!-- Always-visible scan/search input. The inline spinner inside
+         ScanSearchBox still uses the legacy spinner class — that
+         component is out of PR 6 scope (see apply-progress). -->
+    <div class="scan-row">
+      <ScanSearchBox
+        placeholder={$LL.scan.placeholder()}
+        onFound={handleScanFound}
+        onNotFound={handleScanNotFound}
+      />
+    </div>
+
+    <!-- Unit audit banner (appears when unrecognized units exist) -->
+    {#if !showUnitReview}
+      <UnitReviewBanner
+        onReview={() => {
+          showUnitReview = true;
+        }}
+      />
+    {:else}
+      <UnitReviewPage onDone={() => {
+        showUnitReview = false;
+        loadDashboard();
+      }} />
+    {/if}
 
     <!-- Store / location filter -->
     <div class="filter-row">
-      <label>
+      <label class="filter-row-label">
         {$LL.dashboard.store()}:
-        <select bind:value={selectedStoreId}>
-          <option value={null}>{$LL.dashboard.allStores()}</option>
-          {#each stores as store}
-            <option value={store.id}>{store.name}</option>
-          {/each}
-        </select>
+        <Listbox
+          value={storeFilterValue}
+          options={storeFilterOptions}
+          size="sm"
+          aria-label={$LL.dashboard.store()}
+          onchange={onStoreFilterChange}
+        />
       </label>
 
       {#if selectedStoreId && locations.length > 0}
-        <label>
+        <label class="filter-row-label">
           {$LL.dashboard.location()}:
-          <select bind:value={selectedLocationId}>
-            <option value={null}>{$LL.dashboard.allLocations()}</option>
-            {#each locations as loc}
-              <option value={loc.id}>{loc.name}</option>
-            {/each}
-          </select>
+          <Listbox
+            value={locationFilterValue}
+            options={locationFilterOptions}
+            size="sm"
+            aria-label={$LL.dashboard.location()}
+            onchange={onLocationFilterChange}
+          />
         </label>
       {/if}
 
@@ -477,312 +617,335 @@ async function viewProduct(lot: DashboardLotRow, preselectLotId: string | null =
   </header>
 
   <!-- ── Urgency cards ────────────────────────────────────────────────────── -->
-  <section class="urgency-cards" aria-label={$LL.dashboard.aria.urgencySummary()}>
-    <article class="urgency-card urgency-card-expired" class:has-count={counts.expired > 0}>
-      <span class="urgency-label">{$LL.dashboard.urgencyCard.expired()}</span>
-      <strong class="urgency-count">{counts.expired}</strong>
-    </article>
-    <article class="urgency-card urgency-card-today" class:has-count={counts.today > 0}>
-      <span class="urgency-label">{$LL.dashboard.urgencyCard.today()}</span>
-      <strong class="urgency-count">{counts.today}</strong>
-    </article>
-    <article class="urgency-card urgency-card-alert" class:has-count={counts.alert_window > 0}>
-      <span class="urgency-label">{$LL.dashboard.urgencyCard.alertWindow()}</span>
-      <strong class="urgency-count">{counts.alert_window}</strong>
-    </article>
-    <article class="urgency-card urgency-card-soon" class:has-count={counts.next_30_days > 0}>
-      <span class="urgency-label">{$LL.dashboard.urgencyCard.next30Days()}</span>
-      <strong class="urgency-count">{counts.next_30_days}</strong>
-    </article>
+  <section
+    class="stats stats-vertical lg:stats-horizontal shadow w-full overflow-hidden border-base-300"
+    aria-label={$LL.dashboard.aria.urgencySummary()}
+  >
+    <div class="stat border-t-4 border-error">
+      <div class="stat-figure">
+        <Badge semantic="error" dot size="md" />
+      </div>
+      <div class="stat-title">{$LL.dashboard.urgencyCard.expired()}</div>
+      <div class="stat-value text-error">{counts.expired}</div>
+    </div>
+    <div class="stat border-t-4 border-warning">
+      <div class="stat-figure">
+        <Badge semantic="warning" dot size="md" />
+      </div>
+      <div class="stat-title">{$LL.dashboard.urgencyCard.today()}</div>
+      <div class="stat-value text-warning">{counts.today}</div>
+    </div>
+    <div class="stat border-t-4 border-info">
+      <div class="stat-figure">
+        <Badge semantic="info" dot size="md" />
+      </div>
+      <div class="stat-title">{$LL.dashboard.urgencyCard.alertWindow()}</div>
+      <div class="stat-value text-info">{counts.alert_window}</div>
+    </div>
+    <div class="stat border-t-4 border-success">
+      <div class="stat-figure">
+        <Badge semantic="success" dot size="md" />
+      </div>
+      <div class="stat-title">{$LL.dashboard.urgencyCard.next30Days()}</div>
+      <div class="stat-value text-success">{counts.next_30_days}</div>
+    </div>
   </section>
 
   <!-- ── Quick filters ───────────────────────────────────────────────────── -->
   <div class="quick-filters" role="group" aria-label={$LL.dashboard.aria.quickFilters()}>
     {#each PRESET_ORDER as preset}
+      {@const isActive = activePreset === preset}
       <button
-        class="filter-btn"
-        class:active={activePreset === preset}
-        on:click={() => (activePreset = preset)}
+        type="button"
+        class="btn btn-ghost btn-sm motion-reduce:transition-none"
+        class:btn-active={isActive}
+        aria-pressed={isActive}
+        onclick={() => (activePreset = preset)}
       >
         {$LL.dashboard.presets[PRESET_LABELS[preset] as keyof typeof $LL.dashboard.presets]()}
       </button>
     {/each}
   </div>
 
-  <!-- ── Error banner ────────────────────────────────────────────────────── -->
+  <!-- ── Error alert ────────────────────────────────────────────────────── -->
   {#if errorMsg}
-    <div class="error-banner" role="alert">
+    <Alert
+      variant="error"
+      dismissible
+      dismissLabel={$LL.common.dismiss()}
+      ondismiss={() => (errorMsg = "")}
+    >
       {errorMsg}
-      <button on:click={() => (errorMsg = "")}>{$LL.common.dismiss()}</button>
-    </div>
+    </Alert>
   {/if}
 
   <!-- ── Lot table ──────────────────────────────────────────────────────── -->
   {#if loading}
-    <div class="loading-row">{$LL.common.loading()}</div>
-  {:else if lots.length === 0}
-    <div class="empty-state">
-      <p>{$LL.dashboard.emptyState.title()}</p>
-      <p>
-        <button class="link-btn" on:click={() => { activePreset = "all"; selectedStoreId = null; selectedLocationId = null; }}>
-          {$LL.dashboard.actions.clearFilters()}
-        </button>
-      </p>
-    </div>
-  {:else}
-    <div class="table-wrapper" role="region" aria-label={$LL.dashboard.aria.lotTable()}>
-      <table class="lot-table">
-        <thead>
+    <div role="region" aria-label={$LL.dashboard.aria.lotTable()} aria-busy="true">
+      <Table zebra stickyHeader scrollable aria-label={$LL.dashboard.aria.lotTable()}>
+        {#snippet head()}
+          {@render lotTableHead()}
+        {/snippet}
+        {#snippet loading()}
           <tr>
-            <th>{$LL.dashboard.sku()}</th>
-            <th>{$LL.dashboard.description()}</th>
-            <th>{$LL.dashboard.store()} / {$LL.dashboard.location()}</th>
-            <th>{$LL.dashboard.qty()}</th>
-            <th>{$LL.dashboard.expiryDate()}</th>
-            <th>{$LL.dashboard.daysLeft()}</th>
-            <th>{$LL.dashboard.urgencyLabel()}</th>
-            <th>{$LL.dashboard.batch()}</th>
-            <th>{$LL.common.actions()}</th>
+            <td colspan="9" class="p-4 text-center">
+              <LoadingState variant="text" label={$LL.common.loading()} />
+            </td>
           </tr>
-        </thead>
-        <tbody>
-          {#each lots as lot (lot.lot_id)}
-            <tr class:row-expired={lot.urgency === "expired"} class:row-today={lot.urgency === "today"}>
-              <td class="cell-sku">{lot.sku}</td>
-              <td class="cell-desc">{lot.description}</td>
-              <td class="cell-store">
-                {lot.store_name}
-                {#if lot.location_name}
-                  <span class="loc-name">/ {lot.location_name}</span>
-                {/if}
-              </td>
-              <td class="cell-qty">{lot.quantity} {getUnitDisplayName(lot)}</td>
-              <td class="cell-date">{formatDate(lot.expiry_date)}</td>
-              <td class="cell-days" class:days-negative={lot.days_remaining < 0}>
-                {lot.days_remaining >= 0 ? lot.days_remaining : $LL.pdf.daysAgo({ n: Math.abs(lot.days_remaining) })}
-              </td>
-              <td>
-                <span class="urgency-badge {urgencyClass(lot.urgency)}">
-                  {urgencyLabel(lot.urgency)}
-                </span>
-              </td>
-              <td class="cell-batch">{lot.batch_code ?? "—"}</td>
-              <td class="cell-actions">
-                <button
-                  class="action-btn"
-                  title={$LL.common.edit()}
-                  on:click={() => editLot(lot)}
-                >✏️</button>
-                <button
-                  class="action-btn action-btn-lot-actions"
-                  title={$LL.dashboard.viewProductAndMovements()}
-                  on:click={() => viewProduct(lot, lot.lot_id)}
-                >↓</button>
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+        {/snippet}
+      </Table>
     </div>
+  {:else if lots.length === 0}
+    <EmptyState
+      title={$LL.dashboard.emptyState.title()}
+      body={$LL.dashboard.emptyState.subtitle()}
+      icon="inbox"
+    >
+      {#snippet actions()}
+        <Button variant="link" onclick={clearAllFilters}>
+          {$LL.dashboard.actions.clearFilters()}
+        </Button>
+      {/snippet}
+    </EmptyState>
+  {:else}
+    <Table zebra stickyHeader scrollable aria-label={$LL.dashboard.aria.lotTable()}>
+      {#snippet head()}
+        {@render lotTableHead()}
+      {/snippet}
+      {#snippet body()}
+        {#each lots as lot (lot.lot_id)}
+          <tr class:row-expired={lot.urgency === "expired"} class:row-today={lot.urgency === "today"}>
+            <td class="cell-sku">{lot.sku}</td>
+            <td class="cell-desc">{lot.description}</td>
+            <td class="cell-store">
+              {lot.store_name}
+              {#if lot.location_name}
+                <span class="loc-name">/ {lot.location_name}</span>
+              {/if}
+            </td>
+            <td class="cell-qty num">{lot.quantity} {getUnitDisplayName(lot)}</td>
+            <td class="cell-date num">{formatDate(lot.expiry_date)}</td>
+            <td class="cell-days num" class:days-negative={lot.days_remaining < 0}>
+              {lot.days_remaining >= 0 ? lot.days_remaining : $LL.pdf.daysAgo({ n: Math.abs(lot.days_remaining) })}
+            </td>
+            <td>
+              <Badge urgency={toBadgeUrgency(lot.urgency)} size="sm">
+                {urgencyLabel(lot.urgency)}
+              </Badge>
+            </td>
+            <td class="cell-batch">{lot.batch_code ?? "—"}</td>
+            <td class="cell-actions">
+              <Tooltip text={$LL.common.edit()}>
+                <Button
+                  variant="icon"
+                  size="sm"
+                  onclick={() => editLot(lot)}
+                  aria-label={$LL.common.edit()}
+                >
+                  {#snippet iconStart()}
+                    <Icon name="pencil" size="sm" />
+                  {/snippet}
+                </Button>
+              </Tooltip>
+              <Tooltip text={$LL.dashboard.viewProductAndMovements()}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onclick={() => viewProduct(lot, lot.lot_id)}
+                  aria-label={$LL.dashboard.viewProductAndMovements()}
+                >
+                  {#snippet iconStart()}
+                    <Icon name="arrow-down-tray" size="sm" />
+                  {/snippet}
+                </Button>
+              </Tooltip>
+            </td>
+          </tr>
+        {/each}
+      {/snippet}
+    </Table>
   {/if}
 </div>
 
-    <!-- ── Product detail modal ─────────────────────────────────────────────────── -->
-    {#if showProductDetail}
-      <div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.products.pageTitle()}>
-        <div class="modal-box modal-box-wide">
-          <div class="modal-header">
-            <h3>{$LL.products.pageTitle()}</h3>
-            <button class="modal-close" on:click={closeProductDetail}>✕</button>
-          </div>
-          {#if detailLoading}
-            <p class="modal-loading">{$LL.common.loadingWithDots()}</p>
-          {:else if detailProduct}
-            <dl class="detail-grid">
-              <dt>{$LL.dashboard.sku()}</dt><dd>{detailProduct.product.sku}</dd>
-              <dt>{$LL.dashboard.description()}</dt><dd>{detailProduct.product.description}</dd>
-              <dt>{$LL.dashboard.category()}</dt><dd>{detailProduct.categories.length > 0 ? detailProduct.categories.map(c => c.name).join(", ") : "—"}</dd>
-              <dt>{$LL.dashboard.unit()}</dt><dd>{detailProduct.product.default_unit ?? "—"}</dd>
-              <dt>{$LL.dashboard.alertDaysBefore()}</dt><dd>{detailProduct.product.default_alert_days_before}</dd>
-              <dt>{$LL.dashboard.status()}</dt><dd>{detailProduct.product.is_active ? $LL.dashboard.active() : $LL.dashboard.archived()}</dd>
-              {#if detailProduct.barcodes.length > 0}
-                <dt>{$LL.dashboard.barcode}s</dt>
-                <dd>
-                  {#each detailProduct.barcodes as bc}
-                    <span class="barcode-chip" class:primary={bc.is_primary}>
-                      {bc.barcode}{bc.is_primary ? " ★" : ""}
-                    </span>
-                  {/each}
-                </dd>
-              {/if}
-            </dl>
+<!-- ── Product detail modal ──────────────────────────────────────────────── -->
+<Modal
+  bind:open={showProductDetail}
+  size="wide"
+  showClose
+  closeLabel={$LL.lotMovements.modal.close()}
+  aria-label={$LL.dashboard.aria.productDetail()}
+  oncancel={closeProductDetail}
+  onclose={closeProductDetail}
+>
+  {#snippet children()}
+    <header class="dialog-header">
+      <h3>{$LL.products.pageTitle()}</h3>
+    </header>
 
-            <!-- ── Expiry lots + per-lot movement history ───────────────────── -->
-            <section class="lots-section" aria-label={$LL.dashboard.aria.expiryLots()}>
-              <div class="lots-section-header">
-                <h4>{$LL.dashboard.expiryLots()}</h4>
-                {#if detailLotsLoading}
-                  <span class="lots-loading-hint">{$LL.dashboard.loading()}</span>
-                {:else}
-                  <span class="lots-count">
-                    {$LL.dashboard.emptyState.lots({ n: detailLots.length })}
-                  </span>
-                {/if}
-              </div>
-
-              {#if !detailLotsLoading && detailLots.length === 0}
-                <p class="empty-hint">
-                  {$LL.dashboard.emptyState.noExpiryLots()}
-                </p>
-              {:else if detailLots.length > 0}
-                <ul class="lot-picker" role="listbox" aria-label={$LL.dashboard.aria.productExpiryLots()}>
-                  {#each detailLots as lot (lot.id)}
-                    <li>
-                      <button
-                        type="button"
-                        class="lot-picker-item"
-                        class:active={detailSelectedLotId === lot.id}
-                        class:lot-status-inactive={lot.status !== "active"}
-                        on:click={() => (detailSelectedLotId = lot.id)}
-                        aria-pressed={detailSelectedLotId === lot.id}
-                      >
-                        <span class="lot-picker-qty">
-                          {lot.quantity} {lot.unit}
-                        </span>
-                        <span class="lot-picker-date">
-                          Exp {formatDate(lot.expiry_date)}
-                        </span>
-                        {#if lot.batch_code}
-                          <span class="lot-picker-batch">{lot.batch_code}</span>
-                        {/if}
-                        <span class="lot-picker-status status-{lot.status}">
-                          {lot.status}
-                        </span>
-                      </button>
-                    </li>
-                  {/each}
-                </ul>
-              {/if}
-
-              {#if detailSelectedLot}
-                <div class="lot-panel-wrap">
-                  <LotMovementsPanel
-                    lotId={detailSelectedLot.id}
-                    lotQuantity={detailSelectedLot.quantity}
-                    lotUnit={detailSelectedLot.unit}
-                    lotStatus={detailSelectedLot.status}
-                    locations={detailAllLocations.filter(
-                      (l) => l.store_id === detailSelectedLot!.store_id,
-                    )}
-                    allLocations={detailAllLocations}
-                    unitType={detailSelectedLot.unit_type}
-                    onMovementCreated={refreshSelectedLot}
-                  />
-                </div>
-              {/if}
-            </section>
+    <div class="dialog-body">
+      {#if detailLoading}
+        <p class="dialog-loading">{$LL.common.loadingWithDots()}</p>
+      {:else if detailProduct}
+        <dl class="detail-grid">
+          <dt>{$LL.dashboard.sku()}</dt><dd>{detailProduct.product.sku}</dd>
+          <dt>{$LL.dashboard.description()}</dt><dd>{detailProduct.product.description}</dd>
+          <dt>{$LL.dashboard.category()}</dt><dd>{detailProduct.categories.length > 0 ? detailProduct.categories.map(c => c.name).join(", ") : "—"}</dd>
+          <dt>{$LL.dashboard.unit()}</dt><dd>{detailProduct.product.default_unit ?? "—"}</dd>
+          <dt>{$LL.dashboard.alertDaysBefore()}</dt><dd>{detailProduct.product.default_alert_days_before}</dd>
+          <dt>{$LL.dashboard.status()}</dt><dd>{detailProduct.product.is_active ? $LL.dashboard.active() : $LL.dashboard.archived()}</dd>
+          {#if detailProduct.barcodes.length > 0}
+            <dt>{$LL.dashboard.barcode}s</dt>
+            <dd>
+              {#each detailProduct.barcodes as bc}
+                <span class="barcode-chip" class:primary={bc.is_primary}>
+                  {bc.barcode}{bc.is_primary ? " ★" : ""}
+                </span>
+              {/each}
+            </dd>
           {/if}
-        </div>
-      </div>
-    {/if}
+        </dl>
 
-<!-- ── Lot detail modal ─────────────────────────────────────────────────────── -->
-{#if showLotDetail}
-  <div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.dashboard.aria.lotDetail()}>
-    <div class="modal-box modal-box-wide">
-      <div class="modal-header">
-        <h3>{$LL.dashboard.lotDetail()}</h3>
-        <button class="modal-close" on:click={() => (showLotDetail = false)}>✕</button>
-      </div>
-
-      {#if detailLotLoading}
-        <p class="modal-loading">{$LL.dashboard.loading()}</p>
-      {:else if detailLot}
-        <!-- Tabs -->
-        <div class="detail-tabs">
-          <button
-            type="button"
-            class="tab-btn"
-            class:active={lotDetailTab === "detail"}
-            on:click={() => (lotDetailTab = "detail")}
-          >
-            {$LL.dashboard.detail()}
-          </button>
-          <button
-            type="button"
-            class="tab-btn"
-            class:active={lotDetailTab === "history"}
-            on:click={() => (lotDetailTab = "history")}
-          >
-            {$LL.lotMovements.history()}
-          </button>
-        </div>
-
-        {#if lotDetailTab === "detail"}
-            <dl class="detail-grid">
-            <dt>{$LL.dashboard.lotId()}</dt><dd class="cell-sku">{detailLot.id.slice(0, 8)}…</dd>
-            <dt>{$LL.dashboard.qty()}</dt><dd>{detailLot.quantity} {detailLot.unit}</dd>
-            <dt>{$LL.dashboard.expiryDate()}</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
-            <dt>{$LL.dashboard.alertDaysBefore()}</dt><dd>{detailLot.alert_days_before}</dd>
-            <dt>{$LL.dashboard.batch()}</dt><dd>{detailLot.batch_code ?? "—"}</dd>
-            <dt>{$LL.dashboard.status()}</dt><dd>{detailLot.status}</dd>
-            {#if detailLot.resolution}
-              <dt>{$LL.lotMovements.resolution.resolveQuantity()}</dt><dd>{detailLot.resolution}</dd>
+        <!-- ── Expiry lots + per-lot movement history ───────────────────── -->
+        <section class="lots-section" aria-label={$LL.dashboard.aria.expiryLots()}>
+          <div class="lots-section-header">
+            <h4>{$LL.dashboard.expiryLots()}</h4>
+            {#if detailLotsLoading}
+              <span class="lots-loading-hint">{$LL.dashboard.loading()}</span>
+            {:else}
+              <span class="lots-count">
+                {$LL.dashboard.emptyState.lots({ n: detailLots.length })}
+              </span>
             {/if}
-{#if detailLot.notes}
-              <dt>{$LL.lotForm.notes()}</dt><dd>{detailLot.notes}</dd>
-            {/if}
-          </dl>
-        {:else}
-          <!-- Historial tab -->
-          <div class="tab-content">
-            <LotMovementsPanel
-              lotId={detailLot.id}
-              lotQuantity={detailLot.quantity}
-              lotUnit={detailLot.unit}
-              lotStatus={detailLot.status}
-              locations={lotDetailLocations}
-              allLocations={lotDetailLocations}
-              unitType={detailLot.unit_type}
-              onMovementCreated={async () => {
-// Reload lot data after movement
-detailLot = await getExpiryLot(detailLot!.id);
-              }}
-            />
           </div>
-        {/if}
+
+          {#if !detailLotsLoading && detailLots.length === 0}
+            <p class="empty-hint">
+              {$LL.dashboard.emptyState.noExpiryLots()}
+            </p>
+          {:else if detailLots.length > 0}
+            <ul class="lot-picker" role="listbox" aria-label={$LL.dashboard.aria.productExpiryLots()}>
+              {#each detailLots as lot (lot.id)}
+                <li>
+                  <button
+                    type="button"
+                    class="lot-picker-item"
+                    class:active={detailSelectedLotId === lot.id}
+                    class:lot-status-inactive={lot.status !== "active"}
+                    onclick={() => (detailSelectedLotId = lot.id)}
+                    aria-pressed={detailSelectedLotId === lot.id}
+                  >
+                    <span class="lot-picker-qty">
+                      {lot.quantity} {lot.unit}
+                    </span>
+                    <span class="lot-picker-date">
+                      Exp {formatDate(lot.expiry_date)}
+                    </span>
+                    {#if lot.batch_code}
+                      <span class="lot-picker-batch">{lot.batch_code}</span>
+                    {/if}
+                    <Badge
+                      semantic={toLotStatusSemantic(lot.status)}
+                      size="sm"
+                      dot
+                    >
+                      {lotStatusLabel(lot.status)}
+                    </Badge>
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+
+          {#if detailSelectedLot}
+            <div class="lot-panel-wrap">
+              <LotMovementsPanel
+                lotId={detailSelectedLot.id}
+                lotQuantity={detailSelectedLot.quantity}
+                lotUnit={detailSelectedLot.unit}
+                lotStatus={detailSelectedLot.status}
+                locations={detailAllLocations.filter(
+                  (l) => l.store_id === detailSelectedLot!.store_id,
+                )}
+                allLocations={detailAllLocations}
+                unitType={detailSelectedLot.unit_type}
+                onMovementCreated={refreshSelectedLot}
+              />
+            </div>
+          {/if}
+        </section>
       {/if}
     </div>
-  </div>
-{/if}
+  {/snippet}
+</Modal>
 
-    <!-- ── Quick-create product modal ──────────────────────────────────────────── -->
-    {#if showQuickCreate}
-      <div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.dashboard.aria.quickProductCreate()}>
-        <div class="modal-box modal-box-wide">
-          <div class="modal-header">
-            <h3>{$LL.products.createProduct()}</h3>
-            <button class="modal-close" on:click={() => (showQuickCreate = false)}>✕</button>
-          </div>
-          <p class="scan-hint">
-            {$LL.scan.noMatch()}
-          </p>
-          {#await listCategories() then cats}
-            <ProductForm
-              mode="create"
-              initial={null}
-              categories={cats}
-              prefillUpc={quickCreateScannedValue}
-              onSaved={onQuickCreateSaved}
-              onCancel={() => (showQuickCreate = false)}
-              onCategoryCreated={(c) => { categories = [...categories, c]; }}
-            />
-          {/await}
-        </div>
-      </div>
-    {/if}
+<!-- ── Lot detail modal ─────────────────────────────────────────────────── -->
+<Modal
+  bind:open={showLotDetail}
+  size="wide"
+  showClose
+  closeLabel={$LL.lotMovements.modal.close()}
+  aria-label={$LL.dashboard.aria.lotDetail()}
+  oncancel={() => (showLotDetail = false)}
+  onclose={() => (showLotDetail = false)}
+>
+  {#snippet children()}
+    <header class="dialog-header">
+      <h3>{$LL.dashboard.lotDetail()}</h3>
+    </header>
 
-    <style>
+    <div class="dialog-body">
+      {#if detailLotLoading}
+        <LoadingState variant="text" label={$LL.dashboard.loading()} />
+      {:else if detailLot}
+        <Tabs
+          items={[
+            { id: "detail", label: $LL.dashboard.detail(), panel: lotDetailPanel },
+            { id: "history", label: $LL.lotMovements.history(), panel: lotHistoryPanel },
+          ]}
+          bind:activeId={lotDetailTab}
+          style="bordered"
+          aria-label={$LL.dashboard.lotDetail()}
+        />
+      {/if}
+    </div>
+  {/snippet}
+</Modal>
+
+<!-- ── Quick-create product modal ────────────────────────────────────────── -->
+<Modal
+  bind:open={showQuickCreate}
+  size="wide"
+  showClose
+  closeLabel={$LL.lotMovements.modal.close()}
+  aria-label={$LL.dashboard.aria.quickProductCreate()}
+  oncancel={() => (showQuickCreate = false)}
+  onclose={() => (showQuickCreate = false)}
+>
+  {#snippet children()}
+    <header class="dialog-header">
+      <h3>{$LL.products.createProduct()}</h3>
+    </header>
+
+    <div class="dialog-body">
+      <p class="scan-hint">
+        {$LL.scan.noMatch()}
+      </p>
+      {#await listCategories() then cats}
+        <ProductForm
+          mode="create"
+          initial={null}
+          categories={cats}
+          prefillUpc={quickCreateScannedValue}
+          onSaved={onQuickCreateSaved}
+          onCancel={() => (showQuickCreate = false)}
+          onCategoryCreated={(c) => { categories = [...categories, c]; }}
+        />
+      {/await}
+    </div>
+  {/snippet}
+</Modal>
+
+<style>
   /* ── Layout ────────────────────────────────────────────────────────────── */
   .dashboard {
     padding: 24px 32px;
@@ -808,7 +971,14 @@ detailLot = await getExpiryLot(detailLot!.id);
   .dash-title-row h2 {
     margin: 0;
     font-size: 1.2rem;
-    color: #0f172a;
+    color: var(--color-base-content);
+  }
+
+  .dash-title-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
   }
 
   /* ── Scan input row ───────────────────────────────────────────────────── */
@@ -817,35 +987,21 @@ detailLot = await getExpiryLot(detailLot!.id);
   }
 
   .store-chip {
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
+    background: color-mix(in oklch, var(--color-primary) 6%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-primary) 25%, transparent);
     border-radius: 12px;
     padding: 2px 10px;
     font-size: 0.78rem;
-    color: #1d4ed8;
-    display: flex;
+    color: var(--color-primary);
+    display: inline-flex;
     align-items: center;
     gap: 6px;
   }
 
   .store-chip-all {
-    background: #f9fafb;
-    border-color: #e5e7eb;
-    color: #6b7280;
-  }
-
-  .chip-clear {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: #93c5fd;
-    padding: 0;
-    font-size: 0.7rem;
-    line-height: 1;
-  }
-
-  .chip-clear:hover {
-    color: #bfdbfe;
+    background: var(--color-base-200);
+    border-color: var(--color-base-300);
+    color: color-mix(in oklch, var(--color-base-content) 65%, transparent);
   }
 
   .filter-row {
@@ -855,82 +1011,12 @@ detailLot = await getExpiryLot(detailLot!.id);
     flex-wrap: wrap;
   }
 
-  .filter-row label {
+  .filter-row-label {
     display: flex;
     align-items: center;
     gap: 6px;
     font-size: 0.85rem;
-    color: #475569;
-  }
-
-  .filter-row select {
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    padding: 4px 8px;
-    font-size: 0.85rem;
-    background: #fff;
-    color: #1e293b;
-  }
-
-  /* ── Urgency cards ────────────────────────────────────────────────────── */
-  .urgency-cards {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-  }
-
-  .urgency-card {
-    background: #fff;
-    border: 2px solid #e5e7eb;
-    border-radius: 10px;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    transition: box-shadow 0.15s;
-  }
-
-  .urgency-card.has-count {
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
-  }
-
-  .urgency-card-expired {
-    border-color: #dc2626;
-    background: #fef2f2;
-  }
-  .urgency-card-expired .urgency-count { color: #dc2626; }
-
-  .urgency-card-today {
-    border-color: #d97706;
-    background: #fffbeb;
-  }
-  .urgency-card-today .urgency-count { color: #d97706; }
-
-  .urgency-card-alert {
-    border-color: #2563eb;
-    background: #eff6ff;
-  }
-  .urgency-card-alert .urgency-count { color: #2563eb; }
-
-  .urgency-card-soon {
-    border-color: #7c3aed;
-    background: #f5f3ff;
-  }
-  .urgency-card-soon .urgency-count { color: #7c3aed; }
-
-  .urgency-label {
-    font-size: 0.75rem;
-    color: #6b7280;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .urgency-count {
-    font-size: 1.8rem;
-    font-weight: 700;
-    line-height: 1;
-    color: #374151;
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
   }
 
   /* ── Quick filters ────────────────────────────────────────────────────── */
@@ -940,116 +1026,11 @@ detailLot = await getExpiryLot(detailLot!.id);
     flex-wrap: wrap;
   }
 
-  .filter-btn {
-    background: #fff;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    padding: 4px 12px;
-    font-size: 0.82rem;
-    color: #374151;
-    cursor: pointer;
-    transition: background 0.12s, border-color 0.12s;
-    font-family: inherit;
-  }
-
-  .filter-btn:hover {
-    background: #f3f4f6;
-  }
-
-  .filter-btn.active {
-    background: #1e40af;
-    border-color: #1e40af;
-    color: #fff;
-  }
-
-  /* ── Error banner ────────────────────────────────────────────────────── */
-  .error-banner {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    border-radius: 6px;
-    padding: 8px 12px;
-    color: #dc2626;
-    font-size: 0.85rem;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .error-banner button {
-    margin-left: auto;
-    background: none;
-    border: none;
-    color: #dc2626;
-    cursor: pointer;
-    font-size: 0.8rem;
-    text-decoration: underline;
-  }
-
   /* ── Table ────────────────────────────────────────────────────────────── */
-  .table-wrapper {
-    overflow-x: auto;
-    border-radius: 8px;
-    border: 1px solid #e5e7eb;
-    background: #fff;
-  }
-
-  .lot-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.85rem;
-  }
-
-  .lot-table thead {
-    background: #f8fafc;
-    position: sticky;
-    top: 0;
-  }
-
-  .lot-table th {
-    text-align: left;
-    padding: 8px 12px;
-    font-weight: 600;
-    color: #475569;
-    border-bottom: 1px solid #e5e7eb;
-    white-space: nowrap;
-  }
-
-  .lot-table td {
-    padding: 8px 12px;
-    border-bottom: 1px solid #f1f5f9;
-    vertical-align: middle;
-    color: #1e293b;
-  }
-
-  .lot-table tr:last-child td {
-    border-bottom: none;
-  }
-
-  .lot-table tr:hover {
-    background: #f8fafc;
-  }
-
-  .row-expired td {
-    background: #fff5f5;
-  }
-
-  .row-expired:hover td {
-    background: #ffe4e4;
-  }
-
-  .row-today td {
-    background: #fffbeb;
-  }
-
-  .row-today:hover td {
-    background: #fef3c7;
-  }
-
-  /* ── Table cells ──────────────────────────────────────────────────────── */
   .cell-sku {
     font-family: monospace;
     font-size: 0.8rem;
-    color: #475569;
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
   }
 
   .cell-desc {
@@ -1064,7 +1045,7 @@ detailLot = await getExpiryLot(detailLot!.id);
   }
 
   .loc-name {
-    color: #94a3b8;
+    color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
     font-size: 0.78rem;
   }
 
@@ -1074,21 +1055,19 @@ detailLot = await getExpiryLot(detailLot!.id);
 
   .cell-date {
     white-space: nowrap;
-    font-variant-numeric: tabular-nums;
   }
 
   .cell-days {
     white-space: nowrap;
-    font-variant-numeric: tabular-nums;
     font-weight: 600;
   }
 
   .days-negative {
-    color: #dc2626;
+    color: var(--color-error);
   }
 
   .cell-batch {
-    color: #94a3b8;
+    color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
     font-size: 0.8rem;
   }
 
@@ -1098,162 +1077,67 @@ detailLot = await getExpiryLot(detailLot!.id);
     gap: 4px;
   }
 
-  /* ── Urgency badges ──────────────────────────────────────────────────── */
-  .urgency-badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    white-space: nowrap;
+  /* Force the lot table to keep its readable columns on narrow widths.
+     The shared Table primitive already wraps the table in
+     overflow-x-auto when scrollable, but DaisyUI .table defaults to
+     width 100%, which lets the columns compress inside the scroll
+     container. A min-width on the table makes the wrapper scroll
+     horizontally instead of squeezing urgency/status text. */
+  .dashboard :global(table) {
+    min-width: 900px;
   }
 
-  .badge-expired {
-    background: #fee2e2;
-    color: #991b1b;
+  .row-expired td {
+    background: color-mix(in oklch, var(--color-error) 6%, transparent);
   }
 
-  .badge-today {
-    background: #fef3c7;
-    color: #92400e;
+  .row-expired:hover td {
+    background: color-mix(in oklch, var(--color-error) 12%, transparent);
   }
 
-  .badge-alert {
-    background: #dbeafe;
-    color: #1e40af;
+  .row-today td {
+    background: color-mix(in oklch, var(--color-warning) 8%, transparent);
   }
 
-  .badge-soon {
-    background: #ede9fe;
-    color: #5b21b6;
+  .row-today:hover td {
+    background: color-mix(in oklch, var(--color-warning) 15%, transparent);
   }
 
-  .badge-normal {
-    background: #f1f5f9;
-    color: #475569;
-  }
+  /* ── Modal overlays (PR 7b) ───────────────────────────────────────────── */
+  /* Inner-section classes — the modal shell itself is now provided by
+     `Modal.svelte` so the legacy shell selectors have been removed.
+     The wide box width is now handled by `size="wide"` on `<Modal>`. */
 
-  /* ── Action buttons ──────────────────────────────────────────────────── */
-  .action-btn {
-    background: none;
-    border: 1px solid #e5e7eb;
-    border-radius: 4px;
-    padding: 3px 6px;
-    font-size: 0.8rem;
-    cursor: pointer;
-    transition: background 0.1s;
-    line-height: 1;
-  }
-
-  .action-btn:hover {
-    background: #f3f4f6;
-  }
-
-  .action-btn-lot-actions {
-    color: #2563eb;
-    border-color: #bfdbfe;
-  }
-
-  .action-btn-lot-actions:hover {
-    background: #eff6ff;
-  }
-
-  /* ── Loading / empty ─────────────────────────────────────────────────── */
-  .loading-row {
-    text-align: center;
-    padding: 40px;
-    color: #94a3b8;
-    font-style: italic;
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 40px;
-    color: #94a3b8;
-  }
-
-  .empty-state p {
-    margin: 4px 0;
-  }
-
-  .link-btn {
-    background: none;
-    border: none;
-    color: #2563eb;
-    cursor: pointer;
-    font-size: 0.85rem;
-    text-decoration: underline;
-  }
-
-      /* ── Modals ──────────────────────────────────────────────────────────── */
-      .modal-box-wide {
-        width: 720px;
-        max-width: 95vw;
-      }
-
-      .scan-hint {
-        font-size: 0.85rem;
-        color: #475569;
-        margin: 0 0 12px;
-        background: #f8fafc;
-        border: 1px solid #e5e7eb;
-        border-radius: 6px;
-        padding: 8px 12px;
-      }
-
-      .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+  .dialog-header {
     display: flex;
     align-items: center;
-    justify-content: center;
-    z-index: 200;
-  }
-
-  .modal-box {
-    background: #fff;
-    border-radius: 12px;
-    padding: 24px;
-    width: 480px;
-    max-width: 95vw;
-    max-height: 90vh;
-    overflow-y: auto;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
-  }
-
-  .modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     margin-bottom: 16px;
   }
 
-  .modal-header h3 {
+  .dialog-header h3 {
     margin: 0;
     font-size: 1rem;
-    color: #0f172a;
+    color: var(--color-base-content);
   }
 
-  .modal-close {
-    background: none;
-    border: none;
-    font-size: 1rem;
-    cursor: pointer;
-    color: #94a3b8;
-    padding: 2px 6px;
-    border-radius: 4px;
+  .dialog-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
 
-  .modal-close:hover {
-    background: #f1f5f9;
-    color: #475569;
+  .scan-hint {
+    font-size: 0.85rem;
+    color: var(--color-base-content);
+    margin: 0 0 12px;
+    background: var(--color-base-200);
+    border: 1px solid var(--color-base-300);
+    border-radius: 6px;
+    padding: 8px 12px;
   }
 
-  .modal-loading {
-    color: #94a3b8;
+  .dialog-loading {
+    color: var(--color-base-content);
     font-style: italic;
   }
 
@@ -1265,57 +1149,22 @@ detailLot = await getExpiryLot(detailLot!.id);
     margin-bottom: 16px;
   }
 
-  /* ── Detail tabs ────────────────────────────────────────────────────── */
-  .detail-tabs {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 16px;
-    border-bottom: 1px solid #e5e7eb;
-  }
-
-  .tab-btn {
-    background: none;
-    border: none;
-    padding: 8px 16px;
-    font-size: 0.88rem;
-    cursor: pointer;
-    color: #6b7280;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    font-family: inherit;
-    transition: color 0.15s, border-color 0.15s;
-  }
-
-  .tab-btn:hover {
-    color: #374151;
-  }
-
-  .tab-btn.active {
-    color: #2563eb;
-    border-bottom-color: #2563eb;
-    font-weight: 500;
-  }
-
-  .tab-content {
-    min-height: 200px;
-  }
-
   .detail-grid dt {
     font-size: 0.8rem;
-    color: #6b7280;
+    color: color-mix(in oklch, var(--color-base-content) 65%, transparent);
     font-weight: 500;
   }
 
   .detail-grid dd {
     font-size: 0.85rem;
-    color: #1e293b;
+    color: var(--color-base-content);
     margin: 0;
   }
 
   .barcode-chip {
     display: inline-block;
-    background: #f1f5f9;
-    border: 1px solid #e5e7eb;
+    background: var(--color-base-200);
+    border: 1px solid var(--color-base-300);
     border-radius: 4px;
     padding: 1px 6px;
     font-size: 0.78rem;
@@ -1324,16 +1173,16 @@ detailLot = await getExpiryLot(detailLot!.id);
   }
 
   .barcode-chip.primary {
-    background: #eff6ff;
-    border-color: #bfdbfe;
-    color: #1d4ed8;
+    background: color-mix(in oklch, var(--color-primary) 6%, transparent);
+    border-color: color-mix(in oklch, var(--color-primary) 25%, transparent);
+    color: var(--color-primary);
   }
 
   /* ── Product detail: expiry lots picker ─────────────────────────────── */
   .lots-section {
     margin-top: 18px;
     padding-top: 16px;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid var(--color-base-300);
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -1349,18 +1198,18 @@ detailLot = await getExpiryLot(detailLot!.id);
   .lots-section-header h4 {
     margin: 0;
     font-size: 0.92rem;
-    color: #0f172a;
+    color: var(--color-base-content);
     font-weight: 600;
   }
 
   .lots-loading-hint,
   .lots-count {
     font-size: 0.78rem;
-    color: #6b7280;
+    color: color-mix(in oklch, var(--color-base-content) 65%, transparent);
   }
 
   .empty-hint {
-    color: #9ca3af;
+    color: color-mix(in oklch, var(--color-base-content) 55%, transparent);
     font-size: 0.85rem;
     font-style: italic;
     margin: 0;
@@ -1383,25 +1232,25 @@ detailLot = await getExpiryLot(detailLot!.id);
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: var(--color-base-200);
+    border: 1px solid var(--color-base-300);
     border-radius: 6px;
     padding: 7px 10px;
     font-family: inherit;
     font-size: 0.82rem;
-    color: #1e293b;
+    color: var(--color-base-content);
     cursor: pointer;
     text-align: left;
     transition: background 0.12s, border-color 0.12s;
   }
 
   .lot-picker-item:hover {
-    background: #f3f4f6;
+    background: var(--color-base-200);
   }
 
   .lot-picker-item.active {
-    background: #eff6ff;
-    border-color: #3b82f6;
+    background: color-mix(in oklch, var(--color-primary) 6%, transparent);
+    border-color: var(--color-primary);
   }
 
   .lot-picker-item.lot-status-inactive {
@@ -1414,95 +1263,21 @@ detailLot = await getExpiryLot(detailLot!.id);
   }
 
   .lot-picker-date {
-    color: #475569;
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
     font-variant-numeric: tabular-nums;
   }
 
   .lot-picker-batch {
-    background: #e5e7eb;
-    color: #374151;
+    background: var(--color-base-300);
+    color: var(--color-base-content);
     padding: 1px 6px;
     border-radius: 4px;
     font-size: 0.74rem;
   }
 
-  .lot-picker-status {
-    margin-left: auto;
-    font-size: 0.7rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 1px 7px;
-    border-radius: 999px;
-    background: #f1f5f9;
-    color: #475569;
-  }
-
-  .lot-picker-status.status-active {
-    background: #dcfce7;
-    color: #166534;
-  }
-
-  .lot-picker-status.status-resolved {
-    background: #dbeafe;
-    color: #1e40af;
-  }
-
-  .lot-picker-status.status-archived {
-    background: #f3f4f6;
-    color: #9ca3af;
-  }
-
   .lot-panel-wrap {
     margin-top: 6px;
     padding-top: 10px;
-    border-top: 1px dashed #e5e7eb;
-  }
-
-  .modal-actions {
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    margin-top: 16px;
-  }
-
-  .btn-primary {
-    background: #2563eb;
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    padding: 7px 16px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    font-family: inherit;
-  }
-
-  .btn-primary:hover {
-    background: #1d4ed8;
-  }
-
-  .btn-primary:disabled {
-    background: #93c5fd;
-    cursor: not-allowed;
-  }
-
-  .btn-secondary {
-    background: #fff;
-    color: #374151;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    padding: 7px 16px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    font-family: inherit;
-  }
-
-  .btn-secondary:hover {
-    background: #f9fafb;
-  }
-
-  .btn-secondary:disabled {
-    color: #9ca3af;
-    cursor: not-allowed;
+    border-top: 1px dashed var(--color-base-300);
   }
 </style>

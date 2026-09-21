@@ -14,6 +14,13 @@
   import { listStores, listStoreLocations, type StoreLocationResponse } from "../lib/stores.js";
   import LotMovementsPanel from "./LotMovementsPanel.svelte";
   import { humanizeError } from "../lib/errors.js";
+  import Table from "./ui/Table.svelte";
+  import Badge from "./ui/Badge.svelte";
+  import Button from "./ui/Button.svelte";
+  import Modal from "./ui/Modal.svelte";
+  import Tabs from "./ui/Tabs.svelte";
+  import Tooltip from "./ui/Tooltip.svelte";
+  import Icon from "./ui/Icon.svelte";
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -53,14 +60,21 @@
     }
   }
 
-  function urgencyClass(row: DashboardLotRow): string {
+  /**
+   * Maps the backend urgency bucket (`alert_window | next_30_days | future`)
+   * to the closed `BadgeUrgency` union consumed by the shared `Badge.svelte`
+   * primitive. The mapping is local to this page so the dashboard / ledger
+   * surfaces can keep their bespoke buckets; only the CalendarPage's
+   * day-detail panel needs the Badge primitive today.
+   */
+  function urgencyToBadge(row: DashboardLotRow): "expired" | "today" | "alert" | "soon" | "normal" {
     switch (row.urgency) {
-      case "expired":   return "status-expired";
-      case "today":     return "status-today";
-      case "alert_window": return "status-alert";
-      case "next_30_days": return "status-soon";
-      case "future":    return "status-future";
-      default:          return "status-unknown";
+      case "expired":   return "expired";
+      case "today":     return "today";
+      case "alert_window": return "alert";
+      case "next_30_days": return "soon";
+      case "future":    return "normal";
+      default:          return "normal";
     }
   }
 
@@ -333,15 +347,20 @@ function onLotCancel() {
 <div class="cal-page">
   <div class="cal-page-header">
     <h2 class="page-title">{$LL.calendar.pageTitle()}</h2>
-    <button
-      type="button"
-      class="btn-refresh"
-      on:click={loadLots}
-      disabled={loading}
-      aria-label={$LL.calendar.refreshAria()}
-    >
-      ⟳ {$LL.calendar.refresh()}
-    </button>
+    <Tooltip text={$LL.calendar.refreshAria()} position="bottom">
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label={$LL.calendar.refreshAria()}
+        disabled={loading}
+        onclick={loadLots}
+      >
+        {#snippet iconStart()}
+          <Icon name="arrow-path" size="sm" />
+        {/snippet}
+        {$LL.calendar.refresh()}
+      </Button>
+    </Tooltip>
   </div>
 
       {#if loading && lots.length === 0}
@@ -379,15 +398,15 @@ function onLotCancel() {
         <h3 class="day-panel-title">
           {$LL.calendar.dayPanelTitle({ date: formatDate(selectedDate) })}
           {#if dayRows.length > 0}
-            <span class="badge-count">{dayRows.length}</span>
+            <Badge semantic="info" size="sm">{dayRows.length}</Badge>
           {/if}
         </h3>
 
         {#if dayRows.length === 0}
           <p class="day-empty">{$LL.calendar.noLotsOnDate()}</p>
         {:else}
-          <table class="day-table">
-            <thead>
+          <Table zebra stickyHeader aria-label={$LL.calendar.dayPanelTitle({ date: formatDate(selectedDate) })}>
+            {#snippet head()}
               <tr>
                 <th>{$LL.calendar.table.product()}</th>
                 <th>{$LL.calendar.table.qty()}</th>
@@ -397,15 +416,15 @@ function onLotCancel() {
                 <th>{$LL.calendar.table.days()}</th>
                 <th>{$LL.calendar.table.status()}</th>
               </tr>
-            </thead>
-            <tbody>
+            {/snippet}
+            {#snippet body()}
               {#each dayRows as row (row.lot_id)}
                 <tr>
                   <td>
                     <button
                       type="button"
                       class="lot-link"
-                      on:click={() => openLot(row)}
+                      onclick={() => openLot(row)}
                     >
                       {row.description || row.sku || row.product_id}
                     </button>
@@ -418,109 +437,108 @@ function onLotCancel() {
                     {row.days_remaining}
                   </td>
                   <td>
-                    <span class="status-badge {urgencyClass(row)}">
+                    <Badge urgency={urgencyToBadge(row)} size="sm">
                       {urgencyLabel(row)}
-                    </span>
+                    </Badge>
                   </td>
                 </tr>
               {/each}
-            </tbody>
-          </table>
+            {/snippet}
+          </Table>
         {/if}
       </div>
     </div>
   {/if}
 </div>
 
-<!-- Lot edit overlay — reusing the existing LotForm pattern -->
-{#if showLotDetail}
-  <div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.dashboard.lotDetail()}>
-    <div class="modal-box modal-box-wide">
-      <div class="modal-header">
-        <h3>{$LL.dashboard.lotDetail()}</h3>
-        <button class="modal-close" on:click={onLotCancel}>✕</button>
-      </div>
-      {#if detailLoading}
-        <p class="modal-loading">{$LL.lotsDetail.loading()}</p>
-      {:else if detailLot}
-        <!-- Tabs -->
-        <div class="detail-tabs">
-          <button
-            type="button"
-            class="tab-btn"
-            class:active={lotDetailTab === "detail"}
-            on:click={() => (lotDetailTab = "detail")}
-          >
-            {$LL.lotsDetail.detail()}
-          </button>
-          <button
-            type="button"
-            class="tab-btn"
-            class:active={lotDetailTab === "history"}
-            on:click={() => (lotDetailTab = "history")}
-          >
-            {$LL.lotsDetail.history()}
-          </button>
-        </div>
+<!-- Lot edit overlay — reused Modal + Tabs primitives (PR 13 cleanup) -->
+<Modal
+  bind:open={showLotDetail}
+  size="wide"
+  showClose
+  closeLabel={$LL.lotMovements.modal.close()}
+  aria-label={$LL.dashboard.lotDetail()}
+  oncancel={() => (showLotDetail = false)}
+  onclose={onLotCancel}
+>
+  {#snippet children()}
+    <header class="dialog-header">
+      <h3>{$LL.dashboard.lotDetail()}</h3>
+    </header>
 
-        {#if lotDetailTab === "detail"}
-          <dl class="detail-grid">
-            <dt>{$LL.dashboard.product()}</dt>
-            <dd>{detailLot.product_id}</dd>
-            <dt>{$LL.dashboard.store()}</dt>
-            <dd>{detailLot.store_id}</dd>
-            <dt>{$LL.dashboard.location()}</dt>
-            <dd>{detailLot.location_id ?? "—"}</dd>
-            <dt>{$LL.lotsDetail.quantity()}</dt>
-            <dd>{detailLot.quantity}</dd>
-            <dt>{$LL.dashboard.expiryDate()}</dt>
-            <dd>{detailLot.expiry_date}</dd>
-            <dt>{$LL.dashboard.alertDaysBefore()}</dt>
-            <dd>{detailLot.alert_days_before}</dd>
-            {#if detailLot.batch_code}
-              <dt>{$LL.lotsDetail.batch()}</dt>
-              <dd>{detailLot.batch_code}</dd>
-            {/if}
-          </dl>
-          <div class="modal-actions">
-            <button
-              type="button"
-              class="btn-secondary"
-              on:click={onLotCancel}
-            >
-              {$LL.common.close()}
-            </button>
-            <button
-              type="button"
-              class="btn-primary"
-              on:click={() => (lotDetailTab = "history")}
-            >
-              {$LL.lotMovements.panelTitle()}
-            </button>
-          </div>
-        {:else}
-          <!-- Historial tab -->
-          <div class="tab-content">
-            <LotMovementsPanel
-              lotId={detailLot.id}
-              lotQuantity={detailLot.quantity}
-              lotUnit={detailLot.unit}
-              lotStatus={detailLot.status}
-              locations={lotDetailLocations}
-              allLocations={lotDetailLocations}
-              unitType={detailLot.unit_type}
-              onMovementCreated={async () => {
-                // Reload modal and calendar data after a movement.
-                detailLot = await getExpiryLot(detailLot!.id);
-                await loadLots();
-              }}
-            />
-          </div>
-        {/if}
-      {/if}
-    </div>
+    {#if detailLoading}
+      <p class="modal-loading">{$LL.lotsDetail.loading()}</p>
+    {:else if detailLot}
+      <Tabs
+        items={[
+          {
+            id: "detail",
+            label: $LL.lotsDetail.detail(),
+            panel: lotDetailTabPanel,
+          },
+          {
+            id: "history",
+            label: $LL.lotsDetail.history(),
+            panel: lotHistoryTabPanel,
+          },
+        ]}
+        bind:activeId={lotDetailTab}
+        style="bordered"
+        aria-label={$LL.dashboard.lotDetail()}
+      />
+    {/if}
+  {/snippet}
+</Modal>
+
+{#snippet lotDetailTabPanel()}
+  <dl class="detail-grid">
+    <dt>{$LL.dashboard.product()}</dt>
+    <dd>{detailLot?.product_id}</dd>
+    <dt>{$LL.dashboard.store()}</dt>
+    <dd>{detailLot?.store_id}</dd>
+    <dt>{$LL.dashboard.location()}</dt>
+    <dd>{detailLot?.location_id ?? "—"}</dd>
+    <dt>{$LL.lotsDetail.quantity()}</dt>
+    <dd>{detailLot?.quantity}</dd>
+    <dt>{$LL.dashboard.expiryDate()}</dt>
+    <dd>{detailLot?.expiry_date}</dd>
+    <dt>{$LL.dashboard.alertDaysBefore()}</dt>
+    <dd>{detailLot?.alert_days_before}</dd>
+    {#if detailLot?.batch_code}
+      <dt>{$LL.lotsDetail.batch()}</dt>
+      <dd>{detailLot.batch_code}</dd>
+    {/if}
+  </dl>
+  <div class="modal-actions">
+    <Button variant="ghost" onclick={onLotCancel}>
+      {$LL.common.close()}
+    </Button>
+    <Button variant="primary" onclick={() => (lotDetailTab = "history")}>
+      {$LL.lotMovements.panelTitle()}
+    </Button>
   </div>
-{/if}
+{/snippet}
+
+{#snippet lotHistoryTabPanel()}
+  {#if detailLot}
+    <div class="tab-content">
+      <LotMovementsPanel
+        lotId={detailLot.id}
+        lotQuantity={detailLot.quantity}
+        lotUnit={detailLot.unit}
+        lotStatus={detailLot.status}
+        locations={lotDetailLocations}
+        allLocations={lotDetailLocations}
+        unitType={detailLot.unit_type}
+        onMovementCreated={async () => {
+          // Reload modal and calendar data after a movement.
+          detailLot = await getExpiryLot(detailLot!.id);
+          await loadLots();
+        }}
+      />
+    </div>
+  {/if}
+{/snippet}
 
     <style>
   .cal-page {
@@ -539,29 +557,8 @@ function onLotCancel() {
   .page-title {
     font-size: 1.3rem;
     font-weight: 700;
-    color: #1e293b;
+    color: var(--color-base-content);
     margin: 0;
-  }
-
-  .btn-refresh {
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 5px 12px;
-    font-size: 0.85rem;
-    font-family: inherit;
-    color: #2563eb;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-
-  .btn-refresh:hover:not(:disabled) {
-    background: #e2e8f0;
-  }
-
-  .btn-refresh:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   /* ── Layout ──────────────────────────────────────────────────────────────── */
@@ -578,8 +575,8 @@ function onLotCancel() {
 
   .day-panel {
     flex: 1;
-    background: #fff;
-    border: 1px solid #e2e8f0;
+    background: var(--color-base-100);
+    border: 1px solid var(--color-base-200);
     border-radius: 12px;
     padding: 16px;
     min-width: 0;
@@ -588,77 +585,33 @@ function onLotCancel() {
   .day-panel-title {
     font-size: 1rem;
     font-weight: 600;
-    color: #1e293b;
+    color: var(--color-base-content);
     margin: 0 0 12px 0;
     display: flex;
     align-items: center;
     gap: 8px;
   }
 
-  .badge-count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: #2563eb;
-    color: #fff;
-    font-size: 0.75rem;
-    font-weight: 700;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-  }
-
   .day-empty {
-    color: #64748b;
+    color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
     font-size: 0.9rem;
     text-align: center;
     padding: 20px 0;
   }
 
-  /* ── Day table ─────────────────────────────────────────────────────────── */
-
-  .day-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.85rem;
-  }
-
-  .day-table th {
-    text-align: left;
-    font-weight: 600;
-    color: #64748b;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 4px 8px;
-    border-bottom: 1px solid #e2e8f0;
-  }
-
-  .day-table td {
-    padding: 6px 8px;
-    border-bottom: 1px solid #f1f5f9;
-    color: #1e293b;
-    vertical-align: middle;
-  }
-
-  .day-table tr:last-child td {
-    border-bottom: none;
-  }
-
-  .num {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
-
+  /* Negative-days accent. The `num` utility (PR 1) and the
+     table chrome come from `Table.svelte` + DaisyUI; only the
+     per-cell tint stays local because it composes with the table
+     primitive's `text-base-content` default. */
   .days-neg {
-    color: #ef4444;
+    color: var(--color-error);
   }
 
   .lot-link {
     background: none;
     border: none;
     padding: 0;
-    color: #2563eb;
+    color: var(--color-primary);
     cursor: pointer;
     font-size: 0.85rem;
     font-family: inherit;
@@ -667,31 +620,14 @@ function onLotCancel() {
   }
 
   .lot-link:hover {
-    color: #1d4ed8;
+    color: color-mix(in oklch, var(--color-primary) 80%, black);
     text-decoration: underline;
   }
 
   .lot-link:focus-visible {
-    outline: 2px solid #2563eb;
+    outline: 2px solid var(--color-primary);
     outline-offset: 2px;
   }
-
-  /* ── Status badges ──────────────────────────────────────────────────────── */
-
-  .status-badge {
-    display: inline-block;
-    padding: 2px 7px;
-    border-radius: 12px;
-    font-size: 0.7rem;
-    font-weight: 600;
-  }
-
-  .status-expired { background: #fee2e2; color: #b91c1c; }
-  .status-today   { background: #fef3c7; color: #92400e; }
-  .status-alert   { background: #fff7ed; color: #c2410c; }
-  .status-soon    { background: #eff6ff; color: #1d4ed8; }
-  .status-future  { background: #f0fdf4; color: #15803d; }
-  .status-unknown { background: #f1f5f9; color: #475569; }
 
   /* ── Loading / error ──────────────────────────────────────────────────── */
 
@@ -699,12 +635,12 @@ function onLotCancel() {
       .error-msg {
         text-align: center;
         padding: 40px;
-        color: #64748b;
+        color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
         font-size: 0.95rem;
       }
 
       .error-msg {
-        color: #ef4444;
+        color: var(--color-error);
       }
 
       /* Muted diagnostic line rendered under `Loading lots…` (and the error
@@ -715,108 +651,30 @@ function onLotCancel() {
         margin: -24px auto 40px;
         padding: 0 40px;
         text-align: center;
-        color: #94a3b8;
+        color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
         font-size: 0.8rem;
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       }
 
-  /* ── Modal ─────────────────────────────────────────────────────────────── */
+  /* ── Modal (PR 13: modal shell from `<Modal>` primitive; only inner
+     panel styles remain) ────────────────────────────────────────────────── */
 
-  .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+  .dialog-header {
     display: flex;
     align-items: center;
-    justify-content: center;
-    z-index: 200;
-  }
-
-  .modal-box {
-    background: #fff;
-    border-radius: 12px;
-    padding: 24px;
-    width: 480px;
-    max-width: 95vw;
-    max-height: 90vh;
-    overflow-y: auto;
-  }
-
-  .modal-box-wide {
-    width: 720px;
-    max-width: 95vw;
-  }
-
-  .modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     margin-bottom: 16px;
   }
 
-  .modal-header h3 {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: #1e293b;
+  .dialog-header h3 {
     margin: 0;
-  }
-
-  .modal-close {
-    background: none;
-    border: none;
-    cursor: pointer;
     font-size: 1rem;
-    color: #64748b;
-    padding: 4px 8px;
-    border-radius: 4px;
-    transition: background 0.15s;
-  }
-
-  .modal-close:hover {
-    background: #f1f5f9;
-    color: #1e293b;
-  }
-
-  .modal-close:focus-visible {
-    outline: 2px solid #2563eb;
-    outline-offset: 1px;
+    color: var(--color-base-content);
   }
 
   .modal-loading {
     text-align: center;
     padding: 20px;
-    color: #64748b;
-  }
-
-  /* ── Detail tabs ────────────────────────────────────────────────────── */
-  .detail-tabs {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 16px;
-    border-bottom: 1px solid #e5e7eb;
-  }
-
-  .tab-btn {
-    background: none;
-    border: none;
-    padding: 8px 16px;
-    font-size: 0.88rem;
-    cursor: pointer;
-    color: #6b7280;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    font-family: inherit;
-    transition: color 0.15s, border-color 0.15s;
-  }
-
-  .tab-btn:hover {
-    color: #374151;
-  }
-
-  .tab-btn.active {
-    color: #2563eb;
-    border-bottom-color: #2563eb;
-    font-weight: 500;
+    color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
   }
 
   .tab-content {
@@ -832,12 +690,12 @@ function onLotCancel() {
   }
 
   .detail-grid dt {
-    color: #64748b;
+    color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
     font-weight: 500;
   }
 
   .detail-grid dd {
-    color: #1e293b;
+    color: var(--color-base-content);
     margin: 0;
   }
 
@@ -845,58 +703,6 @@ function onLotCancel() {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
-  }
-
-  .btn-primary {
-    background: #2563eb;
-    border: none;
-    border-radius: 6px;
-    padding: 7px 16px;
-    font-size: 0.875rem;
-    font-family: inherit;
-    color: #fff;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-
-  .btn-primary:hover {
-    background: #1d4ed8;
-  }
-
-  .btn-primary:focus-visible {
-    outline: 2px solid #2563eb;
-    outline-offset: 2px;
-  }
-
-  .btn-primary:disabled {
-    background: #93c5fd;
-    cursor: not-allowed;
-  }
-
-  .btn-secondary {
-    background: #fff;
-    color: #374151;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    padding: 7px 16px;
-    font-size: 0.875rem;
-    font-family: inherit;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: #f9fafb;
-  }
-
-  .btn-secondary:disabled {
-    color: #9ca3af;
-    cursor: not-allowed;
-  }
-
-  .btn-secondary:focus-visible {
-    outline: 2px solid #2563eb;
-    outline-offset: 2px;
   }
 
 </style>

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
   import { LL } from "../i18n/i18n-svelte.js";
+  import Button from "./ui/Button.svelte";
+  import Tooltip from "./ui/Tooltip.svelte";
 
   // ── Props ───────────────────────────────────────────────────────────────────
 
@@ -329,41 +331,52 @@
 <div class="cal-month" aria-label={ariaLabel} role="application">
   <!-- Header -->
   <div class="cal-header">
-    <button
-      type="button"
-      class="cal-nav"
-      aria-label={$LL.calendar.ariaPreviousMonth()}
-      on:click={prevMonth}
-    >
-      ‹
-    </button>
+    <Tooltip text={$LL.calendar.ariaPreviousMonth()} position="bottom">
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label={$LL.calendar.ariaPreviousMonth()}
+        onclick={prevMonth}
+      >
+        ‹
+      </Button>
+    </Tooltip>
 
     <div class="cal-title">
       {#if showYearPicker}
-        <button type="button" class="cal-year-btn" on:click={openYearPicker}>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={$LL.calendar.ariaOpenYearPicker()}
+          onclick={openYearPicker}
+        >
           {displayYear}
-        </button>
+        </Button>
         <div class="year-picker">
           <div class="year-picker-header">
-            <button
-              type="button"
-              class="cal-nav cal-nav-sm"
-              aria-label={$LL.calendar.ariaPreviousDecade()}
-              on:click={prevDecade}
-            >
-              ‹
-            </button>
+            <Tooltip text={$LL.calendar.ariaPreviousDecade()} position="bottom">
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={$LL.calendar.ariaPreviousDecade()}
+                onclick={prevDecade}
+              >
+                ‹
+              </Button>
+            </Tooltip>
             <span class="decade-label">
               {decadeStart}–{decadeStart + 9}
             </span>
-            <button
-              type="button"
-              class="cal-nav cal-nav-sm"
-              aria-label={$LL.calendar.ariaNextDecade()}
-              on:click={nextDecade}
-            >
-              ›
-            </button>
+            <Tooltip text={$LL.calendar.ariaNextDecade()} position="bottom">
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={$LL.calendar.ariaNextDecade()}
+                onclick={nextDecade}
+              >
+                ›
+              </Button>
+            </Tooltip>
           </div>
           <div class="year-grid">
             {#each decadeYears as yr}
@@ -384,33 +397,35 @@
           </div>
         </div>
       {:else}
-        <button
-          type="button"
-          class="cal-month-btn"
+        <Button
+          variant="ghost"
+          size="sm"
           aria-label={$LL.calendar.ariaCycleMonth()}
-          on:click={cycleMonth}
+          onclick={cycleMonth}
         >
           {MONTH_NAMES[viewMonth - 1] ?? ""}
-        </button>
-        <button
-          type="button"
-          class="cal-year-btn"
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           aria-label={$LL.calendar.ariaOpenYearPicker()}
-          on:click={openYearPicker}
+          onclick={openYearPicker}
         >
           {displayYear} ▼
-        </button>
+        </Button>
       {/if}
     </div>
 
-    <button
-      type="button"
-      class="cal-nav"
-      aria-label={$LL.calendar.ariaNextMonth()}
-      on:click={nextMonth}
-    >
-      ›
-    </button>
+    <Tooltip text={$LL.calendar.ariaNextMonth()} position="bottom">
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label={$LL.calendar.ariaNextMonth()}
+        onclick={nextMonth}
+      >
+        ›
+      </Button>
+    </Tooltip>
   </div>
 
   <!-- Weekday row -->
@@ -495,79 +510,11 @@
     gap: 4px;
   }
 
-  .cal-nav {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 1.2rem;
-    color: #1e293b;
-    padding: 4px 8px;
-    border-radius: 4px;
-    line-height: 1;
-    transition: background 0.15s;
-  }
-
-  .cal-nav:hover {
-    background: #e2e8f0;
-  }
-
-  .cal-nav:focus-visible {
-    outline: 2px solid #2563eb;
-    outline-offset: 1px;
-  }
-
-  .cal-nav-sm {
-    font-size: 0.9rem;
-    padding: 2px 6px;
-  }
-
   .cal-title {
     display: flex;
     align-items: center;
     gap: 4px;
     position: relative;
-  }
-
-  .cal-month-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: #1e293b;
-    padding: 2px 6px;
-    border-radius: 4px;
-    transition: background 0.15s;
-  }
-
-  .cal-month-btn:hover {
-    background: #e2e8f0;
-  }
-
-  .cal-month-btn:focus-visible {
-    outline: 2px solid #2563eb;
-    outline-offset: 1px;
-  }
-
-  .cal-year-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: #1e293b;
-    padding: 2px 6px;
-    border-radius: 4px;
-    transition: background 0.15s;
-  }
-
-  .cal-year-btn:hover {
-    background: #e2e8f0;
-  }
-
-  .cal-year-btn:focus-visible {
-    outline: 2px solid #2563eb;
-    outline-offset: 1px;
   }
 
   /* ── Year picker ─────────────────────────────────────────────────────────── */
@@ -578,10 +525,13 @@
     left: 50%;
     transform: translateX(-50%);
     z-index: 10;
-    background: #fff;
-    border: 1px solid #e2e8f0;
+    background: var(--color-base-100);
+    border: 1px solid var(--color-base-200);
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    /* Theme-derived shadow: a generic literal alpha shadow is acceptable
+       but a theme-derived one tracks light/dark. Keep the alpha very low
+       so neither theme bleeds through. */
+    box-shadow: 0 4px 12px color-mix(in oklch, var(--color-base-content) 12%, transparent);
     padding: 8px;
     width: 220px;
   }
@@ -595,7 +545,7 @@
 
   .decade-label {
     font-size: 0.8rem;
-    color: #64748b;
+    color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
     font-weight: 600;
   }
 
@@ -612,28 +562,28 @@
     font-size: 0.8rem;
     padding: 4px 2px;
     border-radius: 4px;
-    color: #1e293b;
+    color: var(--color-base-content);
     transition: background 0.1s;
     text-align: center;
   }
 
   .year-chip:hover:not(.year-disabled) {
-    background: #e2e8f0;
+    background: color-mix(in oklch, var(--color-base-300) 50%, transparent);
   }
 
   .year-chip.year-selected {
-    background: #2563eb;
-    color: #fff;
-    border-color: #2563eb;
+    background: var(--color-primary);
+    color: var(--color-base-100);
+    border-color: var(--color-primary);
   }
 
   .year-chip.year-disabled {
-    color: #cbd5e1;
+    color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
     cursor: not-allowed;
   }
 
   .year-chip:focus-visible {
-    outline: 2px solid #2563eb;
+    outline: 2px solid var(--color-primary);
     outline-offset: 1px;
   }
 
@@ -643,14 +593,14 @@
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     padding: 4px 0;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid var(--color-base-200);
   }
 
   .cal-weekday {
     text-align: center;
     font-size: 0.7rem;
     font-weight: 700;
-    color: #64748b;
+    color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     padding: 2px 0;
@@ -676,48 +626,48 @@
     align-items: center;
     justify-content: center;
     border-radius: 4px;
-    color: #1e293b;
+    color: var(--color-base-content);
     transition: background 0.1s, color 0.1s;
     padding: 0;
   }
 
   .cal-day:focus-visible {
-    outline: 2px solid #2563eb;
+    outline: 2px solid var(--color-primary);
     outline-offset: 1px;
     z-index: 1;
   }
 
   .cal-day:hover:not(.day-disabled):not(.day-selected) {
-    background: #e2e8f0;
+    background: color-mix(in oklch, var(--color-base-300) 50%, transparent);
   }
 
   /* Today: distinct highlight */
   .cal-day.day-today {
-    color: #2563eb;
+    color: var(--color-primary);
     font-weight: 700;
   }
 
   /* Selected: filled blue */
   .cal-day.day-selected {
-    background: #2563eb;
-    color: #fff;
+    background: var(--color-primary);
+    color: var(--color-base-100);
     font-weight: 600;
   }
 
   .cal-day.day-selected.day-today {
     /* both today and selected: blue wins */
-    color: #fff;
+    color: var(--color-base-100);
   }
 
   /* Disabled */
   .cal-day.day-disabled {
-    color: #cbd5e1;
+    color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
     cursor: not-allowed;
   }
 
   /* Weekend: muted */
   .cal-day.day-weekend:not(.day-selected):not(.day-disabled) {
-    color: #94a3b8;
+    color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
   }
 
   /* Outside month: blank placeholder */
@@ -727,7 +677,7 @@
 
   /* Focused ring */
   .cal-day.day-focused:not(.day-selected) {
-    outline: 2px solid #2563eb;
+    outline: 2px solid var(--color-primary);
     outline-offset: 1px;
   }
 
@@ -740,10 +690,10 @@
     width: 4px;
     height: 4px;
     border-radius: 50%;
-    background: #f59e0b;
+    background: var(--color-warning);
   }
 
   .cal-day.day-selected .badge-dot {
-    background: rgba(255, 255, 255, 0.8);
+    background: color-mix(in oklch, var(--color-base-100) 80%, transparent);
   }
 </style>

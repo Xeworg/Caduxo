@@ -1,5 +1,28 @@
+<!--
+  LotForm.svelte — expiry-lot create/edit form (PR 8a of
+  caduxo-daisyui-redesign).
+
+  Full migration to the shared UI primitives:
+    - Input.svelte for text/number fields.
+    - Select.svelte for store + location selects.
+    - Button.svelte for primary / ghost actions.
+    - Alert.svelte for error + no-stores-available surfaces.
+  The DatePicker primitive (its own component) is preserved verbatim;
+  its popover + keyboard contract is owned by PR 10 per the design.
+
+  Tailwind classes referenced here (for the JIT scanner):
+    input input-md input-error
+    select select-md select-error
+    textarea
+    btn btn-primary btn-ghost
+    alert alert-error alert-soft
+-->
 <script lang="ts">
     import DatePicker from "./DatePicker.svelte";
+    import Input from "./ui/Input.svelte";
+    import Select from "./ui/Select.svelte";
+    import Button from "./ui/Button.svelte";
+    import Alert from "./ui/Alert.svelte";
     import {
         createExpiryLot,
         updateExpiryLot,
@@ -27,16 +50,16 @@
     export let lot: ExpiryLotResponse | null = null;
     /** Required when mode === "create". */
     export let productId: string = "";
-        /** Pre-filled defaults from the product (may be blank). */
-        export let defaultUnit: string = "";
-        export let defaultAlertDays: number = 30;
-        /**
-         * Unit kind from the product's catalog link. Drives quantity input rules:
-         * - "integer": quantity must be whole numbers (min=1, step=1)
-         * - "decimal": fractional quantities allowed (min=0.01, step=0.01)
-         * When null (legacy/uncatalogued), defaults to decimal rules.
-         */
-        export let productUnitKind: "integer" | "decimal" | null = null;
+    /** Pre-filled defaults from the product (may be blank). */
+    export let defaultUnit: string = "";
+    export let defaultAlertDays: number = 30;
+    /**
+     * Unit kind from the product's catalog link. Drives quantity input rules:
+     * - "integer": quantity must be whole numbers (min=1, step=1)
+     * - "decimal": fractional quantities allowed (min=0.01, step=0.01)
+     * When null (legacy/uncatalogued), defaults to decimal rules.
+     */
+    export let productUnitKind: "integer" | "decimal" | null = null;
     /** Called after a successful save. */
     export let onSaved: (lot: ExpiryLotResponse) => void;
     /** Called when the user cancels. */
@@ -55,13 +78,21 @@
     let stores: StoreResponse[] = [];
     let locations: StoreLocationResponse[] = [];
 
-    // Form fields
+    // Form fields. Quantity + alert days use string bridges because
+    // `Input.svelte`'s `value` contract is `string` (HTML <input
+    // type="number"> round-trips through a string). The derived
+    // numeric variants drive submit-time validation + the backend
+    // payload.
     let selectedStoreId = "";
     let selectedLocationId = "";
+    let quantityStr = "1";
     let quantity = 1;
+    $: quantity = Number.parseFloat(quantityStr) || 0;
     let unit = "";
     let expiryDate = "";
+    let alertDaysStr = "30";
     let alertDaysBefore = 30;
+    $: alertDaysBefore = Number.parseInt(alertDaysStr, 10) || 0;
     let batchCode = "";
     let notes = "";
 
@@ -90,9 +121,11 @@
             if (mode === "edit" && lot) {
                 selectedStoreId = lot.store_id;
                 selectedLocationId = lot.location_id ?? "";
+                quantityStr = String(lot.quantity);
                 quantity = lot.quantity;
                 unit = lot.unit;
                 expiryDate = lot.expiry_date;
+                alertDaysStr = String(lot.alert_days_before);
                 alertDaysBefore = lot.alert_days_before;
                 batchCode = lot.batch_code ?? "";
                 notes = lot.notes ?? "";
@@ -100,6 +133,7 @@
                 // Create mode: pre-fill from product defaults.
                 unit = defaultUnit;
                 alertDaysBefore = defaultAlertDays;
+                alertDaysStr = String(defaultAlertDays);
                 // Auto-select the last-selected store, or the first available.
                 if (stores.length > 0) {
                     selectedStoreId = stores[0].id;
@@ -132,7 +166,25 @@
         }
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────────
+    // ── Select option derivations ───────────────────────────────────────────────
+
+    // Store options always start with the disabled placeholder row so the
+    // empty-selection state stays visually distinct from a real pick.
+    $: storeOptions = [
+        { value: "", label: $LL.lotForm.selectStorePlaceholder(), disabled: true },
+        ...stores.map((s) => ({ value: s.id, label: s.name })),
+    ];
+
+    // Location options omit the "no location" entry when the setting
+    // requires a location — keeps the validation contract intact.
+    $: locationOptions = [
+        ...(!requireInitialLocation
+            ? [{ value: "", label: $LL.lotForm.noLocation() }]
+            : []),
+        ...locations.map((loc) => ({ value: loc.id, label: loc.name })),
+    ];
+
+    // ── Submit ─────────────────────────────────────────────────────────────────
 
     async function submit() {
         errorMsg = "";
@@ -200,40 +252,36 @@
 </script>
 
 <form class="lot-form" on:submit|preventDefault={submit}>
-    <h3>
+    <h3 class="form-title">
         {mode === "edit"
-? $LL.lotForm.editTitle()
-: $LL.lotForm.createTitle()}
+            ? $LL.lotForm.editTitle()
+            : $LL.lotForm.createTitle()}
     </h3>
 
     {#if mode === "edit"}
         <p class="metadata-only-notice" role="note">
-{$LL.lotForm.quantityUseMovementHint()}
+            {$LL.lotForm.quantityUseMovementHint()}
         </p>
     {/if}
 
     {#if errorMsg}
-        <div class="alert alert-error" role="alert">{errorMsg}</div>
+        <Alert variant="error">{errorMsg}</Alert>
     {/if}
 
     {#if loadingStores}
         <p class="loading">{$LL.lotForm.loadingStores()}</p>
     {:else if stores.length === 0}
-        <div class="alert alert-error" role="alert">
-            {$LL.lotForm.noStoresAvailable()}
-        </div>
+        <Alert variant="error">{$LL.lotForm.noStoresAvailable()}</Alert>
     {:else}
         <!-- Store selection — only shown when multiple stores exist -->
         {#if stores.length > 1}
-            <label>
-                {$LL.lotForm.selectStore()}
-                <select bind:value={selectedStoreId}>
-                    <option value="" disabled>{$LL.lotForm.selectStorePlaceholder()}</option>
-                    {#each stores as store (store.id)}
-                        <option value={store.id}>{store.name}</option>
-                    {/each}
-                </select>
-            </label>
+            <Select
+                bind:value={selectedStoreId}
+                options={storeOptions}
+                size="md"
+                aria-label={$LL.lotForm.selectStore()}
+                required
+            />
         {:else}
             <!-- Single store: remember the selection implicitly. -->
             <p class="store-hint">
@@ -243,74 +291,62 @@
 
         <!-- Location picker — shown when the store has locations -->
         {#if selectedStoreId && locations.length > 0}
-            <label>
-                {$LL.lotForm.internalLocation()}
-                {#if requireInitialLocation}
-                    <span class="required-hint">{$LL.lotForm.locationRequired()}</span>
-                {:else}
-                    <span class="optional-hint">{$LL.lotForm.locationOptional()}</span>
-                {/if}
-                <select bind:value={selectedLocationId}>
-                    {#if !requireInitialLocation}
-                        <option value="">{$LL.lotForm.noLocation()}</option>
-                    {/if}
-                    {#each locations as loc (loc.id)}
-                        <option value={loc.id}>{loc.name}</option>
-                    {/each}
-                </select>
-            </label>
+            <Select
+                bind:value={selectedLocationId}
+                options={locationOptions}
+                size="md"
+                aria-label={$LL.lotForm.internalLocation()}
+                required={requireInitialLocation}
+            />
+            {#if requireInitialLocation}
+                <p class="hint-required">{$LL.lotForm.locationRequired()}</p>
+            {:else}
+                <p class="hint-optional">{$LL.lotForm.locationOptional()}</p>
+            {/if}
         {/if}
 
-                <div class="grid-2">
-                    {#if mode === "edit" && lot}
-                        <!-- Edit mode: quantity is read-only. Quantity changes
-                             must go through movement/adjustment/resolve flows. -->
-                        <div class="quantity-readonly">
-                            <span class="quantity-label">{$LL.lotForm.quantityReadonly()}</span>
-                            <span class="quantity-value">
-                                {lot.quantity}
-                                {#if lot.unit}<span class="quantity-unit">{lot.unit}</span>{/if}
-                            </span>
-                            <span class="quantity-hint">
-                                {$LL.lotForm.quantityUseMovementHint()}
-                            </span>
-                        </div>
-                    {:else}
-                        <label>
-                            {$LL.lotForm.quantityStar()}
-                            <input
-                                type="number"
-                                bind:value={quantity}
-                                min={productUnitKind === "integer" ? 1 : 0.01}
-                                step={productUnitKind === "integer" ? 1 : 0.01}
-                                required
-                            />
-                        </label>
-                    {/if}
-
-                    {#if productUnitKind === null}
-                        <!-- Product has no catalog link: show editable unit text input. -->
-                        <label>
-                            {$LL.lotForm.selectUnit()}
-                            <input
-                                type="text"
-                                bind:value={unit}
-                                placeholder={$LL.lotForm.placeholders.unit()}
-                                autocomplete="off"
-                            />
-                        </label>
-                    {:else}
-                        <!-- Product has a catalog link: show read-only display name. -->
-                        <div class="readonly-field">
-                            <span class="readonly-label">{$LL.lotForm.selectUnit()}</span>
-                            <span class="unit-chip">{unit}</span>
-                        </div>
-                    {/if}
+        <div class="grid-2">
+            {#if mode === "edit" && lot}
+                <!-- Edit mode: quantity is read-only. Quantity changes
+                     must go through movement/adjustment/resolve flows. -->
+                <div class="quantity-readonly">
+                    <span class="quantity-label">{$LL.lotForm.quantityReadonly()}</span>
+                    <span class="quantity-value">
+                        {lot.quantity}
+                        {#if lot.unit}<span class="quantity-unit">{lot.unit}</span>{/if}
+                    </span>
+                    <span class="quantity-hint">
+                        {$LL.lotForm.quantityUseMovementHint()}
+                    </span>
                 </div>
+            {:else}
+                <Input
+                    bind:value={quantityStr}
+                    label={$LL.lotForm.quantityStar()}
+                    type="number"
+                    required
+                />
+            {/if}
+
+            {#if productUnitKind === null}
+                <!-- Product has no catalog link: show editable unit text input. -->
+                <Input
+                    bind:value={unit}
+                    label={$LL.lotForm.selectUnit()}
+                    placeholder={$LL.lotForm.placeholders.unit()}
+                />
+            {:else}
+                <!-- Product has a catalog link: show read-only display name. -->
+                <div class="readonly-field">
+                    <span class="readonly-label">{$LL.lotForm.selectUnit()}</span>
+                    <span class="unit-chip">{unit}</span>
+                </div>
+            {/if}
+        </div>
 
         <div class="grid-2">
-            <label>
-                {$LL.lotForm.expiryDate()}
+            <fieldset class="date-fieldset">
+                <legend class="fieldset-legend">{$LL.lotForm.expiryDate()}</legend>
                 <DatePicker
                     bind:value={expiryDate}
                     clearable={false}
@@ -320,67 +356,57 @@
                     placeholder={$LL.lotForm.dateFormat()}
                     todayDate={todayIso()}
                 />
-            </label>
+            </fieldset>
 
-            <label>
-                {$LL.lotForm.alertDaysStar()}
-                <input
-                    type="number"
-                    bind:value={alertDaysBefore}
-                    min="0"
-                    max="3650"
-                    step="1"
-                    required
-                />
-            </label>
+            <Input
+                bind:value={alertDaysStr}
+                label={$LL.lotForm.alertDaysStar()}
+                type="number"
+                required
+            />
         </div>
 
-        <div class="batch-code-wrapper">
-            <label>
-                {$LL.lotForm.batchCodeOptional()}
-                <input
-                    type="text"
-                    bind:value={batchCode}
-                    placeholder={$LL.lotForm.placeholders.batchCode()}
-                    autocomplete="off"
-                />
-            </label>
-            {#if batchEcho}
-                <span class="batch-echo-chip" aria-live="polite">
-                    {$LL.lotForm.createTitle()}: <code>{batchEcho}</code>
-                </span>
-            {/if}
-        </div>
+        <Input
+            bind:value={batchCode}
+            label={$LL.lotForm.batchCodeOptional()}
+            placeholder={$LL.lotForm.placeholders.batchCode()}
+        />
+        {#if batchEcho}
+            <span class="batch-echo-chip" aria-live="polite">
+                {$LL.lotForm.createTitle()}: <code>{batchEcho}</code>
+            </span>
+        {/if}
 
-        <label>
-            {$LL.lotForm.notesOptional()}
+        <fieldset class="fieldset">
+            <legend class="fieldset-legend">{$LL.lotForm.notesOptional()}</legend>
             <textarea
                 bind:value={notes}
                 placeholder={$LL.common.optional()}
                 rows="2"
+                class="textarea textarea-md w-full motion-reduce:transition-none"
             ></textarea>
-        </label>
+        </fieldset>
 
         <div class="form-actions">
-            <button
+            <Button
                 type="submit"
-                class="btn-primary"
-                disabled={submitting}
+                variant="primary"
+                loading={submitting}
             >
                 {submitting
                     ? $LL.lotForm.saving()
                     : mode === "edit"
                       ? $LL.lotForm.saveChanges()
                       : $LL.lotForm.addLot()}
-            </button>
-            <button
+            </Button>
+            <Button
                 type="button"
-                class="btn-secondary"
-                on:click={onCancel}
+                variant="ghost"
+                onclick={onCancel}
                 disabled={submitting}
             >
                 {$LL.common.cancel()}
-            </button>
+            </Button>
         </div>
     {/if}
 </form>
@@ -393,47 +419,9 @@
         max-width: 520px;
     }
 
-    .lot-form h3 {
+    .form-title {
         margin: 0 0 4px;
         font-size: 1rem;
-    }
-
-    .alert {
-        padding: 10px 14px;
-        border-radius: 6px;
-        font-size: 0.9rem;
-    }
-
-    .alert-error {
-        background: #fee2e2;
-        color: #991b1b;
-        border: 1px solid #fca5a5;
-    }
-
-    label {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        font-size: 0.85rem;
-        color: #374151;
-    }
-
-    label input[type="text"],
-    label input[type="number"],
-    label textarea,
-    label select {
-        padding: 7px 10px;
-        border: 1px solid #d1d5db;
-        border-radius: 6px;
-        font-size: 0.9rem;
-        font-family: inherit;
-    }
-
-    label input:focus,
-    label textarea:focus,
-    label select:focus {
-        outline: 2px solid #3b82f6;
-        border-color: #3b82f6;
     }
 
     .grid-2 {
@@ -442,10 +430,99 @@
         gap: 12px;
     }
 
-    .batch-code-wrapper {
+    /* DatePicker wrapper. The DatePicker primitive renders its own
+       popover; the fieldset-legend preserves the visible label
+       association with the popover trigger inside. */
+    .date-fieldset {
+        border: 0;
+        padding: 0;
+        margin: 0;
+        min-width: 0;
+    }
+
+    .hint-required {
+        margin: -6px 0 0;
+        font-size: 0.78rem;
+        color: var(--color-error);
+    }
+
+    .hint-optional {
+        margin: -6px 0 0;
+        font-size: 0.78rem;
+        color: var(--color-secondary);
+    }
+
+    .loading {
+        color: var(--color-secondary);
+        font-style: italic;
+        font-size: 0.85rem;
+        margin: 0;
+    }
+
+    .store-hint {
+        font-size: 0.85rem;
+        color: var(--color-base-content);
+        margin: 0;
+    }
+
+    .unit-chip {
+        display: inline-flex;
+        align-items: center;
+        background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
+        border-radius: 4px;
+        padding: 4px 10px;
+        font-size: 0.9rem;
+        color: var(--color-base-content);
+        font-weight: 500;
+    }
+
+    .metadata-only-notice {
+        margin: 0;
+        padding: 8px 12px;
+        background: color-mix(in oklch, var(--color-info) 8%, transparent);
+        border: 1px solid color-mix(in oklch, var(--color-info) 35%, transparent);
+        border-radius: 6px;
+        font-size: 0.82rem;
+        color: var(--color-info);
+        line-height: 1.35;
+    }
+
+    .quantity-readonly {
         display: flex;
         flex-direction: column;
         gap: 4px;
+        padding: 7px 10px;
+        border: 1px dashed color-mix(in oklch, var(--color-base-300) 70%, transparent);
+        border-radius: 6px;
+        background: color-mix(in oklch, var(--color-base-200) 50%, transparent);
+        font-size: 0.85rem;
+        color: var(--color-base-content);
+    }
+
+    .quantity-label {
+        font-weight: 500;
+        color: var(--color-secondary);
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .quantity-value {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--color-base-content);
+    }
+
+    .quantity-unit {
+        font-weight: 400;
+        color: var(--color-secondary);
+        margin-left: 4px;
+    }
+
+    .quantity-hint {
+        font-size: 0.78rem;
+        color: var(--color-secondary);
+        font-style: italic;
     }
 
     .batch-echo-chip {
@@ -453,9 +530,9 @@
         align-items: center;
         gap: 4px;
         font-size: 0.82rem;
-        color: #16a34a;
-        background: #dcfce7;
-        border: 1px solid #86efac;
+        color: var(--color-success);
+        background: color-mix(in oklch, var(--color-success) 12%, transparent);
+        border: 1px solid color-mix(in oklch, var(--color-success) 40%, transparent);
         border-radius: 4px;
         padding: 3px 8px;
         width: fit-content;
@@ -465,125 +542,12 @@
         font-family: 'Courier New', Courier, monospace;
         font-size: 0.82rem;
         font-weight: 600;
-        color: #15803d;
+        color: var(--color-success);
     }
 
     .form-actions {
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
-    }
-
-    .btn-primary {
-        background: #2563eb;
-        color: #fff;
-        border: none;
-        border-radius: 6px;
-        padding: 8px 16px;
-        font-size: 0.9rem;
-        cursor: pointer;
-        font-family: inherit;
-    }
-
-    .btn-primary:hover:not(:disabled) {
-        background: #1d4ed8;
-    }
-
-    .btn-primary:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-    }
-
-    .btn-secondary {
-        background: #fff;
-        color: #374151;
-        border: 1px solid #d1d5db;
-        border-radius: 6px;
-        padding: 8px 16px;
-        font-size: 0.9rem;
-        cursor: pointer;
-        font-family: inherit;
-    }
-
-    .btn-secondary:hover:not(:disabled) {
-        background: #f9fafb;
-    }
-
-    .btn-secondary:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-    }
-
-    .loading {
-        color: #6b7280;
-        font-style: italic;
-        font-size: 0.85rem;
-        margin: 0;
-    }
-
-    .store-hint {
-        font-size: 0.85rem;
-        color: #374151;
-        margin: 0;
-    }
-
-    .unit-chip {
-        display: inline-flex;
-        align-items: center;
-        background: #e5e7eb;
-        border-radius: 4px;
-        padding: 4px 10px;
-        font-size: 0.9rem;
-        color: #374151;
-        font-weight: 500;
-    }
-
-    .metadata-only-notice {
-        margin: 0;
-        padding: 8px 12px;
-        background: #eff6ff;
-        border: 1px solid #bfdbfe;
-        border-radius: 6px;
-        font-size: 0.82rem;
-        color: #1e3a8a;
-        line-height: 1.35;
-    }
-
-    .quantity-readonly {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        padding: 7px 10px;
-        border: 1px dashed #d1d5db;
-        border-radius: 6px;
-        background: #f9fafb;
-        font-size: 0.85rem;
-        color: #374151;
-    }
-
-    .quantity-label {
-        font-weight: 500;
-        color: #6b7280;
-        font-size: 0.78rem;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-    }
-
-    .quantity-value {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #111827;
-    }
-
-    .quantity-unit {
-        font-weight: 400;
-        color: #6b7280;
-        margin-left: 4px;
-    }
-
-    .quantity-hint {
-        font-size: 0.78rem;
-        color: #6b7280;
-        font-style: italic;
     }
 </style>

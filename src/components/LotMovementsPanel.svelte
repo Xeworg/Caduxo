@@ -1,3 +1,28 @@
+<!--
+  LotMovementsPanel.svelte — single-lot movement ledger
+  (PR 9a of caduxo-daisyui-redesign).
+
+  Migration to shared UI primitives:
+    - Table.svelte (zebra, stickyHeader) hosts the per-lot movement
+      ledger; numeric columns use the `num` utility from PR 1.
+    - LoadingState.svelte (text variant) replaces the bespoke
+      `.loading` placeholder.
+    - EmptyState.svelte replaces the bespoke `.empty-hint` text.
+    - Alert.svelte (variant=error) replaces the bespoke
+      `.alert-error` div.
+    - Button.svelte + Tooltip.svelte host the action buttons
+      (moveStock / registerExit / adjustCount).
+
+  New i18n keys (`lotMovements.table.*`) introduce the table-header
+  copy that did not exist before the tabular migration.
+
+  Tailwind classes referenced here (for the JIT scanner):
+    table table-zebra table-pin-rows
+    overflow-x-auto
+    btn btn-secondary btn-error btn-success btn-sm
+    tooltip tooltip-bottom
+    alert alert-error alert-soft
+-->
 <script lang="ts">
   import { onMount } from "svelte";
   import { LL } from "../i18n/i18n-svelte.js";
@@ -13,6 +38,13 @@
   import MoveStockModal from "./MoveStockModal.svelte";
   import RegisterExitModal from "./RegisterExitModal.svelte";
   import AdjustCountModal from "./AdjustCountModal.svelte";
+  import Table from "./ui/Table.svelte";
+  import LoadingState from "./ui/LoadingState.svelte";
+  import EmptyState from "./ui/EmptyState.svelte";
+  import Alert from "./ui/Alert.svelte";
+  import Button from "./ui/Button.svelte";
+  import Tooltip from "./ui/Tooltip.svelte";
+  import Icon from "./ui/Icon.svelte";
 
   // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -142,73 +174,83 @@
 
     {#if isActive}
       <div class="panel-actions">
-        <button
-          type="button"
-          class="btn-action btn-move"
-          on:click={() => openActionForm("move")}
-          title={$LL.lotMovements.actionTitles.moveStock()}
-        >
-          {$LL.lotMovements.moveStock()}
-        </button>
-        <button
-          type="button"
-          class="btn-action btn-exit"
-          on:click={() => openActionForm("exit")}
-          title={$LL.lotMovements.actionTitles.registerExit()}
-        >
-          {$LL.lotMovements.registerExit()}
-        </button>
-        <button
-          type="button"
-          class="btn-action btn-adjust"
-          on:click={() => openActionForm("adjust")}
-          title={$LL.lotMovements.actionTitles.adjustCount()}
-        >
-          {$LL.lotMovements.adjustCount()}
-        </button>
+        <Tooltip text={$LL.lotMovements.actionTitles.moveStock()} position="bottom">
+          <Button variant="secondary" size="sm" onclick={() => openActionForm("move")}>
+            {#snippet iconStart()}
+              <Icon name="arrows-right-left" size="sm" />
+            {/snippet}
+            {$LL.lotMovements.moveStock()}
+          </Button>
+        </Tooltip>
+        <Tooltip text={$LL.lotMovements.actionTitles.registerExit()} position="bottom">
+          <Button variant="danger" size="sm" onclick={() => openActionForm("exit")}>
+            {#snippet iconStart()}
+              <Icon name="arrow-right-on-rectangle" size="sm" />
+            {/snippet}
+            {$LL.lotMovements.registerExit()}
+          </Button>
+        </Tooltip>
+        <Tooltip text={$LL.lotMovements.actionTitles.adjustCount()} position="bottom">
+          <Button variant="success" size="sm" onclick={() => openActionForm("adjust")}>
+            {#snippet iconStart()}
+              <Icon name="adjustments-horizontal" size="sm" />
+            {/snippet}
+            {$LL.lotMovements.adjustCount()}
+          </Button>
+        </Tooltip>
       </div>
     {/if}
   </div>
 
   <!-- ── Movements list ────────────────────────────────────────────────────── -->
   {#if loading}
-    <p class="loading">{$LL.lotMovements.loadingMovements()}</p>
+    <LoadingState variant="text" label={$LL.lotMovements.loadingMovements()} />
   {:else if errorMsg}
-    <div class="alert-error" role="alert">{errorMsg}</div>
+    <Alert variant="error">{errorMsg}</Alert>
   {:else if movements.length === 0}
-    <p class="empty-hint">{$LL.lotMovements.noMovements()}</p>
+    <EmptyState
+      title={$LL.lotMovements.noMovements()}
+      icon="inbox"
+    />
   {:else}
-    <ul class="movement-list">
-      {#each movements as mov (mov.id)}
-        {@const label = getMovementKindLabel(mov.movement_kind, mov.direction)}
-        {@const qty = formatMovementQuantity(mov.quantity, mov.movement_kind, mov.direction)}
-        <li class="movement-item">
-          <div class="movement-main">
-            <span class="movement-kind">{label}</span>
-            <span class="movement-qty">{qty}</span>
-          </div>
-          <div class="movement-meta">
-            {#if mov.movement_kind === "transfer" || mov.movement_kind.startsWith("entry:") || mov.movement_kind === "inventory_adjustment"}
-              <span class="movement-locations">
+    <Table zebra stickyHeader scrollable aria-label={$LL.lotMovements.panelTitle()}>
+      {#snippet head()}
+        <tr>
+          <th>{$LL.lotMovements.table.kind()}</th>
+          <th class="num">{$LL.lotMovements.table.quantity()}</th>
+          <th>{$LL.lotMovements.table.locations()}</th>
+          <th>{$LL.lotMovements.table.time()}</th>
+        </tr>
+      {/snippet}
+      {#snippet body()}
+        {#each movements as mov (mov.id)}
+          {@const label = getMovementKindLabel(mov.movement_kind, mov.direction)}
+          {@const qty = formatMovementQuantity(mov.quantity, mov.movement_kind, mov.direction)}
+          <tr>
+            <td>{label}</td>
+            <td class="num">{qty}</td>
+            <td>
+              {#if mov.movement_kind === "transfer" || mov.movement_kind.startsWith("entry:") || mov.movement_kind === "inventory_adjustment"}
                 {#if mov.source_location_id}
                   <span class="loc-badge">{getLocationName(mov.source_location_id)}</span>
                   →
                 {/if}
                 <span class="loc-badge">{getLocationName(mov.destination_location_id)}</span>
-              </span>
-            {:else}
-              <span class="movement-locations">
-                {$LL.lotMovements.fromLocation()} <span class="loc-badge">{getLocationName(mov.source_location_id)}</span>
-              </span>
-            {/if}
-            <span class="movement-time">{formatDate(mov.created_at)}</span>
-          </div>
+              {:else}
+                <span>{$LL.lotMovements.fromLocation()}</span>
+                <span class="loc-badge">{getLocationName(mov.source_location_id)}</span>
+              {/if}
+            </td>
+            <td>{formatDate(mov.created_at)}</td>
+          </tr>
           {#if mov.notes}
-            <p class="movement-notes">{mov.notes}</p>
+            <tr class="notes-row">
+              <td colspan="4" class="movement-notes">{mov.notes}</td>
+            </tr>
           {/if}
-        </li>
-      {/each}
-    </ul>
+        {/each}
+      {/snippet}
+    </Table>
   {/if}
 </div>
 
@@ -276,7 +318,7 @@
 
   .total-label {
     font-size: 0.72rem;
-    color: #6b7280;
+    color: var(--color-secondary);
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }
@@ -284,7 +326,7 @@
   .total-value {
     font-size: 0.95rem;
     font-weight: 600;
-    color: #374151;
+    color: var(--color-base-content);
   }
 
   .panel-actions {
@@ -293,138 +335,24 @@
     flex-wrap: wrap;
   }
 
-  .btn-action {
-    padding: 6px 12px;
-    border-radius: 6px;
-    font-size: 0.82rem;
-    cursor: pointer;
-    border: 1px solid;
-    font-family: inherit;
-    transition: background-color 0.15s;
-  }
-
-  .btn-move {
-    background: #eff6ff;
-    border-color: #bfdbfe;
-    color: #1e40af;
-  }
-
-  .btn-move:hover {
-    background: #dbeafe;
-  }
-
-  .btn-exit {
-    background: #fef2f2;
-    border-color: #fecaca;
-    color: #991b1b;
-  }
-
-  .btn-exit:hover {
-    background: #fee2e2;
-  }
-
-  .btn-adjust {
-    background: #f0fdf4;
-    border-color: #bbf7d0;
-    color: #166534;
-  }
-
-  .btn-adjust:hover {
-    background: #dcfce7;
-  }
-
-  .loading {
-    color: #6b7280;
-    font-style: italic;
-    font-size: 0.85rem;
-    margin: 0;
-  }
-
-  .empty-hint {
-    color: #9ca3af;
-    font-size: 0.85rem;
-    font-style: italic;
-    margin: 0;
-  }
-
-  .alert-error {
-    background: #fee2e2;
-    color: #991b1b;
-    border: 1px solid #fca5a5;
-    border-radius: 6px;
-    padding: 8px 12px;
-    font-size: 0.85rem;
-  }
-
-  .movement-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .movement-item {
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
-    border-radius: 7px;
-    padding: 10px 12px;
-  }
-
-  .movement-main {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-  }
-
-  .movement-kind {
-    font-size: 0.88rem;
-    font-weight: 500;
-    color: #374151;
-  }
-
-  .movement-qty {
-    font-size: 0.95rem;
-    font-weight: 600;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    color: #1f2937;
-  }
-
-  .movement-meta {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 4px;
-    flex-wrap: wrap;
-  }
-
-  .movement-locations {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 0.78rem;
-    color: #6b7280;
-  }
-
   .loc-badge {
-    background: #e5e7eb;
-    color: #374151;
+    background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
+    color: var(--color-base-content);
     padding: 1px 6px;
     border-radius: 4px;
     font-size: 0.74rem;
   }
 
-  .movement-time {
-    font-size: 0.74rem;
-    color: #9ca3af;
+  .notes-row td {
+    background: color-mix(in oklch, var(--color-base-200) 50%, transparent);
+    padding-top: 4px;
+    padding-bottom: 8px;
   }
 
   .movement-notes {
-    margin: 6px 0 0;
+    margin: 0;
     font-size: 0.8rem;
-    color: #4b5563;
+    color: var(--color-secondary);
     font-style: italic;
     white-space: pre-wrap;
   }

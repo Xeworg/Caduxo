@@ -7,6 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json --threshold error",
     "tauri": "tauri",
     "i18n:generate": "typesafe-i18n --no-watch",
     "i18n:watch": "typesafe-i18n",
@@ -15,11 +16,14 @@
     "predev": "npm run i18n:generate"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "@tauri-apps/plugin-notification": "^2.0.0",
     "@tauri-apps/plugin-os": "^2.3.2",
+    "daisyui": "^5.7.42",
     "svelte": "^5.0.0",
+    "tailwindcss": "^4.3.3",
     "typesafe-i18n": "^5.27.1",
     "vite": "^6.0.0"
   },

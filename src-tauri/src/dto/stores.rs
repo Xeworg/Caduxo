@@ -77,6 +77,18 @@ pub struct SettingsResponse {
     /// False on fresh installs lets the frontend call OS / WebView detection
     /// instead of treating the `"en"` fallback as a manual user preference.
     pub language_configured: bool,
+    /// Effective active theme; one of {"caduxo-light", "dark"}. Falls back to
+    /// `"caduxo-light"` when no row is persisted so the type stays a
+    /// non-nullable string for consumers. The frontend treats the fallback
+    /// as "no manual preference" via `theme_configured` and runs OS detection
+    /// (`prefers-color-scheme`) before locking to the fallback string.
+    pub theme: String,
+    /// True only when an `app_settings.theme` row was actually persisted AND
+    /// its value is in the supported set (`caduxo-light` or `dark`). False on
+    /// fresh installs OR when a stored row carries an unsupported value, so
+    /// the frontend can run detection / fall back to the default theme
+    /// instead of honouring an invalid row.
+    pub theme_configured: bool,
 }
 
 /// Input for updating settings.
@@ -87,4 +99,9 @@ pub struct SettingsUpdate {
     pub require_initial_location_on_lot_create: Option<bool>,
     /// Optional: when present, sets the language preference to "en" or "es".
     pub language: Option<String>,
+    /// Optional: when present, sets the active theme preference. The command
+    /// boundary rejects values outside the curated v1 set
+    /// (`caduxo-light`, `dark`); the service layer accepts any non-empty
+    /// string and the repository trusts it.
+    pub theme: Option<String>,
 }

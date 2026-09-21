@@ -4,6 +4,8 @@
     import { tick } from "svelte";
     import { LL } from "../../i18n/i18n-svelte.js";
     import { humanizeError } from "../../lib/errors.js";
+    import Button from "../ui/Button.svelte";
+    import Icon from "../ui/Icon.svelte";
 
     // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -391,7 +393,9 @@
                             class="cp-chip-remove"
                             aria-label={$LL.categoryPicker.removeCategory({ name: $LL.categoryPicker.uncategorized() })}
                             on:click|stopPropagation={() => removeChip(UNCATEGORIZED_SENTINEL)}
-                        >✕</button>
+                        >
+                            <Icon name="x-mark" size="xs" />
+                        </button>
                     </span>
                 {/if}
                 {#each selectedChips as chip (chip.id)}
@@ -402,7 +406,9 @@
                             class="cp-chip-remove"
                             aria-label={$LL.categoryPicker.removeCategory({ name: chip.name })}
                             on:click|stopPropagation={() => removeChip(chip.id)}
-                        >✕</button>
+                        >
+                            <Icon name="x-mark" size="xs" />
+                        </button>
                     </span>
                 {/each}
             </div>
@@ -464,13 +470,17 @@
                 on:keydown={onInputKeydown}
             />
             {#if isOpen}
-                <button
-                    type="button"
-                    class="cp-close-icon"
+                <Button
+                    variant="ghost"
+                    size="sm"
                     aria-label={$LL.common.close()}
-                    tabindex="-1"
-                    on:click|stopPropagation={closePopover}
-                >✕</button>
+                    onclick={closePopover}
+                    id="cp-close-icon"
+                >
+                    {#snippet iconStart()}
+                        <Icon name="x-mark" size="sm" />
+                    {/snippet}
+                </Button>
             {/if}
         </div>
     </div>
@@ -480,7 +490,7 @@
         <div
             bind:this={popoverEl}
             id="cp-listbox"
-            class="cp-popover"
+            class="cp-popover dropdown dropdown-content"
             role="listbox"
             aria-label={$LL.categoryPicker.results()}
             aria-multiselectable="true"
@@ -506,7 +516,9 @@
                     >
                         <span class="cp-option-name">{$LL.categoryPicker.uncategorized()}</span>
                         {#if hasUncategorized}
-                            <span class="cp-check" aria-hidden="true">✓</span>
+                            <span class="cp-check" aria-hidden="true">
+                                <Icon name="check" size="sm" />
+                            </span>
                         {/if}
                     </div>
                 {/if}
@@ -527,7 +539,9 @@
                     >
                         <span class="cp-option-name">{cat.name}</span>
                         {#if isSelected(cat.id)}
-                            <span class="cp-check" aria-hidden="true">✓</span>
+                            <span class="cp-check" aria-hidden="true">
+                                <Icon name="check" size="sm" />
+                            </span>
                         {/if}
                     </div>
                 {/each}
@@ -585,19 +599,19 @@
         align-items: center;
         gap: 4px;
         padding: 2px 8px;
-        background: #dbeafe;
-        color: #1e40af;
+        background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+        color: var(--color-primary);
         border-radius: 9999px;
         font-size: 0.8rem;
         font-weight: 500;
-        border: 1px solid #bfdbfe;
+        border: 1px solid color-mix(in oklch, var(--color-primary) 20%, transparent);
         line-height: 1.4;
     }
 
     .cp-chip--uncat {
-        background: #f3f4f6;
-        color: #6b7280;
-        border-color: #d1d5db;
+        background: var(--color-base-200);
+        color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+        border-color: var(--color-base-300);
     }
 
     .cp-chip-remove {
@@ -611,6 +625,8 @@
         line-height: 1;
         border-radius: 3px;
         transition: opacity 0.15s;
+        display: inline-flex;
+        align-items: center;
     }
 
     .cp-chip-remove:hover {
@@ -622,7 +638,7 @@
         border: none;
         cursor: pointer;
         font-size: 0.75rem;
-        color: #ef4444;
+        color: var(--color-error);
         padding: 0;
         margin-bottom: 4px;
         text-decoration: underline;
@@ -630,7 +646,7 @@
     }
 
     .cp-clear-all:focus-visible {
-        outline: 2px solid #2563eb;
+        outline: 2px solid var(--color-primary);
         outline-offset: 1px;
         border-radius: 2px;
     }
@@ -642,22 +658,22 @@
         align-items: center;
         gap: 6px;
         padding: 7px 10px;
-        border: 1px solid #d1d5db;
+        border: 1px solid var(--color-base-300);
         border-radius: 8px;
-        background: #fff;
+        background: var(--color-base-100);
         cursor: text;
         transition: border-color 0.15s, box-shadow 0.15s;
     }
 
     .cp-trigger:focus-within,
     .cp-root.cp-open .cp-trigger {
-        border-color: #2563eb;
-        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 15%, transparent);
         outline: none;
     }
 
     .cp-search-icon {
-        color: #9ca3af;
+        color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
         flex-shrink: 0;
     }
 
@@ -667,44 +683,40 @@
         outline: none;
         font-size: 0.9rem;
         font-family: inherit;
-        color: #1e293b;
+        color: var(--color-base-content);
         background: transparent;
         min-width: 0;
         padding: 0;
     }
 
     .cp-trigger input[type="text"]::placeholder {
-        color: #9ca3af;
+        color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
     }
 
-    .cp-close-icon {
-        background: none;
-        border: none;
-        cursor: pointer;
-        color: #9ca3af;
-        font-size: 0.8rem;
-        padding: 2px 4px;
-        border-radius: 4px;
-        line-height: 1;
-        transition: color 0.15s;
-    }
-
-    .cp-close-icon:hover {
-        color: #1e293b;
-    }
+    /* The close icon is now a Button primitive (variant="ghost" size="sm");
+       the muted gray hover behaviour it used to provide is inherited from
+       DaisyUI's btn-ghost + the surrounding text colour. No local CSS rule
+       is needed. */
 
     /* ── Popover ──────────────────────────────────────────────────────────────── */
 
+    /* DaisyUI `dropdown dropdown-content` classes are also applied in markup
+       so the popover inherits DaisyUI's `border-radius` / shadow contract,
+       but the hand-rolled `position: fixed` + manual top/left computed in
+       `positionPopover()` stays unchanged. The DaisyUI anchor pattern is
+       NOT used here because the popover is anchored to the trigger's
+       bounding rect via JS — the visual contract is the only thing
+       borrowed. */
     .cp-popover {
         position: fixed;
         z-index: 500;
         width: 300px;
         max-height: 320px;
         overflow-y: auto;
-        background: #fff;
-        border: 1px solid #e2e8f0;
+        background: var(--color-base-100);
+        border: 1px solid var(--color-base-200);
         border-radius: 10px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.13);
+        box-shadow: 0 8px 24px color-mix(in oklch, var(--color-base-content) 13%, transparent);
         padding: 4px 0;
     }
 
@@ -719,32 +731,32 @@
         border-radius: 6px;
         margin: 0 4px;
         font-size: 0.88rem;
-        color: #1e293b;
+        color: var(--color-base-content);
         transition: background 0.1s;
         user-select: none;
     }
 
     .cp-option:hover,
     .cp-option--active {
-        background: #eff6ff;
+        background: color-mix(in oklch, var(--color-primary) 8%, transparent);
     }
 
     .cp-option--uncat {
-        color: #6b7280;
+        color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
         font-style: italic;
     }
 
     .cp-option--create {
-        color: #2563eb;
-        border-top: 1px solid #e2e8f0;
+        color: var(--color-primary);
+        border-top: 1px solid var(--color-base-200);
         margin-top: 4px;
         padding-top: 10px;
     }
 
     .cp-option--create:hover,
     .cp-option--create.cp-option--active {
-        background: #eff6ff;
-        color: #1d4ed8;
+        background: color-mix(in oklch, var(--color-primary) 8%, transparent);
+        color: color-mix(in oklch, var(--color-primary) 80%, black);
     }
 
     .cp-option-name {
@@ -752,13 +764,15 @@
     }
 
     .cp-check {
-        color: #2563eb;
+        color: var(--color-primary);
         font-weight: 600;
         font-size: 0.85rem;
+        display: inline-flex;
+        align-items: center;
     }
 
     .cp-creating {
-        color: #9ca3af;
+        color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
         font-style: italic;
     }
 
@@ -767,13 +781,13 @@
     .cp-status {
         padding: 12px;
         text-align: center;
-        color: #9ca3af;
+        color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
         font-size: 0.85rem;
     }
 
     .cp-create-error {
         padding: 6px 12px;
-        color: #ef4444;
+        color: var(--color-error);
         font-size: 0.78rem;
         text-align: center;
     }

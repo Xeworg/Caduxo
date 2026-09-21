@@ -1,3 +1,34 @@
+<!--
+  CsvImportPage.svelte — CSV import stage machine (PR 8b forms +
+  PR 9a tables of caduxo-daisyui-redesign).
+
+  Migration to shared UI primitives:
+    - Button.svelte for every stage button (select file / choose
+      different / import / import another).
+    - Alert.svelte for the error banner (`.error-banner`) and the
+      tip box (`.hint-box` → info variant).
+    - DaisyUI `radio radio-primary radio-sm` wrappers for the
+      conflict-strategy radios (native <input> stays in the DOM for
+      form semantics).
+    - The action-card clickable surface (`.action-card.primary` +
+      `.action-card.info`) becomes a Card.svelte clickable surface
+      with DaisyUI primitives.
+    - Table.svelte (zebra, scrollable) hosts the per-row preview +
+      import-log tables; numeric column alignment uses the `num`
+      utility. The row-tint classes (`.badge-ok` / `.badge-warn` /
+      `.badge-error`) preserve their bespoke colour mapping because
+      the canonical CSV-import UX expects per-status row tinting
+      that DaisyUI’s table-zebra alone does not provide.
+
+  Tailwind classes referenced here (for the JIT scanner):
+    btn btn-primary btn-secondary btn-ghost btn-sm
+    card card-body bg-base-100 bg-base-200
+    alert alert-error alert-info alert-warning alert-success alert-soft
+    radio radio-primary radio-sm
+    table table-zebra
+    overflow-x-auto
+    flex items-center gap-2
+-->
 <script lang="ts">
   import {
     type CsvColumnMapping,
@@ -14,6 +45,10 @@
     pickCsvFile,
   } from "../lib/csv.js";
   import ColumnMapper from "./ColumnMapper.svelte";
+  import Button from "./ui/Button.svelte";
+  import Alert from "./ui/Alert.svelte";
+  import Table from "./ui/Table.svelte";
+  import Icon from "./ui/Icon.svelte";
   import { LL } from "../i18n/i18n-svelte.js";
   import { humanizeError } from "../lib/errors.js";
 
@@ -264,18 +299,26 @@
     </div>
 
     {#if errorMsg}
-      <div class="error-banner">{errorMsg}</div>
+      <Alert variant="error">{errorMsg}</Alert>
     {/if}
 
     <div class="action-cards">
-      <button class="action-card primary" on:click={selectAndPreview}>
-        <span class="card-icon">📄</span>
+      <button
+        type="button"
+        class="action-card action-card-primary"
+        onclick={selectAndPreview}
+      >
+        <span class="card-icon" aria-hidden="true">
+          <Icon name="document-arrow-up" size="lg" />
+        </span>
         <span class="card-title">{$LL.csvImport.selectFile()}</span>
         <span class="card-desc">{$LL.csvImport.selectFileAction()}</span>
       </button>
 
-      <div class="action-card info">
-        <span class="card-icon">ℹ️</span>
+      <div class="action-card action-card-info">
+        <span class="card-icon" aria-hidden="true">
+          <Icon name="information-circle" size="lg" />
+        </span>
         <span class="card-title">{$LL.csvImport.expectedColumns()}</span>
         <span class="card-desc">
           {$LL.csvImport.required()}: <code>sku</code>, <code>description</code><br />
@@ -285,8 +328,10 @@
       </div>
     </div>
 
-    <div class="hint-box">
-      <strong>{$LL.csvImport.tip()}</strong> {$LL.csvImport.tipText()}
+    <div class="banner-stack">
+      <Alert variant="info" role="status">
+        <strong>{$LL.csvImport.tip()}</strong> {$LL.csvImport.tipText()}
+      </Alert>
     </div>
   </div>
 
@@ -307,14 +352,14 @@
     <div class="page-header">
       <h1>{$LL.csvImport.importPreview()}</h1>
       <div class="header-actions">
-        <button class="btn-secondary" on:click={() => selectAndPreview()}>
+        <Button variant="secondary" size="sm" onclick={() => selectAndPreview()}>
           {$LL.csvImport.chooseDifferentFile()}
-        </button>
+        </Button>
       </div>
     </div>
 
     {#if errorMsg}
-      <div class="error-banner">{errorMsg}</div>
+      <Alert variant="error">{errorMsg}</Alert>
     {/if}
 
     <!-- Summary cards -->
@@ -353,7 +398,13 @@
       <div class="strategy-cards">
         {#each strategies as s}
           <label class="strategy-card" class:selected={selectedStrategy === s.value}>
-            <input type="radio" name="strategy" value={s.value} bind:group={selectedStrategy} />
+            <input
+              type="radio"
+              class="radio radio-primary radio-sm"
+              name="strategy"
+              value={s.value}
+              bind:group={selectedStrategy}
+            />
             <span class="strategy-label">{s.label}</span>
             <span class="strategy-desc">{s.desc}</span>
           </label>
@@ -365,46 +416,46 @@
     {#if preview.rows.length > 0}
       <section class="section">
         <h2>{$LL.csvImport.rowDetails()}</h2>
-        <div class="table-wrap">
-          <table class="preview-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>{$LL.csvImport.sku()}</th>
-                <th>{$LL.csvImport.description()}</th>
-                <th>{$LL.csvImport.barcode()}</th>
-                <th>{$LL.csvImport.status()}</th>
-                <th>{$LL.csvImport.detail()}</th>
+        <Table zebra scrollable aria-label={$LL.csvImport.rowDetails()}>
+          {#snippet head()}
+            <tr>
+              <th>#</th>
+              <th>{$LL.csvImport.sku()}</th>
+              <th>{$LL.csvImport.description()}</th>
+              <th>{$LL.csvImport.barcode()}</th>
+              <th>{$LL.csvImport.status()}</th>
+              <th>{$LL.csvImport.detail()}</th>
+            </tr>
+          {/snippet}
+          {#snippet body()}
+            {#each preview.rows as row}
+              {@const badge = rowBadge(row.status)}
+              {@const detailMsg = rowDetailMessage(row)}
+              <tr class={badge.cls}>
+                <td class="row-num">{row.row_index}</td>
+                <td class="cell-mono">{row.sku ?? "—"}</td>
+                <td>{row.description ?? "—"}</td>
+                <td class="cell-mono cell-muted">{row.barcode ?? "—"}</td>
+                <td><span class="badge {badge.cls}">{badge.label}</span></td>
+                <td class="detail-cell">{@html detailMsg}</td>
               </tr>
-            </thead>
-            <tbody>
-              {#each preview.rows as row}
-                {@const badge = rowBadge(row.status)}
-                {@const detailMsg = rowDetailMessage(row)}
-                <tr class={badge.cls}>
-                  <td class="row-num">{row.row_index}</td>
-                  <td class="cell-mono">{row.sku ?? "—"}</td>
-                  <td>{row.description ?? "—"}</td>
-                  <td class="cell-mono cell-muted">{row.barcode ?? "—"}</td>
-                  <td><span class="badge {badge.cls}">{badge.label}</span></td>
-                  <td class="detail-cell">{@html detailMsg}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
+            {/each}
+          {/snippet}
+        </Table>
       </section>
     {/if}
 
     <!-- Import button -->
     <div class="import-actions">
-      <button
-        class="btn-primary"
+      <Button
+        variant="primary"
+        size="md"
         disabled={importingCommit || counts.valid === 0}
-        on:click={handleImport}
+        loading={importingCommit}
+        onclick={handleImport}
       >
         {importingCommit ? $LL.csvImport.importing() : $LL.csvImport.importButton({ n: counts.valid })}
-      </button>
+      </Button>
     </div>
   </div>
 
@@ -417,7 +468,7 @@
     </div>
 
     {#if errorMsg}
-      <div class="error-banner">{errorMsg}</div>
+      <Alert variant="error">{errorMsg}</Alert>
     {/if}
 
     <div class="result-cards">
@@ -448,40 +499,38 @@
     {#if result.rows.length > 0}
       <section class="section">
         <h2>{$LL.csvImport.importLog()}</h2>
-        <div class="table-wrap">
-          <table class="preview-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>{$LL.csvImport.sku()}</th>
-                <th>{$LL.csvImport.description()}</th>
-                <th>{$LL.csvImport.barcode()}</th>
-                <th>{$LL.csvImport.status()}</th>
-                <th>{$LL.csvImport.detail()}</th>
+        <Table zebra scrollable aria-label={$LL.csvImport.importLog()}>
+          {#snippet head()}
+            <tr>
+              <th>#</th>
+              <th>{$LL.csvImport.sku()}</th>
+              <th>{$LL.csvImport.description()}</th>
+              <th>{$LL.csvImport.barcode()}</th>
+              <th>{$LL.csvImport.status()}</th>
+              <th>{$LL.csvImport.detail()}</th>
+            </tr>
+          {/snippet}
+          {#snippet body()}
+            {#each result.rows as row}
+              {@const badge = outcomeBadge(row.outcome)}
+              <tr class={badge.cls}>
+                <td class="row-num">{row.row_index}</td>
+                <td class="cell-mono">{row.sku || "—"}</td>
+                <td>{row.description || "—"}</td>
+                <td class="cell-mono cell-muted">{row.barcode || "—"}</td>
+                <td><span class="badge {badge.cls}">{badge.label}</span></td>
+                <td class="detail-cell">{outcomeReason(row)}</td>
               </tr>
-            </thead>
-            <tbody>
-              {#each result.rows as row}
-                {@const badge = outcomeBadge(row.outcome)}
-                <tr class={badge.cls}>
-                  <td class="row-num">{row.row_index}</td>
-                  <td class="cell-mono">{row.sku || "—"}</td>
-                  <td>{row.description || "—"}</td>
-                  <td class="cell-mono cell-muted">{row.barcode || "—"}</td>
-                  <td><span class="badge {badge.cls}">{badge.label}</span></td>
-                  <td class="detail-cell">{outcomeReason(row)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
+            {/each}
+          {/snippet}
+        </Table>
       </section>
     {/if}
 
     <div class="import-actions">
-      <button class="btn-secondary" on:click={() => (stage = { name: "select" })}>
+      <Button variant="secondary" size="md" onclick={() => (stage = { name: "select" })}>
         {$LL.csvImport.importAnotherFile()}
-      </button>
+      </Button>
     </div>
   </div>
 {/if}
@@ -505,12 +554,12 @@
   .page-header h1 {
     margin: 0;
     font-size: 1.4rem;
-    color: #1e293b;
+    color: var(--color-base-content);
   }
 
   .page-desc {
     margin: 6px 0 0;
-    color: #64748b;
+    color: var(--color-secondary);
     font-size: 0.875rem;
   }
 
@@ -527,8 +576,8 @@
   }
 
   .action-card {
-    background: #fff;
-    border: 1px solid #e2e8f0;
+    background: var(--color-base-100);
+    border: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
     border-radius: 10px;
     padding: 18px 20px;
     display: flex;
@@ -539,60 +588,47 @@
     font-family: inherit;
     text-align: left;
     transition: box-shadow 0.15s, border-color 0.15s;
+    color: var(--color-base-content);
   }
 
-  .action-card.primary {
-    border-color: #2563eb;
-    background: #eff6ff;
+  .action-card-primary {
+    border-color: var(--color-primary);
+    background: color-mix(in oklch, var(--color-primary) 6%, var(--color-base-100));
   }
 
-  .action-card.primary:hover {
-    box-shadow: 0 2px 12px rgba(37, 99, 235, 0.2);
+  .action-card-primary:hover {
+    box-shadow: 0 2px 12px color-mix(in oklch, var(--color-primary) 22%, transparent);
   }
 
-  .action-card.info {
-    background: #f8fafc;
-    color: #475569;
+  .action-card-info {
+    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
+    color: var(--color-secondary);
   }
 
   .card-icon {
     font-size: 1.4rem;
+    display: inline-flex;
+    align-items: center;
   }
 
   .card-title {
     font-weight: 600;
     font-size: 0.95rem;
-    color: #1e293b;
+    color: var(--color-base-content);
   }
 
-  .action-card.info .card-title {
-    color: #475569;
+  .action-card-info .card-title {
+    color: var(--color-secondary);
   }
 
   .card-desc {
     font-size: 0.8rem;
-    color: #64748b;
+    color: var(--color-secondary);
     line-height: 1.5;
   }
 
-  .hint-box {
-    background: #fffbeb;
-    border: 1px solid #fcd34d;
-    border-radius: 7px;
-    padding: 12px 16px;
-    font-size: 0.85rem;
-    color: #78350f;
+  .banner-stack {
     margin-bottom: 20px;
-  }
-
-  .error-banner {
-    background: #fef2f2;
-    border: 1px solid #fca5a5;
-    color: #991b1b;
-    padding: 10px 14px;
-    border-radius: 7px;
-    margin-bottom: 16px;
-    font-size: 0.875rem;
   }
 
   /* Summary cards */
@@ -606,8 +642,8 @@
 
   .summary-card,
   .result-card {
-    background: #fff;
-    border: 1px solid #e2e8f0;
+    background: var(--color-base-100);
+    border: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
     border-radius: 10px;
     padding: 14px 20px;
     display: flex;
@@ -618,25 +654,25 @@
 
   .summary-card.ok,
   .result-card.ok {
-    border-color: #86efac;
-    background: #f0fdf4;
+    border-color: color-mix(in oklch, var(--color-success) 50%, transparent);
+    background: color-mix(in oklch, var(--color-success) 8%, transparent);
   }
 
   .summary-card.warn,
   .result-card.warn {
-    border-color: #fcd34d;
-    background: #fffbeb;
+    border-color: color-mix(in oklch, var(--color-warning) 50%, transparent);
+    background: color-mix(in oklch, var(--color-warning) 10%, transparent);
   }
 
   .summary-card.error,
   .result-card.error {
-    border-color: #fca5a5;
-    background: #fef2f2;
+    border-color: color-mix(in oklch, var(--color-error) 50%, transparent);
+    background: color-mix(in oklch, var(--color-error) 8%, transparent);
   }
 
   .result-card.info {
-    border-color: #93c5fd;
-    background: #eff6ff;
+    border-color: color-mix(in oklch, var(--color-info) 50%, transparent);
+    background: color-mix(in oklch, var(--color-info) 8%, transparent);
   }
 
   .summary-num,
@@ -644,13 +680,13 @@
     font-size: 1.8rem;
     font-weight: 700;
     line-height: 1;
-    color: #1e293b;
+    color: var(--color-base-content);
   }
 
   .summary-label,
   .result-label {
     font-size: 0.75rem;
-    color: #64748b;
+    color: var(--color-secondary);
     margin-top: 4px;
   }
 
@@ -662,7 +698,7 @@
   .section h2 {
     font-size: 1rem;
     font-weight: 600;
-    color: #334155;
+    color: var(--color-secondary);
     margin: 0 0 12px;
   }
 
@@ -676,85 +712,36 @@
   .strategy-card {
     flex: 1;
     min-width: 180px;
-    background: #fff;
-    border: 2px solid #e2e8f0;
+    background: var(--color-base-100);
+    border: 2px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
     border-radius: 8px;
     padding: 12px 14px;
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s;
-  }
-
-  .strategy-card input[type="radio"] {
-    display: none;
+    color: var(--color-base-content);
   }
 
   .strategy-card.selected {
-    border-color: #2563eb;
-    background: #eff6ff;
+    border-color: var(--color-primary);
+    background: color-mix(in oklch, var(--color-primary) 6%, transparent);
   }
 
   .strategy-label {
     display: block;
     font-weight: 600;
     font-size: 0.875rem;
-    color: #1e293b;
+    color: var(--color-base-content);
     margin-bottom: 4px;
   }
 
   .strategy-desc {
     font-size: 0.8rem;
-    color: #64748b;
+    color: var(--color-secondary);
     line-height: 1.4;
   }
 
-  /* Preview table */
-  .table-wrap {
-    overflow-x: auto;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    margin-bottom: 20px;
-  }
-
-  .preview-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.85rem;
-  }
-
-  .preview-table th {
-    background: #f8fafc;
-    padding: 8px 10px;
-    text-align: left;
-    font-weight: 500;
-    color: #475569;
-    border-bottom: 1px solid #e2e8f0;
-    white-space: nowrap;
-  }
-
-  .preview-table td {
-    padding: 7px 10px;
-    border-bottom: 1px solid #f1f5f9;
-    vertical-align: middle;
-  }
-
-  .preview-table tr:last-child td {
-    border-bottom: none;
-  }
-
-  .preview-table tr.badge-ok {
-    background: #f0fdf4;
-  }
-
-  .preview-table tr.badge-warn {
-    background: #fffbeb;
-  }
-
-  .preview-table tr.badge-error {
-    background: #fef2f2;
-  }
-
   .row-num {
-    color: #94a3b8;
+    color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
     font-size: 0.8rem;
     text-align: right;
     width: 36px;
@@ -763,16 +750,16 @@
   .cell-mono {
     font-family: monospace;
     font-size: 0.85rem;
-    color: #1e293b;
+    color: var(--color-base-content);
   }
 
   .cell-muted {
-    color: #64748b;
+    color: var(--color-secondary);
   }
 
   .detail-cell {
     font-size: 0.8rem;
-    color: #475569;
+    color: var(--color-secondary);
     max-width: 280px;
   }
 
@@ -786,23 +773,23 @@
   }
 
   .badge-ok {
-    background: #dcfce7;
-    color: #166534;
+    background: color-mix(in oklch, var(--color-success) 18%, transparent);
+    color: var(--color-success);
   }
 
   .badge-warn {
-    background: #fef9c3;
-    color: #854d0e;
+    background: color-mix(in oklch, var(--color-warning) 22%, transparent);
+    color: var(--color-warning);
   }
 
   .badge-error {
-    background: #fee2e2;
-    color: #991b1b;
+    background: color-mix(in oklch, var(--color-error) 18%, transparent);
+    color: var(--color-error);
   }
 
   .badge-info {
-    background: #dbeafe;
-    color: #1e40af;
+    background: color-mix(in oklch, var(--color-info) 18%, transparent);
+    color: var(--color-info);
   }
 
   /* Import actions */
@@ -813,47 +800,11 @@
     margin-top: 8px;
   }
 
-  /* Buttons */
-  .btn-primary,
-  .btn-secondary {
-    padding: 8px 20px;
-    border-radius: 7px;
-    font-size: 0.875rem;
-    font-family: inherit;
-    cursor: pointer;
-    border: none;
-    transition: background 0.15s;
-  }
-
-  .btn-primary {
-    background: #2563eb;
-    color: #fff;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: #1d4ed8;
-  }
-
-  .btn-primary:disabled {
-    background: #93c5fd;
-    cursor: not-allowed;
-  }
-
-  .btn-secondary {
-    background: #f1f5f9;
-    color: #475569;
-    border: 1px solid #e2e8f0;
-  }
-
-  .btn-secondary:hover {
-    background: #e2e8f0;
-  }
-
   code {
-    background: #f1f5f9;
+    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
     padding: 1px 5px;
     border-radius: 3px;
     font-size: 0.85em;
-    color: #475569;
+    color: var(--color-secondary);
   }
 </style>

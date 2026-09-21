@@ -2066,6 +2066,7 @@ mod tests {
                 last_selected_store_id: None,
                 require_initial_location_on_lot_create: Some(false),
                 language: None,
+                theme: None,
             },
         )
         .await?;
@@ -2077,6 +2078,7 @@ mod tests {
                 last_selected_store_id: None,
                 require_initial_location_on_lot_create: Some(true),
                 language: None,
+                theme: None,
             },
         )
         .await?;

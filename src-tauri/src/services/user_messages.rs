@@ -59,6 +59,29 @@
 use crate::error::AppError;
 use crate::pdf::locale::Locale;
 
+/// Curated DaisyUI theme set shipped at v1 GA. The display order mirrors
+/// the order the frontend uses in `AVAILABLE_THEMES` so the rejection
+/// message is stable. The same constant is consumed by the IPC validator
+/// in `commands::stores::validate_theme_value` so the message and the
+/// whitelist can never drift apart.
+pub const ALLOWED_THEMES: &[&str] = &[
+    "caduxo-light",
+    "dark",
+    "dracula",
+    "valentine",
+    "luxury",
+    "sunset",
+    "nord",
+];
+
+/// Canonical English list-form used inside the rejection message and its
+/// parser prefix. Built from `ALLOWED_THEMES` so the message text and the
+/// parser stay in sync with the whitelist. Exposed as `pub` so the IPC
+/// validator tests in `commands::stores::tests` can assert the literal
+/// rejection text without duplicating the list.
+pub const ALLOWED_THEMES_DISPLAY: &str =
+    "caduxo-light, dark, dracula, valentine, luxury, sunset, nord";
+
 /// A typed description of a user-visible message.
 #[derive(Debug, Clone, PartialEq)]
 pub enum UserMessage {
@@ -122,6 +145,13 @@ pub enum UserMessage {
     /// Settings validation: language is not one of the allowed values
     /// (`en`, `es`).
     LanguageNotAllowed {
+        value: String,
+    },
+    /// Settings validation: theme is not one of the allowed values
+    /// (`caduxo-light`, `dark`). Mirrors `LanguageNotAllowed` so the
+    /// `update_settings` command can localise the rejection at the IPC
+    /// boundary and leave the persisted row untouched.
+    ThemeNotAllowed {
         value: String,
     },
     /// Product catalog business rule: a barcode cannot be added to a
@@ -394,6 +424,18 @@ pub fn user_message(kind: UserMessage, locale: Locale) -> String {
         }
         (UserMessage::LanguageNotAllowed { value }, L::Es) => {
             format!("el idioma debe ser uno de {{en, es}}, se recibió `{value}`")
+        }
+        (UserMessage::ThemeNotAllowed { value }, L::En) => {
+            format!(
+                "theme must be one of {{{}}}, got `{value}`",
+                ALLOWED_THEMES_DISPLAY
+            )
+        }
+        (UserMessage::ThemeNotAllowed { value }, L::Es) => {
+            format!(
+                "el tema debe ser uno de {{{}}}, se recibió `{value}`",
+                ALLOWED_THEMES_DISPLAY
+            )
         }
         (UserMessage::ProductArchivedForBarcode, L::En) => {
             "Cannot add barcode to an archived product".to_string()
@@ -760,6 +802,10 @@ pub fn parse_user_message_kind(message: &str) -> Option<UserMessage> {
         return Some(UserMessage::LanguageNotAllowed { value });
     }
 
+    if let Some(value) = parse_theme_not_allowed(message) {
+        return Some(UserMessage::ThemeNotAllowed { value });
+    }
+
     if message == "Cannot add barcode to an archived product" {
         return Some(UserMessage::ProductArchivedForBarcode);
     }
@@ -1007,6 +1053,18 @@ fn parse_language_not_allowed(message: &str) -> Option<String> {
     Some(inner.to_string())
 }
 
+/// Parses `theme must be one of {…}, got \`{value}\`` back into the captured
+/// value. The inner list is built from `ALLOWED_THEMES` so the parser stays
+/// in sync with the formatter. Returns `None` for malformed input.
+fn parse_theme_not_allowed(message: &str) -> Option<String> {
+    let prefix = format!("theme must be one of {{{}}}, got `", ALLOWED_THEMES_DISPLAY);
+    if !message.starts_with(&prefix) || !message.ends_with('`') {
+        return None;
+    }
+    let inner = message.strip_prefix(&prefix)?.strip_suffix('`')?;
+    Some(inner.to_string())
+}
+
 /// Parses a lot-movement exit-kind dynamic message that has the shape
 /// `` `{kind}` {suffix} ``. Returns the captured `kind` on success.
 ///
@@ -1198,10 +1256,8 @@ pub fn localize_not_found(err: AppError, locale: Locale) -> AppError {
 /// `/^uniqueness violation: barcode/` in `src/lib/products.ts` continues
 /// to match when the helper chain is bypassed.
 pub fn localize_duplicate_field(err: AppError, locale: Locale) -> AppError {
-    let crate::error::AppError::Domain(crate::error::DomainError::DuplicateField {
-        field,
-        value,
-    }) = err
+    let crate::error::AppError::Domain(crate::error::DomainError::DuplicateField { field, value }) =
+        err
     else {
         return err;
     };
@@ -1233,9 +1289,7 @@ pub fn localize_internal(err: AppError, locale: Locale) -> AppError {
     match err {
         crate::error::AppError::Infrastructure(_) => {
             let message = user_message(UserMessage::InternalError, locale);
-            crate::error::AppError::Domain(crate::error::DomainError::LocalizedInternal {
-                message,
-            })
+            crate::error::AppError::Domain(crate::error::DomainError::LocalizedInternal { message })
         }
         other => other,
     }
@@ -3148,10 +3202,7 @@ mod tests {
         // Missing id backticks → None.
         assert_eq!(parse_user_message_kind("store abc not found"), None);
         // Inner backtick in id → None (the parser is strict).
-        assert_eq!(
-            parse_user_message_kind("store `a`b` not found"),
-            None
-        );
+        assert_eq!(parse_user_message_kind("store `a`b` not found"), None);
         // Empty resource → None.
         assert_eq!(parse_user_message_kind("`abc` not found"), None);
     }

@@ -561,6 +561,13 @@ const en: BaseTranslation = {
       inventoryAdjustmentIncrease: "Inventory adjustment (+)",
       inventoryAdjustmentDecrease: "Inventory adjustment (−)",
     },
+    // Column headers for the tabular movement ledger (PR 9a).
+    table: {
+      kind: "Type",
+      quantity: "Qty",
+      locations: "Locations",
+      time: "Time",
+    },
     modal: {
       close: "Close",
       cancel: "Cancel",
@@ -952,6 +959,47 @@ const en: BaseTranslation = {
     dateYearRange: "Year must be 1900–2100",
     dateFieldRequired: "This field is required",
     dateInvalid: "Invalid date",
+  },
+
+  // Top-level theme display names and source labels. Consumed by the
+  // Configuration page theme switcher (PR 5 of caduxo-daisyui-redesign)
+  // and any future cross-page theme affordance. Keep the source values
+  // in lockstep with `ThemeSource` in
+  // `src/components/ui/theme/themeStore.svelte.ts`.
+  //
+  // The five built-in entries (dracula, valentine, luxury, sunset, nord)
+  // mirror the curated DaisyUI v5 themes registered in `src/app.css` and
+  // accepted by the backend whitelist in
+  // `src-tauri/src/commands/stores.rs::validate_theme_value`. We do NOT
+  // enable `themes: all` — these five were picked by product.
+  theme: {
+    caduxoLight: "Caduxo Light",
+    dark: "Dark",
+    dracula: "Dracula",
+    valentine: "Valentine",
+    luxury: "Luxury",
+    sunset: "Sunset",
+    nord: "Nord",
+    source: {
+      manual: "Manual",
+      persisted: "Persisted",
+      os: "OS preference",
+      fallback: "Default",
+    },
+  },
+
+  // Settings namespace — individual setting-section copy. Lives
+  // alongside the existing `configuration` namespace (which holds
+  // page-level labels like `pageTitle` and `section.*`). Theme-section
+  // labels follow the explicit PR 5 instruction to introduce the
+  // `settings.theme.*` key tree for the Configuration page switcher.
+  settings: {
+    theme: {
+      title: "Theme",
+      description:
+        "Choose the active theme. Your choice is persisted across restarts. If unset, the app follows your operating-system preference.",
+      error: "Could not change the theme: {msg}",
+    },
   },
 };
 

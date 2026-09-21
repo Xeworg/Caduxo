@@ -1,3 +1,10 @@
+<!--
+  ArchiveLotDialog.svelte — Migrated to Modal.svelte primitive in
+  caduxo-daisyui-redesign PR 7a. Shell markup replaced with the
+  shared primitive; the confirmation button now uses
+  Button.svelte variant="danger" per the spec. Business state,
+  validation, submit handlers, and visible copy preserved verbatim.
+-->
 <script lang="ts">
     import { LL } from "../i18n/i18n-svelte.js";
     import { humanizeError } from "../lib/errors.js";
@@ -8,6 +15,9 @@
         ARCHIVE_NOTES_MIN_CHARS,
         type ExpiryLotResponse,
     } from "../lib/expiry_lots.js";
+    import Modal from "./ui/Modal.svelte";
+    import Button from "./ui/Button.svelte";
+    import Listbox from "./ui/Listbox.svelte";
 
     // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -19,6 +29,10 @@
     export let onClose: () => void;
 
     // ── Local state ────────────────────────────────────────────────────────────
+
+    /** Backs the `<Modal>` primitive via two-way binding. */
+    let visible = true;
+    let returnFocusTo: HTMLElement | null = null;
 
     let reason = ARCHIVE_REASONS[0]?.value ?? "";
     let notes = "";
@@ -34,6 +48,16 @@
     $: notesValid = !notesTooShort && !notesTooLong;
     $: reasonValid = ARCHIVE_REASONS.some((r: { value: string; label: string }) => r.value === reason);
     $: canSubmit = reasonValid && notesValid && !submitting;
+
+    /**
+     * Archive reason options for the native `<select>`. The value
+     * is the reason code; the label is the i18n string for that
+     * reason (verbatim from the original shell).
+     */
+    $: archiveReasonOptions = ARCHIVE_REASONS.map((option) => ({
+        value: option.value,
+        label: archiveReasonLabel(option.value),
+    }));
 
     // ── Submit ─────────────────────────────────────────────────────────────────
 
@@ -66,6 +90,11 @@
         }
     }
 
+    function handleCancel() {
+        if (submitting) return;
+        onClose();
+    }
+
     function handleClose() {
         if (submitting) return;
         onClose();
@@ -87,19 +116,19 @@
     }
 </script>
 
-<div class="overlay" role="dialog" aria-modal="true" aria-labelledby="archive-title">
-    <div class="dialog">
+<Modal
+    bind:open={visible}
+    size="md"
+    showClose
+    closeLabel={$LL.lotMovements.modal.close()}
+    {returnFocusTo}
+    oncancel={handleCancel}
+    onclose={handleClose}
+    titleId="archive-title"
+>
+    {#snippet children()}
         <header class="dialog-header">
             <h3 id="archive-title">{$LL.lotMovements.archive.title()}</h3>
-            <button
-                type="button"
-                class="btn-close"
-                title={$LL.lotMovements.modal.close()}
-                on:click={handleClose}
-                disabled={submitting}
-            >
-                ✕
-            </button>
         </header>
 
         {#if errorMsg}
@@ -120,14 +149,22 @@
             </p>
         </div>
 
-        <form on:submit|preventDefault={submit}>
+        <form
+            onsubmit={(e) => {
+                e.preventDefault();
+                submit();
+            }}
+            class="archive-form"
+        >
             <label>
                 {$LL.lotMovements.archive.reason()}
-                <select bind:value={reason} required disabled={submitting}>
-                    {#each ARCHIVE_REASONS as option (option.value)}
-                        <option value={option.value}>{archiveReasonLabel(option.value)}</option>
-                    {/each}
-                </select>
+                <Listbox
+                    bind:value={reason}
+                    options={archiveReasonOptions}
+                    required
+                    disabled={submitting}
+                    aria-label={$LL.lotMovements.archive.reason()}
+                />
             </label>
 
             <label>
@@ -139,6 +176,7 @@
                     / {ARCHIVE_NOTES_MIN_CHARS}–{ARCHIVE_NOTES_MAX_CHARS}
                 </span>
                 <textarea
+                    class="textarea w-full motion-reduce:transition-none"
                     bind:value={notes}
                     placeholder={$LL.lotMovements.archive.notesPlaceholder()}
                     rows="3"
@@ -146,6 +184,7 @@
                     maxlength={ARCHIVE_NOTES_MAX_CHARS + 200}
                     required
                     disabled={submitting}
+                    aria-label={$LL.lotMovements.archive.notes()}
                 ></textarea>
                 {#if notesTooShort}
                     <span class="field-hint invalid">
@@ -157,109 +196,72 @@
                     </span>
                 {/if}
             </label>
-
-            <div class="form-actions">
-                <button
-                    type="submit"
-                    class="btn-primary"
-                    disabled={!canSubmit}
-                >
-                    {submitting ? $LL.lotMovements.archive.archiving() : $LL.lotMovements.archive.archiveLot()}
-                </button>
-                <button
-                    type="button"
-                    class="btn-secondary"
-                    on:click={handleClose}
-                    disabled={submitting}
-                >
-                    {$LL.lotMovements.modal.cancel()}
-                </button>
-            </div>
         </form>
-    </div>
-</div>
+    {/snippet}
+
+    {#snippet footer()}
+        <Button
+            variant="danger"
+            onclick={submit}
+            disabled={!canSubmit}
+            loading={submitting}
+        >
+            {submitting ? $LL.lotMovements.archive.archiving() : $LL.lotMovements.archive.archiveLot()}
+        </Button>
+        <Button
+            variant="ghost"
+            onclick={handleClose}
+            disabled={submitting}
+        >
+            {$LL.lotMovements.modal.cancel()}
+        </Button>
+    {/snippet}
+</Modal>
 
 <style>
-    .overlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.45);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 50;
-    }
-
-    .dialog {
-        background: #fff;
-        border-radius: 12px;
-        padding: 24px;
-        width: min(520px, calc(100vw - 32px));
-        max-height: calc(100vh - 64px);
-        overflow-y: auto;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-    }
-
+    /* ── Header ────────────────────────────────────────────────────────────── */
     .dialog-header {
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        margin-bottom: 12px;
     }
 
     .dialog-header h3 {
         margin: 0;
         font-size: 1.05rem;
+        color: var(--color-base-content);
     }
 
-    .btn-close {
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-size: 1rem;
-        padding: 2px 8px;
-        color: #6b7280;
-        border-radius: 4px;
-    }
-
-    .btn-close:hover:not(:disabled) {
-        background: #f3f4f6;
-        color: #374151;
-    }
-
-    .btn-close:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-
+    /* ── Alert ─────────────────────────────────────────────────────────────── */
     .alert {
         padding: 10px 14px;
         border-radius: 6px;
         font-size: 0.9rem;
+        margin-bottom: 12px;
     }
 
     .alert-error {
-        background: #fee2e2;
-        color: #991b1b;
-        border: 1px solid #fca5a5;
+        background: color-mix(in oklch, var(--color-error) 12%, transparent);
+        color: var(--color-error);
+        border: 1px solid color-mix(in oklch, var(--color-error) 30%, transparent);
     }
 
+    /* ── Lot summary ───────────────────────────────────────────────────────── */
     .lot-summary {
-        background: #f9fafb;
-        border: 1px solid #e5e7eb;
+        background: var(--color-base-200);
+        border: 1px solid var(--color-base-300);
         border-radius: 7px;
         padding: 10px 14px;
         font-size: 0.85rem;
-        color: #374151;
+        color: var(--color-base-content);
         display: flex;
         flex-direction: column;
         gap: 6px;
+        margin-bottom: 14px;
     }
 
     .batch {
-        background: #e5e7eb;
+        background: var(--color-base-300);
         border-radius: 4px;
         padding: 1px 5px;
         font-size: 0.75rem;
@@ -268,12 +270,14 @@
 
     .hint {
         margin: 0;
-        color: #6b7280;
+        color: var(--color-base-content);
+        opacity: 0.7;
         font-size: 0.82rem;
         font-style: italic;
     }
 
-    form {
+    /* ── Form ──────────────────────────────────────────────────────────────── */
+    .archive-form {
         display: flex;
         flex-direction: column;
         gap: 14px;
@@ -284,23 +288,8 @@
         flex-direction: column;
         gap: 4px;
         font-size: 0.85rem;
-        color: #374151;
+        color: var(--color-base-content);
         position: relative;
-    }
-
-    label textarea,
-    label select {
-        padding: 7px 10px;
-        border: 1px solid #d1d5db;
-        border-radius: 6px;
-        font-size: 0.9rem;
-        font-family: inherit;
-    }
-
-    label textarea:focus,
-    label select:focus {
-        outline: 2px solid #3b82f6;
-        border-color: #3b82f6;
     }
 
     .char-counter {
@@ -308,67 +297,25 @@
         right: 4px;
         top: -2px;
         font-size: 0.74rem;
-        color: #9ca3af;
+        color: var(--color-base-content);
+        opacity: 0.7;
         background: transparent;
         pointer-events: none;
     }
 
     .char-counter .invalid {
-        color: #991b1b;
+        color: var(--color-error);
+        opacity: 1;
     }
 
     .field-hint {
         font-size: 0.78rem;
-        color: #6b7280;
+        color: var(--color-base-content);
+        opacity: 0.7;
     }
 
     .field-hint.invalid {
-        color: #991b1b;
-    }
-
-    .form-actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-    }
-
-    .btn-primary {
-        background: #2563eb;
-        color: #fff;
-        border: none;
-        border-radius: 6px;
-        padding: 8px 16px;
-        font-size: 0.9rem;
-        cursor: pointer;
-        font-family: inherit;
-    }
-
-    .btn-primary:hover:not(:disabled) {
-        background: #1d4ed8;
-    }
-
-    .btn-primary:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-    }
-
-    .btn-secondary {
-        background: #fff;
-        color: #374151;
-        border: 1px solid #d1d5db;
-        border-radius: 6px;
-        padding: 8px 16px;
-        font-size: 0.9rem;
-        cursor: pointer;
-        font-family: inherit;
-    }
-
-    .btn-secondary:hover:not(:disabled) {
-        background: #f9fafb;
-    }
-
-    .btn-secondary:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
+        color: var(--color-error);
+        opacity: 1;
     }
 </style>

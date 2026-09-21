@@ -429,6 +429,7 @@ mod tests {
                 last_selected_store_id: Some(store.id.clone()),
                 require_initial_location_on_lot_create: None,
                 language: None,
+                theme: None,
             },
         )
         .await?;

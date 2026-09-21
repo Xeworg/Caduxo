@@ -1,9 +1,23 @@
+<!--
+  RegisterExitModal.svelte — Migrated to Modal.svelte primitive in
+  caduxo-daisyui-redesign PR 7b. Shell markup replaced with the
+  shared primitive; the motivo select now uses Select.svelte per
+  the spec. Source-location select, quantity input, and notes
+  textarea stay inline (the source select is a domain list not in
+  scope; textareas and number spinners are out of scope for
+  Input.svelte / Select.svelte). Business state, validation,
+  submit handlers, and visible copy preserved verbatim.
+-->
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
   import { LL } from "../i18n/i18n-svelte.js";
   import { locale } from "../i18n/locale.svelte.js";
   import type { UnitKind } from "../lib/products.js";
   import { humanizeError } from "../lib/errors.js";
+  import Modal from "./ui/Modal.svelte";
+  import Select from "./ui/Select.svelte";
+  import Listbox from "./ui/Listbox.svelte";
+  import Button from "./ui/Button.svelte";
 
   // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -18,6 +32,11 @@
   export let onCreated: () => void;
 
   // ── State ──────────────────────────────────────────────────────────────────
+
+  /** Backs the `<Modal>` primitive via two-way binding. */
+  let visible = true;
+  /** Element to receive focus when the modal closes (the trigger row). */
+  let returnFocusTo: HTMLElement | null = null;
 
   let sourceLocationId = "";
   let exitReason = "";
@@ -53,6 +72,33 @@
   $: qtyInputMode = (isIntegerUnit ? "numeric" : "decimal") as
     | "numeric"
     | "decimal";
+
+  /**
+   * Motivo options for the `<Select>` primitive. The value is the
+   * exit-reason code; the label is the i18n string for that reason
+   * (verbatim from the original shell).
+   */
+  $: exitReasonOptions = EXIT_REASONS.map((reason) => ({
+    value: reason.value,
+    label: reason.label(),
+  }));
+
+  /**
+   * Source-location options for the `<Listbox>` primitive. Filters
+   * balances to those with stock available and labels each entry
+   * with the existing location id and the available-balance badge.
+   * The empty placeholder is surfaced via a leading `value === ""`
+   * option so the user can clear the selection.
+   */
+  $: sourceLocationOptions = [
+    { value: "", label: $LL.lotMovements.modal.selectLocation() },
+    ...currentBalances
+      .filter((bal) => bal.balance > 0)
+      .map((bal) => ({
+        value: bal.location_id,
+        label: `${bal.location_id} (${$LL.lotMovements.modal.availableOption({ balance: bal.balance })})`,
+      })),
+  ];
 
   /**
    * Local validation for integer-unit products: catches fractional input
@@ -112,36 +158,65 @@
       submitting = false;
     }
   }
+
+  /**
+   * The modal's `oncancel` callback wires Escape to the consumer's
+   * close handler so the "discard in-progress edits on Escape"
+   * semantic is preserved verbatim.
+   */
+  function handleCancel() {
+    if (submitting) return;
+    onClose();
+  }
+
+  function handleClose() {
+    onClose();
+  }
 </script>
 
-<div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.lotMovements.registerExit()}>
-  <div class="modal-box">
-    <div class="modal-header">
+<Modal
+  bind:open={visible}
+  size="md"
+  showClose
+  closeLabel={$LL.lotMovements.modal.close()}
+  {returnFocusTo}
+  oncancel={handleCancel}
+  onclose={handleClose}
+  aria-label={$LL.lotMovements.registerExit()}
+>
+  {#snippet children()}
+    <header class="dialog-header">
       <h3>{$LL.lotMovements.registerExit()}</h3>
-      <button class="modal-close" on:click={onClose}>✕</button>
-    </div>
+    </header>
 
-    <div class="modal-body">
+    <div class="dialog-body">
       <div class="form-group">
         <label for="exit-source">{$LL.lotMovements.modal.sourceLocation()}</label>
-        <select id="exit-source" bind:value={sourceLocationId} disabled={submitting}>
-          <option value="">{$LL.lotMovements.modal.selectLocation()}</option>
-          {#each currentBalances as bal}
-            {#if bal.balance > 0}
-              <option value={bal.location_id}>{bal.location_id} ({$LL.lotMovements.modal.availableOption({ balance: bal.balance })})</option>
-            {/if}
-          {/each}
-        </select>
+        <Listbox
+          id="exit-source"
+          value={sourceLocationId}
+          options={sourceLocationOptions}
+          disabled={submitting}
+          aria-label={$LL.lotMovements.modal.sourceLocation()}
+          onchange={(v) => (sourceLocationId = v)}
+        />
       </div>
 
       <div class="form-group">
         <label for="exit-reason">{$LL.lotMovements.modal.exitReason()}</label>
-        <select id="exit-reason" bind:value={exitReason} disabled={submitting}>
-          <option value="">{$LL.lotMovements.modal.selectExitReason()}</option>
-          {#each EXIT_REASONS as reason}
-            <option value={reason.value}>{reason.label()}</option>
-          {/each}
-        </select>
+        <Select
+          id="exit-reason"
+          bind:value={exitReason}
+          options={exitReasonOptions}
+          disabled={submitting}
+          aria-label={$LL.lotMovements.modal.exitReason()}
+        >
+          {#snippet leading()}
+            <option value="" disabled>
+              {$LL.lotMovements.modal.selectExitReason()}
+            </option>
+          {/snippet}
+        </Select>
       </div>
 
       <div class="form-group">
@@ -149,12 +224,14 @@
         <input
           id="exit-qty"
           type="number"
+          class="input input-md w-full motion-reduce:transition-none"
           min={qtyMin}
           step={qtyStep}
           inputmode={qtyInputMode}
           max={availableQuantity}
           bind:value={quantity}
           disabled={submitting}
+          aria-label={$LL.lotMovements.modal.quantity()}
         />
         <span class="hint">{$LL.lotMovements.available({ available: availableQuantity })}{isIntegerUnit ? $LL.lotMovements.integerNote() : ""}</span>
       </div>
@@ -165,6 +242,7 @@
         </label>
         <textarea
           id="exit-notes"
+          class="textarea w-full motion-reduce:transition-none"
           rows="3"
           bind:value={notes}
           disabled={submitting}
@@ -176,24 +254,48 @@
         <div class="alert-error" role="alert">{errorMsg}</div>
       {/if}
     </div>
+  {/snippet}
 
-    <div class="modal-footer">
-      <button type="button" class="btn-secondary" on:click={onClose} disabled={submitting}>
-        {$LL.lotMovements.modal.cancel()}
-      </button>
-      <button
-        type="button"
-        class="btn-primary"
-        on:click={submit}
-        disabled={submitting}
-      >
-        {submitting ? $LL.lotMovements.modal.saving() : $LL.lotMovements.modal.registerExitSubmit()}
-      </button>
-    </div>
-  </div>
-</div>
+  {#snippet footer()}
+    <Button
+      variant="ghost"
+      onclick={handleClose}
+      disabled={submitting}
+    >
+      {$LL.lotMovements.modal.cancel()}
+    </Button>
+    <Button
+      variant="primary"
+      onclick={submit}
+      disabled={submitting}
+      loading={submitting}
+    >
+      {submitting ? $LL.lotMovements.modal.saving() : $LL.lotMovements.modal.registerExitSubmit()}
+    </Button>
+  {/snippet}
+</Modal>
 
 <style>
+  /* ── Header ────────────────────────────────────────────────────────────── */
+  .dialog-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .dialog-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--color-base-content);
+  }
+
+  /* ── Body ──────────────────────────────────────────────────────────────── */
+  .dialog-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
   .form-group {
     display: flex;
     flex-direction: column;
@@ -203,36 +305,20 @@
 
   .form-group label {
     font-size: 0.85rem;
-    color: #374151;
+    color: var(--color-base-content);
     font-weight: 500;
-  }
-
-  .form-group select,
-  .form-group input,
-  .form-group textarea {
-    padding: 8px 10px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    font-family: inherit;
-  }
-
-  .form-group select:focus,
-  .form-group input:focus,
-  .form-group textarea:focus {
-    outline: 2px solid #3b82f6;
-    border-color: #3b82f6;
   }
 
   .hint {
     font-size: 0.78rem;
-    color: #6b7280;
+    color: var(--color-base-content);
+    opacity: 0.7;
   }
 
   .alert-error {
-    background: #fee2e2;
-    color: #991b1b;
-    border: 1px solid #fca5a5;
+    background: color-mix(in oklch, var(--color-error) 12%, transparent);
+    color: var(--color-error);
+    border: 1px solid color-mix(in oklch, var(--color-error) 30%, transparent);
     border-radius: 6px;
     padding: 8px 12px;
     font-size: 0.85rem;

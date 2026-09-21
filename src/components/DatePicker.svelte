@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import CalendarMonth from "./CalendarMonth.svelte";
+  import Button from "./ui/Button.svelte";
+  import Icon from "./ui/Icon.svelte";
   import { LL } from "../i18n/i18n-svelte.js";
 
   // ── Props ───────────────────────────────────────────────────────────────────
@@ -315,24 +317,31 @@
       on:blur={onBlur}
       on:keydown={onInputKeydown}
     />
-    <button
-      type="button"
-      class="dp-icon"
-      aria-label={$LL.datePicker.ariaOpenCalendar()}
-      tabindex="0"
-      on:click={togglePopover}
-    >
-      📅
-    </button>
-    {#if clearable && value !== ""}
-      <button
-        type="button"
-        class="dp-clear"
-        aria-label={$LL.datePicker.ariaClearDate()}
-        on:click={onClear}
+    <div class="dp-icon-slot">
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label={$LL.datePicker.ariaOpenCalendar()}
+        onclick={togglePopover}
       >
-        ✕
-      </button>
+        {#snippet iconStart()}
+          <Icon name="calendar" size="sm" />
+        {/snippet}
+      </Button>
+    </div>
+    {#if clearable && value !== ""}
+      <div class="dp-clear-slot">
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={$LL.datePicker.ariaClearDate()}
+          onclick={onClear}
+        >
+          {#snippet iconStart()}
+            <Icon name="x-mark" size="xs" />
+          {/snippet}
+        </Button>
+      </div>
     {/if}
   </div>
 
@@ -345,7 +354,7 @@
   {#if isOpen}
     <div
       bind:this={popoverEl}
-      class="dp-popover"
+      class="dp-popover dropdown dropdown-content"
       role="dialog"
       aria-label={$LL.datePicker.calendarDialog({ label: ariaLabel })}
     >
@@ -396,12 +405,12 @@
   .dp-trigger input[type="text"] {
     padding: 7px 10px;
     padding-right: 36px;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--color-base-300);
     border-radius: 6px;
     font-size: 0.9rem;
     font-family: inherit;
-    color: #1e293b;
-    background: #fff;
+    color: var(--color-base-content);
+    background: var(--color-base-100);
     width: 100%;
     min-width: 140px;
     transition: border-color 0.15s, box-shadow 0.15s;
@@ -409,79 +418,76 @@
 
   .dp-trigger input[type="text"]:focus {
     outline: none;
-    border-color: #2563eb;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 15%, transparent);
   }
 
   .dp-trigger input[type="text"].dp-invalid {
-    border-color: #ef4444;
-    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+    border-color: var(--color-error);
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-error) 12%, transparent);
   }
 
-  .dp-icon {
+  .dp-icon-slot {
     position: absolute;
     right: 8px;
-    background: none;
-    border: none;
-    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
+  }
+
+  .dp-icon-slot :global(.btn) {
+    padding: 2px 6px;
+    min-height: auto;
+    height: auto;
     font-size: 1rem;
-    padding: 2px 4px;
-    color: #64748b;
-    line-height: 1;
-    border-radius: 4px;
-    transition: color 0.15s;
+    color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
   }
 
-  .dp-icon:hover {
-    color: #1e293b;
-  }
-
-  .dp-icon:focus-visible {
-    outline: 2px solid #2563eb;
-    outline-offset: 1px;
-  }
-
-  .dp-clear {
+  .dp-clear-slot {
     position: absolute;
-    right: 28px;
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 0.75rem;
-    color: #94a3b8;
-    padding: 2px 4px;
-    border-radius: 3px;
+    right: 32px;
+    display: inline-flex;
+    align-items: center;
     line-height: 1;
-    transition: color 0.15s;
   }
 
-  .dp-clear:hover {
-    color: #ef4444;
+  .dp-clear-slot :global(.btn) {
+    padding: 2px 4px;
+    min-height: auto;
+    height: auto;
+    font-size: 0.75rem;
+    color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
   }
 
-  .dp-clear:focus-visible {
-    outline: 2px solid #2563eb;
-    outline-offset: 1px;
+  .dp-clear-slot :global(.btn:hover) {
+    color: var(--color-error);
   }
 
   /* ── Helper text ─────────────────────────────────────────────────────────── */
 
   .dp-helper {
     font-size: 0.75rem;
-    color: #ef4444;
+    color: var(--color-error);
     margin-top: 2px;
     display: block;
   }
 
   /* ── Popover ─────────────────────────────────────────────────────────────── */
 
+  /* DaisyUI `dropdown dropdown-content` classes are also applied in markup
+     so the popover inherits DaisyUI's `border-radius` / shadow contract,
+     but the hand-rolled `position: fixed` + manual top/left computed in
+     `positionPopover()` stays unchanged. The DaisyUI anchor pattern
+     (`dropdown-end`, etc.) is NOT used here because the popover is anchored
+     to the trigger's bounding rect via JS rather than the DaisyUI anchor
+     pattern — the visual contract is the only thing borrowed. */
   .dp-popover {
     position: fixed;
     z-index: 300;
-    background: #fff;
-    border: 1px solid #e2e8f0;
+    background: var(--color-base-100);
+    border: 1px solid var(--color-base-200);
     border-radius: 12px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+    box-shadow: 0 8px 24px color-mix(in oklch, var(--color-base-content) 14%, transparent);
     padding: 8px;
     display: inline-block;
   }
@@ -493,28 +499,28 @@
     width: 100%;
     margin-top: 4px;
     padding: 5px 8px;
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
+    background: color-mix(in oklch, var(--color-base-200) 60%, transparent);
+    border: 1px solid var(--color-base-200);
     border-radius: 6px;
     font-size: 0.8rem;
     font-family: inherit;
-    color: #2563eb;
+    color: var(--color-primary);
     cursor: pointer;
     text-align: center;
     transition: background 0.15s;
   }
 
   .dp-today:hover:not(:disabled) {
-    background: #e2e8f0;
+    background: var(--color-base-200);
   }
 
   .dp-today:disabled {
-    color: #cbd5e1;
+    color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
     cursor: not-allowed;
   }
 
   .dp-today:focus-visible {
-    outline: 2px solid #2563eb;
+    outline: 2px solid var(--color-primary);
     outline-offset: 1px;
   }
 </style>

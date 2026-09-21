@@ -6,6 +6,25 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { SupportedLocale } from "../i18n/locale.svelte.js";
 
+/**
+ * Curated DaisyUI theme set shipped at v1 GA. Mirrors the backend
+ * `{"caduxo-light", "dark", "dracula", "valentine", "luxury", "sunset", "nord"}`
+ * whitelist enforced at the IPC boundary.
+ *
+ * Kept narrow on purpose: a future accent-theme follow-up would extend
+ * this union. The Rust backend (`update_settings` command and
+ * `validate_theme_value` in `src-tauri/src/commands/stores.rs`) rejects
+ * anything outside this set at the IPC boundary.
+ */
+export type ThemeName =
+  | "caduxo-light"
+  | "dark"
+  | "dracula"
+  | "valentine"
+  | "luxury"
+  | "sunset"
+  | "nord";
+
 export interface StoreResponse {
  id: string;
  name: string;
@@ -67,6 +86,17 @@ export interface SettingsResponse {
   *  frontend can run OS / WebView detection instead of treating the
   *  fallback locale as a manual choice. */
  language_configured: boolean;
+ /** Effective active theme. Falls back to `"caduxo-light"` on fresh installs
+  *  when no `app_settings.theme` row exists. Use `theme_configured` to
+  *  disambiguate the fallback from a manual pick. */
+ theme: ThemeName;
+ /** True only when the user persisted a theme preference via
+  *  `updateSettings({ theme })`. False on fresh installs so the frontend
+  *  can run `prefers-color-scheme` detection instead of treating the
+  *  fallback theme as a manual choice. The backend also reports `false`
+  *  when a stored row carries an unsupported value (e.g. legacy `"fr"`
+  *  for language or `"synthwave"` for theme). */
+ theme_configured: boolean;
 }
 
 export interface SettingsUpdate {
@@ -75,6 +105,10 @@ export interface SettingsUpdate {
  require_initial_location_on_lot_create?: boolean;
  /** Optional: sets the interface language preference. */
  language?: SupportedLocale;
+ /** Optional: sets the active theme preference. The IPC boundary rejects
+  *  values outside the curated `ThemeName` set with a `CommandError::Validation`
+  *  so the persisted row stays untouched. PR 2 of `caduxo-daisyui-redesign`. */
+ theme?: ThemeName;
 }
 
 // ─── First-run / settings ────────────────────────────────────────────────────

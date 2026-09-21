@@ -1,0 +1,158 @@
+/*
+ * Caduxo application stylesheet entry.
+ *
+ * PR 1 (foundation) of openspec/changes/caduxo-daisyui-redesign.
+ *   - Imports Tailwind v4 and registers DaisyUI v5 with two themes:
+ *     `caduxo-light` (default, custom brand) and DaisyUI built-in `dark`.
+ *   - Adds project motion tokens via Tailwind v4 `@theme`.
+ *   - Adds a global `prefers-reduced-motion: reduce` reset that clamps
+ *     every animation / transition to 0.001ms.
+ *   - Adds a `num` utility for numeric column alignment (used by the
+ *     shared Table primitive in PR 9).
+ *
+ * PR 12 (motion + effects inventory wiring) of the same change:
+ *   - Defines the `urgency-pulse` keyframes (opacity-only blink,
+ *     eased via the project's motion tokens) used by the
+ *     `motion-safe:animate-urgency-pulse` Tailwind v4 utility that
+ *     `Badge.svelte` composes for the `expired` urgency variant.
+ *   - The utility is auto-generated from the `--animate-urgency-pulse`
+ *     token registered in `@theme` below. The `motion-safe:` variant
+ *     is the narrow allow-list — reduced-motion users see the badge
+ *     as a static element (the global reset also clamps it as a
+ *     back-stop).
+ *
+ * No page migration happens in PR 1 — this file only wires the
+ * foundation. See docs/daisyui-redesign-plan.md and the design phase
+ * for the per-component migration map.
+ */
+
+/* ─── Tailwind + DaisyUI plugin registration ──────────────────────────── */
+@import "tailwindcss";
+/* DaisyUI v5 CSS plugin syntax. The curated set extends the v1
+ * `caduxo-light` (default) + `dark` pair with five extra built-in themes
+ * for visual testing and user selection: `dracula`, `valentine`, `luxury`,
+ * `sunset`, `nord`. We intentionally do NOT use `themes: all` (which would
+ * enable all 35 DaisyUI themes) — each entry below is a deliberate pick.
+ * The backend whitelist in `src-tauri/src/commands/stores.rs::validate_theme_value`
+ * and the frontend `AVAILABLE_THEMES` array in `themeStore.svelte.ts`
+ * must stay in lockstep with this list. */
+@plugin "daisyui" {
+  themes: caduxo-light --default, dark, dracula, valentine, luxury, sunset, nord;
+  root: ":root";
+  logs: false;
+}
+
+/* ─── caduxo-light custom brand theme ─────────────────────────────────── */
+/* Tokens derived from the existing palette: `#2563eb` primary,
+ * `#f6f8fb` base background, slate neutrals, semantic
+ * red / amber / green / blue. oklch values are starting points; the
+ * verify pass tunes contrast for AA against body / headings / inputs /
+ * badges / alerts / primary button labels. */
+@plugin "daisyui/theme" {
+  name: "caduxo-light";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-primary: oklch(54% 0.18 264);
+  --color-primary-content: oklch(98% 0.005 264);
+
+  --color-base-100: oklch(98% 0.005 240);
+  --color-base-200: oklch(96% 0.008 240);
+  --color-base-300: oklch(92% 0.01 240);
+  --color-base-content: oklch(20% 0.02 264);
+
+  --color-secondary: oklch(60% 0.06 240);
+  --color-secondary-content: oklch(98% 0.005 264);
+
+  --color-accent: oklch(70% 0.12 200);
+  --color-accent-content: oklch(20% 0.02 264);
+
+  --color-neutral: oklch(28% 0.02 264);
+  --color-neutral-content: oklch(98% 0.005 264);
+
+  --color-info: oklch(70% 0.12 230);
+  --color-info-content: oklch(20% 0.02 264);
+
+  --color-success: oklch(70% 0.16 145);
+  --color-success-content: oklch(20% 0.02 264);
+
+  --color-warning: oklch(80% 0.18 75);
+  --color-warning-content: oklch(20% 0.02 264);
+
+  --color-error: oklch(62% 0.22 25);
+  --color-error-content: oklch(98% 0.005 264);
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* ─── Project motion tokens ───────────────────────────────────────────── */
+/* Centralised so the verify gate can grep for hand-written
+ * `transition: ... 0.Xs` literals and reject them in favour of these
+ * tokens (PR 12). Reference via Tailwind utilities
+ * (`duration-fast`, `ease-out-soft`, …). */
+@theme {
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 240ms;
+  --duration-pulse: 1800ms;
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  /* `--animate-urgency-pulse` exposes the `animate-urgency-pulse`
+   * Tailwind v4 utility, composed from the project motion tokens
+   * (`--duration-pulse` + `--ease-in-out-soft`). The animation is
+   * opacity-only (no scale, no translate) per the design's pulse-
+   * isolation requirement, so it never pushes surrounding layout.
+   * Consumers compose it via `motion-safe:animate-urgency-pulse` so
+   * the pulse fires only when the user has NOT requested reduced
+   * motion (the global reset below also clamps it as a back-stop). */
+  --animate-urgency-pulse: urgency-pulse var(--duration-pulse)
+    var(--ease-in-out-soft) infinite;
+}
+
+/* The `urgency-pulse` keyframes that `--animate-urgency-pulse`
+ * references. Opacity-only and looped infinitely at the
+ * `--duration-pulse` cadence; never transform- or filter- based so
+ * layout is preserved and reduced-motion users never observe the
+ * pulse (covered by the global reset + the `motion-safe:` variant
+ * gating in `Badge.svelte`). */
+@keyframes urgency-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* ─── Global reduced-motion reset ─────────────────────────────────────── */
+/* Safety net so no animated surface escapes the gate. The reset
+ * targets every element (including ::before / ::after pseudo-elements)
+ * so DaisyUI's built-in animations and primitives' custom transitions
+ * are all clamped when the user prefers reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─── Foundation utilities ────────────────────────────────────────────── */
+/* Tabular-nums + right alignment for numeric table columns. Consumed
+ * by `<td class="num">` in the shared Table primitive (PR 9). */
+@utility num {
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}

@@ -1,3 +1,25 @@
+<!--
+  StoresPage.svelte — store + location management (PR 9b of
+  caduxo-daisyui-redesign).
+
+  Migration to shared UI primitives:
+    - Table.svelte (zebra) hosts both the store sidebar and the
+      per-store location list. Each row is keyboard-activatable via
+      tabindex="0" + Enter/Space; the Name cell renders a <button
+      class="store-link"> so screen readers can announce the row
+      action without depending on the row-level click handler.
+    - Badge.svelte renders the active / inactive status cell.
+    - EmptyState.svelte replaces the bespoke .empty-hint text in
+      both the store sidebar and the location list (via the Table
+      primitive's empty slot).
+    - Button.svelte (variant ghost, size icon) replaces the
+      bespoke .btn-icon edit button for locations.
+    - The form blocks (store-form / location-form) and the first-run
+      banner are deliberately left untouched — they are PR 8 scope.
+
+  Tailwind classes referenced here (for the JIT scanner):
+    table table-zebra
+-->
 <script lang="ts">
   import { onMount } from "svelte";
   import {
@@ -18,6 +40,12 @@
   } from "../lib/stores.js";
   import { LL } from "../i18n/i18n-svelte.js";
   import { humanizeError } from "../lib/errors.js";
+  import Table from "./ui/Table.svelte";
+  import Badge from "./ui/Badge.svelte";
+  import EmptyState from "./ui/EmptyState.svelte";
+  import Alert from "./ui/Alert.svelte";
+  import Button from "./ui/Button.svelte";
+  import Icon from "./ui/Icon.svelte";
 
   // ── State ──────────────────────────────────────────────────────────────────
 
@@ -244,10 +272,10 @@
 
   <!-- Messages -->
   {#if errorMsg}
-    <div class="alert alert-error" role="alert">{errorMsg}</div>
+    <Alert variant="error">{errorMsg}</Alert>
   {/if}
   {#if successMsg}
-    <div class="alert alert-success" role="status">{successMsg}</div>
+    <Alert variant="success">{successMsg}</Alert>
   {/if}
 
   {#if loading}
@@ -312,24 +340,55 @@
     <div class="stores-layout">
       <!-- Left: store list -->
       <aside class="store-list">
-        {#each stores as store (store.id)}
-          <button
-            class="store-item"
-            class:active={store.id === selectedStoreId}
-            on:click={() => selectStore(store.id)}
-          >
-            <span class="store-name">{store.name}</span>
-            {#if store.code}
-              <span class="store-code">{store.code}</span>
-            {/if}
-            {#if !store.is_active}
-              <span class="badge-inactive">{$LL.stores.inactive()}</span>
-            {/if}
-          </button>
-        {/each}
-        {#if stores.length === 0}
-          <p class="empty-hint">{$LL.stores.noStores()}</p>
-        {/if}
+        <Table zebra aria-label={$LL.stores.pageTitle()}>
+          {#snippet head()}
+            <tr>
+              <th>{$LL.stores.storeName()}</th>
+              <th>{$LL.stores.storeCode()}</th>
+              <th>{$LL.dashboard.status()}</th>
+            </tr>
+          {/snippet}
+          {#snippet body()}
+            {#each stores as store (store.id)}
+              <tr
+                class="store-row"
+                class:active={store.id === selectedStoreId}
+                tabindex="0"
+                on:click={() => selectStore(store.id)}
+                on:keydown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    selectStore(store.id);
+                  }
+                }}
+              >
+                <td>
+                  <button
+                    type="button"
+                    class="store-link"
+                    on:click|stopPropagation={() => selectStore(store.id)}
+                  >
+                    {store.name}
+                  </button>
+                </td>
+                <td>{store.code ?? "—"}</td>
+                <td>
+                  {#if store.is_active}
+                    <Badge semantic="success" size="sm">{$LL.stores.active()}</Badge>
+                  {:else}
+                    <Badge semantic="neutral" size="sm">{$LL.stores.inactive()}</Badge>
+                  {/if}
+                </td>
+              </tr>
+            {/each}
+          {/snippet}
+          {#snippet empty()}
+            <EmptyState
+              title={$LL.stores.noStores()}
+              icon="inbox"
+            />
+          {/snippet}
+        </Table>
       </aside>
 
       <!-- Right: store detail / form -->
@@ -414,28 +473,49 @@
 
             {#if !locationFormOpen}
               <!-- Location list -->
-              {#if locations.length === 0}
-                <p class="empty-hint">{$LL.stores.noLocationsHint()}</p>
-              {:else}
-                <ul class="location-list">
+              <Table zebra aria-label={$LL.stores.internalLocations()}>
+                {#snippet head()}
+                  <tr>
+                    <th>{$LL.stores.locationName()}</th>
+                    <th>{$LL.stores.locationNotes()}</th>
+                    <th>{$LL.dashboard.status()}</th>
+                    <th>{$LL.common.actions()}</th>
+                  </tr>
+                {/snippet}
+                {#snippet body()}
                   {#each locations as loc (loc.id)}
-                    <li class="location-item">
-                      <div class="location-info">
-                        <span class="location-name">{loc.name}</span>
-                        {#if loc.notes}<span class="location-notes">{loc.notes}</span>{/if}
-                        {#if !loc.is_active}<span class="badge-inactive">{$LL.stores.inactive()}</span>{/if}
-                      </div>
-                      <button
-                        class="btn-icon"
-                        title={$LL.stores.edit()}
-                        on:click={() => startEditLocation(loc)}
-                      >
-                        ✏️
-                      </button>
-                    </li>
+                    <tr class="location-row">
+                      <td>{loc.name}</td>
+                      <td class="notes">{loc.notes ?? ""}</td>
+                      <td>
+                        {#if loc.is_active}
+                          <Badge semantic="success" size="sm">{$LL.stores.active()}</Badge>
+                        {:else}
+                          <Badge semantic="neutral" size="sm">{$LL.stores.inactive()}</Badge>
+                        {/if}
+                      </td>
+                      <td>
+                        <Button
+                          variant="icon"
+                          size="sm"
+                          aria-label={$LL.stores.edit()}
+                          onclick={() => startEditLocation(loc)}
+                        >
+                          {#snippet iconStart()}
+                            <Icon name="pencil" size="sm" />
+                          {/snippet}
+                        </Button>
+                      </td>
+                    </tr>
                   {/each}
-                </ul>
-              {/if}
+                {/snippet}
+                {#snippet empty()}
+                  <EmptyState
+                    title={$LL.stores.noLocationsHint()}
+                    icon="tag"
+                  />
+                {/snippet}
+              </Table>
 
             {:else}
               <!-- Location form -->
@@ -497,36 +577,16 @@
     font-size: 1.5rem;
   }
 
-  /* ── Alerts ────────────────────────────────────────────────────────────── */
-  .alert {
-    padding: 10px 14px;
-    border-radius: 6px;
-    margin-bottom: 16px;
-    font-size: 0.9rem;
-  }
-
-  .alert-error {
-    background: #fee2e2;
-    color: #991b1b;
-    border: 1px solid #fca5a5;
-  }
-
-  .alert-success {
-    background: #dcfce7;
-    color: #166534;
-    border: 1px solid #86efac;
-  }
-
   /* ── Loading ───────────────────────────────────────────────────────────── */
   .loading {
-    color: #6b7280;
+    color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
     font-style: italic;
   }
 
   /* ── First-run ─────────────────────────────────────────────────────────── */
   .first-run-card {
-    background: #fff;
-    border: 1px solid #d1d5db;
+    background: var(--color-base-100);
+    border: 1px solid var(--color-base-300);
     border-radius: 10px;
     padding: 32px;
     max-width: 520px;
@@ -535,73 +595,100 @@
   .first-run-card h2 {
     margin: 0 0 8px;
     font-size: 1.4rem;
+    color: var(--color-base-content);
   }
 
   .first-run-card p {
     margin: 0 0 20px;
-    color: #4b5563;
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
   }
 
   /* ── Store layout ──────────────────────────────────────────────────────── */
   .stores-layout {
     display: grid;
-    grid-template-columns: 240px 1fr;
+    /* 340 px gives the store table enough room for the Spanish headers
+       (Nombre de tienda / Código / Estado) plus the status badge without
+       visually colliding at desktop widths. */
+    grid-template-columns: 340px 1fr;
     gap: 20px;
     align-items: start;
   }
 
-  /* ── Store list sidebar ────────────────────────────────────────────────── */
+  /* Grid items default to min-width: auto, which prevents them from
+     shrinking below the natural width of their content. The sidebar's
+     Table.svelte contains long store names / codes that would push
+     the column past the declared sidebar width; min-width: 0 lets the
+     grid track keep its declared width. */
   .store-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    min-width: 0;
   }
 
-  .store-item {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 7px;
-    padding: 10px 12px;
-    text-align: left;
+  /* The Table primitive renders a native <table> (class table).
+     Native tables auto-size to their content; force them to fill the
+     sidebar and use table-layout: fixed with explicit column widths so
+     the header labels cannot collide. The :global() is required because
+     Svelte CSS scoping does not reach into the Table primitive's
+     rendered HTML. */
+  .store-list :global(table) {
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  .store-list :global(table th:nth-child(1)),
+  .store-list :global(table td:nth-child(1)) {
+    width: 48%;
+    overflow-wrap: anywhere;
+  }
+  .store-list :global(table th:nth-child(2)),
+  .store-list :global(table td:nth-child(2)) {
+    width: 22%;
+    white-space: nowrap;
+    text-align: right;
+  }
+  .store-list :global(table th:nth-child(3)),
+  .store-list :global(table td:nth-child(3)) {
+    width: 30%;
+    white-space: nowrap;
+  }
+
+  /* ── Store sidebar (Table primitive hosts the table; only the
+     row-level hover / focus / active states stay local because
+     the Table primitive does not own row-state styling) ──────── */
+  .store-row {
     cursor: pointer;
-    transition: background 0.15s;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
   }
 
-  .store-item:hover {
-    background: #f9fafb;
+  .store-row:hover {
+    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
   }
 
-  .store-item.active {
-    background: #eff6ff;
-    border-color: #3b82f6;
+  .store-row.active {
+    background: color-mix(in oklch, var(--color-primary) 12%, transparent);
   }
 
-  .store-name {
-    font-weight: 500;
-    font-size: 0.9rem;
+  .store-row:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
   }
 
-  .store-code {
-    font-size: 0.75rem;
-    color: #6b7280;
+  .store-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
   }
 
-  .badge-inactive {
-    font-size: 0.7rem;
-    background: #f3f4f6;
-    color: #9ca3af;
-    border-radius: 4px;
-    padding: 1px 5px;
-    align-self: flex-start;
+  .store-link:hover {
+    text-decoration: underline;
   }
 
   /* ── Store detail ──────────────────────────────────────────────────────── */
   .store-detail {
-    background: #fff;
-    border: 1px solid #e5e7eb;
+    background: var(--color-base-100);
+    border: 1px solid var(--color-base-300);
     border-radius: 10px;
     padding: 24px;
   }
@@ -617,18 +704,19 @@
   .detail-header h2 {
     margin: 0 0 4px;
     font-size: 1.2rem;
+    color: var(--color-base-content);
   }
 
   .detail-code {
     font-size: 0.8rem;
-    color: #6b7280;
+    color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
     margin-left: 8px;
   }
 
   .detail-notes {
     margin: 6px 0 0;
     font-size: 0.85rem;
-    color: #4b5563;
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
   }
 
   .detail-actions {
@@ -647,6 +735,7 @@
   form h3 {
     margin: 0 0 4px;
     font-size: 1rem;
+    color: var(--color-base-content);
   }
 
   label {
@@ -654,22 +743,24 @@
     flex-direction: column;
     gap: 4px;
     font-size: 0.85rem;
-    color: #374151;
+    color: var(--color-base-content);
   }
 
   label input[type="text"],
   label textarea {
     padding: 7px 10px;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--color-base-300);
     border-radius: 6px;
     font-size: 0.9rem;
     font-family: inherit;
+    background: var(--color-base-100);
+    color: var(--color-base-content);
   }
 
   label input:focus,
   label textarea:focus {
-    outline: 2px solid #3b82f6;
-    border-color: #3b82f6;
+    outline: 2px solid var(--color-primary);
+    border-color: var(--color-primary);
   }
 
   .checkbox-label {
@@ -691,8 +782,8 @@
 
   /* ── Buttons ───────────────────────────────────────────────────────────── */
   .btn-primary {
-    background: #2563eb;
-    color: #fff;
+    background: var(--color-primary);
+    color: var(--color-primary-content);
     border: none;
     border-radius: 6px;
     padding: 8px 16px;
@@ -702,13 +793,13 @@
   }
 
   .btn-primary:hover {
-    background: #1d4ed8;
+    background: color-mix(in oklch, var(--color-primary) 88%, black);
   }
 
   .btn-secondary {
-    background: #fff;
-    color: #374151;
-    border: 1px solid #d1d5db;
+    background: var(--color-base-100);
+    color: var(--color-base-content);
+    border: 1px solid var(--color-base-300);
     border-radius: 6px;
     padding: 8px 16px;
     font-size: 0.9rem;
@@ -717,7 +808,7 @@
   }
 
   .btn-secondary:hover {
-    background: #f9fafb;
+    background: var(--color-base-200);
   }
 
   .btn-small {
@@ -725,17 +816,9 @@
     font-size: 0.82rem;
   }
 
-  .btn-icon {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 0.9rem;
-    padding: 2px 6px;
-  }
-
   /* ── Locations ─────────────────────────────────────────────────────────── */
   .locations-section {
-    border-top: 1px solid #f3f4f6;
+    border-top: 1px solid var(--color-base-200);
     padding-top: 20px;
   }
 
@@ -749,46 +832,22 @@
   .section-header h3 {
     margin: 0;
     font-size: 1rem;
+    color: var(--color-base-content);
   }
 
-  .location-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .location-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 10px;
-    background: #f9fafb;
-    border-radius: 6px;
-    gap: 8px;
-  }
-
-  .location-info {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .location-name {
-    font-size: 0.9rem;
-    font-weight: 500;
-  }
-
-  .location-notes {
-    font-size: 0.78rem;
-    color: #6b7280;
+  /* Local styling for the per-cell muted notes column. The
+     location-row wrapper is reserved for any future per-row state
+     (e.g. hover / focus-visible) the migration may add; today only
+     the .notes child needs local styling because the rest of the
+     location list inherits from the Table primitive's DaisyUI
+     chrome. */
+  .location-row .notes {
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
+    font-size: 0.85rem;
   }
 
   .empty-hint {
-    color: #9ca3af;
+    color: color-mix(in oklch, var(--color-base-content) 55%, transparent);
     font-size: 0.85rem;
     font-style: italic;
     margin: 0;
