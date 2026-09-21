@@ -200,26 +200,40 @@ fn current_close_behavior(handle: &tauri::AppHandle) -> CloseBehavior {
     }
 }
 
-/// Resolves the tray icon from the bundled resources. Returns `None` if
-/// the resource directory cannot be located or the icon file cannot be
-/// decoded; the caller decides whether to proceed without an icon.
+/// Resolves the tray icon from the bundled resources. In development,
+/// `resource_dir()` points at `src-tauri/target/debug`, where Tauri does
+/// not copy the bundle icon files, so we fall back to the compile-time
+/// icon bytes generated under `src-tauri/icons/`.
 fn load_tray_icon(app: &tauri::App) -> Option<Image<'static>> {
     let resource_dir = match app.path().resource_dir() {
         Ok(dir) => dir,
         Err(e) => {
             tracing::warn!(error = %e, "Failed to resolve resource_dir for tray icon");
-            return None;
+            return load_embedded_tray_icon();
         }
     };
     let icon_path = resource_dir.join(TRAY_ICON_REL_PATH);
     match Image::from_path(&icon_path) {
         Ok(img) => Some(img),
         Err(e) => {
-            tracing::warn!(
+            tracing::debug!(
                 path = %icon_path.display(),
                 error = %e,
-                "Failed to load tray icon; tray will be built without an icon"
+                "Bundled tray icon path unavailable; falling back to embedded icon bytes"
             );
+            load_embedded_tray_icon()
+        }
+    }
+}
+
+/// Loads the generated 32×32 tray icon directly from the source tree at
+/// compile time. This keeps `tauri dev` and `cargo run` from depending on
+/// `target/debug/icons/32x32.png` existing on disk.
+fn load_embedded_tray_icon() -> Option<Image<'static>> {
+    match Image::from_bytes(include_bytes!("../icons/32x32.png")) {
+        Ok(img) => Some(img),
+        Err(e) => {
+            tracing::warn!(error = %e, "Failed to decode embedded tray icon");
             None
         }
     }
