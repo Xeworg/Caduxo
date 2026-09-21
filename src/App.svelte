@@ -21,6 +21,7 @@
 -->
 <script lang="ts">
   import { onDestroy } from "svelte";
+  import caduxoMark from "./assets/caduxo-mark.png";
   import StoresPage from "./components/StoresPage.svelte";
   import ProductCatalogPage from "./components/ProductCatalogPage.svelte";
   import DashboardPage from "./components/DashboardPage.svelte";
@@ -91,6 +92,14 @@
         onclick={() => setTab("dashboard")}
         aria-label={$LL.nav.dashboard()}
       >
+        <img
+          src={caduxoMark}
+          alt=""
+          class="app-brand-mark"
+          aria-hidden="true"
+          width="24"
+          height="24"
+        />
         Caduxo
       </button>
     </div>
@@ -232,10 +241,25 @@
     letter-spacing: 0.02em;
     color: var(--color-primary);
     cursor: pointer;
+    /* Inline-flex keeps the brand mark and the wordmark vertically
+       aligned regardless of font-metric drift between platforms. */
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
     /* The brand sits on top of the dashboard gradient band, which is
        pointer-events: none, so clicks always reach the button. */
     position: relative;
     z-index: 1;
+  }
+
+  /* Decorative brand mark inside the navbar brand button. Sized to
+     match the 1rem text on the navbar baseline; the asset file is
+     exported at 64px (1x) and 128px (2x) so HiDPI screens still
+     look crisp. */
+  .app-brand-mark {
+    height: 1.5rem;
+    width: 1.5rem;
+    flex: none;
   }
 
   /* Dashboard-only gradient band. Absolute child of .navbar-start
