@@ -25,6 +25,29 @@ export type ThemeName =
   | "sunset"
   | "nord";
 
+/**
+ * FEFO (First-Expired, First-Out) lot-selection policy persisted in
+ * `app_settings.scanner_fefo_policy`. Wire-serialised as the snake_case
+ * strings the backend accepts (`suggest_fefo`, `require_fefo`,
+ * `manual_lot_choice`); defaults to `"suggest_fefo"` on fresh installs.
+ *
+ * The Scanner tab honours the policy for `ProductMatch` results only;
+ * `LotMatch` results bypass FEFO because the scanned code already names
+ * the lot. PR 2 of `scanner-quick-operations` ships the Scanner tab
+ * consumer; PR 3 ships the Configuration selector.
+ */
+export type FefoPolicy = "suggest_fefo" | "require_fefo" | "manual_lot_choice";
+
+/**
+ * Close-window behaviour persisted in `app_settings.close_behavior`.
+ * Wire-serialised as the snake_case strings the backend accepts
+ * (`minimize_to_tray`, `exit_application`); defaults to
+ * `"minimize_to_tray"` on fresh installs. PR 3 wires the Tauri runtime
+ * so the configured behaviour takes effect from the very first close
+ * attempt.
+ */
+export type CloseBehavior = "minimize_to_tray" | "exit_application";
+
 export interface StoreResponse {
  id: string;
  name: string;
@@ -96,7 +119,17 @@ export interface SettingsResponse {
   *  fallback theme as a manual choice. The backend also reports `false`
   *  when a stored row carries an unsupported value (e.g. legacy `"fr"`
   *  for language or `"synthwave"` for theme). */
- theme_configured: boolean;
+  theme_configured: boolean;
+ /** Effective FEFO lot-selection policy for the Scanner tab. Defaults to
+  *  `"suggest_fefo"` on fresh installs (matching the spec) and when a
+  *  stored row carries an unrecognised value (mirroring the `language`
+  *  fallback pattern). PR 2 of `scanner-quick-operations`. */
+ scanner_fefo_policy: FefoPolicy;
+ /** Effective close-window behaviour. Defaults to `"minimize_to_tray"`
+  *  on fresh installs (matching the spec) and when a stored row carries
+  *  an unrecognised value. PR 3 wires the Tauri runtime consumer;
+  *  PR 2 ships the TS mirror so the Scanner tab can read the policy. */
+ close_behavior: CloseBehavior;
 }
 
 export interface SettingsUpdate {
@@ -108,7 +141,17 @@ export interface SettingsUpdate {
  /** Optional: sets the active theme preference. The IPC boundary rejects
   *  values outside the curated `ThemeName` set with a `CommandError::Validation`
   *  so the persisted row stays untouched. PR 2 of `caduxo-daisyui-redesign`. */
- theme?: ThemeName;
+  theme?: ThemeName;
+ /** Optional: sets the Scanner FEFO lot-selection policy. The IPC boundary
+  *  rejects values outside the curated `FefoPolicy` set with a
+  *  `CommandError::Validation` so the persisted row stays untouched.
+  *  PR 2 of `scanner-quick-operations`. */
+ scanner_fefo_policy?: FefoPolicy;
+ /** Optional: sets the close-window behaviour. The IPC boundary rejects
+  *  values outside the curated `CloseBehavior` set with a
+  *  `CommandError::Validation` so the persisted row stays untouched.
+  *  PR 2 of `scanner-quick-operations`. */
+ close_behavior?: CloseBehavior;
 }
 
 // ─── First-run / settings ────────────────────────────────────────────────────

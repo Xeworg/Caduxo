@@ -7,6 +7,7 @@ const en: BaseTranslation = {
     products: "Products",
     calendar: "Calendar",
     reports: "Reports",
+    scanner: "Scanner",
     import: "Import",
     backup: "Backup",
     settings: "Configuration",
@@ -77,6 +78,32 @@ const en: BaseTranslation = {
       names: {
         en: "English",
         es: "Español",
+      },
+    },
+    // Scanner FEFO lot-selection policy (`scanner-quick-operations` PR 3).
+    // Mirrors the `language` selector pattern: section title + label +
+    // description + per-option names dictionary keyed by the snake_case
+    // wire values (`suggest_fefo`, `require_fefo`, `manual_lot_choice`).
+    scannerFefoPolicy: {
+      sectionTitle: "Scanner",
+      label: "FEFO lot selection",
+      description:
+        "Controls how the Scanner tab picks a lot when a scan resolves to a product with multiple lots. Direct lot-code scans always bypass this policy and use the scanned lot.",
+      names: {
+        suggest_fefo: "Suggest FEFO (allow override)",
+        require_fefo: "Require FEFO (disable override)",
+        manual_lot_choice: "Manual lot choice",
+      },
+    },
+    // Close-window behaviour (`scanner-quick-operations` PR 3).
+    closeBehavior: {
+      sectionTitle: "Window close",
+      label: "When closing the window",
+      description:
+        "When set to minimize to tray, closing the window hides it to the system tray and keeps the application running. When set to exit, closing the window quits the application.",
+      names: {
+        minimize_to_tray: "Minimize to tray",
+        exit_application: "Exit application",
       },
     },
   },
@@ -894,6 +921,114 @@ const en: BaseTranslation = {
     title: "Press Enter to search",
     noMatch: "No product found for this barcode.",
     searchError: "Search failed: {msg}",
+  },
+
+  // Scanner tab — PR 2 of `scanner-quick-operations`. Three modes
+  // (Sale / Registration / Stock-out) share the same single primary
+  // input; the active mode decides the action after a successful
+  // resolution. See `src/components/ScannerPage.svelte` for the
+  // consumer wiring.
+  scanner: {
+    pageTitle: "Scanner",
+    pageSubtitle: "Quick operations for handheld scanners.",
+    input: {
+      label: "Scan code",
+      placeholder: "Scan SKU, barcode, or lot code…",
+      ariaLabel: "Scanner input",
+      title: "Press Enter to submit",
+    },
+    modes: {
+      sale: "Sale",
+      registration: "Registration",
+      stockOut: "Stock-out",
+    },
+    noStore: {
+      title: "Create a store first",
+      body: "The Scanner tab needs an active store to resolve scans. Create or select a store in the Stores tab to enable scanning.",
+    },
+    loadingSettings: "Loading scanner settings…",
+    debouncedNotice: "Ignored repeat scan (debounced).",
+    unknownTitle: "No match",
+    // Sale mode copy
+    sale: {
+      selectedLot: "Lot",
+      selectedLotHint: "Resolved by lot code — FEFO bypassed for direct lot scans.",
+      selectedProduct: "Product",
+      lotPickerLabel: "Lot",
+      fefoRequiredNotice: "FEFO policy is enforced — the lot picker is disabled.",
+      quantityLabel: "Quantity *",
+      locationLabel: "Source location *",
+      confirm: "Confirm sale",
+      confirming: "Confirming…",
+      success: "Sold {qty} × {sku}",
+      invalid: {
+        lot: "Select a lot to confirm the sale.",
+        quantity: "Quantity must be greater than zero.",
+        location: "Select a source location.",
+        quantityExceeds: "Only {available} units are available at this location.",
+      },
+    },
+    // Registration mode copy
+    registration: {
+      unknownHeading: "Quick product creation",
+      unknownBody: "The scanned code did not match any existing product. Choose where to use it as the starting point for a new product, or retype the SKU / barcode yourself.",
+      scannedValueLabel: "Scanned value",
+      scannedValuePlaceholder: "(empty)",
+      routeAsSku: "Use as SKU",
+      routeAsBarcode: "Use as barcode",
+      routeUnrouted: "Route the scanned value to one slot before creating the product.",
+      skuLabel: "SKU *",
+      barcodeLabel: "Barcode",
+      descriptionLabel: "Description *",
+      alertDaysLabel: "Alert days before expiry *",
+      notesLabel: "Notes",
+      createProduct: "Create product",
+      creating: "Creating…",
+      successProduct: "Created product {sku}.",
+      successBarcode: "Attached barcode {barcode}.",
+      // Existing-lot creation flow (LotMatch / ProductMatch)
+      newLotHeading: "Create a new lot",
+      newLotBody: "The scanned code matched an existing product. Create a brand-new lot for it — the registered quantity will not be added to any existing lot in v1.",
+      noExistingLots: "This product has no active lots. Creating a new lot is the only path in Registration mode.",
+      invalid: {
+        sku: "SKU is required.",
+        description: "Description is required.",
+        alertDays: "Alert days must be 0 or greater.",
+      },
+      successLot: "Created lot {batchCode}.",
+    },
+    // Stock-out mode copy
+    stockOut: {
+      selectedLot: "Lot",
+      selectedProduct: "Product",
+      lotPickerLabel: "Lot",
+      fefoRequiredNotice: "FEFO policy is enforced — the lot picker is disabled.",
+      reasonLabel: "Exit reason *",
+      reasonPlaceholder: "Select reason…",
+      quantityLabel: "Quantity *",
+      locationLabel: "Source location *",
+      notesLabel: "Notes *",
+      notesOptionalLabel: "Notes (optional)",
+      notesRequiredHint: "Notes are required for this reason.",
+      confirm: "Confirm stock-out",
+      confirming: "Confirming…",
+      success: "Removed {qty} × {sku} ({reason})",
+      invalid: {
+        lot: "Select a lot to confirm the stock-out.",
+        reason: "Select an exit reason.",
+        quantity: "Quantity must be greater than zero.",
+        location: "Select a source location.",
+        quantityExceeds: "Only {available} units are available at this location.",
+        notes: "Notes are required for this exit type.",
+      },
+    },
+    // Reusable fragments
+    errors: {
+      lookupFailed: "Could not resolve the scanned value: {msg}",
+      saveFailed: "Could not save: {msg}",
+      loadBalancesFailed: "Could not load lot balances: {msg}",
+      loadSettingsFailed: "Could not load scanner settings: {msg}",
+    },
   },
 
   categoryPicker: {

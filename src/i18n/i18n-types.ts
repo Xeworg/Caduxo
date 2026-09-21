@@ -36,6 +36,10 @@ type RootTranslation = {
 		 */
 		reports: string
 		/**
+		 * S​c​a​n​n​e​r
+		 */
+		scanner: string
+		/**
 		 * I​m​p​o​r​t
 		 */
 		'import': string
@@ -265,6 +269,58 @@ type RootTranslation = {
 				 * E​s​p​a​ñ​o​l
 				 */
 				es: string
+			}
+		}
+		scannerFefoPolicy: {
+			/**
+			 * S​c​a​n​n​e​r
+			 */
+			sectionTitle: string
+			/**
+			 * F​E​F​O​ ​l​o​t​ ​s​e​l​e​c​t​i​o​n
+			 */
+			label: string
+			/**
+			 * C​o​n​t​r​o​l​s​ ​h​o​w​ ​t​h​e​ ​S​c​a​n​n​e​r​ ​t​a​b​ ​p​i​c​k​s​ ​a​ ​l​o​t​ ​w​h​e​n​ ​a​ ​s​c​a​n​ ​r​e​s​o​l​v​e​s​ ​t​o​ ​a​ ​p​r​o​d​u​c​t​ ​w​i​t​h​ ​m​u​l​t​i​p​l​e​ ​l​o​t​s​.​ ​D​i​r​e​c​t​ ​l​o​t​-​c​o​d​e​ ​s​c​a​n​s​ ​a​l​w​a​y​s​ ​b​y​p​a​s​s​ ​t​h​i​s​ ​p​o​l​i​c​y​ ​a​n​d​ ​u​s​e​ ​t​h​e​ ​s​c​a​n​n​e​d​ ​l​o​t​.
+			 */
+			description: string
+			names: {
+				/**
+				 * S​u​g​g​e​s​t​ ​F​E​F​O​ ​(​a​l​l​o​w​ ​o​v​e​r​r​i​d​e​)
+				 */
+				suggest_fefo: string
+				/**
+				 * R​e​q​u​i​r​e​ ​F​E​F​O​ ​(​d​i​s​a​b​l​e​ ​o​v​e​r​r​i​d​e​)
+				 */
+				require_fefo: string
+				/**
+				 * M​a​n​u​a​l​ ​l​o​t​ ​c​h​o​i​c​e
+				 */
+				manual_lot_choice: string
+			}
+		}
+		closeBehavior: {
+			/**
+			 * W​i​n​d​o​w​ ​c​l​o​s​e
+			 */
+			sectionTitle: string
+			/**
+			 * W​h​e​n​ ​c​l​o​s​i​n​g​ ​t​h​e​ ​w​i​n​d​o​w
+			 */
+			label: string
+			/**
+			 * W​h​e​n​ ​s​e​t​ ​t​o​ ​m​i​n​i​m​i​z​e​ ​t​o​ ​t​r​a​y​,​ ​c​l​o​s​i​n​g​ ​t​h​e​ ​w​i​n​d​o​w​ ​h​i​d​e​s​ ​i​t​ ​t​o​ ​t​h​e​ ​s​y​s​t​e​m​ ​t​r​a​y​ ​a​n​d​ ​k​e​e​p​s​ ​t​h​e​ ​a​p​p​l​i​c​a​t​i​o​n​ ​r​u​n​n​i​n​g​.​ ​W​h​e​n​ ​s​e​t​ ​t​o​ ​e​x​i​t​,​ ​c​l​o​s​i​n​g​ ​t​h​e​ ​w​i​n​d​o​w​ ​q​u​i​t​s​ ​t​h​e​ ​a​p​p​l​i​c​a​t​i​o​n​.
+			 */
+			description: string
+			names: {
+				/**
+				 * M​i​n​i​m​i​z​e​ ​t​o​ ​t​r​a​y
+				 */
+				minimize_to_tray: string
+				/**
+				 * E​x​i​t​ ​a​p​p​l​i​c​a​t​i​o​n
+				 */
+				exit_application: string
 			}
 		}
 	}
@@ -3192,6 +3248,342 @@ type RootTranslation = {
 		 */
 		searchError: RequiredParams<'msg'>
 	}
+	scanner: {
+		/**
+		 * S​c​a​n​n​e​r
+		 */
+		pageTitle: string
+		/**
+		 * Q​u​i​c​k​ ​o​p​e​r​a​t​i​o​n​s​ ​f​o​r​ ​h​a​n​d​h​e​l​d​ ​s​c​a​n​n​e​r​s​.
+		 */
+		pageSubtitle: string
+		input: {
+			/**
+			 * S​c​a​n​ ​c​o​d​e
+			 */
+			label: string
+			/**
+			 * S​c​a​n​ ​S​K​U​,​ ​b​a​r​c​o​d​e​,​ ​o​r​ ​l​o​t​ ​c​o​d​e​…
+			 */
+			placeholder: string
+			/**
+			 * S​c​a​n​n​e​r​ ​i​n​p​u​t
+			 */
+			ariaLabel: string
+			/**
+			 * P​r​e​s​s​ ​E​n​t​e​r​ ​t​o​ ​s​u​b​m​i​t
+			 */
+			title: string
+		}
+		modes: {
+			/**
+			 * S​a​l​e
+			 */
+			sale: string
+			/**
+			 * R​e​g​i​s​t​r​a​t​i​o​n
+			 */
+			registration: string
+			/**
+			 * S​t​o​c​k​-​o​u​t
+			 */
+			stockOut: string
+		}
+		noStore: {
+			/**
+			 * C​r​e​a​t​e​ ​a​ ​s​t​o​r​e​ ​f​i​r​s​t
+			 */
+			title: string
+			/**
+			 * T​h​e​ ​S​c​a​n​n​e​r​ ​t​a​b​ ​n​e​e​d​s​ ​a​n​ ​a​c​t​i​v​e​ ​s​t​o​r​e​ ​t​o​ ​r​e​s​o​l​v​e​ ​s​c​a​n​s​.​ ​C​r​e​a​t​e​ ​o​r​ ​s​e​l​e​c​t​ ​a​ ​s​t​o​r​e​ ​i​n​ ​t​h​e​ ​S​t​o​r​e​s​ ​t​a​b​ ​t​o​ ​e​n​a​b​l​e​ ​s​c​a​n​n​i​n​g​.
+			 */
+			body: string
+		}
+		/**
+		 * L​o​a​d​i​n​g​ ​s​c​a​n​n​e​r​ ​s​e​t​t​i​n​g​s​…
+		 */
+		loadingSettings: string
+		/**
+		 * I​g​n​o​r​e​d​ ​r​e​p​e​a​t​ ​s​c​a​n​ ​(​d​e​b​o​u​n​c​e​d​)​.
+		 */
+		debouncedNotice: string
+		/**
+		 * N​o​ ​m​a​t​c​h
+		 */
+		unknownTitle: string
+		sale: {
+			/**
+			 * L​o​t
+			 */
+			selectedLot: string
+			/**
+			 * R​e​s​o​l​v​e​d​ ​b​y​ ​l​o​t​ ​c​o​d​e​ ​—​ ​F​E​F​O​ ​b​y​p​a​s​s​e​d​ ​f​o​r​ ​d​i​r​e​c​t​ ​l​o​t​ ​s​c​a​n​s​.
+			 */
+			selectedLotHint: string
+			/**
+			 * P​r​o​d​u​c​t
+			 */
+			selectedProduct: string
+			/**
+			 * L​o​t
+			 */
+			lotPickerLabel: string
+			/**
+			 * F​E​F​O​ ​p​o​l​i​c​y​ ​i​s​ ​e​n​f​o​r​c​e​d​ ​—​ ​t​h​e​ ​l​o​t​ ​p​i​c​k​e​r​ ​i​s​ ​d​i​s​a​b​l​e​d​.
+			 */
+			fefoRequiredNotice: string
+			/**
+			 * Q​u​a​n​t​i​t​y​ ​*
+			 */
+			quantityLabel: string
+			/**
+			 * S​o​u​r​c​e​ ​l​o​c​a​t​i​o​n​ ​*
+			 */
+			locationLabel: string
+			/**
+			 * C​o​n​f​i​r​m​ ​s​a​l​e
+			 */
+			confirm: string
+			/**
+			 * C​o​n​f​i​r​m​i​n​g​…
+			 */
+			confirming: string
+			/**
+			 * S​o​l​d​ ​{​q​t​y​}​ ​×​ ​{​s​k​u​}
+			 * @param {unknown} qty
+			 * @param {unknown} sku
+			 */
+			success: RequiredParams<'qty' | 'sku'>
+			invalid: {
+				/**
+				 * S​e​l​e​c​t​ ​a​ ​l​o​t​ ​t​o​ ​c​o​n​f​i​r​m​ ​t​h​e​ ​s​a​l​e​.
+				 */
+				lot: string
+				/**
+				 * Q​u​a​n​t​i​t​y​ ​m​u​s​t​ ​b​e​ ​g​r​e​a​t​e​r​ ​t​h​a​n​ ​z​e​r​o​.
+				 */
+				quantity: string
+				/**
+				 * S​e​l​e​c​t​ ​a​ ​s​o​u​r​c​e​ ​l​o​c​a​t​i​o​n​.
+				 */
+				location: string
+				/**
+				 * O​n​l​y​ ​{​a​v​a​i​l​a​b​l​e​}​ ​u​n​i​t​s​ ​a​r​e​ ​a​v​a​i​l​a​b​l​e​ ​a​t​ ​t​h​i​s​ ​l​o​c​a​t​i​o​n​.
+				 * @param {unknown} available
+				 */
+				quantityExceeds: RequiredParams<'available'>
+			}
+		}
+		registration: {
+			/**
+			 * Q​u​i​c​k​ ​p​r​o​d​u​c​t​ ​c​r​e​a​t​i​o​n
+			 */
+			unknownHeading: string
+			/**
+			 * T​h​e​ ​s​c​a​n​n​e​d​ ​c​o​d​e​ ​d​i​d​ ​n​o​t​ ​m​a​t​c​h​ ​a​n​y​ ​e​x​i​s​t​i​n​g​ ​p​r​o​d​u​c​t​.​ ​C​h​o​o​s​e​ ​w​h​e​r​e​ ​t​o​ ​u​s​e​ ​i​t​ ​a​s​ ​t​h​e​ ​s​t​a​r​t​i​n​g​ ​p​o​i​n​t​ ​f​o​r​ ​a​ ​n​e​w​ ​p​r​o​d​u​c​t​,​ ​o​r​ ​r​e​t​y​p​e​ ​t​h​e​ ​S​K​U​ ​/​ ​b​a​r​c​o​d​e​ ​y​o​u​r​s​e​l​f​.
+			 */
+			unknownBody: string
+			/**
+			 * S​c​a​n​n​e​d​ ​v​a​l​u​e
+			 */
+			scannedValueLabel: string
+			/**
+			 * (​e​m​p​t​y​)
+			 */
+			scannedValuePlaceholder: string
+			/**
+			 * U​s​e​ ​a​s​ ​S​K​U
+			 */
+			routeAsSku: string
+			/**
+			 * U​s​e​ ​a​s​ ​b​a​r​c​o​d​e
+			 */
+			routeAsBarcode: string
+			/**
+			 * R​o​u​t​e​ ​t​h​e​ ​s​c​a​n​n​e​d​ ​v​a​l​u​e​ ​t​o​ ​o​n​e​ ​s​l​o​t​ ​b​e​f​o​r​e​ ​c​r​e​a​t​i​n​g​ ​t​h​e​ ​p​r​o​d​u​c​t​.
+			 */
+			routeUnrouted: string
+			/**
+			 * S​K​U​ ​*
+			 */
+			skuLabel: string
+			/**
+			 * B​a​r​c​o​d​e
+			 */
+			barcodeLabel: string
+			/**
+			 * D​e​s​c​r​i​p​t​i​o​n​ ​*
+			 */
+			descriptionLabel: string
+			/**
+			 * A​l​e​r​t​ ​d​a​y​s​ ​b​e​f​o​r​e​ ​e​x​p​i​r​y​ ​*
+			 */
+			alertDaysLabel: string
+			/**
+			 * N​o​t​e​s
+			 */
+			notesLabel: string
+			/**
+			 * C​r​e​a​t​e​ ​p​r​o​d​u​c​t
+			 */
+			createProduct: string
+			/**
+			 * C​r​e​a​t​i​n​g​…
+			 */
+			creating: string
+			/**
+			 * C​r​e​a​t​e​d​ ​p​r​o​d​u​c​t​ ​{​s​k​u​}​.
+			 * @param {unknown} sku
+			 */
+			successProduct: RequiredParams<'sku'>
+			/**
+			 * A​t​t​a​c​h​e​d​ ​b​a​r​c​o​d​e​ ​{​b​a​r​c​o​d​e​}​.
+			 * @param {unknown} barcode
+			 */
+			successBarcode: RequiredParams<'barcode'>
+			/**
+			 * C​r​e​a​t​e​ ​a​ ​n​e​w​ ​l​o​t
+			 */
+			newLotHeading: string
+			/**
+			 * T​h​e​ ​s​c​a​n​n​e​d​ ​c​o​d​e​ ​m​a​t​c​h​e​d​ ​a​n​ ​e​x​i​s​t​i​n​g​ ​p​r​o​d​u​c​t​.​ ​C​r​e​a​t​e​ ​a​ ​b​r​a​n​d​-​n​e​w​ ​l​o​t​ ​f​o​r​ ​i​t​ ​—​ ​t​h​e​ ​r​e​g​i​s​t​e​r​e​d​ ​q​u​a​n​t​i​t​y​ ​w​i​l​l​ ​n​o​t​ ​b​e​ ​a​d​d​e​d​ ​t​o​ ​a​n​y​ ​e​x​i​s​t​i​n​g​ ​l​o​t​ ​i​n​ ​v​1​.
+			 */
+			newLotBody: string
+			/**
+			 * T​h​i​s​ ​p​r​o​d​u​c​t​ ​h​a​s​ ​n​o​ ​a​c​t​i​v​e​ ​l​o​t​s​.​ ​C​r​e​a​t​i​n​g​ ​a​ ​n​e​w​ ​l​o​t​ ​i​s​ ​t​h​e​ ​o​n​l​y​ ​p​a​t​h​ ​i​n​ ​R​e​g​i​s​t​r​a​t​i​o​n​ ​m​o​d​e​.
+			 */
+			noExistingLots: string
+			invalid: {
+				/**
+				 * S​K​U​ ​i​s​ ​r​e​q​u​i​r​e​d​.
+				 */
+				sku: string
+				/**
+				 * D​e​s​c​r​i​p​t​i​o​n​ ​i​s​ ​r​e​q​u​i​r​e​d​.
+				 */
+				description: string
+				/**
+				 * A​l​e​r​t​ ​d​a​y​s​ ​m​u​s​t​ ​b​e​ ​0​ ​o​r​ ​g​r​e​a​t​e​r​.
+				 */
+				alertDays: string
+			}
+			/**
+			 * C​r​e​a​t​e​d​ ​l​o​t​ ​{​b​a​t​c​h​C​o​d​e​}​.
+			 * @param {unknown} batchCode
+			 */
+			successLot: RequiredParams<'batchCode'>
+		}
+		stockOut: {
+			/**
+			 * L​o​t
+			 */
+			selectedLot: string
+			/**
+			 * P​r​o​d​u​c​t
+			 */
+			selectedProduct: string
+			/**
+			 * L​o​t
+			 */
+			lotPickerLabel: string
+			/**
+			 * F​E​F​O​ ​p​o​l​i​c​y​ ​i​s​ ​e​n​f​o​r​c​e​d​ ​—​ ​t​h​e​ ​l​o​t​ ​p​i​c​k​e​r​ ​i​s​ ​d​i​s​a​b​l​e​d​.
+			 */
+			fefoRequiredNotice: string
+			/**
+			 * E​x​i​t​ ​r​e​a​s​o​n​ ​*
+			 */
+			reasonLabel: string
+			/**
+			 * S​e​l​e​c​t​ ​r​e​a​s​o​n​…
+			 */
+			reasonPlaceholder: string
+			/**
+			 * Q​u​a​n​t​i​t​y​ ​*
+			 */
+			quantityLabel: string
+			/**
+			 * S​o​u​r​c​e​ ​l​o​c​a​t​i​o​n​ ​*
+			 */
+			locationLabel: string
+			/**
+			 * N​o​t​e​s​ ​*
+			 */
+			notesLabel: string
+			/**
+			 * N​o​t​e​s​ ​(​o​p​t​i​o​n​a​l​)
+			 */
+			notesOptionalLabel: string
+			/**
+			 * N​o​t​e​s​ ​a​r​e​ ​r​e​q​u​i​r​e​d​ ​f​o​r​ ​t​h​i​s​ ​r​e​a​s​o​n​.
+			 */
+			notesRequiredHint: string
+			/**
+			 * C​o​n​f​i​r​m​ ​s​t​o​c​k​-​o​u​t
+			 */
+			confirm: string
+			/**
+			 * C​o​n​f​i​r​m​i​n​g​…
+			 */
+			confirming: string
+			/**
+			 * R​e​m​o​v​e​d​ ​{​q​t​y​}​ ​×​ ​{​s​k​u​}​ ​(​{​r​e​a​s​o​n​}​)
+			 * @param {unknown} qty
+			 * @param {unknown} reason
+			 * @param {unknown} sku
+			 */
+			success: RequiredParams<'qty' | 'reason' | 'sku'>
+			invalid: {
+				/**
+				 * S​e​l​e​c​t​ ​a​ ​l​o​t​ ​t​o​ ​c​o​n​f​i​r​m​ ​t​h​e​ ​s​t​o​c​k​-​o​u​t​.
+				 */
+				lot: string
+				/**
+				 * S​e​l​e​c​t​ ​a​n​ ​e​x​i​t​ ​r​e​a​s​o​n​.
+				 */
+				reason: string
+				/**
+				 * Q​u​a​n​t​i​t​y​ ​m​u​s​t​ ​b​e​ ​g​r​e​a​t​e​r​ ​t​h​a​n​ ​z​e​r​o​.
+				 */
+				quantity: string
+				/**
+				 * S​e​l​e​c​t​ ​a​ ​s​o​u​r​c​e​ ​l​o​c​a​t​i​o​n​.
+				 */
+				location: string
+				/**
+				 * O​n​l​y​ ​{​a​v​a​i​l​a​b​l​e​}​ ​u​n​i​t​s​ ​a​r​e​ ​a​v​a​i​l​a​b​l​e​ ​a​t​ ​t​h​i​s​ ​l​o​c​a​t​i​o​n​.
+				 * @param {unknown} available
+				 */
+				quantityExceeds: RequiredParams<'available'>
+				/**
+				 * N​o​t​e​s​ ​a​r​e​ ​r​e​q​u​i​r​e​d​ ​f​o​r​ ​t​h​i​s​ ​e​x​i​t​ ​t​y​p​e​.
+				 */
+				notes: string
+			}
+		}
+		errors: {
+			/**
+			 * C​o​u​l​d​ ​n​o​t​ ​r​e​s​o​l​v​e​ ​t​h​e​ ​s​c​a​n​n​e​d​ ​v​a​l​u​e​:​ ​{​m​s​g​}
+			 * @param {unknown} msg
+			 */
+			lookupFailed: RequiredParams<'msg'>
+			/**
+			 * C​o​u​l​d​ ​n​o​t​ ​s​a​v​e​:​ ​{​m​s​g​}
+			 * @param {unknown} msg
+			 */
+			saveFailed: RequiredParams<'msg'>
+			/**
+			 * C​o​u​l​d​ ​n​o​t​ ​l​o​a​d​ ​l​o​t​ ​b​a​l​a​n​c​e​s​:​ ​{​m​s​g​}
+			 * @param {unknown} msg
+			 */
+			loadBalancesFailed: RequiredParams<'msg'>
+			/**
+			 * C​o​u​l​d​ ​n​o​t​ ​l​o​a​d​ ​s​c​a​n​n​e​r​ ​s​e​t​t​i​n​g​s​:​ ​{​m​s​g​}
+			 * @param {unknown} msg
+			 */
+			loadSettingsFailed: RequiredParams<'msg'>
+		}
+	}
 	categoryPicker: {
 		/**
 		 * F​i​l​t​e​r​ ​b​y​ ​c​a​t​e​g​o​r​y​…
@@ -3504,6 +3896,10 @@ export type TranslationFunctions = {
 		 */
 		reports: () => LocalizedString
 		/**
+		 * Scanner
+		 */
+		scanner: () => LocalizedString
+		/**
 		 * Import
 		 */
 		'import': () => LocalizedString
@@ -3729,6 +4125,58 @@ export type TranslationFunctions = {
 				 * Español
 				 */
 				es: () => LocalizedString
+			}
+		}
+		scannerFefoPolicy: {
+			/**
+			 * Scanner
+			 */
+			sectionTitle: () => LocalizedString
+			/**
+			 * FEFO lot selection
+			 */
+			label: () => LocalizedString
+			/**
+			 * Controls how the Scanner tab picks a lot when a scan resolves to a product with multiple lots. Direct lot-code scans always bypass this policy and use the scanned lot.
+			 */
+			description: () => LocalizedString
+			names: {
+				/**
+				 * Suggest FEFO (allow override)
+				 */
+				suggest_fefo: () => LocalizedString
+				/**
+				 * Require FEFO (disable override)
+				 */
+				require_fefo: () => LocalizedString
+				/**
+				 * Manual lot choice
+				 */
+				manual_lot_choice: () => LocalizedString
+			}
+		}
+		closeBehavior: {
+			/**
+			 * Window close
+			 */
+			sectionTitle: () => LocalizedString
+			/**
+			 * When closing the window
+			 */
+			label: () => LocalizedString
+			/**
+			 * When set to minimize to tray, closing the window hides it to the system tray and keeps the application running. When set to exit, closing the window quits the application.
+			 */
+			description: () => LocalizedString
+			names: {
+				/**
+				 * Minimize to tray
+				 */
+				minimize_to_tray: () => LocalizedString
+				/**
+				 * Exit application
+				 */
+				exit_application: () => LocalizedString
 			}
 		}
 	}
@@ -6573,6 +7021,328 @@ export type TranslationFunctions = {
 		 * Search failed: {msg}
 		 */
 		searchError: (arg: { msg: unknown }) => LocalizedString
+	}
+	scanner: {
+		/**
+		 * Scanner
+		 */
+		pageTitle: () => LocalizedString
+		/**
+		 * Quick operations for handheld scanners.
+		 */
+		pageSubtitle: () => LocalizedString
+		input: {
+			/**
+			 * Scan code
+			 */
+			label: () => LocalizedString
+			/**
+			 * Scan SKU, barcode, or lot code…
+			 */
+			placeholder: () => LocalizedString
+			/**
+			 * Scanner input
+			 */
+			ariaLabel: () => LocalizedString
+			/**
+			 * Press Enter to submit
+			 */
+			title: () => LocalizedString
+		}
+		modes: {
+			/**
+			 * Sale
+			 */
+			sale: () => LocalizedString
+			/**
+			 * Registration
+			 */
+			registration: () => LocalizedString
+			/**
+			 * Stock-out
+			 */
+			stockOut: () => LocalizedString
+		}
+		noStore: {
+			/**
+			 * Create a store first
+			 */
+			title: () => LocalizedString
+			/**
+			 * The Scanner tab needs an active store to resolve scans. Create or select a store in the Stores tab to enable scanning.
+			 */
+			body: () => LocalizedString
+		}
+		/**
+		 * Loading scanner settings…
+		 */
+		loadingSettings: () => LocalizedString
+		/**
+		 * Ignored repeat scan (debounced).
+		 */
+		debouncedNotice: () => LocalizedString
+		/**
+		 * No match
+		 */
+		unknownTitle: () => LocalizedString
+		sale: {
+			/**
+			 * Lot
+			 */
+			selectedLot: () => LocalizedString
+			/**
+			 * Resolved by lot code — FEFO bypassed for direct lot scans.
+			 */
+			selectedLotHint: () => LocalizedString
+			/**
+			 * Product
+			 */
+			selectedProduct: () => LocalizedString
+			/**
+			 * Lot
+			 */
+			lotPickerLabel: () => LocalizedString
+			/**
+			 * FEFO policy is enforced — the lot picker is disabled.
+			 */
+			fefoRequiredNotice: () => LocalizedString
+			/**
+			 * Quantity *
+			 */
+			quantityLabel: () => LocalizedString
+			/**
+			 * Source location *
+			 */
+			locationLabel: () => LocalizedString
+			/**
+			 * Confirm sale
+			 */
+			confirm: () => LocalizedString
+			/**
+			 * Confirming…
+			 */
+			confirming: () => LocalizedString
+			/**
+			 * Sold {qty} × {sku}
+			 */
+			success: (arg: { qty: unknown, sku: unknown }) => LocalizedString
+			invalid: {
+				/**
+				 * Select a lot to confirm the sale.
+				 */
+				lot: () => LocalizedString
+				/**
+				 * Quantity must be greater than zero.
+				 */
+				quantity: () => LocalizedString
+				/**
+				 * Select a source location.
+				 */
+				location: () => LocalizedString
+				/**
+				 * Only {available} units are available at this location.
+				 */
+				quantityExceeds: (arg: { available: unknown }) => LocalizedString
+			}
+		}
+		registration: {
+			/**
+			 * Quick product creation
+			 */
+			unknownHeading: () => LocalizedString
+			/**
+			 * The scanned code did not match any existing product. Choose where to use it as the starting point for a new product, or retype the SKU / barcode yourself.
+			 */
+			unknownBody: () => LocalizedString
+			/**
+			 * Scanned value
+			 */
+			scannedValueLabel: () => LocalizedString
+			/**
+			 * (empty)
+			 */
+			scannedValuePlaceholder: () => LocalizedString
+			/**
+			 * Use as SKU
+			 */
+			routeAsSku: () => LocalizedString
+			/**
+			 * Use as barcode
+			 */
+			routeAsBarcode: () => LocalizedString
+			/**
+			 * Route the scanned value to one slot before creating the product.
+			 */
+			routeUnrouted: () => LocalizedString
+			/**
+			 * SKU *
+			 */
+			skuLabel: () => LocalizedString
+			/**
+			 * Barcode
+			 */
+			barcodeLabel: () => LocalizedString
+			/**
+			 * Description *
+			 */
+			descriptionLabel: () => LocalizedString
+			/**
+			 * Alert days before expiry *
+			 */
+			alertDaysLabel: () => LocalizedString
+			/**
+			 * Notes
+			 */
+			notesLabel: () => LocalizedString
+			/**
+			 * Create product
+			 */
+			createProduct: () => LocalizedString
+			/**
+			 * Creating…
+			 */
+			creating: () => LocalizedString
+			/**
+			 * Created product {sku}.
+			 */
+			successProduct: (arg: { sku: unknown }) => LocalizedString
+			/**
+			 * Attached barcode {barcode}.
+			 */
+			successBarcode: (arg: { barcode: unknown }) => LocalizedString
+			/**
+			 * Create a new lot
+			 */
+			newLotHeading: () => LocalizedString
+			/**
+			 * The scanned code matched an existing product. Create a brand-new lot for it — the registered quantity will not be added to any existing lot in v1.
+			 */
+			newLotBody: () => LocalizedString
+			/**
+			 * This product has no active lots. Creating a new lot is the only path in Registration mode.
+			 */
+			noExistingLots: () => LocalizedString
+			invalid: {
+				/**
+				 * SKU is required.
+				 */
+				sku: () => LocalizedString
+				/**
+				 * Description is required.
+				 */
+				description: () => LocalizedString
+				/**
+				 * Alert days must be 0 or greater.
+				 */
+				alertDays: () => LocalizedString
+			}
+			/**
+			 * Created lot {batchCode}.
+			 */
+			successLot: (arg: { batchCode: unknown }) => LocalizedString
+		}
+		stockOut: {
+			/**
+			 * Lot
+			 */
+			selectedLot: () => LocalizedString
+			/**
+			 * Product
+			 */
+			selectedProduct: () => LocalizedString
+			/**
+			 * Lot
+			 */
+			lotPickerLabel: () => LocalizedString
+			/**
+			 * FEFO policy is enforced — the lot picker is disabled.
+			 */
+			fefoRequiredNotice: () => LocalizedString
+			/**
+			 * Exit reason *
+			 */
+			reasonLabel: () => LocalizedString
+			/**
+			 * Select reason…
+			 */
+			reasonPlaceholder: () => LocalizedString
+			/**
+			 * Quantity *
+			 */
+			quantityLabel: () => LocalizedString
+			/**
+			 * Source location *
+			 */
+			locationLabel: () => LocalizedString
+			/**
+			 * Notes *
+			 */
+			notesLabel: () => LocalizedString
+			/**
+			 * Notes (optional)
+			 */
+			notesOptionalLabel: () => LocalizedString
+			/**
+			 * Notes are required for this reason.
+			 */
+			notesRequiredHint: () => LocalizedString
+			/**
+			 * Confirm stock-out
+			 */
+			confirm: () => LocalizedString
+			/**
+			 * Confirming…
+			 */
+			confirming: () => LocalizedString
+			/**
+			 * Removed {qty} × {sku} ({reason})
+			 */
+			success: (arg: { qty: unknown, reason: unknown, sku: unknown }) => LocalizedString
+			invalid: {
+				/**
+				 * Select a lot to confirm the stock-out.
+				 */
+				lot: () => LocalizedString
+				/**
+				 * Select an exit reason.
+				 */
+				reason: () => LocalizedString
+				/**
+				 * Quantity must be greater than zero.
+				 */
+				quantity: () => LocalizedString
+				/**
+				 * Select a source location.
+				 */
+				location: () => LocalizedString
+				/**
+				 * Only {available} units are available at this location.
+				 */
+				quantityExceeds: (arg: { available: unknown }) => LocalizedString
+				/**
+				 * Notes are required for this exit type.
+				 */
+				notes: () => LocalizedString
+			}
+		}
+		errors: {
+			/**
+			 * Could not resolve the scanned value: {msg}
+			 */
+			lookupFailed: (arg: { msg: unknown }) => LocalizedString
+			/**
+			 * Could not save: {msg}
+			 */
+			saveFailed: (arg: { msg: unknown }) => LocalizedString
+			/**
+			 * Could not load lot balances: {msg}
+			 */
+			loadBalancesFailed: (arg: { msg: unknown }) => LocalizedString
+			/**
+			 * Could not load scanner settings: {msg}
+			 */
+			loadSettingsFailed: (arg: { msg: unknown }) => LocalizedString
+		}
 	}
 	categoryPicker: {
 		/**

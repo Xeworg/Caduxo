@@ -38,9 +38,7 @@ pub async fn list_unit_definitions(
     state: State<'_, AppState>,
 ) -> Result<Vec<UnitDefinitionResponse>, CommandError> {
     let pool = state.pool().await;
-    service::list_active(&pool)
-        .await
-        .map_err(Into::into)
+    service::list_active(&pool).await.map_err(Into::into)
 }
 
 /// Creates a new custom unit. The key must be unique (case-insensitive) and
@@ -113,9 +111,7 @@ pub async fn unit_audit_banner_state(
     state: State<'_, AppState>,
 ) -> Result<UnitAuditBannerState, CommandError> {
     let pool = state.pool().await;
-    unit_audit::banner_state(&pool)
-        .await
-        .map_err(Into::into)
+    unit_audit::banner_state(&pool).await.map_err(Into::into)
 }
 
 /// Dismisses the audit banner by persisting the current signature.
@@ -123,9 +119,7 @@ pub async fn unit_audit_banner_state(
 #[tauri::command]
 pub async fn dismiss_unit_audit_banner(state: State<'_, AppState>) -> Result<(), CommandError> {
     let pool = state.pool().await;
-    unit_audit::dismiss_banner(&pool)
-        .await
-        .map_err(Into::into)
+    unit_audit::dismiss_banner(&pool).await.map_err(Into::into)
 }
 
 /// Applies a review action from the UnitReviewPage: map-to-preset,

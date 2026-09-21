@@ -91,7 +91,7 @@ pub struct ArchiveLotInput {
 // ============================================================
 
 /// Full expiry lot response row.
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow)]
 pub struct ExpiryLotResponse {
     pub id: String,
     pub product_id: String,

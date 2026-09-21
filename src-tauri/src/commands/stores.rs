@@ -157,7 +157,10 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<SettingsResponse
 ///
 /// `locale` (BCP-47 tag) is forwarded to the inline `LanguageNotAllowed`
 /// validation so the rejection reaches the UI in the active locale. Unknown
-/// tags fall back to English via `Locale::parse`.
+/// tags fall back to English via `Locale::parse`. PR 1 of
+/// `scanner-quick-operations` adds equivalent `scanner_fefo_policy` and
+/// `close_behavior` validation here so the persisted row stays untouched
+/// when an unrecognised value slips through.
 #[tauri::command]
 pub async fn update_settings(
     state: State<'_, AppState>,
@@ -180,10 +183,80 @@ pub async fn update_settings(
     if let Some(ref value) = input.theme {
         validate_theme_value(value, loc)?;
     }
+    if let Some(ref value) = input.scanner_fefo_policy {
+        validate_scanner_fefo_policy_value(*value, loc)?;
+    }
+    if let Some(ref value) = input.close_behavior {
+        validate_close_behavior_value(*value, loc)?;
+    }
     let pool = state.pool().await;
-    settings_service::update_settings(&pool, input)
-        .await
-        .map_err(AppError::into)
+    // `?` uses the `From<AppError> for CommandError` impl the function
+    // return type expects, avoiding the `AppError::into` ambiguity that
+    // arises with explicit `.map_err(...)` when two `From` impls exist.
+    let updated: SettingsResponse = settings_service::update_settings(&pool, input).await?;
+
+    // Refresh the close-window behaviour cache so the next close attempt
+    // observes the new setting without an async DB read inside the
+    // lifecycle handler. PR 3 of `scanner-quick-operations` wires the
+    // desktop close-window handler against this cache.
+    state.set_close_behavior(updated.close_behavior);
+
+    Ok(updated)
+}
+
+/// Validates a scanner FEFO policy value at the IPC boundary.
+///
+/// The curated v1 set is `{"suggest_fefo", "require_fefo",
+/// "manual_lot_choice"}`. Any other value is rejected as
+/// `CommandError::Validation` with a locale-aware message so the persisted
+/// row stays untouched. PR 1 of `scanner-quick-operations` introduces the
+/// setting; the function is the single source of truth for IPC validation
+/// and is mirrored by tests in `commands::stores::tests`.
+fn validate_scanner_fefo_policy_value(
+    value: crate::dto::stores::FefoPolicy,
+    loc: Locale,
+) -> Result<(), CommandError> {
+    // `FefoPolicy::parse` is lenient; the curated v1 set is the same three
+    // variants the wire shape recognises — accepting the parsed value back
+    // round-trips through the same set. We surface the raw value in the
+    // rejection text so a stale unknown wire tag (which serde would have
+    // rejected before reaching the command) does not silently fall back
+    // to `SuggestFefo`.
+    let wire = value.as_wire();
+    match wire {
+        "suggest_fefo" | "require_fefo" | "manual_lot_choice" => Ok(()),
+        _ => Err(CommandError::Validation {
+            message: user_message(
+                UserMessage::ScannerFefoPolicyNotAllowed {
+                    value: wire.to_string(),
+                },
+                loc,
+            ),
+        }),
+    }
+}
+
+/// Validates a close-window behaviour value at the IPC boundary.
+///
+/// The curated v1 set is `{"minimize_to_tray", "exit_application"}`. Any
+/// other value is rejected as `CommandError::Validation` with a
+/// locale-aware message so the persisted row stays untouched.
+fn validate_close_behavior_value(
+    value: crate::dto::stores::CloseBehavior,
+    loc: Locale,
+) -> Result<(), CommandError> {
+    let wire = value.as_wire();
+    match wire {
+        "minimize_to_tray" | "exit_application" => Ok(()),
+        _ => Err(CommandError::Validation {
+            message: user_message(
+                UserMessage::CloseBehaviorNotAllowed {
+                    value: wire.to_string(),
+                },
+                loc,
+            ),
+        }),
+    }
 }
 
 /// Validates a theme preference at the IPC boundary.

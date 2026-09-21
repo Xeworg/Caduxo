@@ -11,7 +11,11 @@ pub async fn get_settings(pool: &DbPool) -> Result<SettingsResponse, AppError> {
 }
 
 /// Updates settings: last_selected_store_id, require_initial_location_on_lot_create,
-/// language, and theme.
+/// language, theme, scanner_fefo_policy, and close_behavior.
+///
+/// Partial updates only touch the keys whose `Some(_)` value is supplied;
+/// the persisted row stays untouched for every key whose value is `None`.
+/// This mirrors the existing `language` / `theme` branch pattern.
 pub async fn update_settings(
     pool: &DbPool,
     input: SettingsUpdate,
@@ -31,6 +35,16 @@ pub async fn update_settings(
     }
     if let Some(value) = input.theme.as_deref() {
         repo::set_theme_setting(pool, value)
+            .await
+            .map_err(AppError::from)?;
+    }
+    if let Some(value) = input.scanner_fefo_policy {
+        repo::set_scanner_fefo_policy_setting(pool, value.as_wire())
+            .await
+            .map_err(AppError::from)?;
+    }
+    if let Some(value) = input.close_behavior {
+        repo::set_close_behavior_setting(pool, value.as_wire())
             .await
             .map_err(AppError::from)?;
     }
@@ -74,6 +88,8 @@ mod tests {
                 require_initial_location_on_lot_create: None,
                 language: Some("es".to_string()),
                 theme: None,
+                scanner_fefo_policy: None,
+                close_behavior: None,
             },
         )
         .await?;
@@ -108,6 +124,8 @@ mod tests {
                 require_initial_location_on_lot_create: None,
                 language: None,
                 theme: None,
+                scanner_fefo_policy: None,
+                close_behavior: None,
             },
         )
         .await?;
@@ -120,6 +138,8 @@ mod tests {
                 require_initial_location_on_lot_create: None,
                 language: None,
                 theme: None,
+                scanner_fefo_policy: None,
+                close_behavior: None,
             },
         )
         .await?;
@@ -150,6 +170,8 @@ mod tests {
                 require_initial_location_on_lot_create: Some(false),
                 language: Some("es".to_string()),
                 theme: None,
+                scanner_fefo_policy: None,
+                close_behavior: None,
             },
         )
         .await?;
@@ -170,6 +192,8 @@ mod tests {
                 require_initial_location_on_lot_create: None,
                 language: None,
                 theme: Some("dark".to_string()),
+                scanner_fefo_policy: None,
+                close_behavior: None,
             },
         )
         .await?;

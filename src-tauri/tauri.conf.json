@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Caduxo - Product Expiry Tracker",
         "width": 1100,
         "height": 720,

@@ -98,6 +98,91 @@ pub async fn list_expiry_lots_by_product(
     .await
 }
 
+/// Returns the active lot in the given store whose `batch_code` matches
+/// `batch_code` exactly. Trimming is the caller's responsibility; the
+/// comparison is verbatim so the spec's "no upper-casing, lower-casing, or
+/// whitespace normalization" rule is preserved.
+///
+/// Introduced by `scanner-quick-operations` (PR 1) for the
+/// `resolve_scanner_code` lot-code lookup branch. Returns `None` when no
+/// active lot matches; the caller falls back to barcode → SKU lookup.
+/// Returns the most recently created lot when multiple active rows carry the
+/// same `batch_code` in the same store (a defensive `LIMIT 1` keeps the
+/// service-layer contract deterministic; the unique-batch-code invariant
+/// is not enforced at the schema level).
+///
+/// JOINs `products` to expose the unit kind for unit-aware downstream
+/// consumers and to enforce the scanner's "active product only" rule via
+/// `products.is_active = 1`. The Scanner tab MUST NOT resolve lot codes
+/// whose parent product has been archived (the lot remains in the
+/// database for stock-history audit, but the scanner lookup ignores it).
+pub async fn find_active_lot_by_batch_code(
+    pool: &SqlitePool,
+    store_id: &str,
+    batch_code: &str,
+) -> Result<Option<ExpiryLotResponse>, sqlx::Error> {
+    sqlx::query_as::<_, ExpiryLotResponse>(
+        r#"
+        SELECT el.id, el.product_id, el.store_id, el.location_id, el.quantity, el.unit,
+               el.expiry_date, el.alert_days_before, el.batch_code,
+               el.status, el.resolution, el.resolved_at, el.notes,
+               el.created_at, el.updated_at,
+               p.unit_type AS unit_type
+        FROM expiry_lots el
+        LEFT JOIN products p ON p.id = el.product_id
+        WHERE el.store_id = $1
+          AND el.batch_code = $2
+          AND el.status = 'active'
+          AND (p.id IS NULL OR p.is_active = 1)
+        ORDER BY el.created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(store_id)
+    .bind(batch_code)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Returns the active lots for a given product in the given store, ordered
+/// by stable FEFO order `(expiry_date ASC, created_at ASC, id ASC)`.
+///
+/// Introduced by `scanner-quick-operations` (PR 1) for the
+/// `resolve_scanner_code` `ProductMatch` branch. The ordering matches the
+/// spec's `expiry_date ASC, created_at ASC, id ASC` tie-break so the
+/// frontend can render the FEFO suggestion without re-sorting; `id ASC`
+/// is the deterministic tie-breaker when two lots share an expiry date
+/// and a creation timestamp (rare in practice, but the contract demands
+/// stability for snapshot-style lookups).
+///
+/// JOINs `products` to expose the unit kind for unit-aware downstream
+/// consumers.
+pub async fn list_active_lots_for_product_in_store(
+    pool: &SqlitePool,
+    product_id: &str,
+    store_id: &str,
+) -> Result<Vec<ExpiryLotResponse>, sqlx::Error> {
+    sqlx::query_as::<_, ExpiryLotResponse>(
+        r#"
+        SELECT el.id, el.product_id, el.store_id, el.location_id, el.quantity, el.unit,
+               el.expiry_date, el.alert_days_before, el.batch_code,
+               el.status, el.resolution, el.resolved_at, el.notes,
+               el.created_at, el.updated_at,
+               p.unit_type AS unit_type
+        FROM expiry_lots el
+        LEFT JOIN products p ON p.id = el.product_id
+        WHERE el.product_id = $1
+          AND el.store_id = $2
+          AND el.status = 'active'
+        ORDER BY el.expiry_date ASC, el.created_at ASC, el.id ASC
+        "#,
+    )
+    .bind(product_id)
+    .bind(store_id)
+    .fetch_all(pool)
+    .await
+}
+
 /// Returns all active expiry lots for a given store.
 /// JOINs `products` to expose the unit kind for unit-aware downstream consumers.
 pub async fn list_expiry_lots_by_store(

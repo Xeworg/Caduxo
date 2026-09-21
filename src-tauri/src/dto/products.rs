@@ -85,7 +85,7 @@ pub struct ProductUpdate {
 /// Response shape for a product.
 /// `category_ids` is always present and may be empty. The legacy `category_id`
 /// field is dropped from the runtime model; see design §2.2.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ProductResponse {
     pub id: String,
     pub sku: String,

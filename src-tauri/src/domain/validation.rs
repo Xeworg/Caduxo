@@ -59,7 +59,9 @@ pub fn validate_barcode(barcode: &str) -> Result<(), String> {
     }
     if trimmed.len() > BARCODE_MAX_LEN {
         return Err(user_message(
-            UserMessage::BarcodeTooLong { max: BARCODE_MAX_LEN },
+            UserMessage::BarcodeTooLong {
+                max: BARCODE_MAX_LEN,
+            },
             Locale::En,
         ));
     }

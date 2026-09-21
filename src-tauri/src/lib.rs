@@ -5,6 +5,7 @@ mod db;
 mod domain;
 mod dto;
 mod error;
+mod lifecycle;
 mod logging;
 mod pdf;
 mod services;
@@ -14,7 +15,9 @@ use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::Mutex;
 
+use crate::db::repositories::settings as settings_repo;
 use crate::db::{open_pool, run_migrations};
+use crate::dto::stores::CloseBehavior;
 use crate::logging::resolve_log_dir;
 use crate::state::AppState;
 
@@ -57,6 +60,8 @@ pub fn run() {
             commands::products::search_products,
             commands::products::suggested_product_alert_days,
             commands::products::find_product_by_scan,
+            // Scanner operations (scanner-quick-operations PR 1).
+            commands::scanner::resolve_scanner_code,
             commands::products::add_product_barcode,
             commands::products::list_product_barcodes,
             commands::products::remove_product_barcode,
@@ -135,7 +140,33 @@ async fn async_init(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> 
 
     // 5. Register application state with Tauri.
     // The pool is wrapped in Arc<Mutex<>> so it can be replaced atomically on restore.
-    app.manage(AppState::new(Arc::new(Mutex::new(pool)), db_path));
+    // The close_behavior cache is seeded from the persisted settings so the
+    // very first close attempt honours the configured behaviour (PR 3 of
+    // `scanner-quick-operations`).
+    let initial_close_behavior = settings_repo::get_close_behavior_setting(&pool)
+        .await
+        .map(|raw| CloseBehavior::parse(raw.as_deref()))
+        .unwrap_or_else(|e| {
+            tracing::warn!(
+                error = %e,
+                "Failed to read initial close_behavior; falling back to MinimizeToTray"
+            );
+            CloseBehavior::MinimizeToTray
+        });
+    app.manage(AppState::new(
+        Arc::new(Mutex::new(pool)),
+        db_path,
+        initial_close_behavior,
+    ));
+
+    // 6. Install the desktop lifecycle (tray icon + close-window handler).
+    // PR 3 of `scanner-quick-operations`. Best-effort: tray setup failure
+    // logs a warning and the close handler falls back to a normal exit; the
+    // persisted `close_behavior` setting is NOT rewritten.
+    if let Err(e) = lifecycle::install(app) {
+        tracing::error!(error = %e, "Failed to install desktop lifecycle; app will continue without tray");
+    }
+
     tracing::info!("Caduxo application started successfully");
     Ok(())
 }

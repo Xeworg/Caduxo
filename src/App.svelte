@@ -29,10 +29,11 @@
   import BackupRestorePage from "./components/BackupRestorePage.svelte";
   import CalendarPage from "./components/CalendarPage.svelte";
   import ConfigurationPage from "./components/ConfigurationPage.svelte";
+  import ScannerPage from "./components/ScannerPage.svelte";
   import { startPeriodicNotificationCheck } from "./lib/notifications.js";
   import { LL } from "./i18n/i18n-svelte.js";
 
-  type Tab = "dashboard" | "stores" | "products" | "calendar" | "reports" | "import" | "backup" | "settings";
+  type Tab = "dashboard" | "stores" | "products" | "calendar" | "reports" | "scanner" | "import" | "backup" | "settings";
 
   // Tab metadata — the destination tab rune value and the label
   // accessor. Plain <button> elements render the label as visible
@@ -47,6 +48,7 @@
     { id: "products", label: () => $LL.nav.products() },
     { id: "calendar", label: () => $LL.nav.calendar() },
     { id: "reports", label: () => $LL.nav.reports() },
+    { id: "scanner", label: () => $LL.nav.scanner() },
     { id: "import", label: () => $LL.nav.import() },
     { id: "backup", label: () => $LL.nav.backup() },
     { id: "settings", label: () => $LL.nav.settings() },
@@ -193,6 +195,8 @@
     <CalendarPage />
   {:else if activeTab === "reports"}
     <ReportsPage />
+  {:else if activeTab === "scanner"}
+    <ScannerPage />
   {:else if activeTab === "import"}
     <CsvImportPage />
   {:else if activeTab === "backup"}

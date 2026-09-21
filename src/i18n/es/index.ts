@@ -7,6 +7,7 @@ const es: BaseTranslation = {
     products: "Productos",
     calendar: "Calendario",
     reports: "Reportes",
+    scanner: "Escáner",
     import: "Importar",
     backup: "Respaldo",
     settings: "Configuración",
@@ -77,6 +78,33 @@ const es: BaseTranslation = {
       names: {
         en: "Inglés",
         es: "Español",
+      },
+    },
+    // Política FEFO del escáner (`scanner-quick-operations` PR 3). Espejo
+    // del selector de idioma: título de sección + etiqueta + descripción +
+    // diccionario de nombres por opción, indexado por los valores
+    // snake_case del wire (`suggest_fefo`, `require_fefo`,
+    // `manual_lot_choice`).
+    scannerFefoPolicy: {
+      sectionTitle: "Escáner",
+      label: "Selección de lote FEFO",
+      description:
+        "Controla cómo la pestaña Escáner elige un lote cuando un escaneo resuelve a un producto con varios lotes. Los escaneos directos por código de lote siempre omiten esta política y usan el lote escaneado.",
+      names: {
+        suggest_fefo: "Sugerir FEFO (permitir cambiar)",
+        require_fefo: "Requerir FEFO (sin cambio)",
+        manual_lot_choice: "Elección manual del lote",
+      },
+    },
+    // Comportamiento al cerrar la ventana (`scanner-quick-operations` PR 3).
+    closeBehavior: {
+      sectionTitle: "Cierre de ventana",
+      label: "Al cerrar la ventana",
+      description:
+        "Si está en minimizar a la bandeja, al cerrar la ventana se oculta en la bandeja del sistema y la aplicación sigue ejecutándose. Si está en salir, al cerrar la ventana se cierra la aplicación.",
+      names: {
+        minimize_to_tray: "Minimizar a la bandeja",
+        exit_application: "Cerrar la aplicación",
       },
     },
   },
@@ -892,6 +920,114 @@ const es: BaseTranslation = {
     title: "Pulsa Intro para buscar",
     noMatch: "No se encontró ningún producto para este código de barras.",
     searchError: "Error en la búsqueda: {msg}",
+  },
+
+  // Pestaña Escáner — PR 2 de `scanner-quick-operations`. Tres modos
+  // (Venta / Registro / Salida) comparten la misma entrada principal;
+  // el modo activo decide la acción tras una resolución exitosa.
+  // Ver `src/components/ScannerPage.svelte` para el cableado del
+  // consumidor.
+  scanner: {
+    pageTitle: "Escáner",
+    pageSubtitle: "Operaciones rápidas para lectores de mano.",
+    input: {
+      label: "Escanear código",
+      placeholder: "Escanear SKU, código de barras o código de lote…",
+      ariaLabel: "Entrada del escáner",
+      title: "Pulsa Intro para confirmar",
+    },
+    modes: {
+      sale: "Venta",
+      registration: "Registro",
+      stockOut: "Salida",
+    },
+    noStore: {
+      title: "Crea primero una tienda",
+      body: "La pestaña Escáner necesita una tienda activa para resolver los códigos. Crea o selecciona una tienda en la pestaña Tiendas para habilitar el escaneo.",
+    },
+    loadingSettings: "Cargando ajustes del escáner…",
+    debouncedNotice: "Escaneo repetido ignorado (debounce).",
+    unknownTitle: "Sin coincidencias",
+    // Copia del modo Venta
+    sale: {
+      selectedLot: "Lote",
+      selectedLotHint: "Resuelto por código de lote — FEFO omitido para escaneos directos de lote.",
+      selectedProduct: "Producto",
+      lotPickerLabel: "Lote",
+      fefoRequiredNotice: "La política FEFO está activa — el selector de lote está deshabilitado.",
+      quantityLabel: "Cantidad *",
+      locationLabel: "Ubicación de origen *",
+      confirm: "Confirmar venta",
+      confirming: "Confirmando…",
+      success: "Vendidos {qty} × {sku}",
+      invalid: {
+        lot: "Selecciona un lote para confirmar la venta.",
+        quantity: "La cantidad debe ser mayor que cero.",
+        location: "Selecciona una ubicación de origen.",
+        quantityExceeds: "Solo hay {available} unidades disponibles en esta ubicación.",
+      },
+    },
+    // Copia del modo Registro
+    registration: {
+      unknownHeading: "Creación rápida de producto",
+      unknownBody: "El código escaneado no coincide con ningún producto existente. Elige dónde usarlo como punto de partida para un producto nuevo, o reescribe el SKU / código de barras.",
+      scannedValueLabel: "Valor escaneado",
+      scannedValuePlaceholder: "(vacío)",
+      routeAsSku: "Usar como SKU",
+      routeAsBarcode: "Usar como código de barras",
+      routeUnrouted: "Asigna el valor escaneado a una opción antes de crear el producto.",
+      skuLabel: "SKU *",
+      barcodeLabel: "Código de barras",
+      descriptionLabel: "Descripción *",
+      alertDaysLabel: "Días de alerta antes de caducidad *",
+      notesLabel: "Notas",
+      createProduct: "Crear producto",
+      creating: "Creando…",
+      successProduct: "Producto {sku} creado.",
+      successBarcode: "Código de barras {barcode} asociado.",
+      // Flujo de creación de lote existente (LotMatch / ProductMatch)
+      newLotHeading: "Crear un nuevo lote",
+      newLotBody: "El código escaneado coincide con un producto existente. Crea un lote nuevo — la cantidad registrada no se añadirá a ningún lote existente en v1.",
+      noExistingLots: "Este producto no tiene lotes activos. Crear un lote nuevo es el único camino en modo Registro.",
+      invalid: {
+        sku: "El SKU es obligatorio.",
+        description: "La descripción es obligatoria.",
+        alertDays: "Los días de alerta deben ser 0 o más.",
+      },
+      successLot: "Lote {batchCode} creado.",
+    },
+    // Copia del modo Salida
+    stockOut: {
+      selectedLot: "Lote",
+      selectedProduct: "Producto",
+      lotPickerLabel: "Lote",
+      fefoRequiredNotice: "La política FEFO está activa — el selector de lote está deshabilitado.",
+      reasonLabel: "Motivo de salida *",
+      reasonPlaceholder: "Seleccionar motivo…",
+      quantityLabel: "Cantidad *",
+      locationLabel: "Ubicación de origen *",
+      notesLabel: "Notas *",
+      notesOptionalLabel: "Notas (opcional)",
+      notesRequiredHint: "Las notas son obligatorias para este motivo.",
+      confirm: "Confirmar salida",
+      confirming: "Confirmando…",
+      success: "Eliminados {qty} × {sku} ({reason})",
+      invalid: {
+        lot: "Selecciona un lote para confirmar la salida.",
+        reason: "Selecciona un motivo de salida.",
+        quantity: "La cantidad debe ser mayor que cero.",
+        location: "Selecciona una ubicación de origen.",
+        quantityExceeds: "Solo hay {available} unidades disponibles en esta ubicación.",
+        notes: "Las notas son obligatorias para este tipo de salida.",
+      },
+    },
+    // Fragmentos reutilizables
+    errors: {
+      lookupFailed: "No se pudo resolver el valor escaneado: {msg}",
+      saveFailed: "No se pudo guardar: {msg}",
+      loadBalancesFailed: "No se pudieron cargar los saldos del lote: {msg}",
+      loadSettingsFailed: "No se pudieron cargar los ajustes del escáner: {msg}",
+    },
   },
 
   categoryPicker: {

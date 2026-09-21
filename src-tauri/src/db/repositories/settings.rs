@@ -3,7 +3,7 @@
 use chrono::Utc;
 use sqlx::SqlitePool;
 
-use crate::dto::stores::SettingsResponse;
+use crate::dto::stores::{CloseBehavior, FefoPolicy, SettingsResponse};
 
 /// Retrieves a single setting value by key, or None if absent.
 pub async fn get_setting(pool: &SqlitePool, key: &str) -> Result<Option<String>, sqlx::Error> {
@@ -100,6 +100,45 @@ pub async fn set_theme_setting(pool: &SqlitePool, value: &str) -> Result<(), sql
     upsert_setting(pool, "theme", value).await
 }
 
+/// Retrieves the scanner FEFO policy setting, or `None` if absent.
+///
+/// `None` (or any unrecognised value) is mapped to the documented default
+/// (`SuggestFefo`) inside [`get_settings`] and [`FefoPolicy::parse`] — this
+/// helper returns the raw stored value so the snapshot logic can apply the
+/// same `configured`-style fallback the `language` / `theme` rows use.
+pub async fn get_scanner_fefo_policy_setting(
+    pool: &SqlitePool,
+) -> Result<Option<String>, sqlx::Error> {
+    get_setting(pool, "scanner_fefo_policy").await
+}
+
+/// Persists the scanner FEFO policy. The command boundary rejects values
+/// outside the curated v1 set (`suggest_fefo`, `require_fefo`,
+/// `manual_lot_choice`) so the persisted row stays untouched on rejection;
+/// this function accepts any non-empty string the caller supplies.
+pub async fn set_scanner_fefo_policy_setting(
+    pool: &SqlitePool,
+    value: &str,
+) -> Result<(), sqlx::Error> {
+    upsert_setting(pool, "scanner_fefo_policy", value).await
+}
+
+/// Retrieves the close-window behaviour setting, or `None` if absent.
+///
+/// `None` (or any unrecognised value) is mapped to the documented default
+/// (`MinimizeToTray`) inside [`get_settings`] and [`CloseBehavior::parse`].
+pub async fn get_close_behavior_setting(pool: &SqlitePool) -> Result<Option<String>, sqlx::Error> {
+    get_setting(pool, "close_behavior").await
+}
+
+/// Persists the close-window behaviour. The command boundary rejects values
+/// outside the curated v1 set (`minimize_to_tray`, `exit_application`) so
+/// the persisted row stays untouched on rejection; this function accepts
+/// any non-empty string the caller supplies.
+pub async fn set_close_behavior_setting(pool: &SqlitePool, value: &str) -> Result<(), sqlx::Error> {
+    upsert_setting(pool, "close_behavior", value).await
+}
+
 /// Builds the full settings snapshot.
 pub async fn get_settings(pool: &SqlitePool) -> Result<SettingsResponse, sqlx::Error> {
     let last_selected_store_id = get_last_selected_store_id(pool).await?;
@@ -132,6 +171,19 @@ pub async fn get_settings(pool: &SqlitePool) -> Result<SettingsResponse, sqlx::E
     let theme = stored_theme
         .filter(|_| theme_configured)
         .unwrap_or_else(|| "caduxo-light".to_string());
+    // Scanner FEFO policy: a raw `app_settings.scanner_fefo_policy` row
+    // (or `None`) is mapped to the documented default via
+    // `FefoPolicy::parse`. The helper's lenient matching means an absent
+    // row, an empty string, whitespace, and any unrecognised tag all
+    // collapse to `SuggestFefo` so the snapshot stays non-null and the
+    // frontend never has to defend against `null`.
+    let stored_fefo = get_scanner_fefo_policy_setting(pool).await?;
+    let scanner_fefo_policy = FefoPolicy::parse(stored_fefo.as_deref());
+    // Close-window behaviour: same lenient mapping — `None`, empty, or
+    // any unrecognised tag collapses to the documented default
+    // (`MinimizeToTray`).
+    let stored_close_behavior = get_close_behavior_setting(pool).await?;
+    let close_behavior = CloseBehavior::parse(stored_close_behavior.as_deref());
     Ok(SettingsResponse {
         last_selected_store_id,
         require_initial_location_on_lot_create,
@@ -139,6 +191,8 @@ pub async fn get_settings(pool: &SqlitePool) -> Result<SettingsResponse, sqlx::E
         language_configured,
         theme,
         theme_configured,
+        scanner_fefo_policy,
+        close_behavior,
     })
 }
 
@@ -149,8 +203,10 @@ mod tests {
     use crate::db::migrations::fresh_test_pool;
 
     use super::{
-        get_last_selected_store_id, get_setting, get_settings, get_theme_setting,
-        set_language_setting, set_last_selected_store_id, set_theme_setting, upsert_setting,
+        get_close_behavior_setting, get_last_selected_store_id, get_scanner_fefo_policy_setting,
+        get_setting, get_settings, get_theme_setting, set_close_behavior_setting,
+        set_language_setting, set_last_selected_store_id, set_scanner_fefo_policy_setting,
+        set_theme_setting, upsert_setting,
     };
 
     #[tokio::test]
@@ -379,6 +435,194 @@ mod tests {
         assert!(settings.language_configured);
         assert_eq!(settings.theme, "dark");
         assert!(settings.theme_configured);
+        Ok(())
+    }
+
+    // ─── Scanner FEFO policy (PR 1 of scanner-quick-operations) ────────────
+
+    #[tokio::test]
+    async fn get_scanner_fefo_policy_missing_returns_none() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let pool = fresh_test_pool().await?;
+        let val = get_scanner_fefo_policy_setting(&pool).await?;
+        assert!(val.is_none());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn set_and_get_scanner_fefo_policy_round_trips() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let pool = fresh_test_pool().await?;
+        set_scanner_fefo_policy_setting(&pool, "require_fefo").await?;
+        let val = get_scanner_fefo_policy_setting(&pool).await?;
+        assert_eq!(val, Some("require_fefo".to_string()));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_settings_scanner_fefo_defaults_to_suggest_on_fresh_install(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        // No `app_settings.scanner_fefo_policy` row: the snapshot must
+        // expose the documented default (`SuggestFefo` / `suggest_fefo`).
+        let settings = get_settings(&pool).await?;
+        assert_eq!(
+            settings.scanner_fefo_policy,
+            crate::dto::stores::FefoPolicy::SuggestFefo
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_settings_scanner_fefo_round_trips_every_curated_value(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        // Each curated value must round-trip verbatim so the snapshot
+        // doesn't fallback-mask the user's manual pick.
+        for (raw, expected) in [
+            ("suggest_fefo", crate::dto::stores::FefoPolicy::SuggestFefo),
+            ("require_fefo", crate::dto::stores::FefoPolicy::RequireFefo),
+            (
+                "manual_lot_choice",
+                crate::dto::stores::FefoPolicy::ManualLotChoice,
+            ),
+        ] {
+            set_scanner_fefo_policy_setting(&pool, raw).await?;
+            let settings = get_settings(&pool).await?;
+            assert_eq!(
+                settings.scanner_fefo_policy, expected,
+                "scanner_fefo_policy mismatch for `{raw}`"
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_settings_scanner_fefo_falls_back_to_suggest_for_unknown_value(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        // A persisted but unrecognised tag (e.g. legacy `"force_fefo"`,
+        // empty string, or whitespace) must NOT be reported as a manual
+        // preference; the snapshot falls back to `SuggestFefo` so the
+        // frontend never sees a null / unmapped value.
+        for raw in ["force_fefo", "", "  ", "SuggestFefo"] {
+            upsert_setting(&pool, "scanner_fefo_policy", raw).await?;
+            let settings = get_settings(&pool).await?;
+            assert_eq!(
+                settings.scanner_fefo_policy,
+                crate::dto::stores::FefoPolicy::SuggestFefo,
+                "scanner_fefo_policy must fall back to SuggestFefo for raw=`{raw}`"
+            );
+        }
+        Ok(())
+    }
+
+    // ─── Close-window behaviour (PR 1 of scanner-quick-operations) ──────────
+
+    #[tokio::test]
+    async fn get_close_behavior_missing_returns_none() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let val = get_close_behavior_setting(&pool).await?;
+        assert!(val.is_none());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn set_and_get_close_behavior_round_trips() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        set_close_behavior_setting(&pool, "exit_application").await?;
+        let val = get_close_behavior_setting(&pool).await?;
+        assert_eq!(val, Some("exit_application".to_string()));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_settings_close_behavior_defaults_to_minimize_to_tray_on_fresh_install(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        // No `app_settings.close_behavior` row: the snapshot must expose
+        // the documented default (`MinimizeToTray` / `minimize_to_tray`).
+        let settings = get_settings(&pool).await?;
+        assert_eq!(
+            settings.close_behavior,
+            crate::dto::stores::CloseBehavior::MinimizeToTray
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_settings_close_behavior_round_trips_every_curated_value(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        for (raw, expected) in [
+            (
+                "minimize_to_tray",
+                crate::dto::stores::CloseBehavior::MinimizeToTray,
+            ),
+            (
+                "exit_application",
+                crate::dto::stores::CloseBehavior::ExitApplication,
+            ),
+        ] {
+            set_close_behavior_setting(&pool, raw).await?;
+            let settings = get_settings(&pool).await?;
+            assert_eq!(
+                settings.close_behavior, expected,
+                "close_behavior mismatch for `{raw}`"
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_settings_close_behavior_falls_back_to_minimize_to_tray_for_unknown_value(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        // Unrecognised tags (e.g. legacy `"kill"`, empty, whitespace) must
+        // NOT be reported as a manual preference; the snapshot falls back
+        // to `MinimizeToTray` so the close-window handler never sees a
+        // null / unmapped value.
+        for raw in ["kill", "", "  ", "MinimizeToTray"] {
+            upsert_setting(&pool, "close_behavior", raw).await?;
+            let settings = get_settings(&pool).await?;
+            assert_eq!(
+                settings.close_behavior,
+                crate::dto::stores::CloseBehavior::MinimizeToTray,
+                "close_behavior must fall back to MinimizeToTray for raw=`{raw}`"
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_settings_all_four_keys_configure_independently(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        // Persist only one of the four new keys; the others must stay at
+        // their documented defaults so the frontend can detect a partial
+        // update without seeing unrelated state change.
+        set_scanner_fefo_policy_setting(&pool, "require_fefo").await?;
+        let settings = get_settings(&pool).await?;
+        assert_eq!(
+            settings.scanner_fefo_policy,
+            crate::dto::stores::FefoPolicy::RequireFefo
+        );
+        assert_eq!(
+            settings.close_behavior,
+            crate::dto::stores::CloseBehavior::MinimizeToTray
+        );
+
+        // Now flip only the close behaviour; FEFO must stay at RequireFefo.
+        set_close_behavior_setting(&pool, "exit_application").await?;
+        let settings = get_settings(&pool).await?;
+        assert_eq!(
+            settings.scanner_fefo_policy,
+            crate::dto::stores::FefoPolicy::RequireFefo
+        );
+        assert_eq!(
+            settings.close_behavior,
+            crate::dto::stores::CloseBehavior::ExitApplication
+        );
         Ok(())
     }
 }

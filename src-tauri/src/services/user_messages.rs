@@ -154,6 +154,27 @@ pub enum UserMessage {
     ThemeNotAllowed {
         value: String,
     },
+    /// Settings validation: scanner FEFO policy is not one of the allowed
+    /// values (`suggest_fefo`, `require_fefo`, `manual_lot_choice`).
+    /// Introduced by `scanner-quick-operations` (PR 1) so the
+    /// `update_settings` command can localise the rejection at the IPC
+    /// boundary and leave the persisted row untouched.
+    ScannerFefoPolicyNotAllowed {
+        value: String,
+    },
+    /// Settings validation: close-window behaviour is not one of the
+    /// allowed values (`minimize_to_tray`, `exit_application`).
+    /// Introduced by `scanner-quick-operations` (PR 1) so the
+    /// `update_settings` command can localise the rejection at the IPC
+    /// boundary and leave the persisted row untouched.
+    CloseBehaviorNotAllowed {
+        value: String,
+    },
+    /// Scanner validation: scanned value is blank. Mirrors `ScanValueEmpty`
+    /// for the new `resolve_scanner_code` command — same canonical English
+    /// text so the parser can round-trip and the localised message can
+    /// stay in sync.
+    ScannerResolveValueEmpty,
     /// Product catalog business rule: a barcode cannot be added to a
     /// product that has been soft-archived.
     ProductArchivedForBarcode,
@@ -436,6 +457,32 @@ pub fn user_message(kind: UserMessage, locale: Locale) -> String {
                 "el tema debe ser uno de {{{}}}, se recibió `{value}`",
                 ALLOWED_THEMES_DISPLAY
             )
+        }
+        (UserMessage::ScannerFefoPolicyNotAllowed { value }, L::En) => {
+            format!(
+                "scanner_fefo_policy must be one of {{suggest_fefo, require_fefo, manual_lot_choice}}, got `{value}`"
+            )
+        }
+        (UserMessage::ScannerFefoPolicyNotAllowed { value }, L::Es) => {
+            format!(
+                "scanner_fefo_policy debe ser uno de {{suggest_fefo, require_fefo, manual_lot_choice}}, se recibió `{value}`"
+            )
+        }
+        (UserMessage::CloseBehaviorNotAllowed { value }, L::En) => {
+            format!(
+                "close_behavior must be one of {{minimize_to_tray, exit_application}}, got `{value}`"
+            )
+        }
+        (UserMessage::CloseBehaviorNotAllowed { value }, L::Es) => {
+            format!(
+                "close_behavior debe ser uno de {{minimize_to_tray, exit_application}}, se recibió `{value}`"
+            )
+        }
+        (UserMessage::ScannerResolveValueEmpty, L::En) => {
+            "Scan value cannot be empty".to_string()
+        }
+        (UserMessage::ScannerResolveValueEmpty, L::Es) => {
+            "El valor escaneado no puede estar vacío".to_string()
         }
         (UserMessage::ProductArchivedForBarcode, L::En) => {
             "Cannot add barcode to an archived product".to_string()
@@ -806,6 +853,24 @@ pub fn parse_user_message_kind(message: &str) -> Option<UserMessage> {
         return Some(UserMessage::ThemeNotAllowed { value });
     }
 
+    if let Some(value) = parse_simple_backticked(
+        message,
+        "scanner_fefo_policy must be one of {suggest_fefo, require_fefo, manual_lot_choice}, got `",
+    ) {
+        return Some(UserMessage::ScannerFefoPolicyNotAllowed { value });
+    }
+
+    if let Some(value) = parse_simple_backticked(
+        message,
+        "close_behavior must be one of {minimize_to_tray, exit_application}, got `",
+    ) {
+        return Some(UserMessage::CloseBehaviorNotAllowed { value });
+    }
+
+    if message == "Scan value cannot be empty" {
+        return Some(UserMessage::ScannerResolveValueEmpty);
+    }
+
     if message == "Cannot add barcode to an archived product" {
         return Some(UserMessage::ProductArchivedForBarcode);
     }
@@ -1062,6 +1127,23 @@ fn parse_theme_not_allowed(message: &str) -> Option<String> {
         return None;
     }
     let inner = message.strip_prefix(&prefix)?.strip_suffix('`')?;
+    Some(inner.to_string())
+}
+
+/// Parses a `<key> must be one of {…}, got \`{value}\`` shaped message into
+/// the captured `value`. Reuses the same opening prefix and trailing
+/// backtick guard as `parse_theme_not_allowed` but without a dynamic
+/// `{ALLOWED_THEMES_DISPLAY}` interpolation so the caller controls the
+/// exact prefix text. Returns `None` for malformed input or an empty
+/// captured value.
+fn parse_simple_backticked(message: &str, prefix: &str) -> Option<String> {
+    if !message.starts_with(prefix) || !message.ends_with('`') {
+        return None;
+    }
+    let inner = message.strip_prefix(prefix)?.strip_suffix('`')?;
+    if inner.is_empty() || inner.contains('`') {
+        return None;
+    }
     Some(inner.to_string())
 }
 
