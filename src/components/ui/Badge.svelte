@@ -96,7 +96,7 @@
 </script>
 
 <span
-  class="badge {semanticClass} {sizeClass} {pulseClass} gap-1"
+  class="badge {semanticClass} {sizeClass} {pulseClass} gap-1 whitespace-nowrap"
 >
   {#if dot}
     <span class="status {statusClass} status-sm" aria-hidden="true"></span>

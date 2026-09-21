@@ -1064,6 +1064,16 @@
     gap: 4px;
   }
 
+  /* Force the lot table to keep its readable columns on narrow widths.
+     The shared Table primitive already wraps the table in
+     overflow-x-auto when scrollable, but DaisyUI .table defaults to
+     width 100%, which lets the columns compress inside the scroll
+     container. A min-width on the table makes the wrapper scroll
+     horizontally instead of squeezing urgency/status text. */
+  .dashboard :global(table) {
+    min-width: 900px;
+  }
+
   .row-expired td {
     background: color-mix(in oklch, var(--color-error) 6%, transparent);
   }
