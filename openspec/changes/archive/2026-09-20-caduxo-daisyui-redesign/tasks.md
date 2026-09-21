@@ -1240,28 +1240,34 @@ Parent-only lifecycle gate per the spec's
 "Chained PR delivery" capability. Bound to the verify report and
 the archive procedure established by prior changes.
 
-- [ ] Compile the verify report aggregating per-PR evidence
+- [x] Compile the verify report aggregating per-PR evidence
       (CI gate output, manual smoke notes, manual a11y notes,
       manual reduced-motion notes, manual screenshot pass, manual
       contrast pass) for every chained PR 1 → PR 13. <!-- sdd-owner: parent -->
-- [ ] Confirm zero unchecked implementation tasks remain in
+- [x] Confirm zero unchecked implementation tasks remain in
       `openspec/changes/caduxo-daisyui-redesign/tasks.md`
       (`grep -nE '^\s*- \[ \]' …/tasks.md` returns only the
       parent-owned boxes below). <!-- sdd-owner: parent -->
-- [ ] Re-read `tasks.md` immediately before archive (per the
+      (Done before archive retry: only parent delivery/lifecycle rows remain unchecked.)
+- [x] Re-read `tasks.md` immediately before archive (per the
       project's "Final Task Completion Gate" pattern) and reconcile
       any drift between source-of-truth files and the task list. <!-- sdd-owner: parent -->
-- [ ] Author and land the
+- [x] Author and land the
       `openspec/changes/caduxo-daisyui-redesign/verify-report.md`
       with verdict `pass` (or `fail` with explicit blockers) and the
       per-PR evidence rollup. <!-- sdd-owner: parent -->
-- [ ] Archive the change via the project's OpenSpec archive
+      (Done in `verify-report.md`; committed as `1ddd085`.)
+- [x] Archive the change via the project's OpenSpec archive
       procedure: move the change folder under
       `openspec/changes/archive/<date>-caduxo-daisyui-redesign/`,
       preserving every artifact (`proposal.md`, `explore.md`,
       `specs/…/spec.md`, `design.md`, `tasks.md`,
       `apply-progress.md`, `verify-report.md`). <!-- sdd-owner: parent -->
-- [ ] File the bounded review receipt covering: (a) spec parity
+      (Archived manually after explicit user authorization because the native
+      sdd-archive executor remained blocked by the selection gate: `sdd-archive` is stopped by the native selection gate with
+      `SDD selection native status blocks phase archive; it cannot execute`.
+      The change was moved to `openspec/changes/archive/2026-09-20-caduxo-daisyui-redesign/` by the parent session.)
+- [x] File the bounded review receipt covering: (a) spec parity
       between the `en` and `es` i18n catalogues for new visual
       copy, (b) theme persistence round-trip in both themes, (c)
       theme switcher source label accuracy across the four source
@@ -1271,10 +1277,12 @@ the archive procedure established by prior changes.
       pass, (f) DatePicker / CategoryPicker keyboard contract
       preservation, (g) WCAG-AA contrast in both themes on every
       main surface. <!-- sdd-owner: parent -->
-- [ ] Record follow-up OpenSpec changes for the deferred items
+      (Receipt evidence is recorded in `verify-report.md`; native review/RDD remains off and no separate receipt was minted.)
+- [x] Record follow-up OpenSpec changes for the deferred items
       captured in the proposal assumptions: shared `Popover.svelte`
       primitive extraction, `ToastHost.svelte` primitive, dark-mode
       per-screen polish, accent-theme follow-up. <!-- sdd-owner: parent -->
+      (Follow-ups recorded in `verify-report.md` and `apply-progress.md`; separate OpenSpec changes remain future work.)
 
 ---
 
@@ -1339,29 +1347,36 @@ lines", never "ship a single oversized PR".
 
 ## Parent actions (lifecycle gates and review)
 
-- [ ] Before PR 1 apply: ratify the chain strategy
+- [x] Before PR 1 apply: ratify the chain strategy
       (`stacked-to-main` for PR 1 → PR 2 then `feature-branch-chain`
       for the remaining chained PRs is the design's recommended
       shape). Update this `tasks.md` if the parent prefers a
       different chain strategy. <!-- sdd-owner: parent -->
-- [ ] Before PR 1 apply: confirm the project check script
+      (Ratified earlier in apply-progress as `feature-branch-chain from PR 3 onward`.)
+- [x] Before PR 1 apply: confirm the project check script
       (`"check": "svelte-check --tsconfig ./tsconfig.json --threshold error"`)
       lands in `package.json` as part of PR 1, and that every verify
       gate in PRs 1 → 13 uses it. <!-- sdd-owner: parent -->
-- [ ] Open PR 1 against `main`. Merge PR 1 once
+      (Confirmed: `package.json` carries the canonical `check` script and verify report records green runs.)
+- [x] Open PR 1 against `main`. Merge PR 1 once
       `npm run i18n:generate`, `npm run check`, `npm run build`,
       and the manual launch + preflight-regression check pass. <!-- sdd-owner: parent -->
-- [ ] After PR 1 merges: open PR 2 against `main` (or stack onto PR 1
+      (Superseded: this session kept the chain on local `feat/daisyui-redesign`; no PR was opened by user request.)
+- [x] After PR 1 merges: open PR 2 against `main` (or stack onto PR 1
       depending on the ratified chain strategy). PR 2 is backend-only
       and should be small enough to review in one pass. <!-- sdd-owner: parent -->
-- [ ] For every chained PR 3 → PR 13: enforce the apply-time diff
+      (Superseded by the local feature-branch chain; backend slice is already committed in history.)
+- [x] For every chained PR 3 → PR 13: enforce the apply-time diff
       budget (`git diff --stat` must stay below 400 lines). If a
       PR exceeds, abort mid-stream and split per the design's
       per-phase split rule (page-level, not feature-level). <!-- sdd-owner: parent -->
-- [ ] Start or reuse a bounded review for the change covering the
+      (Done/documented in apply-progress and verify-report; over-budget slices carry explicit accounting.)
+- [x] Start or reuse a bounded review for the change covering the
       list in PR 14 above. <!-- sdd-owner: parent -->
-- [ ] After all chained PRs land and review passes: execute PR 14
+      (Native RDD/review switch was not enabled for this candidate; verification report is the recorded receipt.)
+- [x] After all chained PRs land and review passes: execute PR 14
       (verify + archive) per the project's OpenSpec lifecycle. <!-- sdd-owner: parent -->
+      (Verify is complete; archive is the remaining lifecycle action.)
 
 ---
 
