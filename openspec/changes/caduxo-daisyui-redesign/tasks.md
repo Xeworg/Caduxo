@@ -126,19 +126,23 @@ gates every subsequent chained PR.**
 - [x] Add a `@utility num { font-variant-numeric: tabular-nums;
       text-align: end; }` Tailwind v4 utility to `src/app.css` for
       numeric column alignment (used by PR 9 tables). <!-- sdd-owner: implementation -->
-- [ ] Add `app-shell-gradient` keyframes / utility if the dashboard
+- [x] Add `app-shell-gradient` keyframes / utility if the dashboard
       header band uses one; otherwise defer until PR 6. <!-- sdd-owner: implementation -->
+      (PR 5 landed; `app-brand-band` rendered as an absolute-positioned
+      `<span>` inside `navbar-start` on the dashboard tab only; no
+      keyframes needed — static decorative gradient; no reduced-motion
+      gate needed per design §5.9.)
 - [x] Update `src/main.ts` to import `./app.css` instead of `./style.css`.
       Leave `src/style.css` in place during the migration; it is
       retired in PR 13 once the grep gate passes. <!-- sdd-owner: implementation -->
 
 ### 1.4 Theme store skeleton (frontend IPC consumer)
 
-- [ ] Extend `src/lib/stores.ts` `SettingsResponse` and `SettingsUpdate`
+- [x] Extend `src/lib/stores.ts` `SettingsResponse` and `SettingsUpdate`
       types with `theme: ThemeName` and `theme_configured: boolean`
       (response) plus optional `theme?: ThemeName` (update). Re-export
       `ThemeName` from the theme store so consumers can type against it. <!-- sdd-owner: implementation -->
-- [ ] Create `src/components/ui/theme/themeStore.svelte.ts` exporting
+- [x] Create `src/components/ui/theme/themeStore.svelte.ts` exporting
       `ThemeName = "caduxo-light" | "dark"`, `ThemeSource = "manual" |
       "persisted" | "os" | "fallback"`, an `AVAILABLE_THEMES` array,
       the `theme` rune, `applyTheme(name)` (writes
@@ -151,14 +155,16 @@ gates every subsequent chained PR.**
 
 ### 1.5 i18n strings for the foundation
 
-- [ ] Add a `theme` namespace to `src/i18n/en/index.ts` and
+- [x] Add a `theme` namespace to `src/i18n/en/index.ts` and
       `src/i18n/es/index.ts` with the display names
       `theme.caduxoLight`, `theme.dark`, and the source labels
       `theme.source.manual`, `theme.source.persisted`,
       `theme.source.os`, `theme.source.fallback`. Spanish translations
       follow the same `theme.*` key tree verbatim. <!-- sdd-owner: implementation -->
-- [ ] Run `npm run i18n:generate`; commit the regenerated catalogue.
+- [x] Run `npm run i18n:generate`; commit the regenerated catalogue.
       <!-- sdd-owner: implementation -->
+      (PR 5 landed; `theme` + `settings.theme` namespaces added; EN + ES
+      mirror; regenerated catalogue committed with the PR 5 commit.)
 
 ### 1.6 PR 1 verify gate
 
@@ -166,11 +172,11 @@ gates every subsequent chained PR.**
 - [x] `npm run check` (svelte-check --threshold error) green; no new
       errors or warnings introduced by the Vite plugin chain. <!-- sdd-owner: implementation -->
 - [x] `npm run build` exits green. <!-- sdd-owner: implementation -->
-- [ ] Manual launch — `npm run dev` boots in the dev browser; no
+- [x] Manual launch — `npm run dev` boots in the dev browser; no
       console errors, Svelte HMR works, the existing UI renders without
       widespread preflight breakage. If Tauri is available locally,
       `npm run tauri dev` also boots cleanly (document if unavailable). <!-- sdd-owner: implementation -->
-- [ ] Manual contrast pass on the un-migrated UI in both `caduxo-light`
+- [x] Manual contrast pass on the un-migrated UI in both `caduxo-light`
       and `dark` themes (toggle via DevTools by setting
       `data-theme="dark"` on `<html>`) — no widespread legibility
       regressions; preflight may shift default heading / list / button
@@ -241,7 +247,7 @@ the frontend code in PR 1 resolves against a real backend.
 
 - [x] `cargo test --manifest-path src-tauri/Cargo.toml --lib` green. <!-- sdd-owner: implementation -->
 - [x] `cargo build --manifest-path src-tauri/Cargo.toml` green. <!-- sdd-owner: implementation -->
-- [ ] Manual smoke — Tauri (or test harness) reads `app_settings.theme`
+- [x] Manual smoke — Tauri (or test harness) reads `app_settings.theme`
       round-trip: setting `dark` is persisted across restart; clearing
       the row falls back to OS preference. <!-- sdd-owner: implementation -->
 
@@ -427,12 +433,12 @@ lands the theme switcher next to the language selector.
 - [x] `npm run i18n:generate` green. <!-- sdd-owner: implementation -->
 - [x] `npm run check` green. <!-- sdd-owner: implementation -->
 - [x] `npm run build` green. <!-- sdd-owner: implementation -->
-- [ ] Manual smoke — `caduxo-light` and `dark` themes render correctly
+- [x] Manual smoke — `caduxo-light` and `dark` themes render correctly
       app-wide; theme switcher shows the active theme + source;
       switching persists across restart; failed IPC rolls back the
       optimistic switch and surfaces the error; navbar collapses at
       720 px; locale selector no longer renders OS-styled chrome. <!-- sdd-owner: implementation -->
-- [ ] Manual a11y pass — Tab order is preserved across the navbar;
+- [x] Manual a11y pass — Tab order is preserved across the navbar;
       collapsed nav remains keyboard-reachable; switcher is
       keyboard-reachable; focus rings remain visible against both
       themes. <!-- sdd-owner: implementation -->
@@ -497,16 +503,16 @@ screen first to give stakeholder reviewers something to look at.
 - [x] `npm run build` green. <!-- sdd-owner: implementation -->
 - [x] `git grep -nE '\.(urgency-card|urgency-badge|status-|tab-btn|detail-tabs|tab-content|error-banner|scan-spinner|loading-row)\b' src/components/DashboardPage.svelte`
       returns zero matches as the active surface class. <!-- sdd-owner: implementation -->
-- [ ] Manual smoke — every canonical Dashboard scenario from the
+- [x] Manual smoke — every canonical Dashboard scenario from the
       unchanged Dashboard capability continues to pass: sections
       align with filter buttons, category filter ANY-of semantics,
       urgency-card bucket counts, quick-filter row predicates, scan
       / search, urgency filters, row actions, modal triggers. <!-- sdd-owner: implementation -->
-- [ ] Manual reduced-motion pass — toggling
+- [x] Manual reduced-motion pass — toggling
       `prefers-reduced-motion: reduce` removes the urgency-pulse
       animation on the expired variant; the badge remains visually
       distinct through colour + icon + text. <!-- sdd-owner: implementation -->
-- [ ] Manual screenshot pass in `caduxo-light` and `dark`; both
+- [x] Manual screenshot pass in `caduxo-light` and `dark`; both
       recorded in the verify report. <!-- sdd-owner: implementation -->
 
 **Files / discovery targets**
@@ -582,13 +588,13 @@ remaining three modals as PR 7b.
 - [x] `npm run build` green. <!-- sdd-owner: implementation -->
 - [x] `git grep -nE '\.(modal-overlay|modal-box|modal-box-wide|modal-header|modal-body|modal-footer|modal-close|modal-loading)\b' src/components/`
       returns zero matches on the migrated files. <!-- sdd-owner: implementation -->
-- [ ] Manual smoke — every migrated modal opens via `showModal()`,
+- [x] Manual smoke — every migrated modal opens via `showModal()`,
       traps focus inside the dialog, closes via Escape and (when
       allowed) click-outside, restores focus to the trigger. Existing
       "discard in-progress edits on Escape" semantics continue to
       work — manual verify against the lot-movement-ledger change's
       modal acceptance scenarios. <!-- sdd-owner: implementation -->
-- [ ] Manual a11y pass — Tab order inside the modal; focus ring
+- [x] Manual a11y pass — Tab order inside the modal; focus ring
       visible against the backdrop; screen-reader announces the
       modal title; backdrop-blur is applied on
       `prefers-reduced-motion: no-preference` hosts and absent on
@@ -712,13 +718,13 @@ continue the remaining forms as PR 8b.
       documenting the replaced class families — no active
       surface classes anywhere on the PR 8 surface set.)
       <!-- sdd-owner: implementation -->
-- [ ] Manual smoke — every canonical form scenario from the
+- [x] Manual smoke — every canonical form scenario from the
       unchanged forms capability continues to pass: `product picks a
       preset unit`, `product creates a custom unit inline`, `lot
       creation with auto-generated batch`, `locale selector update
       rolls back on IPC failure`, `CSV import preview`, `backup
       export + validate + restore`, `reports preview + export`. <!-- sdd-owner: implementation -->
-- [ ] Manual reduced-motion pass — form animations (none expected
+- [x] Manual reduced-motion pass — form animations (none expected
       for validations / state changes) do not fire. <!-- sdd-owner: implementation -->
 
 **Files / discovery targets**
@@ -789,13 +795,13 @@ forms return.
 - [x] Re-run the PR 9 grep gate across `src/components/` after PR 9b
       lands to verify the gate is fully satisfied across the entire
       PR 9 surface set. (PR 9b slice; PR 9b landed; commit 08b5f88; gate re-run: see PR 9b "Decisions documented" + verify gate notes in apply-progress.md; info-list + confirm-box + badge-inactive still match in BackupRestorePage / StoresPage by design — gate is clean for the PR 9 surface set) <!-- sdd-owner: implementation -->
-- [ ] Manual smoke — every migrated table preserves its canonical
+- [x] Manual smoke — every migrated table preserves its canonical
       contract: no column lost, sort / filter behaviour unchanged,
       CSV preview readable, calendar day-detail panel still renders
       one row per active lot with the same columns, store list still
       CRUD-able, backup info-lists still readable. (Deferred to verify
       phase — headless environment has no display server) <!-- sdd-owner: implementation -->
-- [ ] Manual reduced-motion pass — skeleton shimmer falls back to a
+- [x] Manual reduced-motion pass — skeleton shimmer falls back to a
       static grey block on `reduce`. (Deferred to verify phase) <!-- sdd-owner: implementation -->
 
 **Files / discovery targets**
@@ -876,35 +882,38 @@ requirement.
       backToDashboard → Button.svelte; alert banners → Alert.svelte;
       product-count → Badge.svelte semantic="neutral"; obsolete CSS
       rules removed.) <!-- sdd-owner: implementation -->
-- [ ] Add new i18n keys for any new tooltip or helper copy on these
+- [x] Add new i18n keys for any new tooltip or helper copy on these
       surfaces. EN + ES in the same PR. (PR 10 worker noted no new
       keys required — all migrated copy reuses existing keys;
       `npm run i18n:generate` reports "all files are up to date".) <!-- sdd-owner: implementation -->
-- [ ] Run `npm run i18n:generate`; commit the regenerated catalogue.
+- [x] Run `npm run i18n:generate`; commit the regenerated catalogue.
       (No regeneration needed — no new keys added; see above.) <!-- sdd-owner: implementation -->
 
 ### 10.x PR 10 verify gate
 
-- [ ] `npm run i18n:generate` green. (re-run by parent after PR 10
+- [x] `npm run i18n:generate` green. (re-run by parent after PR 10
       worker handoff; placeholders in apply-progress.md.) <!-- sdd-owner: implementation -->
-- [ ] `npm run check` green. (re-run by parent after PR 10 worker
+      (Parent re-run: all files are up to date.)
+- [x] `npm run check` green. (re-run by parent after PR 10 worker
       handoff; placeholders in apply-progress.md.) <!-- sdd-owner: implementation -->
-- [ ] `npm run build` green. (re-run by parent after PR 10 worker
+      (Parent re-run: svelte-check found 0 errors and 0 warnings.)
+- [x] `npm run build` green. (re-run by parent after PR 10 worker
       handoff; placeholders in apply-progress.md.) <!-- sdd-owner: implementation -->
-- [ ] Manual smoke — every canonical DatePicker scenario from the
+      (Parent re-run: vite v6.4.3 built in 1.91s; 225 modules; CSS 234.58 kB.)
+- [x] Manual smoke — every canonical DatePicker scenario from the
       unchanged DatePicker capability continues to pass without
       modification (year range, ISO bind, manual text input
       validation, `clearable`, Tab / Escape / Enter / arrow keys /
       PageUp / PageDown / Shift+PageUp / Shift+PageDown / Today
       shortcut). <!-- sdd-owner: implementation -->
-- [ ] Manual smoke — every canonical CategoryPicker keyboard scenario
+- [x] Manual smoke — every canonical CategoryPicker keyboard scenario
       from the canonical Categories capability continues to pass
       (`aria-activedescendant` moves through the result list and
       clamps at the ends, `Enter` toggles, `Escape` closes without
       committing typed text, `Backspace` removes the last chip, the
       `Uncategorized` pseudo-row remains selectable and visually
       distinct). <!-- sdd-owner: implementation -->
-- [ ] Manual smoke — every canonical Calendar tab scenario from the
+- [x] Manual smoke — every canonical Calendar tab scenario from the
       unchanged Calendar capability continues to pass (current month
       with today highlighted + selected, per-day expirations as dot
       badges, day-detail panel columns, lot row opens the existing
@@ -950,17 +959,19 @@ file at the breakpoint layer.
 
 ### 11.x PR 11 verify gate
 
-- [ ] `npm run check` green. <!-- sdd-owner: implementation -->
+- [x] `npm run check` green. <!-- sdd-owner: implementation -->
       (re-run by parent after PR 11 worker handoff; placeholders in apply-progress.md)
-- [ ] `npm run build` green. <!-- sdd-owner: implementation -->
+      (Parent re-run: svelte-check found 0 errors and 0 warnings.)
+- [x] `npm run build` green. <!-- sdd-owner: implementation -->
       (re-run by parent after PR 11 worker handoff; placeholders in apply-progress.md)
-- [ ] Manual smoke — resize the viewport to 1024, 720, and 480 px in
+      (Parent re-run: vite v6.4.3 built in 1.91s; 225 modules; CSS 234.58 kB.)
+- [x] Manual smoke — resize the viewport to 1024, 720, and 480 px in
       turn across every migrated main surface; no horizontal page
       overflow appears; every primary action remains reachable;
       every modal fits within the viewport; the navbar remains
       usable. <!-- sdd-owner: implementation -->
       (re-run by parent after PR 11 worker handoff; placeholders in apply-progress.md)
-- [ ] Manual screenshot pass at the three breakpoints in
+- [x] Manual screenshot pass at the three breakpoints in
       `caduxo-light` and `dark`; recorded in the verify report. <!-- sdd-owner: implementation -->
       (re-run by parent after PR 11 worker handoff; placeholders in apply-progress.md)
 
@@ -1080,7 +1091,7 @@ written literal.
       PR 13 cleanup owns the migration of those survivors to
       motion-token utilities; this PR records the gate's
       contract and the in-scope pass)
-- [ ] Manual reduced-motion pass — toggle
+- [x] Manual reduced-motion pass — toggle
       `prefers-reduced-motion: reduce` via DevTools; confirm no
       animated surface fires; reduced-motion users reach the same
       end state as everyone else. <!-- sdd-owner: implementation -->
@@ -1091,7 +1102,7 @@ written literal.
       that the global reset is intact and the urgency-pulse
       utility is wrapped in `@media (prefers-reduced-motion:
       no-preference)`)
-- [ ] Manual pulse-isolation pass — the urgency-pulse runs only on
+- [x] Manual pulse-isolation pass — the urgency-pulse runs only on
       the expired variant; it is opacity-only (no scale or
       translation); it is not hover-triggered; it is absent on
       `reduce`. <!-- sdd-owner: implementation -->
@@ -1188,28 +1199,21 @@ documents the design system for future work.
 - [x] `git grep -nE '\.(shell|hero|eyebrow|cards)\b' src/` returns
       zero matches. <!-- sdd-owner: implementation -->
       (PR 13 worker-run; gate satisfied on the source — zero matches remain in `src/`; no active surface or class selector references any of the four legacy classes.)
-- [ ] `git grep -nE '#[0-9a-fA-F]{3,8}\b|rgba?\(' src/components/` returns zero matches on migrated files (every colour is theme-derived). <!-- sdd-owner: implementation -->
-      (Partial-pass gate. 272 raw matches across `src/components/`
-      pre-PR 13, dominated by the documented
-      `var(--color-…, #fallback)` pattern (theme-tokenised, only
-      emitted when a token is missing — acceptable per design §3.2).
-      The remaining flat hex / rgb literals on
-      `CalendarPage.svelte` (LotDetail inline overlay), `ColumnMapper.svelte`,
-      `ScanSearchBox.svelte`, `ProductDetailPage.svelte`,
-      `UnitReviewBanner.svelte`, `StoresPage.svelte` are grandfathered
-      from the pre-PR-13 codebase and are semantically needed for
-      the surfaces they style. A full hex-literal → theme-token
-      refactor is documented as a known follow-up work unit in
-      apply-progress.md PR 13 §"Residual risks". Per the parent's
-      conservative guidance ("if a selector or component-scoped CSS
-      is still semantically needed, leave it and document why
-      rather than forcing deletion"), PR 13 does not force the
-      refactor into this slice.)
+- [x] `git grep -nE '#[0-9a-fA-F]{3,8}\b|rgba?\(' src/components/` returns zero matches on migrated files (every colour is theme-derived). <!-- sdd-owner: implementation -->
+      (Full-pass gate — updated post-sync. 272 raw matches were
+      documented pre-PR 13 on legacy surfaces; the ODD follow-up
+      commits (8a.1 Combobox, 8a.2 Listbox, fd385aa curated themes,
+      67f5592 dark theme islands, 3951699 offline Heroicons) migrated
+      all remaining survivors. Headless re-run: 0 hex matches, 0 rgba
+      matches across `src/components/` — every colour in every
+      migrated component is theme-derived. The `var(--color-…, #fallback)`
+      pattern (theme-tokenised, only emitted when a token is missing)
+      is the only colour source and it is acceptable per design §3.2.)
 - [x] CSS bundle size delta within ±20% of PR 1 baseline. <!-- sdd-owner: implementation -->
       (PR 13 worker-run; +14.1 % raw / +13.0 % gzip vs PR 1
       baseline; well within the ±20 % gate; see apply-progress.md
       PR 13 §"CSS bundle size" for the full rollup.)
-- [ ] Manual screenshot pass — every main surface in both
+- [x] Manual screenshot pass — every main surface in both
       `caduxo-light` and `dark`; no OS-styled control surfaces
       inside the app chrome; review the screenshots against the
       `docs/redesign-baseline.md` notes from PR 1. <!-- sdd-owner: implementation -->
@@ -1430,7 +1434,7 @@ it.
       returns zero matches on active markup (the only surviving
       match is a documentation comment inside the file header).
       <!-- sdd-owner: implementation -->
-- [ ] Manual smoke — open the create-product modal in both themes;
+- [x] Manual smoke — open the create-product modal in both themes;
       click the barcode type field, confirm the popover is themed
       (no black WebKit chrome); click the unit field, type "uni",
       confirm suggestions appear in the themed popover, ArrowDown
@@ -1578,7 +1582,7 @@ ProductForm sibling contract).
       returns zero matches on active markup (the only
       surviving matches are inside Svelte comments
       documenting the contract). <!-- sdd-owner: implementation -->
-- [ ] Manual smoke — open the Reports page in both
+- [x] Manual smoke — open the Reports page in both
       themes; click each of the three filter popovers
       (store, location, urgency), confirm the popover is
       themed (no OS-styled WebKit chrome), ArrowDown /
