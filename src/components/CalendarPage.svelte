@@ -156,6 +156,15 @@
   // Day-detail panel
   let showLotDetail = false;
   let detailLot: ExpiryLotResponse | null = null;
+  /**
+   * Row context captured when `openLot(row)` is called. Provides
+   * human-readable display values for the lot detail panel
+   * (`description`, `sku`, `store_name`, `location_name`) without an
+   * extra IPC round-trip — the row data already carries them from the
+   * `listDashboardLots` fetch. Cleared alongside `detailLot` when the
+   * modal closes.
+   */
+  let detailRow: DashboardLotRow | null = null;
   let detailLoading = false;
   let lotDetailTab: "detail" | "history" = "detail";
   let lotDetailLocations: StoreLocationResponse[] = [];
@@ -323,6 +332,10 @@ const watchdog = window.setTimeout(() => {
     showLotDetail = true;
     lotDetailTab = "history";
     detailLot = null;
+    // Capture the row context so the detail panel can show
+    // description / SKU / store name / location name without an
+    // extra IPC round-trip.
+    detailRow = row;
     lotDetailLocations = [];
     try {
       [detailLot, lotDetailLocations] = await Promise.all([
@@ -340,6 +353,7 @@ const watchdog = window.setTimeout(() => {
 function onLotCancel() {
     showLotDetail = false;
     detailLot = null;
+    detailRow = null;
   }
 
 </script>
@@ -491,32 +505,55 @@ function onLotCancel() {
 </Modal>
 
 {#snippet lotDetailTabPanel()}
-  <dl class="detail-grid">
-    <dt>{$LL.dashboard.product()}</dt>
-    <dd>{detailLot?.product_id}</dd>
-    <dt>{$LL.dashboard.store()}</dt>
-    <dd>{detailLot?.store_id}</dd>
-    <dt>{$LL.dashboard.location()}</dt>
-    <dd>{detailLot?.location_id ?? "—"}</dd>
-    <dt>{$LL.lotsDetail.quantity()}</dt>
-    <dd>{detailLot?.quantity}</dd>
-    <dt>{$LL.dashboard.expiryDate()}</dt>
-    <dd>{detailLot?.expiry_date}</dd>
-    <dt>{$LL.dashboard.alertDaysBefore()}</dt>
-    <dd>{detailLot?.alert_days_before}</dd>
-    {#if detailLot?.batch_code}
-      <dt>{$LL.lotsDetail.batch()}</dt>
-      <dd>{detailLot.batch_code}</dd>
-    {/if}
-  </dl>
-  <div class="modal-actions">
-    <Button variant="ghost" onclick={onLotCancel}>
-      {$LL.common.close()}
-    </Button>
-    <Button variant="primary" onclick={() => (lotDetailTab = "history")}>
-      {$LL.lotMovements.panelTitle()}
-    </Button>
-  </div>
+  {#if detailLot}
+    <dl class="detail-grid">
+      <dt>{$LL.dashboard.product()}</dt>
+      <dd>
+        {#if detailRow?.description}
+          {detailRow.description}
+          <small class="detail-muted"> · {detailRow.sku}</small>
+        {:else}
+          {detailLot.product_id}
+        {/if}
+      </dd>
+      <dt>{$LL.dashboard.store()}</dt>
+      <dd>
+        {#if detailRow?.store_name}
+          {detailRow.store_name}
+        {:else}
+          {detailLot.store_id}
+        {/if}
+      </dd>
+      <dt>{$LL.dashboard.location()}</dt>
+      <dd>
+        {#if detailRow?.location_name}
+          {detailRow.location_name}
+        {:else if detailLot.location_id}
+          {detailLot.location_id}
+        {:else}
+          —
+        {/if}
+      </dd>
+      <dt>{$LL.lotsDetail.quantity()}</dt>
+      <dd>{detailLot.quantity}</dd>
+      <dt>{$LL.dashboard.expiryDate()}</dt>
+      <dd>{detailLot.expiry_date}</dd>
+      <dt>{$LL.dashboard.alertDaysBefore()}</dt>
+      <dd>{detailLot.alert_days_before}</dd>
+      {#if detailLot.batch_code}
+        <dt>{$LL.lotsDetail.batch()}</dt>
+        <dd>{detailLot.batch_code}</dd>
+      {/if}
+    </dl>
+    <div class="modal-actions">
+      <Button variant="ghost" onclick={onLotCancel}>
+        {$LL.common.close()}
+      </Button>
+      <Button variant="primary" onclick={() => (lotDetailTab = "history")}>
+        {$LL.lotMovements.panelTitle()}
+      </Button>
+    </div>
+  {/if}
 {/snippet}
 
 {#snippet lotHistoryTabPanel()}
@@ -697,6 +734,14 @@ function onLotCancel() {
   .detail-grid dd {
     color: var(--color-base-content);
     margin: 0;
+  }
+
+  /* SKU suffix shown after the description in the product cell so
+     the description stays the primary text without losing the SKU
+     context. */
+  .detail-muted {
+    color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+    font-size: 0.82rem;
   }
 
   .modal-actions {

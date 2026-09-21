@@ -60,6 +60,20 @@
      * When null (legacy/uncatalogued), defaults to decimal rules.
      */
     export let productUnitKind: "integer" | "decimal" | null = null;
+    /**
+     * When set (Scanner Registration flow), the store is locked for
+     * create mode: `selectedStoreId` is pre-filled with this id, the
+     * store select is replaced by a read-only label, and the user
+     * cannot change the store from inside this form. Ignored in edit
+     * mode (the existing lot already owns its store id). PR
+     * `scanner-default-store-lock`.
+     */
+    export let lockedStoreId: string | null = null;
+    /**
+     * Display name of the locked store. Falls back to `lockedStoreId`
+     * when the parent cannot resolve a name (e.g. stale persisted id).
+     */
+    export let lockedStoreName: string = "";
     /** Called after a successful save. */
     export let onSaved: (lot: ExpiryLotResponse) => void;
     /** Called when the user cancels. */
@@ -134,8 +148,12 @@
                 unit = defaultUnit;
                 alertDaysBefore = defaultAlertDays;
                 alertDaysStr = String(defaultAlertDays);
-                // Auto-select the last-selected store, or the first available.
-                if (stores.length > 0) {
+                // Store pre-fill: prefer the Scanner-locked store when
+                // the parent passed one, otherwise the first available
+                // store (preserves the Product Catalog default).
+                if (lockedStoreId) {
+                    selectedStoreId = lockedStoreId;
+                } else if (stores.length > 0) {
                     selectedStoreId = stores[0].id;
                 }
                 // Default expiry date: today + alertDaysBefore.
@@ -273,8 +291,23 @@
     {:else if stores.length === 0}
         <Alert variant="error">{$LL.lotForm.noStoresAvailable()}</Alert>
     {:else}
-        <!-- Store selection — only shown when multiple stores exist -->
-        {#if stores.length > 1}
+        <!-- Store selection. Locked when the Scanner passes
+             `lockedStoreId` (Scanner Registration flow) — the user
+             cannot change the store from inside this form. Otherwise
+             show the select when multiple stores exist, or a static
+             label when only one store is available. PR
+             `scanner-default-store-lock`. -->
+        {#if lockedStoreId}
+            <div class="store-hint store-hint-locked" role="note">
+                <span class="store-hint-label">
+                    {$LL.lotForm.lockedStoreLabel()}:
+                    <strong>{lockedStoreName || lockedStoreId}</strong>
+                </span>
+                <span class="store-hint-detail">
+                    {$LL.lotForm.lockedStoreHint()}
+                </span>
+            </div>
+        {:else if stores.length > 1}
             <Select
                 bind:value={selectedStoreId}
                 options={storeOptions}
@@ -463,6 +496,31 @@
         font-size: 0.85rem;
         color: var(--color-base-content);
         margin: 0;
+    }
+
+    /* Scanner-locked store hint: keeps the same baseline as the
+       single-store hint but adds a chip-style container with a
+       warning-tinted border so the user immediately sees the store
+       is fixed by the Scanner context (PR `scanner-default-store-lock`). */
+    .store-hint-locked {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 8px 12px;
+        border: 1px solid color-mix(in oklch, var(--color-warning) 40%, transparent);
+        background: color-mix(in oklch, var(--color-warning) 8%, transparent);
+        border-radius: 6px;
+    }
+
+    .store-hint-label {
+        font-size: 0.85rem;
+        color: var(--color-base-content);
+    }
+
+    .store-hint-detail {
+        font-size: 0.78rem;
+        color: var(--color-secondary);
+        line-height: 1.35;
     }
 
     .unit-chip {

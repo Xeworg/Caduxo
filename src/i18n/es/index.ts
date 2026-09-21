@@ -483,6 +483,13 @@ const es: BaseTranslation = {
       unit: "p. ej. kg, L, pzas",
       batchCode: "p. ej. B2024-001",
     },
+    // Aviso de tienda bloqueada desde el Escáner (PR
+    // `scanner-default-store-lock`). Se muestra en lugar del selector
+    // cuando el Escáner pasa `lockedStoreId`, para evitar que el
+    // usuario registre un lote en una tienda distinta a la elegida en
+    // el Escáner.
+    lockedStoreLabel: "Tienda seleccionada en el Escáner",
+    lockedStoreHint: "Los lotes abiertos desde el Escáner quedan en la tienda activa del Escáner.",
     // Edit-mode read-only quantity
     quantityReadonly: "Cantidad",
     quantityUseMovementHint: "Usa las acciones de movimiento, ajuste o resolución para cambiarla.",
@@ -935,7 +942,19 @@ const es: BaseTranslation = {
       placeholder: "Escanear SKU, código de barras o código de lote…",
       ariaLabel: "Entrada del escáner",
       title: "Pulsa Intro para confirmar",
+      // Etiqueta de la acción principal del escáner. Se distingue de
+      // `common.save` para que el verbo refleje la intención de
+      // búsqueda.
+      lookupLabel: "Buscar",
+      looking: "Buscando…",
     },
+    // Se muestra en Venta y Salida cuando `ScannerProductMatch.lots`
+    // está vacío: el producto existe pero no tiene lotes activos en
+    // la tienda activa. El bloque de resumen superior ya nombra el
+    // producto (descripción + SKU); esta clave sólo aporta la
+    // explicación.
+    noLotsAvailable:
+      "No hay lotes activos disponibles para este producto en la tienda activa.",
     modes: {
       sale: "Venta",
       registration: "Registro",
@@ -944,6 +963,37 @@ const es: BaseTranslation = {
     noStore: {
       title: "Crea primero una tienda",
       body: "La pestaña Escáner necesita una tienda activa para resolver los códigos. Crea o selecciona una tienda en la pestaña Tiendas para habilitar el escaneo.",
+    },
+    // Se muestra cuando hay tiendas pero `last_selected_store_id`
+    // está vacío o desactualizado. Permite al usuario elegir una
+    // tienda activa sin salir de la pestaña Escáner (el comportamiento
+    // previo era un error de "sin tienda" en el primer escaneo).
+    selectActiveStore: {
+      title: "Selecciona una tienda activa",
+      body: "Elige la tienda que debe usar el Escáner. Puedes cambiarla después desde la pestaña Tiendas.",
+      label: "Tienda activa *",
+      success: "Tienda activa actualizada a {name}.",
+      errors: {
+        failed: "No se pudo establecer la tienda activa: {msg}",
+      },
+    },
+    // Panel de contexto siempre visible en la página del Escáner.
+    // Aparece dentro de la superficie interactiva para que el usuario
+    // vea a qué tienda se aplican las operaciones del Escáner y pueda
+    // cambiarla sin salir de la pestaña. Los lotes abiertos desde el
+    // Escáner quedan bloqueados a esta tienda (ver
+    // `lotForm.lockedStoreLabel`).
+    activeStoreContext: {
+      title: "Tienda activa",
+      body: "Las operaciones del Escáner (búsqueda, registro, salida) se aplican a esta tienda. Los lotes nuevos abiertos desde el Escáner quedan bloqueados a esta tienda para no registrar stock en otro lugar.",
+      label: "Tienda activa",
+      // Etiqueta corta que refuerza que la tienda activa está bloqueada
+      // para los lotes del Escáner. El bloqueo se aplica en LotForm.
+      lockedBadge: "Bloqueada para nuevos lotes",
+      changeNotice: "Tienda activa cambiada a {name}. Se borraron los escaneos en curso.",
+      errors: {
+        failed: "No se pudo cambiar la tienda activa: {msg}",
+      },
     },
     loadingSettings: "Cargando ajustes del escáner…",
     debouncedNotice: "Escaneo repetido ignorado (debounce).",

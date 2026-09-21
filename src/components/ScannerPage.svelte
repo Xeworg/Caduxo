@@ -36,6 +36,13 @@
   page renders a translated "create the first store first" notice
   in that case (per spec scenario `Scanner tab is unavailable until
   first store exists`).
+
+  When stores exist but the persisted `last_selected_store_id` is
+  empty or stale, the page renders an inline store picker that
+  calls `updateSettings` and refreshes settings without leaving the
+  Scanner tab. The backend `resolve_scanner_code` command requires
+  `last_selected_store_id` to point at an active store, so this
+  branch is the only way to keep scanning in that state.
 -->
 <script lang="ts">
   import { onMount, untrack } from "svelte";
@@ -50,8 +57,11 @@
   import {
     getSettings,
     hasStore as hasStoreCommand,
+    updateSettings,
+    listStores,
     type FefoPolicy,
     type SettingsResponse,
+    type StoreResponse,
   } from "../lib/stores.js";
   import {
     createLotMovement,
@@ -138,6 +148,17 @@
   let settingsError = $state("");
   let hasStoreValue: boolean | null = $state(null);
 
+  // Stores available to pick as the active store. Loaded only when
+  // `hasStoreValue === true` AND the persisted `last_selected_store_id`
+  // is empty / stale, so the Scanner lets the user pick without
+  // leaving the tab (regression: prior behaviour surfaced a backend
+  // "No active store selected" error on the first scan).
+  let availableStores = $state<StoreResponse[]>([]);
+  let loadingStores = $state(false);
+  let storeSelectId = $state("");
+  let savingStoreSelection = $state(false);
+  let storeSelectError = $state("");
+
   // Resolved scan state. Persisted across mode switches so the user can
   // move from Sale to Registration without losing their work.
   let resolved = $state<ScannerResolveResult | null>(null);
@@ -178,6 +199,13 @@
 
   // LotMatch/ProductMatch registration flow: open the existing LotForm.
   let registrationLotFormOpen = $state(false);
+
+  // Always-visible active-store context. Mirrors the persisted
+  // `last_selected_store_id` so the user can see which store Scanner
+  // operations apply to and switch it without leaving the tab. PR
+  // `scanner-default-store-lock`.
+  let activeStoreChangeBusy = $state(false);
+  let activeStoreChangeError = $state("");
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -300,15 +328,55 @@
   );
 
   // Scanner-tab availability: the page is interactive only when settings
-  // loaded and an active store exists.
+  // loaded, an active store exists, and the persisted
+  // `last_selected_store_id` still points at one of the available
+  // stores. A missing / stale id surfaces the store picker instead of
+  // letting scans hit the backend "No active store selected" guard.
+  let activeStoreSelected = $derived.by((): boolean => {
+    const id = settings?.last_selected_store_id;
+    if (!id) return false;
+    return availableStores.some((s) => s.id === id);
+  });
+
   let pageReady = $derived(
-    !loadingSettings && !settingsError && hasStoreValue === true,
+    !loadingSettings &&
+      !settingsError &&
+      hasStoreValue === true &&
+      activeStoreSelected,
   );
+
+  // Active stores, formatted for the picker. Inactive stores are
+  // filtered out because the backend `has_store` guard already only
+  // counts active ones, and persisting an inactive id would re-trigger
+  // the same "No active store" error on the next scan.
+  let pickerStoreOptions = $derived.by((): Array<{ value: string; label: string }> => {
+    return availableStores
+      .filter((s) => s.is_active)
+      .map((s) => ({
+        value: s.id,
+        label: s.code ? `${s.name} · ${s.code}` : s.name,
+      }));
+  });
+
+  // Resolved active store (SettingsResponse.last_selected_store_id).
+  // Used by the always-visible context panel and by the LotForm lock.
+  // Falls back to `null` while settings are loading so consumers can
+  // guard against a stale derived.
+  let activeStore: StoreResponse | null = $derived.by((): StoreResponse | null => {
+    const id = settings?.last_selected_store_id;
+    if (!id) return null;
+    return availableStores.find((s) => s.id === id) ?? null;
+  });
+
+  // Mirror of the active store id for the always-visible Select so the
+  // dropdown stays in sync with `settings.last_selected_store_id` on
+  // mount, refresh, and post-switch.
+  let activeStoreSelectId = $derived(settings?.last_selected_store_id ?? "");
 
   // ── Init ──────────────────────────────────────────────────────────────────
 
   onMount(async () => {
-    await Promise.all([loadSettings(), loadHasStore()]);
+    await Promise.all([loadSettings(), loadHasStore(), loadAvailableStores()]);
   });
 
   async function loadSettings(): Promise<void> {
@@ -331,6 +399,80 @@
       hasStoreValue = await hasStoreCommand();
     } catch {
       hasStoreValue = false;
+    }
+  }
+
+  async function loadAvailableStores(): Promise<void> {
+    loadingStores = true;
+    try {
+      availableStores = await listStores();
+      const current = settings?.last_selected_store_id ?? "";
+      if (current && availableStores.some((s) => s.id === current)) {
+        storeSelectId = current;
+      } else {
+        storeSelectId = "";
+      }
+    } catch {
+      availableStores = [];
+      storeSelectId = "";
+    } finally {
+      loadingStores = false;
+    }
+  }
+
+  // Persist the user's pick as `last_selected_store_id`. The Scanner
+  // becomes interactive (pageReady flips true) once `settings` is
+  // refreshed with the new value.
+  async function applyActiveStore(): Promise<void> {
+    const next = storeSelectId;
+    if (!next) return;
+    savingStoreSelection = true;
+    storeSelectError = "";
+    scanError = "";
+    try {
+      const updated = await updateSettings({ last_selected_store_id: next });
+      settings = updated;
+      successNotice = $LL.scanner.selectActiveStore.success({
+        name:
+          availableStores.find((s) => s.id === next)?.name ?? next,
+      });
+    } catch (e) {
+      storeSelectError = $LL.scanner.selectActiveStore.errors.failed({
+        msg: humanizeError(e),
+      });
+    } finally {
+      savingStoreSelection = false;
+    }
+  }
+
+  // Persist a new `last_selected_store_id` from the always-visible
+  // active-store context (different from `applyActiveStore` because
+  // the context lives inside the interactive Scanner surface: any
+  // in-progress scan / lot must be cleared so the user does not see a
+  // resolved value from the previous store context). PR
+  // `scanner-default-store-lock`.
+  async function changeActiveStore(next: string): Promise<void> {
+    const previousId = settings?.last_selected_store_id ?? "";
+    if (!next || next === previousId) return;
+    activeStoreChangeBusy = true;
+    activeStoreChangeError = "";
+    scanError = "";
+    try {
+      const updated = await updateSettings({ last_selected_store_id: next });
+      settings = updated;
+      // The previously resolved scan no longer matches the active
+      // store's context — drop it so the next scan starts fresh.
+      resetMutationForm();
+      successNotice = $LL.scanner.activeStoreContext.changeNotice({
+        name:
+          availableStores.find((s) => s.id === next)?.name ?? next,
+      });
+    } catch (e) {
+      activeStoreChangeError = $LL.scanner.activeStoreContext.errors.failed({
+        msg: humanizeError(e),
+      });
+    } finally {
+      activeStoreChangeBusy = false;
     }
   }
 
@@ -736,7 +878,105 @@
       title={$LL.scanner.noStore.title()}
       body={$LL.scanner.noStore.body()}
     />
+  {:else if hasStoreValue === true && !activeStoreSelected}
+    <!-- Stores exist but the persisted `last_selected_store_id` is
+         empty or stale. Render a picker so the user can pick an
+         active store without leaving the Scanner tab. The backend
+         scanner command requires `last_selected_store_id` to point
+         at an active store, so this branch is the only way to keep
+         scanning in this state. -->
+    <section
+      class="store-picker"
+      aria-labelledby="store-picker-title"
+    >
+      <h2 id="store-picker-title" class="picker-title">
+        {$LL.scanner.selectActiveStore.title()}
+      </h2>
+      <p class="picker-body">{$LL.scanner.selectActiveStore.body()}</p>
+
+      {#if loadingStores}
+        <LoadingState variant="text" label={$LL.common.loading()} />
+      {:else if pickerStoreOptions.length === 0}
+        <Alert variant="warning">{$LL.scanner.noStore.body()}</Alert>
+      {:else}
+        <Select
+          value={storeSelectId}
+          options={[
+            { value: "", label: $LL.lotForm.selectStorePlaceholder(), disabled: true },
+            ...pickerStoreOptions,
+          ]}
+          aria-label={$LL.scanner.selectActiveStore.label()}
+          onchange={(v: string) => (storeSelectId = v)}
+        />
+
+        {#if storeSelectError}
+          <Alert variant="error">{storeSelectError}</Alert>
+        {/if}
+
+        <div class="picker-actions">
+          <Button
+            variant="primary"
+            disabled={!storeSelectId || savingStoreSelection}
+            loading={savingStoreSelection}
+            onclick={() => void applyActiveStore()}
+          >
+            {$LL.scanner.selectActiveStore.label()}
+          </Button>
+        </div>
+      {/if}
+    </section>
   {:else if pageReady}
+    <!-- Always-visible active-store context. Renders inside the
+         interactive Scanner surface so the user can see which store
+         Scanner operations apply to and switch it without leaving
+         the tab. Lot creations opened from the Scanner are locked to
+         this store via `LotForm.lockedStoreId`. PR
+         `scanner-default-store-lock`. -->
+    <section
+      class="store-picker active-store-context"
+      aria-labelledby="active-store-context-title"
+    >
+      <div class="active-store-context-header">
+        <h2 id="active-store-context-title" class="picker-title">
+          {$LL.scanner.activeStoreContext.title()}
+        </h2>
+        <span
+          class="locked-badge"
+          aria-label={$LL.scanner.activeStoreContext.lockedBadge()}
+          title={$LL.scanner.activeStoreContext.lockedBadge()}
+        >
+          {$LL.scanner.activeStoreContext.lockedBadge()}
+        </span>
+      </div>
+      <p class="picker-body">{$LL.scanner.activeStoreContext.body()}</p>
+
+      {#if loadingStores}
+        <LoadingState variant="text" label={$LL.common.loading()} />
+      {:else if pickerStoreOptions.length > 1}
+        <!-- Multiple active stores: show the Select so the user can
+             switch the Scanner context in place. We do NOT navigate
+             away — the page just re-resolves the next scan against
+             the new active store, dropping any in-progress scan. -->
+        <Select
+          value={activeStoreSelectId}
+          options={pickerStoreOptions}
+          aria-label={$LL.scanner.activeStoreContext.label()}
+          disabled={activeStoreChangeBusy}
+          onchange={(v: string) => void changeActiveStore(v)}
+        />
+      {:else}
+        <!-- Single store: read-only display so the user still sees
+             the store the Scanner is operating against. -->
+        <p class="active-store-name" data-testid="active-store-name">
+          <strong>{activeStore?.name ?? settings?.last_selected_store_id ?? ""}</strong>
+        </p>
+      {/if}
+
+      {#if activeStoreChangeError}
+        <Alert variant="error">{activeStoreChangeError}</Alert>
+      {/if}
+    </section>
+
     <!-- Mode tabs (Sale / Registration / Stock-out). Inline DaisyUI
          tabs with manual ARIA wiring because the Tabs primitive
          expects a Snippet per item and our panels depend on per-mode
@@ -814,7 +1054,7 @@
         disabled={scanBusy || !scanInput.trim()}
         onclick={() => void handleScanSubmit()}
       >
-        {$LL.common.save()}
+        {scanBusy ? $LL.scanner.input.looking() : $LL.scanner.input.lookupLabel()}
       </Button>
     </div>
 
@@ -852,11 +1092,45 @@
             <strong>{$LL.scanner.unknownTitle()}:</strong>
             {resolved.scanned_value}
           </Alert>
+        {:else if resolved?.match_type === "lot_match" && activeProduct}
+          <!-- Direct lot scan: FEFO bypassed, but the user still needs
+               to see which product was matched. Render a compact
+               resolved-summary so the lot row is not the only
+               affordance. -->
+          <div class="resolved-summary">
+            <p class="resolved-line">
+              <strong>{$LL.scanner.sale.selectedProduct()}:</strong>
+              {activeProduct.description}
+              <span class="muted">({activeProduct.sku})</span>
+            </p>
+            <p class="resolved-line">
+              <strong>{$LL.scanner.sale.selectedLot()}:</strong>
+              {resolvedLot?.lot.expiry_date ?? "—"}
+              {#if resolvedLot?.lot.batch_code}
+                · {resolvedLot.lot.batch_code}
+              {/if}
+            </p>
+            <p class="hint-required">{$LL.scanner.sale.selectedLotHint()}</p>
+          </div>
+        {:else if resolved?.match_type === "product_match" && activeProduct && resolved.lots.length === 0}
+          <!-- Product resolved but no active lots in the active store.
+               Sale mode has no action to take; surface the resolved
+               product so the user knows what was scanned and explain why
+               nothing else is interactive. -->
+          <div class="resolved-summary">
+            <p class="resolved-line">
+              <strong>{$LL.scanner.sale.selectedProduct()}:</strong>
+              {activeProduct.description}
+              <span class="muted">({activeProduct.sku})</span>
+            </p>
+            <Alert variant="info">{$LL.scanner.noLotsAvailable()}</Alert>
+          </div>
         {:else if resolved && activeProduct && resolvedLot}
           <div class="resolved-summary">
             <p class="resolved-line">
               <strong>{$LL.scanner.sale.selectedProduct()}:</strong>
-              {activeProduct.sku}
+              {activeProduct.description}
+              <span class="muted">({activeProduct.sku})</span>
             </p>
             {#if resolved.match_type === "product_match" && resolved.lots.length > 1}
               <Select
@@ -1067,6 +1341,8 @@
                 defaultUnit={activeProduct.default_unit ?? ""}
                 defaultAlertDays={activeProduct.default_alert_days_before}
                 productUnitKind={activeProduct.unit_type ?? "decimal"}
+                lockedStoreId={settings?.last_selected_store_id ?? null}
+                lockedStoreName={activeStore?.name ?? ""}
                 onSaved={onRegistrationLotSaved}
                 onCancel={closeRegistrationLotForm}
               />
@@ -1099,11 +1375,43 @@
             <strong>{$LL.scanner.unknownTitle()}:</strong>
             {resolved.scanned_value}
           </Alert>
+        {:else if resolved?.match_type === "lot_match" && activeProduct}
+          <!-- Direct lot scan: render the product + lot so the user
+               has the same context the multi-lot picker would have
+               given them. Stock-out is also FEFO-bypassed for
+               direct lot scans, so the lot picker is not shown. -->
+          <div class="resolved-summary">
+            <p class="resolved-line">
+              <strong>{$LL.scanner.stockOut.selectedProduct()}:</strong>
+              {activeProduct.description}
+              <span class="muted">({activeProduct.sku})</span>
+            </p>
+            <p class="resolved-line">
+              <strong>{$LL.scanner.stockOut.selectedLot()}:</strong>
+              {resolvedLot?.lot.expiry_date ?? "—"}
+              {#if resolvedLot?.lot.batch_code}
+                · {resolvedLot.lot.batch_code}
+              {/if}
+            </p>
+          </div>
+        {:else if resolved?.match_type === "product_match" && activeProduct && resolved.lots.length === 0}
+          <!-- Product resolved but no active lots in the active store.
+               Surface what was scanned and explain why the rest of
+               the form is not actionable. -->
+          <div class="resolved-summary">
+            <p class="resolved-line">
+              <strong>{$LL.scanner.stockOut.selectedProduct()}:</strong>
+              {activeProduct.description}
+              <span class="muted">({activeProduct.sku})</span>
+            </p>
+            <Alert variant="info">{$LL.scanner.noLotsAvailable()}</Alert>
+          </div>
         {:else if resolved && activeProduct && resolvedLot}
           <div class="resolved-summary">
             <p class="resolved-line">
               <strong>{$LL.scanner.stockOut.selectedProduct()}:</strong>
-              {activeProduct.sku}
+              {activeProduct.description}
+              <span class="muted">({activeProduct.sku})</span>
             </p>
             {#if resolved.match_type === "product_match" && resolved.lots.length > 1}
               <Select
@@ -1300,6 +1608,15 @@
     line-height: 1.45;
   }
 
+  /* Secondary label inside a resolved line — used for the SKU
+     suffix on `description (sku)` rows so the SKU stays glanceable
+     without competing with the description text. */
+  .muted {
+    color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+    font-size: 0.88rem;
+    margin-left: 4px;
+  }
+
   .hint-required {
     margin: -6px 0 0;
     font-size: 0.78rem;
@@ -1339,5 +1656,74 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+
+  /* ── Store picker (active store selection) ─────────────────────── */
+  .store-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
+    border-radius: 8px;
+    background: color-mix(in oklch, var(--color-base-200) 50%, transparent);
+  }
+
+  .picker-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-base-content);
+  }
+
+  .picker-body {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--color-secondary);
+    line-height: 1.45;
+  }
+
+  .picker-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* ── Active-store context (always-visible Scanner surface) ─────── */
+
+  /* The active-store context panel reuses the store-picker block to
+     keep the visual contract aligned with the missing/stale picker:
+     same border, padding, and body copy styling. Only the header
+     grows a "Locked for new lots" badge and the actions row is
+     replaced with an inline name or a Select. */
+  .active-store-context {
+    margin-bottom: 4px;
+  }
+
+  .active-store-context-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .locked-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.74rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-warning);
+    background: color-mix(in oklch, var(--color-warning) 12%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-warning) 35%, transparent);
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+
+  .active-store-name {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--color-base-content);
   }
 </style>

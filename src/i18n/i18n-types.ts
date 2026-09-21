@@ -1652,6 +1652,14 @@ type RootTranslation = {
 			batchCode: string
 		}
 		/**
+		 * S​c​a​n​n​e​r​-​s​e​l​e​c​t​e​d​ ​s​t​o​r​e
+		 */
+		lockedStoreLabel: string
+		/**
+		 * L​o​t​ ​c​r​e​a​t​i​o​n​s​ ​o​p​e​n​e​d​ ​f​r​o​m​ ​t​h​e​ ​S​c​a​n​n​e​r​ ​s​t​a​y​ ​i​n​ ​t​h​e​ ​a​c​t​i​v​e​ ​S​c​a​n​n​e​r​ ​s​t​o​r​e​.
+		 */
+		lockedStoreHint: string
+		/**
 		 * Q​u​a​n​t​i​t​y
 		 */
 		quantityReadonly: string
@@ -3274,7 +3282,19 @@ type RootTranslation = {
 			 * P​r​e​s​s​ ​E​n​t​e​r​ ​t​o​ ​s​u​b​m​i​t
 			 */
 			title: string
+			/**
+			 * L​o​o​k​ ​u​p
+			 */
+			lookupLabel: string
+			/**
+			 * L​o​o​k​i​n​g​ ​u​p​…
+			 */
+			looking: string
 		}
+		/**
+		 * N​o​ ​a​c​t​i​v​e​ ​l​o​t​s​ ​a​r​e​ ​a​v​a​i​l​a​b​l​e​ ​f​o​r​ ​t​h​i​s​ ​p​r​o​d​u​c​t​ ​i​n​ ​t​h​e​ ​a​c​t​i​v​e​ ​s​t​o​r​e​.
+		 */
+		noLotsAvailable: string
 		modes: {
 			/**
 			 * S​a​l​e
@@ -3298,6 +3318,62 @@ type RootTranslation = {
 			 * T​h​e​ ​S​c​a​n​n​e​r​ ​t​a​b​ ​n​e​e​d​s​ ​a​n​ ​a​c​t​i​v​e​ ​s​t​o​r​e​ ​t​o​ ​r​e​s​o​l​v​e​ ​s​c​a​n​s​.​ ​C​r​e​a​t​e​ ​o​r​ ​s​e​l​e​c​t​ ​a​ ​s​t​o​r​e​ ​i​n​ ​t​h​e​ ​S​t​o​r​e​s​ ​t​a​b​ ​t​o​ ​e​n​a​b​l​e​ ​s​c​a​n​n​i​n​g​.
 			 */
 			body: string
+		}
+		selectActiveStore: {
+			/**
+			 * S​e​l​e​c​t​ ​a​n​ ​a​c​t​i​v​e​ ​s​t​o​r​e
+			 */
+			title: string
+			/**
+			 * P​i​c​k​ ​t​h​e​ ​s​t​o​r​e​ ​t​h​e​ ​S​c​a​n​n​e​r​ ​s​h​o​u​l​d​ ​u​s​e​.​ ​Y​o​u​ ​c​a​n​ ​c​h​a​n​g​e​ ​i​t​ ​l​a​t​e​r​ ​f​r​o​m​ ​t​h​e​ ​S​t​o​r​e​s​ ​t​a​b​.
+			 */
+			body: string
+			/**
+			 * A​c​t​i​v​e​ ​s​t​o​r​e​ ​*
+			 */
+			label: string
+			/**
+			 * A​c​t​i​v​e​ ​s​t​o​r​e​ ​u​p​d​a​t​e​d​ ​t​o​ ​{​n​a​m​e​}​.
+			 * @param {unknown} name
+			 */
+			success: RequiredParams<'name'>
+			errors: {
+				/**
+				 * C​o​u​l​d​ ​n​o​t​ ​s​e​t​ ​t​h​e​ ​a​c​t​i​v​e​ ​s​t​o​r​e​:​ ​{​m​s​g​}
+				 * @param {unknown} msg
+				 */
+				failed: RequiredParams<'msg'>
+			}
+		}
+		activeStoreContext: {
+			/**
+			 * A​c​t​i​v​e​ ​s​t​o​r​e
+			 */
+			title: string
+			/**
+			 * S​c​a​n​n​e​r​ ​o​p​e​r​a​t​i​o​n​s​ ​(​l​o​o​k​u​p​,​ ​r​e​g​i​s​t​r​a​t​i​o​n​,​ ​s​t​o​c​k​-​o​u​t​)​ ​a​p​p​l​y​ ​t​o​ ​t​h​i​s​ ​s​t​o​r​e​.​ ​N​e​w​ ​l​o​t​s​ ​o​p​e​n​e​d​ ​f​r​o​m​ ​t​h​e​ ​S​c​a​n​n​e​r​ ​a​r​e​ ​l​o​c​k​e​d​ ​t​o​ ​i​t​ ​s​o​ ​s​t​o​c​k​ ​i​s​ ​n​o​t​ ​r​e​g​i​s​t​e​r​e​d​ ​i​n​t​o​ ​t​h​e​ ​w​r​o​n​g​ ​p​l​a​c​e​.
+			 */
+			body: string
+			/**
+			 * A​c​t​i​v​e​ ​s​t​o​r​e
+			 */
+			label: string
+			/**
+			 * L​o​c​k​e​d​ ​f​o​r​ ​n​e​w​ ​l​o​t​s
+			 */
+			lockedBadge: string
+			/**
+			 * A​c​t​i​v​e​ ​s​t​o​r​e​ ​s​w​i​t​c​h​e​d​ ​t​o​ ​{​n​a​m​e​}​.​ ​I​n​-​p​r​o​g​r​e​s​s​ ​s​c​a​n​s​ ​w​e​r​e​ ​c​l​e​a​r​e​d​.
+			 * @param {unknown} name
+			 */
+			changeNotice: RequiredParams<'name'>
+			errors: {
+				/**
+				 * C​o​u​l​d​ ​n​o​t​ ​s​w​i​t​c​h​ ​t​h​e​ ​a​c​t​i​v​e​ ​s​t​o​r​e​:​ ​{​m​s​g​}
+				 * @param {unknown} msg
+				 */
+				failed: RequiredParams<'msg'>
+			}
 		}
 		/**
 		 * L​o​a​d​i​n​g​ ​s​c​a​n​n​e​r​ ​s​e​t​t​i​n​g​s​…
@@ -5484,6 +5560,14 @@ export type TranslationFunctions = {
 			batchCode: () => LocalizedString
 		}
 		/**
+		 * Scanner-selected store
+		 */
+		lockedStoreLabel: () => LocalizedString
+		/**
+		 * Lot creations opened from the Scanner stay in the active Scanner store.
+		 */
+		lockedStoreHint: () => LocalizedString
+		/**
 		 * Quantity
 		 */
 		quantityReadonly: () => LocalizedString
@@ -7048,7 +7132,19 @@ export type TranslationFunctions = {
 			 * Press Enter to submit
 			 */
 			title: () => LocalizedString
+			/**
+			 * Look up
+			 */
+			lookupLabel: () => LocalizedString
+			/**
+			 * Looking up…
+			 */
+			looking: () => LocalizedString
 		}
+		/**
+		 * No active lots are available for this product in the active store.
+		 */
+		noLotsAvailable: () => LocalizedString
 		modes: {
 			/**
 			 * Sale
@@ -7072,6 +7168,58 @@ export type TranslationFunctions = {
 			 * The Scanner tab needs an active store to resolve scans. Create or select a store in the Stores tab to enable scanning.
 			 */
 			body: () => LocalizedString
+		}
+		selectActiveStore: {
+			/**
+			 * Select an active store
+			 */
+			title: () => LocalizedString
+			/**
+			 * Pick the store the Scanner should use. You can change it later from the Stores tab.
+			 */
+			body: () => LocalizedString
+			/**
+			 * Active store *
+			 */
+			label: () => LocalizedString
+			/**
+			 * Active store updated to {name}.
+			 */
+			success: (arg: { name: unknown }) => LocalizedString
+			errors: {
+				/**
+				 * Could not set the active store: {msg}
+				 */
+				failed: (arg: { msg: unknown }) => LocalizedString
+			}
+		}
+		activeStoreContext: {
+			/**
+			 * Active store
+			 */
+			title: () => LocalizedString
+			/**
+			 * Scanner operations (lookup, registration, stock-out) apply to this store. New lots opened from the Scanner are locked to it so stock is not registered into the wrong place.
+			 */
+			body: () => LocalizedString
+			/**
+			 * Active store
+			 */
+			label: () => LocalizedString
+			/**
+			 * Locked for new lots
+			 */
+			lockedBadge: () => LocalizedString
+			/**
+			 * Active store switched to {name}. In-progress scans were cleared.
+			 */
+			changeNotice: (arg: { name: unknown }) => LocalizedString
+			errors: {
+				/**
+				 * Could not switch the active store: {msg}
+				 */
+				failed: (arg: { msg: unknown }) => LocalizedString
+			}
 		}
 		/**
 		 * Loading scanner settings…

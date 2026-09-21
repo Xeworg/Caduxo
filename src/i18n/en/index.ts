@@ -485,6 +485,12 @@ const en: BaseTranslation = {
       unit: "e.g. kg, L, pcs",
       batchCode: "e.g. B2024-001",
     },
+    // Scanner-locked store notice (PR `scanner-default-store-lock`).
+    // Rendered in place of the store select when the Scanner tab passes
+    // `lockedStoreId`, so the user cannot accidentally register a lot
+    // into a different store than the one they picked in the Scanner.
+    lockedStoreLabel: "Scanner-selected store",
+    lockedStoreHint: "Lot creations opened from the Scanner stay in the active Scanner store.",
     // Edit-mode read-only quantity
     quantityReadonly: "Quantity",
     quantityUseMovementHint: "Use movement / adjustment / resolve actions to change it.",
@@ -936,7 +942,18 @@ const en: BaseTranslation = {
       placeholder: "Scan SKU, barcode, or lot code…",
       ariaLabel: "Scanner input",
       title: "Press Enter to submit",
+      // Primary action label for the lookup button. Kept distinct from
+      // `common.save` so the verb matches the lookup intent.
+      lookupLabel: "Look up",
+      looking: "Looking up…",
     },
+    // Shown in Sale and Stock-out when `ScannerProductMatch.lots` is
+    // empty: the resolved product exists but has no active lots in the
+    // active store. The resolved-summary block above the alert
+    // already names the product (description + SKU); this key only
+    // carries the explanation.
+    noLotsAvailable:
+      "No active lots are available for this product in the active store.",
     modes: {
       sale: "Sale",
       registration: "Registration",
@@ -945,6 +962,37 @@ const en: BaseTranslation = {
     noStore: {
       title: "Create a store first",
       body: "The Scanner tab needs an active store to resolve scans. Create or select a store in the Stores tab to enable scanning.",
+    },
+    // Shown when stores exist but `last_selected_store_id` is empty or
+    // stale. Lets the user pick an active store without leaving the
+    // Scanner tab (the previous behaviour was a no-store error on the
+    // first scan).
+    selectActiveStore: {
+      title: "Select an active store",
+      body: "Pick the store the Scanner should use. You can change it later from the Stores tab.",
+      label: "Active store *",
+      success: "Active store updated to {name}.",
+      errors: {
+        failed: "Could not set the active store: {msg}",
+      },
+    },
+    // Always-visible context panel in the Scanner page. Renders inside
+    // the interactive Scanner surface so the user can see which store
+    // Scanner operations apply to and switch it without leaving the
+    // tab. Lot creations opened from the Scanner are locked to this
+    // store (see `lotForm.lockedStoreLabel`).
+    activeStoreContext: {
+      title: "Active store",
+      body: "Scanner operations (lookup, registration, stock-out) apply to this store. New lots opened from the Scanner are locked to it so stock is not registered into the wrong place.",
+      label: "Active store",
+      // Small badge that tells the user the active store is locked for
+      // Scanner-created lots. Complements the body copy with a glanceable
+      // affordance; the lock itself is enforced in LotForm.
+      lockedBadge: "Locked for new lots",
+      changeNotice: "Active store switched to {name}. In-progress scans were cleared.",
+      errors: {
+        failed: "Could not switch the active store: {msg}",
+      },
     },
     loadingSettings: "Loading scanner settings…",
     debouncedNotice: "Ignored repeat scan (debounced).",
