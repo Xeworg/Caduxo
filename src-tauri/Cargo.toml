@@ -1,6 +1,6 @@
 [package]
 name = "caduxo"
-version = "0.1.0"
+version = "0.2.0"
 description = "Caduxo - Local-first product expiry tracker"
 authors = ["Caduxo"]
 license = "MIT"
