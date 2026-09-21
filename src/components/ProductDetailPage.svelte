@@ -27,6 +27,11 @@
     } from "../lib/stores.js";
     import { LL } from "../i18n/i18n-svelte.js";
     import { humanizeError } from "../lib/errors.js";
+    import Modal from "./ui/Modal.svelte";
+    import Tabs from "./ui/Tabs.svelte";
+    import Button from "./ui/Button.svelte";
+    import Alert from "./ui/Alert.svelte";
+    import Badge from "./ui/Badge.svelte";
 
     /** Static barcode-type suggestion list shared by the ProductForm
      *  Combobox (PR 8a.1) and this ProductDetailPage Combobox (PR
@@ -540,89 +545,86 @@ on:click={() => (confirmingArchive = false)}
 {/if}
 
 <!-- ── Lot detail modal ─────────────────────────────────────────────────────── -->
-{#if showLotDetail}
-    <div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.dashboard.lotDetail()}>
-        <div class="modal-box modal-box-wide">
-            <div class="modal-header">
-                <h3>{$LL.lotsDetail.title()}</h3>
-                <button class="modal-close" on:click={() => (showLotDetail = false)}>✕</button>
-            </div>
+<Modal
+    bind:open={showLotDetail}
+    size="wide"
+    showClose
+    closeLabel={$LL.lotMovements.modal.close()}
+    aria-label={$LL.dashboard.lotDetail()}
+    oncancel={() => (showLotDetail = false)}
+    onclose={() => (showLotDetail = false)}
+>
+    {#snippet children()}
+        <header class="dialog-header">
+            <h3>{$LL.lotsDetail.title()}</h3>
+        </header>
 
-            {#if detailLotLoading}
-                <p class="modal-loading">{$LL.lotsDetail.loading()}</p>
-            {:else if detailLot}
-                <!-- Tabs -->
-                <div class="detail-tabs">
-                    <button
-                        type="button"
-                        class="tab-btn"
-                        class:active={lotDetailTab === "detail"}
-                        on:click={() => (lotDetailTab = "detail")}
-                    >
-                        {$LL.lotsDetail.detail()}
-                    </button>
-                    <button
-                        type="button"
-                        class="tab-btn"
-                        class:active={lotDetailTab === "history"}
-                        on:click={() => (lotDetailTab = "history")}
-                    >
-                        {$LL.lotsDetail.history()}
-                    </button>
-                </div>
+        {#if detailLotLoading}
+            <p class="modal-loading">{$LL.lotsDetail.loading()}</p>
+        {:else if detailLot}
+            <Tabs
+                items={[
+                    { id: "detail", label: $LL.lotsDetail.detail(), panel: lotDetailPanel },
+                    { id: "history", label: $LL.lotsDetail.history(), panel: lotHistoryPanel },
+                ]}
+                bind:activeId={lotDetailTab}
+                style="bordered"
+                aria-label={$LL.dashboard.lotDetail()}
+            />
+        {/if}
+    {/snippet}
+</Modal>
 
-                {#if lotDetailTab === "detail"}
-                    <dl class="detail-grid">
-                        <dt>{$LL.lotsDetail.lotId()}</dt><dd class="cell-sku">{detailLot.id.slice(0, 8)}…</dd>
-                        <dt>{$LL.lotsDetail.quantity()}</dt><dd>{lotQtyUnit(detailLot)}</dd>
-                        <dt>{$LL.lotsDetail.expiry()}</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
-                        <dt>{$LL.lotsDetail.alertDays()}</dt><dd>{detailLot.alert_days_before}</dd>
-                        <dt>{$LL.lotsDetail.batch()}</dt><dd>{detailLot.batch_code ?? "—"}</dd>
-                        <dt>{$LL.lotsDetail.status()}</dt><dd>{detailLot.status}</dd>
-                        {#if detailLot.location_id}
-                            <dt>{$LL.lotsDetail.location()}</dt><dd>{detailLot.location_id}</dd>
-                        {/if}
-                        {#if detailLot.resolution}
-                            <dt>{$LL.lotsDetail.resolution()}</dt><dd>{detailLot.resolution}</dd>
-                        {/if}
-                        {#if detailLot.notes}
-                            <dt>{$LL.lotsDetail.notes()}</dt><dd>{detailLot.notes}</dd>
-                        {/if}
-                    </dl>
-                    <div class="modal-actions">
-                        <button
-                            type="button"
-                            class="btn-secondary"
-                            on:click={() => (showLotDetail = false)}
-                        >
-                            {$LL.lotsDetail.close()}
-                        </button>
-                    </div>
-                {:else}
-                    <!-- Historial tab -->
-                    <div class="tab-content">
-                        <LotMovementsPanel
-                            lotId={detailLot.id}
-                            lotQuantity={detailLot.quantity}
-                            lotUnit={detailLot.unit || ""}
-                            lotStatus={detailLot.status}
-                            locations={detailLotLocations.filter(
-                                (l) => l.store_id === detailLot!.store_id,
-                            )}
-                            allLocations={detailLotLocations}
-                            unitType={detailLot.unit_type}
-                            onMovementCreated={async () => {
-                                await refreshDetailLot();
-                            }}
-                        />
-                    </div>
-                {/if}
+{#snippet lotDetailPanel()}
+    {#if detailLot}
+        <dl class="detail-grid">
+            <dt>{$LL.lotsDetail.lotId()}</dt><dd class="cell-sku">{detailLot.id.slice(0, 8)}…</dd>
+            <dt>{$LL.lotsDetail.quantity()}</dt><dd>{lotQtyUnit(detailLot)}</dd>
+            <dt>{$LL.lotsDetail.expiry()}</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
+            <dt>{$LL.lotsDetail.alertDays()}</dt><dd>{detailLot.alert_days_before}</dd>
+            <dt>{$LL.lotsDetail.batch()}</dt><dd>{detailLot.batch_code ?? "—"}</dd>
+            <dt>{$LL.lotsDetail.status()}</dt><dd>{detailLot.status}</dd>
+            {#if detailLot.location_id}
+                <dt>{$LL.lotsDetail.location()}</dt><dd>{detailLot.location_id}</dd>
             {/if}
+            {#if detailLot.resolution}
+                <dt>{$LL.lotsDetail.resolution()}</dt><dd>{detailLot.resolution}</dd>
+            {/if}
+            {#if detailLot.notes}
+                <dt>{$LL.lotsDetail.notes()}</dt><dd>{detailLot.notes}</dd>
+            {/if}
+        </dl>
+        <div class="modal-actions">
+            <Button variant="ghost" onclick={() => (showLotDetail = false)}>
+                {$LL.lotsDetail.close()}
+            </Button>
         </div>
-    </div>
-{/if}
+    {/if}
+{/snippet}
+
+{#snippet lotHistoryPanel()}
+    {#if detailLot}
+        <div class="tab-content">
+            <LotMovementsPanel
+                lotId={detailLot.id}
+                lotQuantity={detailLot.quantity}
+                lotUnit={detailLot.unit || ""}
+                lotStatus={detailLot.status}
+                locations={detailLotLocations.filter(
+                    (l) => l.store_id === detailLot!.store_id,
+                )}
+                allLocations={detailLotLocations}
+                unitType={detailLot.unit_type}
+                onMovementCreated={async () => {
+                    await refreshDetailLot();
+                }}
+            />
+        </div>
+    {/if}
+{/snippet}
 
 <style>
+    /* ── Page chrome ─────────────────────────────────────────────────────────── */
     .detail-page {
         display: flex;
         flex-direction: column;
@@ -636,7 +638,7 @@ on:click={() => (confirmingArchive = false)}
     }
 
     .loading {
-        color: #6b7280;
+        color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
         font-style: italic;
     }
 
@@ -647,9 +649,9 @@ on:click={() => (confirmingArchive = false)}
     }
 
     .alert-error {
-        background: #fee2e2;
-        color: #991b1b;
-        border: 1px solid #fca5a5;
+        background: color-mix(in oklch, var(--color-error) 12%, transparent);
+        color: var(--color-error);
+        border: 1px solid color-mix(in oklch, var(--color-error) 35%, transparent);
     }
 
     .inline-error {
@@ -658,6 +660,7 @@ on:click={() => (confirmingArchive = false)}
         font-size: 0.8rem;
     }
 
+    /* ── Header ─────────────────────────────────────────────────────────────── */
     .detail-header {
         display: flex;
         align-items: flex-start;
@@ -676,6 +679,7 @@ on:click={() => (confirmingArchive = false)}
     .detail-header h2 {
         margin: 0;
         font-size: 1.3rem;
+        color: var(--color-base-content);
     }
 
     .meta-row {
@@ -689,28 +693,29 @@ on:click={() => (confirmingArchive = false)}
     .sku {
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-size: 0.85rem;
-        background: #f3f4f6;
+        background: var(--color-base-200);
+        color: var(--color-base-content);
         padding: 2px 8px;
         border-radius: 4px;
     }
 
     .category-badge {
         font-size: 0.78rem;
-        background: #dbeafe;
-        color: #1e40af;
+        background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+        color: var(--color-primary);
         padding: 2px 8px;
         border-radius: 999px;
     }
 
     .meta {
         font-size: 0.82rem;
-        color: #4b5563;
+        color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
     }
 
     .notes {
         margin: 8px 0 0;
         font-size: 0.88rem;
-        color: #4b5563;
+        color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
         white-space: pre-wrap;
     }
 
@@ -726,13 +731,13 @@ on:click={() => (confirmingArchive = false)}
         align-items: center;
         gap: 6px;
         font-size: 0.85rem;
-        color: #991b1b;
+        color: var(--color-error);
     }
 
-    /* Sections */
+    /* ── Sections ──────────────────────────────────────────────────────────── */
     .section {
-        background: #fff;
-        border: 1px solid #e5e7eb;
+        background: var(--color-base-100);
+        border: 1px solid var(--color-base-200);
         border-radius: 10px;
         padding: 18px 20px;
     }
@@ -747,9 +752,10 @@ on:click={() => (confirmingArchive = false)}
     .section-header h3 {
         margin: 0;
         font-size: 1rem;
+        color: var(--color-base-content);
     }
 
-    /* Barcodes */
+    /* ── Barcodes ──────────────────────────────────────────────────────────── */
     .barcode-list {
         list-style: none;
         margin: 0 0 14px;
@@ -765,7 +771,7 @@ on:click={() => (confirmingArchive = false)}
         justify-content: space-between;
         gap: 10px;
         padding: 8px 10px;
-        background: #f9fafb;
+        background: var(--color-base-200);
         border-radius: 6px;
     }
 
@@ -779,44 +785,45 @@ on:click={() => (confirmingArchive = false)}
     .barcode-value {
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-size: 0.85rem;
+        color: var(--color-base-content);
     }
 
     .barcode-type {
         font-size: 0.74rem;
-        color: #6b7280;
-        background: #f3f4f6;
+        color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
+        background: var(--color-base-200);
         padding: 1px 6px;
         border-radius: 4px;
     }
 
     .badge-primary {
         font-size: 0.7rem;
-        background: #dcfce7;
-        color: #166534;
+        background: color-mix(in oklch, var(--color-success) 18%, transparent);
+        color: var(--color-success);
         padding: 1px 6px;
         border-radius: 4px;
     }
 
     .badge-inactive {
         font-size: 0.7rem;
-        background: #f3f4f6;
-        color: #9ca3af;
+        background: var(--color-base-200);
+        color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
         border-radius: 4px;
         padding: 2px 7px;
     }
 
     .badge-archived {
         font-size: 0.7rem;
-        background: #f3f4f6;
-        color: #9ca3af;
+        background: var(--color-base-200);
+        color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
         padding: 1px 6px;
         border-radius: 4px;
     }
 
     .badge-resolved {
         font-size: 0.7rem;
-        background: #dcfce7;
-        color: #166534;
+        background: color-mix(in oklch, var(--color-success) 18%, transparent);
+        color: var(--color-success);
         padding: 1px 6px;
         border-radius: 4px;
     }
@@ -827,27 +834,27 @@ on:click={() => (confirmingArchive = false)}
         cursor: pointer;
         font-size: 0.95rem;
         padding: 2px 6px;
-        color: #6b7280;
+        color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
     }
 
     .btn-icon:hover {
-        color: #374151;
+        color: var(--color-base-content);
     }
 
     .btn-danger-icon {
-        color: #991b1b;
+        color: var(--color-error);
     }
 
     .btn-danger-icon:hover {
-        color: #7f1d1d;
+        color: color-mix(in oklch, var(--color-error) 80%, black);
     }
 
-    /* Barcode add form */
+    /* ── Barcode add form ──────────────────────────────────────────────────── */
     .barcode-form {
         display: flex;
         flex-direction: column;
         gap: 10px;
-        border-top: 1px dashed #e5e7eb;
+        border-top: 1px dashed var(--color-base-300);
         padding-top: 14px;
         margin-top: 4px;
     }
@@ -863,20 +870,22 @@ on:click={() => (confirmingArchive = false)}
         flex-direction: column;
         gap: 4px;
         font-size: 0.85rem;
-        color: #374151;
+        color: var(--color-base-content);
     }
 
     label input[type="text"] {
         padding: 7px 10px;
-        border: 1px solid #d1d5db;
+        border: 1px solid var(--color-base-300);
         border-radius: 6px;
         font-size: 0.9rem;
         font-family: inherit;
+        background: var(--color-base-100);
+        color: var(--color-base-content);
     }
 
     label input:focus {
-        outline: 2px solid #3b82f6;
-        border-color: #3b82f6;
+        outline: 2px solid var(--color-primary);
+        border-color: var(--color-primary);
     }
 
     .checkbox-label {
@@ -896,10 +905,11 @@ on:click={() => (confirmingArchive = false)}
         flex-wrap: wrap;
     }
 
-    /* Buttons */
+    /* ── Local buttons (kept as-is for markup compatibility; tokens now
+       drive the colour so the buttons adapt to `caduxo-light` and `dark`) */
     .btn-primary {
-        background: #2563eb;
-        color: #fff;
+        background: var(--color-primary);
+        color: var(--color-primary-content);
         border: none;
         border-radius: 6px;
         padding: 8px 16px;
@@ -909,7 +919,7 @@ on:click={() => (confirmingArchive = false)}
     }
 
     .btn-primary:hover:not(:disabled) {
-        background: #1d4ed8;
+        background: color-mix(in oklch, var(--color-primary) 88%, black);
     }
 
     .btn-primary:disabled {
@@ -918,9 +928,9 @@ on:click={() => (confirmingArchive = false)}
     }
 
     .btn-secondary {
-        background: #fff;
-        color: #374151;
-        border: 1px solid #d1d5db;
+        background: var(--color-base-100);
+        color: var(--color-base-content);
+        border: 1px solid var(--color-base-300);
         border-radius: 6px;
         padding: 8px 16px;
         font-size: 0.9rem;
@@ -929,13 +939,13 @@ on:click={() => (confirmingArchive = false)}
     }
 
     .btn-secondary:hover:not(:disabled) {
-        background: #f9fafb;
+        background: var(--color-base-200);
     }
 
     .btn-danger {
-        background: #fff;
-        color: #991b1b;
-        border: 1px solid #fca5a5;
+        background: var(--color-base-100);
+        color: var(--color-error);
+        border: 1px solid color-mix(in oklch, var(--color-error) 35%, transparent);
         border-radius: 6px;
         padding: 8px 16px;
         font-size: 0.9rem;
@@ -944,7 +954,7 @@ on:click={() => (confirmingArchive = false)}
     }
 
     .btn-danger:hover {
-        background: #fee2e2;
+        background: color-mix(in oklch, var(--color-error) 10%, transparent);
     }
 
     .btn-small {
@@ -953,28 +963,28 @@ on:click={() => (confirmingArchive = false)}
     }
 
     .empty-hint {
-        color: #9ca3af;
+        color: color-mix(in oklch, var(--color-base-content) 55%, transparent);
         font-size: 0.85rem;
         font-style: italic;
         margin: 0 0 10px;
     }
 
     .hint-muted {
-        color: #9ca3af;
+        color: color-mix(in oklch, var(--color-base-content) 55%, transparent);
         font-size: 0.82rem;
         font-style: italic;
         margin: 8px 0 0;
     }
 
-    /* Sub-form wrapper */
+    /* ── Sub-form wrapper ──────────────────────────────────────────────────── */
     .sub-form {
-        background: #f9fafb;
-        border: 1px solid #e5e7eb;
+        background: var(--color-base-200);
+        border: 1px solid var(--color-base-300);
         border-radius: 8px;
         padding: 16px;
     }
 
-    /* Expiry lots list */
+    /* ── Expiry lots list ──────────────────────────────────────────────────── */
     .lot-list {
         list-style: none;
         margin: 0;
@@ -989,9 +999,9 @@ on:click={() => (confirmingArchive = false)}
         align-items: center;
         gap: 10px;
         padding: 10px 12px;
-        background: #f9fafb;
+        background: var(--color-base-200);
         border-radius: 7px;
-        border: 1px solid #e5e7eb;
+        border: 1px solid var(--color-base-300);
     }
 
     .lot-urgency {
@@ -1009,23 +1019,23 @@ on:click={() => (confirmingArchive = false)}
     }
 
     .urgency-expired .urgency-badge {
-        background: #fee2e2;
-        color: #991b1b;
+        background: color-mix(in oklch, var(--color-error) 12%, transparent);
+        color: var(--color-error);
     }
 
     .urgency-critical .urgency-badge {
-        background: #fee2e2;
-        color: #dc2626;
+        background: color-mix(in oklch, var(--color-error) 15%, transparent);
+        color: var(--color-error);
     }
 
     .urgency-warning .urgency-badge {
-        background: #fef9c3;
-        color: #a16207;
+        background: color-mix(in oklch, var(--color-warning) 18%, transparent);
+        color: color-mix(in oklch, var(--color-warning) 70%, var(--color-base-content));
     }
 
     .urgency-normal .urgency-badge {
-        background: #f0fdf4;
-        color: #166534;
+        background: color-mix(in oklch, var(--color-success) 15%, transparent);
+        color: var(--color-success);
     }
 
     .lot-info {
@@ -1035,6 +1045,7 @@ on:click={() => (confirmingArchive = false)}
         gap: 8px;
         flex-wrap: wrap;
         font-size: 0.85rem;
+        color: var(--color-base-content);
     }
 
     .lot-qty {
@@ -1042,21 +1053,21 @@ on:click={() => (confirmingArchive = false)}
     }
 
     .lot-date {
-        color: #4b5563;
+        color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
     }
 
     .lot-batch {
         font-size: 0.74rem;
-        background: #e5e7eb;
-        color: #374151;
+        background: var(--color-base-300);
+        color: var(--color-base-content);
         padding: 1px 6px;
         border-radius: 4px;
     }
 
     .lot-location {
         font-size: 0.74rem;
-        color: #6b7280;
-        background: #f3f4f6;
+        color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
+        background: var(--color-base-200);
         padding: 1px 6px;
         border-radius: 4px;
     }
@@ -1066,5 +1077,58 @@ on:click={() => (confirmingArchive = false)}
         align-items: center;
         gap: 2px;
         flex-shrink: 0;
+    }
+
+    /* ── Lot-detail modal inner shell (outer shell from `<Modal>`) ────────── */
+    .dialog-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+
+    .dialog-header h3 {
+        margin: 0;
+        font-size: 1.05rem;
+        color: var(--color-base-content);
+    }
+
+    .modal-loading {
+        text-align: center;
+        padding: 20px;
+        color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+    }
+
+    .tab-content {
+        min-height: 200px;
+    }
+
+    .detail-grid {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 6px 16px;
+        font-size: 0.9rem;
+        margin-bottom: 16px;
+    }
+
+    .detail-grid dt {
+        color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
+        font-weight: 500;
+    }
+
+    .detail-grid dd {
+        color: var(--color-base-content);
+        margin: 0;
+    }
+
+    .cell-sku {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.85rem;
+        color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
+    }
+
+    .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
     }
 </style>

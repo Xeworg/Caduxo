@@ -4,6 +4,7 @@
     dismissUnitAuditBanner,
   } from "../lib/unit_definitions.js";
   import { LL } from "../i18n/i18n-svelte.js";
+  import Button from "./ui/Button.svelte";
 
   /** Called when the user clicks the "Review" button. */
   export let onReview: () => void;
@@ -52,40 +53,40 @@
 
 {#if !loading && showBanner}
   <div class="unit-banner" role="status">
-    <span class="banner-icon">⚠️</span>
+    <span class="banner-icon" aria-hidden="true">⚠️</span>
     <span class="banner-text">
       {@html bannerMessage}
     </span>
-    <button
-      type="button"
-      class="btn-primary btn-sm banner-btn"
-      on:click={onReview}
-    >
+    <Button variant="warning" size="sm" onclick={onReview}>
       {$LL.unitReview.review()}
-    </button>
-    <button
-      type="button"
-      class="btn-ghost btn-sm"
+    </Button>
+    <Button
+      variant="ghost"
+      size="sm"
+      onclick={dismiss}
       disabled={dismissing}
-      on:click={dismiss}
-      title={$LL.unitReview.dismiss()}
+      loading={dismissing}
+      aria-label={$LL.unitReview.dismiss()}
     >
-      {dismissing ? $LL.unitReview.inProgress() : $LL.unitReview.dismiss()}
-    </button>
+      {$LL.unitReview.dismiss()}
+    </Button>
   </div>
 {/if}
 
 <style>
+  /* Themed banner — uses `--color-warning` + `color-mix` so the surface
+     adapts to `caduxo-light` and `dark` without bespoke light-hex
+     overrides (PR 13 cleanup). */
   .unit-banner {
     display: flex;
     align-items: center;
     gap: 10px;
-    background: #fef9c3;
-    border: 1px solid #fde047;
+    background: color-mix(in oklch, var(--color-warning) 12%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-warning) 40%, transparent);
     border-radius: 8px;
     padding: 10px 14px;
     font-size: 0.9rem;
-    color: #713f12;
+    color: color-mix(in oklch, var(--color-warning) 80%, var(--color-base-content));
     margin-bottom: 12px;
   }
 
@@ -95,38 +96,5 @@
 
   .banner-text {
     flex: 1;
-  }
-
-  .banner-btn {
-    background: #a16207;
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    padding: 5px 12px;
-    font-size: 0.85rem;
-    cursor: pointer;
-  }
-
-  .banner-btn:hover {
-    background: #854d0e;
-  }
-
-  .btn-ghost {
-    background: transparent;
-    border: none;
-    color: #713f12;
-    cursor: pointer;
-    font-size: 0.85rem;
-    padding: 4px 8px;
-    border-radius: 4px;
-  }
-
-  .btn-ghost:hover {
-    background: rgba(113, 63, 18, 0.1);
-  }
-
-  .btn-ghost:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 </style>

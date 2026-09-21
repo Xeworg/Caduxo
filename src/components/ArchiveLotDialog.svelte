@@ -17,6 +17,7 @@
     } from "../lib/expiry_lots.js";
     import Modal from "./ui/Modal.svelte";
     import Button from "./ui/Button.svelte";
+    import Listbox from "./ui/Listbox.svelte";
 
     // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -157,17 +158,13 @@
         >
             <label>
                 {$LL.lotMovements.archive.reason()}
-                <select
-                    class="select select-md w-full motion-reduce:transition-none"
+                <Listbox
                     bind:value={reason}
+                    options={archiveReasonOptions}
                     required
                     disabled={submitting}
                     aria-label={$LL.lotMovements.archive.reason()}
-                >
-                    {#each ARCHIVE_REASONS as option (option.value)}
-                        <option value={option.value}>{archiveReasonLabel(option.value)}</option>
-                    {/each}
-                </select>
+                />
             </label>
 
             <label>
@@ -232,7 +229,7 @@
     .dialog-header h3 {
         margin: 0;
         font-size: 1.05rem;
-        color: var(--color-base-content, #0f172a);
+        color: var(--color-base-content);
     }
 
     /* ── Alert ─────────────────────────────────────────────────────────────── */
@@ -251,12 +248,12 @@
 
     /* ── Lot summary ───────────────────────────────────────────────────────── */
     .lot-summary {
-        background: var(--color-base-200, #f9fafb);
-        border: 1px solid var(--color-base-300, #e5e7eb);
+        background: var(--color-base-200);
+        border: 1px solid var(--color-base-300);
         border-radius: 7px;
         padding: 10px 14px;
         font-size: 0.85rem;
-        color: var(--color-base-content, #374151);
+        color: var(--color-base-content);
         display: flex;
         flex-direction: column;
         gap: 6px;
@@ -264,7 +261,7 @@
     }
 
     .batch {
-        background: var(--color-base-300, #e5e7eb);
+        background: var(--color-base-300);
         border-radius: 4px;
         padding: 1px 5px;
         font-size: 0.75rem;
@@ -273,7 +270,7 @@
 
     .hint {
         margin: 0;
-        color: var(--color-base-content, #6b7280);
+        color: var(--color-base-content);
         opacity: 0.7;
         font-size: 0.82rem;
         font-style: italic;
@@ -291,7 +288,7 @@
         flex-direction: column;
         gap: 4px;
         font-size: 0.85rem;
-        color: var(--color-base-content, #374151);
+        color: var(--color-base-content);
         position: relative;
     }
 
@@ -300,25 +297,25 @@
         right: 4px;
         top: -2px;
         font-size: 0.74rem;
-        color: var(--color-base-content, #9ca3af);
+        color: var(--color-base-content);
         opacity: 0.7;
         background: transparent;
         pointer-events: none;
     }
 
     .char-counter .invalid {
-        color: var(--color-error, #991b1b);
+        color: var(--color-error);
         opacity: 1;
     }
 
     .field-hint {
         font-size: 0.78rem;
-        color: var(--color-base-content, #6b7280);
+        color: var(--color-base-content);
         opacity: 0.7;
     }
 
     .field-hint.invalid {
-        color: var(--color-error, #991b1b);
+        color: var(--color-error);
         opacity: 1;
     }
 </style>

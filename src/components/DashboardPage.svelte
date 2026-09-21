@@ -48,6 +48,7 @@
   import Tabs from "./ui/Tabs.svelte";
   import Alert from "./ui/Alert.svelte";
   import Button from "./ui/Button.svelte";
+  import Listbox from "./ui/Listbox.svelte";
   import Tooltip from "./ui/Tooltip.svelte";
   import EmptyState from "./ui/EmptyState.svelte";
   import LoadingState from "./ui/LoadingState.svelte";
@@ -158,6 +159,7 @@
       // Auto-select the first store if only one exists
       if (stores.length === 1) {
         selectedStoreId = stores[0].id;
+        storeFilterValue = stores[0].id;
       }
     } catch (e) {
       errorMsg = humanizeError(e);
@@ -168,6 +170,7 @@
     try {
       locations = await listStoreLocations(storeId);
       selectedLocationId = null;
+      locationFilterValue = "";
     } catch (e) {
       errorMsg = humanizeError(e);
     }
@@ -215,6 +218,8 @@
     selectedStoreId = null;
     selectedLocationId = null;
     locations = [];
+    storeFilterValue = "";
+    locationFilterValue = "";
   }
 
   /** Resets every dashboard filter back to the default view. */
@@ -222,6 +227,8 @@
     activePreset = "all";
     selectedStoreId = null;
     selectedLocationId = null;
+    storeFilterValue = "";
+    locationFilterValue = "";
   }
 
   // ─── CSV export (Slice 10a) ────────────────────────────────────────────────
@@ -345,6 +352,37 @@
 
   $: detailSelectedLot =
     detailLots.find((l) => l.id === detailSelectedLotId) ?? null;
+
+  // ─── Filter control bridges (Listbox value contract is `string`) ─────────
+  // The dashboard's source of truth remains `selectedStoreId` /
+  // `selectedLocationId` (`string | null`). The Listbox primitives need a
+  // concrete `string` to bind to, so we use `""` as the "all" sentinel.
+  // We deliberately do NOT use `bind:value` here (it would create a
+  // reactive cycle because every `selectedStoreId` write would re-derive
+  // `storeFilterValue`, which the Listbox would then write back into
+  // `selectedStoreId`). Instead, we drive the Listbox with `value` + an
+  // `onchange` callback, and seed the bridge once from the current
+  // source-of-truth.
+  let storeFilterValue: string = selectedStoreId ?? "";
+  let locationFilterValue: string = selectedLocationId ?? "";
+
+  $: storeFilterOptions = [
+    { value: "", label: $LL.dashboard.allStores() },
+    ...stores.map((store) => ({ value: store.id, label: store.name })),
+  ];
+
+  $: locationFilterOptions = [
+    { value: "", label: $LL.dashboard.allLocations() },
+    ...locations.map((loc) => ({ value: loc.id, label: loc.name })),
+  ];
+
+  function onStoreFilterChange(value: string) {
+    selectedStoreId = value === "" ? null : value;
+  }
+
+  function onLocationFilterChange(value: string) {
+    selectedLocationId = value === "" ? null : value;
+  }
 
   async function editLot(lot: DashboardLotRow) {
     detailLotLoading = true;
@@ -543,23 +581,25 @@
     <div class="filter-row">
       <label class="filter-row-label">
         {$LL.dashboard.store()}:
-        <select bind:value={selectedStoreId} class="select select-sm">
-          <option value={null}>{$LL.dashboard.allStores()}</option>
-          {#each stores as store}
-            <option value={store.id}>{store.name}</option>
-          {/each}
-        </select>
+        <Listbox
+          value={storeFilterValue}
+          options={storeFilterOptions}
+          size="sm"
+          aria-label={$LL.dashboard.store()}
+          onchange={onStoreFilterChange}
+        />
       </label>
 
       {#if selectedStoreId && locations.length > 0}
         <label class="filter-row-label">
           {$LL.dashboard.location()}:
-          <select bind:value={selectedLocationId} class="select select-sm">
-            <option value={null}>{$LL.dashboard.allLocations()}</option>
-            {#each locations as loc}
-              <option value={loc.id}>{loc.name}</option>
-            {/each}
-          </select>
+          <Listbox
+            value={locationFilterValue}
+            options={locationFilterOptions}
+            size="sm"
+            aria-label={$LL.dashboard.location()}
+            onchange={onLocationFilterChange}
+          />
         </label>
       {/if}
 
@@ -918,7 +958,7 @@
   .dash-title-row h2 {
     margin: 0;
     font-size: 1.2rem;
-    color: #0f172a;
+    color: var(--color-base-content);
   }
 
   .dash-title-actions {
@@ -934,21 +974,21 @@
   }
 
   .store-chip {
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
+    background: color-mix(in oklch, var(--color-primary) 6%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-primary) 25%, transparent);
     border-radius: 12px;
     padding: 2px 10px;
     font-size: 0.78rem;
-    color: #1d4ed8;
+    color: var(--color-primary);
     display: inline-flex;
     align-items: center;
     gap: 6px;
   }
 
   .store-chip-all {
-    background: #f9fafb;
-    border-color: #e5e7eb;
-    color: #6b7280;
+    background: var(--color-base-200);
+    border-color: var(--color-base-300);
+    color: color-mix(in oklch, var(--color-base-content) 65%, transparent);
   }
 
   .filter-row {
@@ -963,7 +1003,7 @@
     align-items: center;
     gap: 6px;
     font-size: 0.85rem;
-    color: #475569;
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
   }
 
   /* ── Quick filters ────────────────────────────────────────────────────── */
@@ -977,7 +1017,7 @@
   .cell-sku {
     font-family: monospace;
     font-size: 0.8rem;
-    color: #475569;
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
   }
 
   .cell-desc {
@@ -992,7 +1032,7 @@
   }
 
   .loc-name {
-    color: #94a3b8;
+    color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
     font-size: 0.78rem;
   }
 
@@ -1010,11 +1050,11 @@
   }
 
   .days-negative {
-    color: #dc2626;
+    color: var(--color-error);
   }
 
   .cell-batch {
-    color: #94a3b8;
+    color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
     font-size: 0.8rem;
   }
 
@@ -1025,19 +1065,19 @@
   }
 
   .row-expired td {
-    background: #fff5f5;
+    background: color-mix(in oklch, var(--color-error) 6%, transparent);
   }
 
   .row-expired:hover td {
-    background: #ffe4e4;
+    background: color-mix(in oklch, var(--color-error) 12%, transparent);
   }
 
   .row-today td {
-    background: #fffbeb;
+    background: color-mix(in oklch, var(--color-warning) 8%, transparent);
   }
 
   .row-today:hover td {
-    background: #fef3c7;
+    background: color-mix(in oklch, var(--color-warning) 15%, transparent);
   }
 
   /* ── Modal overlays (PR 7b) ───────────────────────────────────────────── */
@@ -1054,7 +1094,7 @@
   .dialog-header h3 {
     margin: 0;
     font-size: 1rem;
-    color: var(--color-base-content, #0f172a);
+    color: var(--color-base-content);
   }
 
   .dialog-body {
@@ -1065,16 +1105,16 @@
 
   .scan-hint {
     font-size: 0.85rem;
-    color: var(--color-base-content, #475569);
+    color: var(--color-base-content);
     margin: 0 0 12px;
-    background: var(--color-base-200, #f8fafc);
-    border: 1px solid var(--color-base-300, #e5e7eb);
+    background: var(--color-base-200);
+    border: 1px solid var(--color-base-300);
     border-radius: 6px;
     padding: 8px 12px;
   }
 
   .dialog-loading {
-    color: var(--color-base-content, #94a3b8);
+    color: var(--color-base-content);
     font-style: italic;
   }
 
@@ -1088,20 +1128,20 @@
 
   .detail-grid dt {
     font-size: 0.8rem;
-    color: #6b7280;
+    color: color-mix(in oklch, var(--color-base-content) 65%, transparent);
     font-weight: 500;
   }
 
   .detail-grid dd {
     font-size: 0.85rem;
-    color: #1e293b;
+    color: var(--color-base-content);
     margin: 0;
   }
 
   .barcode-chip {
     display: inline-block;
-    background: #f1f5f9;
-    border: 1px solid #e5e7eb;
+    background: var(--color-base-200);
+    border: 1px solid var(--color-base-300);
     border-radius: 4px;
     padding: 1px 6px;
     font-size: 0.78rem;
@@ -1110,16 +1150,16 @@
   }
 
   .barcode-chip.primary {
-    background: #eff6ff;
-    border-color: #bfdbfe;
-    color: #1d4ed8;
+    background: color-mix(in oklch, var(--color-primary) 6%, transparent);
+    border-color: color-mix(in oklch, var(--color-primary) 25%, transparent);
+    color: var(--color-primary);
   }
 
   /* ── Product detail: expiry lots picker ─────────────────────────────── */
   .lots-section {
     margin-top: 18px;
     padding-top: 16px;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid var(--color-base-300);
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -1135,18 +1175,18 @@
   .lots-section-header h4 {
     margin: 0;
     font-size: 0.92rem;
-    color: #0f172a;
+    color: var(--color-base-content);
     font-weight: 600;
   }
 
   .lots-loading-hint,
   .lots-count {
     font-size: 0.78rem;
-    color: #6b7280;
+    color: color-mix(in oklch, var(--color-base-content) 65%, transparent);
   }
 
   .empty-hint {
-    color: #9ca3af;
+    color: color-mix(in oklch, var(--color-base-content) 55%, transparent);
     font-size: 0.85rem;
     font-style: italic;
     margin: 0;
@@ -1169,25 +1209,25 @@
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: var(--color-base-200);
+    border: 1px solid var(--color-base-300);
     border-radius: 6px;
     padding: 7px 10px;
     font-family: inherit;
     font-size: 0.82rem;
-    color: #1e293b;
+    color: var(--color-base-content);
     cursor: pointer;
     text-align: left;
     transition: background 0.12s, border-color 0.12s;
   }
 
   .lot-picker-item:hover {
-    background: #f3f4f6;
+    background: var(--color-base-200);
   }
 
   .lot-picker-item.active {
-    background: #eff6ff;
-    border-color: #3b82f6;
+    background: color-mix(in oklch, var(--color-primary) 6%, transparent);
+    border-color: var(--color-primary);
   }
 
   .lot-picker-item.lot-status-inactive {
@@ -1200,13 +1240,13 @@
   }
 
   .lot-picker-date {
-    color: #475569;
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
     font-variant-numeric: tabular-nums;
   }
 
   .lot-picker-batch {
-    background: #e5e7eb;
-    color: #374151;
+    background: var(--color-base-300);
+    color: var(--color-base-content);
     padding: 1px 6px;
     border-radius: 4px;
     font-size: 0.74rem;
@@ -1215,6 +1255,6 @@
   .lot-panel-wrap {
     margin-top: 6px;
     padding-top: 10px;
-    border-top: 1px dashed #e5e7eb;
+    border-top: 1px dashed var(--color-base-300);
   }
 </style>

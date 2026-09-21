@@ -21,6 +21,7 @@
     import Modal from "./ui/Modal.svelte";
     import Input from "./ui/Input.svelte";
     import Button from "./ui/Button.svelte";
+    import Listbox from "./ui/Listbox.svelte";
 
     // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -90,6 +91,19 @@
 
         return labels[value]?.() ?? value;
     }
+
+    /**
+     * Listbox option shape for the resolution-type picker. Built once
+     * per render from the i18n catalogue so the visible labels stay
+     * verbatim from the original shell.
+     */
+    $: resolutionOptions = [
+        { value: "consumed", label: $LL.lotMovements.resolution.consumed() },
+        { value: "sold", label: $LL.lotMovements.resolution.sold() },
+        { value: "discarded", label: $LL.lotMovements.resolution.discarded() },
+        { value: "donated", label: $LL.lotMovements.resolution.donated() },
+        { value: "other", label: $LL.lotMovements.resolution.other() },
+    ];
 
     function formatDateTime(value: string): string {
         // Delegate to the locale-aware typesafe-i18n `dateTime` formatter
@@ -183,19 +197,13 @@
                 />
 
                 <label>
-                    {$LL.lotMovements.resolution.resolutionType()}
-                    <select
+                    <span>{$LL.lotMovements.resolution.resolutionType()}</span>
+                    <Listbox
                         bind:value={resolution}
+                        options={resolutionOptions}
                         disabled={submitting}
-                        class="select select-md w-full motion-reduce:transition-none"
                         aria-label={$LL.lotMovements.resolution.resolutionType()}
-                    >
-                        <option value="consumed">{$LL.lotMovements.resolution.consumed()}</option>
-                        <option value="sold">{$LL.lotMovements.resolution.sold()}</option>
-                        <option value="discarded">{$LL.lotMovements.resolution.discarded()}</option>
-                        <option value="donated">{$LL.lotMovements.resolution.donated()}</option>
-                        <option value="other">{$LL.lotMovements.resolution.other()}</option>
-                    </select>
+                    />
                 </label>
             </div>
 
@@ -271,7 +279,7 @@
     .dialog-header h3 {
         margin: 0;
         font-size: 1.05rem;
-        color: var(--color-base-content, #0f172a);
+        color: var(--color-base-content);
     }
 
     /* ── Alert ─────────────────────────────────────────────────────────────── */
@@ -290,17 +298,17 @@
 
     /* ── Lot summary ───────────────────────────────────────────────────────── */
     .lot-summary {
-        background: var(--color-base-200, #f9fafb);
-        border: 1px solid var(--color-base-300, #e5e7eb);
+        background: var(--color-base-200);
+        border: 1px solid var(--color-base-300);
         border-radius: 7px;
         padding: 10px 14px;
         font-size: 0.85rem;
-        color: var(--color-base-content, #374151);
+        color: var(--color-base-content);
         margin-bottom: 14px;
     }
 
     .batch {
-        background: var(--color-base-300, #e5e7eb);
+        background: var(--color-base-300);
         border-radius: 4px;
         padding: 1px 5px;
         font-size: 0.75rem;
@@ -320,7 +328,7 @@
         flex-direction: column;
         gap: 4px;
         font-size: 0.85rem;
-        color: var(--color-base-content, #374151);
+        color: var(--color-base-content);
     }
 
     .grid-2 {
@@ -331,7 +339,7 @@
 
     /* History */
     .history {
-        border-top: 1px solid var(--color-base-200, #f3f4f6);
+        border-top: 1px solid var(--color-base-200);
         padding-top: 12px;
         margin-top: 14px;
     }
@@ -339,7 +347,7 @@
     .history h4 {
         margin: 0 0 8px;
         font-size: 0.85rem;
-        color: var(--color-base-content, #6b7280);
+        color: var(--color-base-content);
     }
 
     .history-list {
@@ -357,7 +365,7 @@
         gap: 8px;
         font-size: 0.82rem;
         padding: 6px 8px;
-        background: var(--color-base-200, #f9fafb);
+        background: var(--color-base-200);
         border-radius: 5px;
         flex-wrap: wrap;
     }
@@ -374,29 +382,29 @@
 
     .badge-consumed {
         background: color-mix(in oklch, var(--color-success) 18%, transparent);
-        color: var(--color-success, #166534);
+        color: var(--color-success);
     }
 
     .badge-discarded {
         background: color-mix(in oklch, var(--color-error) 15%, transparent);
-        color: var(--color-error, #991b1b);
+        color: var(--color-error);
     }
 
     .badge-sold,
     .badge-donated,
     .badge-other {
         background: color-mix(in oklch, var(--color-info) 15%, transparent);
-        color: var(--color-info, #1e40af);
+        color: var(--color-info);
     }
 
     .event-notes {
-        color: var(--color-base-content, #6b7280);
+        color: var(--color-base-content);
         flex: 1;
         font-style: italic;
     }
 
     .event-date {
-        color: var(--color-base-content, #9ca3af);
+        color: var(--color-base-content);
         font-size: 0.74rem;
         margin-left: auto;
     }
@@ -404,7 +412,7 @@
     .loading,
     .no-history {
         font-size: 0.82rem;
-        color: var(--color-base-content, #9ca3af);
+        color: var(--color-base-content);
         font-style: italic;
         margin: 12px 0 0;
     }

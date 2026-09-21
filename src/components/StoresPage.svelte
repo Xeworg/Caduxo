@@ -43,6 +43,7 @@
   import Table from "./ui/Table.svelte";
   import Badge from "./ui/Badge.svelte";
   import EmptyState from "./ui/EmptyState.svelte";
+  import Alert from "./ui/Alert.svelte";
   import Button from "./ui/Button.svelte";
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -270,10 +271,10 @@
 
   <!-- Messages -->
   {#if errorMsg}
-    <div class="alert alert-error" role="alert">{errorMsg}</div>
+    <Alert variant="error">{errorMsg}</Alert>
   {/if}
   {#if successMsg}
-    <div class="alert alert-success" role="status">{successMsg}</div>
+    <Alert variant="success">{successMsg}</Alert>
   {/if}
 
   {#if loading}
@@ -573,36 +574,16 @@
     font-size: 1.5rem;
   }
 
-  /* ── Alerts ────────────────────────────────────────────────────────────── */
-  .alert {
-    padding: 10px 14px;
-    border-radius: 6px;
-    margin-bottom: 16px;
-    font-size: 0.9rem;
-  }
-
-  .alert-error {
-    background: #fee2e2;
-    color: #991b1b;
-    border: 1px solid #fca5a5;
-  }
-
-  .alert-success {
-    background: #dcfce7;
-    color: #166534;
-    border: 1px solid #86efac;
-  }
-
   /* ── Loading ───────────────────────────────────────────────────────────── */
   .loading {
-    color: #6b7280;
+    color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
     font-style: italic;
   }
 
   /* ── First-run ─────────────────────────────────────────────────────────── */
   .first-run-card {
-    background: #fff;
-    border: 1px solid #d1d5db;
+    background: var(--color-base-100);
+    border: 1px solid var(--color-base-300);
     border-radius: 10px;
     padding: 32px;
     max-width: 520px;
@@ -611,11 +592,12 @@
   .first-run-card h2 {
     margin: 0 0 8px;
     font-size: 1.4rem;
+    color: var(--color-base-content);
   }
 
   .first-run-card p {
     margin: 0 0 20px;
-    color: #4b5563;
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
   }
 
   /* ── Store layout ──────────────────────────────────────────────────────── */
@@ -708,8 +690,8 @@
 
   /* ── Store detail ──────────────────────────────────────────────────────── */
   .store-detail {
-    background: #fff;
-    border: 1px solid #e5e7eb;
+    background: var(--color-base-100);
+    border: 1px solid var(--color-base-300);
     border-radius: 10px;
     padding: 24px;
   }
@@ -725,18 +707,19 @@
   .detail-header h2 {
     margin: 0 0 4px;
     font-size: 1.2rem;
+    color: var(--color-base-content);
   }
 
   .detail-code {
     font-size: 0.8rem;
-    color: #6b7280;
+    color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
     margin-left: 8px;
   }
 
   .detail-notes {
     margin: 6px 0 0;
     font-size: 0.85rem;
-    color: #4b5563;
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
   }
 
   .detail-actions {
@@ -755,6 +738,7 @@
   form h3 {
     margin: 0 0 4px;
     font-size: 1rem;
+    color: var(--color-base-content);
   }
 
   label {
@@ -762,22 +746,24 @@
     flex-direction: column;
     gap: 4px;
     font-size: 0.85rem;
-    color: #374151;
+    color: var(--color-base-content);
   }
 
   label input[type="text"],
   label textarea {
     padding: 7px 10px;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--color-base-300);
     border-radius: 6px;
     font-size: 0.9rem;
     font-family: inherit;
+    background: var(--color-base-100);
+    color: var(--color-base-content);
   }
 
   label input:focus,
   label textarea:focus {
-    outline: 2px solid #3b82f6;
-    border-color: #3b82f6;
+    outline: 2px solid var(--color-primary);
+    border-color: var(--color-primary);
   }
 
   .checkbox-label {
@@ -799,8 +785,8 @@
 
   /* ── Buttons ───────────────────────────────────────────────────────────── */
   .btn-primary {
-    background: #2563eb;
-    color: #fff;
+    background: var(--color-primary);
+    color: var(--color-primary-content);
     border: none;
     border-radius: 6px;
     padding: 8px 16px;
@@ -810,13 +796,13 @@
   }
 
   .btn-primary:hover {
-    background: #1d4ed8;
+    background: color-mix(in oklch, var(--color-primary) 88%, black);
   }
 
   .btn-secondary {
-    background: #fff;
-    color: #374151;
-    border: 1px solid #d1d5db;
+    background: var(--color-base-100);
+    color: var(--color-base-content);
+    border: 1px solid var(--color-base-300);
     border-radius: 6px;
     padding: 8px 16px;
     font-size: 0.9rem;
@@ -825,7 +811,7 @@
   }
 
   .btn-secondary:hover {
-    background: #f9fafb;
+    background: var(--color-base-200);
   }
 
   .btn-small {
@@ -835,7 +821,7 @@
 
   /* ── Locations ─────────────────────────────────────────────────────────── */
   .locations-section {
-    border-top: 1px solid #f3f4f6;
+    border-top: 1px solid var(--color-base-200);
     padding-top: 20px;
   }
 
@@ -849,6 +835,7 @@
   .section-header h3 {
     margin: 0;
     font-size: 1rem;
+    color: var(--color-base-content);
   }
 
   /* Local styling for the per-cell muted notes column. The
@@ -858,12 +845,12 @@
      location list inherits from the Table primitive's DaisyUI
      chrome. */
   .location-row .notes {
-    color: var(--color-secondary);
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
     font-size: 0.85rem;
   }
 
   .empty-hint {
-    color: #9ca3af;
+    color: color-mix(in oklch, var(--color-base-content) 55%, transparent);
     font-size: 0.85rem;
     font-style: italic;
     margin: 0;

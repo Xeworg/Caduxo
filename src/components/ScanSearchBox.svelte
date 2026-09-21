@@ -105,24 +105,24 @@
   .scan-input {
     width: 100%;
     padding: 8px 40px 8px 12px;
-    border: 2px solid #bfdbfe;
+    border: 2px solid color-mix(in oklch, var(--color-primary) 25%, transparent);
     border-radius: 8px;
     font-size: 0.95rem;
     font-family: inherit;
-    background: #fff;
-    color: #1e293b;
+    background: var(--color-base-100);
+    color: var(--color-base-content);
     transition: border-color 0.15s, box-shadow 0.15s;
     outline: none;
   }
 
   .scan-input:focus {
-    border-color: #2563eb;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 12%, transparent);
   }
 
   .scan-input.scanning {
-    background: #f8fafc;
-    color: #94a3b8;
+    background: var(--color-base-200);
+    color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
   }
 
   .scan-input:disabled {
@@ -135,8 +135,8 @@
     right: 10px;
     width: 16px;
     height: 16px;
-    border: 2px solid #d1d5db;
-    border-top-color: #2563eb;
+    border: 2px solid var(--color-base-300);
+    border-top-color: var(--color-primary);
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
     pointer-events: none;
@@ -152,12 +152,12 @@
     position: absolute;
     right: 0;
     top: calc(100% + 4px);
-    background: #fef2f2;
-    border: 1px solid #fca5a5;
+    background: color-mix(in oklch, var(--color-error) 8%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-error) 35%, transparent);
     border-radius: 4px;
     padding: 4px 8px;
     font-size: 0.78rem;
-    color: #dc2626;
+    color: var(--color-error);
     white-space: nowrap;
     z-index: 10;
   }

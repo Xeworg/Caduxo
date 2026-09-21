@@ -39,6 +39,7 @@
   import ProductDetailPage from "./ProductDetailPage.svelte";
   import Table from "./ui/Table.svelte";
   import Badge from "./ui/Badge.svelte";
+  import Alert from "./ui/Alert.svelte";
 
   // ── View state ─────────────────────────────────────────────────────────────
 
@@ -219,10 +220,10 @@
       </header>
 
   {#if errorMsg}
-    <div class="alert alert-error" role="alert">{errorMsg}</div>
+    <Alert variant="error">{errorMsg}</Alert>
   {/if}
   {#if successMsg}
-    <div class="alert alert-success" role="status">{successMsg}</div>
+    <Alert variant="success">{successMsg}</Alert>
   {/if}
 
       {#if view === "list"}
@@ -373,33 +374,14 @@
     font-size: 1.5rem;
   }
 
-  .alert {
-    padding: 10px 14px;
-    border-radius: 6px;
-    margin-bottom: 16px;
-    font-size: 0.9rem;
-  }
-
-  .alert-error {
-    background: #fee2e2;
-    color: #991b1b;
-    border: 1px solid #fca5a5;
-  }
-
-  .alert-success {
-    background: #dcfce7;
-    color: #166534;
-    border: 1px solid #86efac;
-  }
-
   .loading {
-    color: #6b7280;
+    color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
     font-style: italic;
   }
 
   .empty-state {
-    background: #fff;
-    border: 1px dashed #d1d5db;
+    background: var(--color-base-100);
+    border: 1px dashed var(--color-base-300);
     border-radius: 10px;
     padding: 40px 20px;
     text-align: center;
@@ -407,12 +389,12 @@
 
   .empty-state p {
     margin: 0 0 6px;
-    color: #4b5563;
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
   }
 
   .empty-state .hint {
     font-size: 0.85rem;
-    color: #9ca3af;
+    color: color-mix(in oklch, var(--color-base-content) 55%, transparent);
   }
 
   /* Search bar */
@@ -425,15 +407,17 @@
   .search-bar input {
     flex: 1;
     padding: 8px 12px;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--color-base-300);
     border-radius: 6px;
     font-size: 0.9rem;
     font-family: inherit;
+    background: var(--color-base-100);
+    color: var(--color-base-content);
   }
 
   .search-bar input:focus {
-    outline: 2px solid #3b82f6;
-    border-color: #3b82f6;
+    outline: 2px solid var(--color-primary);
+    border-color: var(--color-primary);
   }
 
   /* Results */
@@ -441,13 +425,13 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    color: #6b7280;
+    color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
     font-size: 0.82rem;
     margin-bottom: 8px;
   }
 
   .results-filter {
-    color: #4b5563;
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
   }
 
   .product-row {
@@ -485,21 +469,21 @@
   .cell-mono {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.85rem;
-    color: var(--color-secondary);
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
   }
 
   /* Panel */
   .panel {
-    background: #fff;
-    border: 1px solid #e5e7eb;
+    background: var(--color-base-100);
+    border: 1px solid var(--color-base-300);
     border-radius: 10px;
     padding: 24px;
   }
 
-  /* Buttons */
+  /* Local buttons (kept for markup compatibility; tokens now drive colour) */
   .btn-primary {
-    background: #2563eb;
-    color: #fff;
+    background: var(--color-primary);
+    color: var(--color-primary-content);
     border: none;
     border-radius: 6px;
     padding: 8px 16px;
@@ -509,13 +493,13 @@
   }
 
   .btn-primary:hover {
-    background: #1d4ed8;
+    background: color-mix(in oklch, var(--color-primary) 88%, black);
   }
 
   .btn-secondary {
-    background: #fff;
-    color: #374151;
-    border: 1px solid #d1d5db;
+    background: var(--color-base-100);
+    color: var(--color-base-content);
+    border: 1px solid var(--color-base-300);
     border-radius: 6px;
     padding: 8px 16px;
     font-size: 0.9rem;
@@ -524,7 +508,7 @@
   }
 
   .btn-secondary:hover {
-    background: #f9fafb;
+    background: var(--color-base-200);
   }
 
   .btn-small {

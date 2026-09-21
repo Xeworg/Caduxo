@@ -17,6 +17,8 @@
   import Table from "./ui/Table.svelte";
   import Badge from "./ui/Badge.svelte";
   import Button from "./ui/Button.svelte";
+  import Modal from "./ui/Modal.svelte";
+  import Tabs from "./ui/Tabs.svelte";
   import Tooltip from "./ui/Tooltip.svelte";
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -445,95 +447,94 @@ function onLotCancel() {
   {/if}
 </div>
 
-<!-- Lot edit overlay — reusing the existing LotForm pattern -->
-{#if showLotDetail}
-  <div class="modal-overlay" role="dialog" aria-modal="true" aria-label={$LL.dashboard.lotDetail()}>
-    <div class="modal-box modal-box-wide">
-      <div class="modal-header">
-        <h3>{$LL.dashboard.lotDetail()}</h3>
-        <button class="modal-close" onclick={onLotCancel}>✕</button>
-      </div>
-      {#if detailLoading}
-        <p class="modal-loading">{$LL.lotsDetail.loading()}</p>
-      {:else if detailLot}
-        <!-- Tabs -->
-        <div class="detail-tabs">
-          <button
-            type="button"
-            class="tab-btn"
-            class:active={lotDetailTab === "detail"}
-            onclick={() => (lotDetailTab = "detail")}
-          >
-            {$LL.lotsDetail.detail()}
-          </button>
-          <button
-            type="button"
-            class="tab-btn"
-            class:active={lotDetailTab === "history"}
-            onclick={() => (lotDetailTab = "history")}
-          >
-            {$LL.lotsDetail.history()}
-          </button>
-        </div>
+<!-- Lot edit overlay — reused Modal + Tabs primitives (PR 13 cleanup) -->
+<Modal
+  bind:open={showLotDetail}
+  size="wide"
+  showClose
+  closeLabel={$LL.lotMovements.modal.close()}
+  aria-label={$LL.dashboard.lotDetail()}
+  oncancel={() => (showLotDetail = false)}
+  onclose={onLotCancel}
+>
+  {#snippet children()}
+    <header class="dialog-header">
+      <h3>{$LL.dashboard.lotDetail()}</h3>
+    </header>
 
-        {#if lotDetailTab === "detail"}
-          <dl class="detail-grid">
-            <dt>{$LL.dashboard.product()}</dt>
-            <dd>{detailLot.product_id}</dd>
-            <dt>{$LL.dashboard.store()}</dt>
-            <dd>{detailLot.store_id}</dd>
-            <dt>{$LL.dashboard.location()}</dt>
-            <dd>{detailLot.location_id ?? "—"}</dd>
-            <dt>{$LL.lotsDetail.quantity()}</dt>
-            <dd>{detailLot.quantity}</dd>
-            <dt>{$LL.dashboard.expiryDate()}</dt>
-            <dd>{detailLot.expiry_date}</dd>
-            <dt>{$LL.dashboard.alertDaysBefore()}</dt>
-            <dd>{detailLot.alert_days_before}</dd>
-            {#if detailLot.batch_code}
-              <dt>{$LL.lotsDetail.batch()}</dt>
-              <dd>{detailLot.batch_code}</dd>
-            {/if}
-          </dl>
-          <div class="modal-actions">
-            <button
-              type="button"
-              class="btn-secondary"
-              onclick={onLotCancel}
-            >
-              {$LL.common.close()}
-            </button>
-            <button
-              type="button"
-              class="btn-primary"
-              onclick={() => (lotDetailTab = "history")}
-            >
-              {$LL.lotMovements.panelTitle()}
-            </button>
-          </div>
-        {:else}
-          <!-- Historial tab -->
-          <div class="tab-content">
-            <LotMovementsPanel
-              lotId={detailLot.id}
-              lotQuantity={detailLot.quantity}
-              lotUnit={detailLot.unit}
-              lotStatus={detailLot.status}
-              locations={lotDetailLocations}
-              allLocations={lotDetailLocations}
-              unitType={detailLot.unit_type}
-              onMovementCreated={async () => {
-                // Reload modal and calendar data after a movement.
-                detailLot = await getExpiryLot(detailLot!.id);
-                await loadLots();
-              }}
-            />
-          </div>
-        {/if}
-      {/if}
-    </div>
+    {#if detailLoading}
+      <p class="modal-loading">{$LL.lotsDetail.loading()}</p>
+    {:else if detailLot}
+      <Tabs
+        items={[
+          {
+            id: "detail",
+            label: $LL.lotsDetail.detail(),
+            panel: lotDetailTabPanel,
+          },
+          {
+            id: "history",
+            label: $LL.lotsDetail.history(),
+            panel: lotHistoryTabPanel,
+          },
+        ]}
+        bind:activeId={lotDetailTab}
+        style="bordered"
+        aria-label={$LL.dashboard.lotDetail()}
+      />
+    {/if}
+  {/snippet}
+</Modal>
+
+{#snippet lotDetailTabPanel()}
+  <dl class="detail-grid">
+    <dt>{$LL.dashboard.product()}</dt>
+    <dd>{detailLot?.product_id}</dd>
+    <dt>{$LL.dashboard.store()}</dt>
+    <dd>{detailLot?.store_id}</dd>
+    <dt>{$LL.dashboard.location()}</dt>
+    <dd>{detailLot?.location_id ?? "—"}</dd>
+    <dt>{$LL.lotsDetail.quantity()}</dt>
+    <dd>{detailLot?.quantity}</dd>
+    <dt>{$LL.dashboard.expiryDate()}</dt>
+    <dd>{detailLot?.expiry_date}</dd>
+    <dt>{$LL.dashboard.alertDaysBefore()}</dt>
+    <dd>{detailLot?.alert_days_before}</dd>
+    {#if detailLot?.batch_code}
+      <dt>{$LL.lotsDetail.batch()}</dt>
+      <dd>{detailLot.batch_code}</dd>
+    {/if}
+  </dl>
+  <div class="modal-actions">
+    <Button variant="ghost" onclick={onLotCancel}>
+      {$LL.common.close()}
+    </Button>
+    <Button variant="primary" onclick={() => (lotDetailTab = "history")}>
+      {$LL.lotMovements.panelTitle()}
+    </Button>
   </div>
-{/if}
+{/snippet}
+
+{#snippet lotHistoryTabPanel()}
+  {#if detailLot}
+    <div class="tab-content">
+      <LotMovementsPanel
+        lotId={detailLot.id}
+        lotQuantity={detailLot.quantity}
+        lotUnit={detailLot.unit}
+        lotStatus={detailLot.status}
+        locations={lotDetailLocations}
+        allLocations={lotDetailLocations}
+        unitType={detailLot.unit_type}
+        onMovementCreated={async () => {
+          // Reload modal and calendar data after a movement.
+          detailLot = await getExpiryLot(detailLot!.id);
+          await loadLots();
+        }}
+      />
+    </div>
+  {/if}
+{/snippet}
 
     <style>
   .cal-page {
@@ -630,12 +631,12 @@ function onLotCancel() {
       .error-msg {
         text-align: center;
         padding: 40px;
-        color: #64748b;
+        color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
         font-size: 0.95rem;
       }
 
       .error-msg {
-        color: #ef4444;
+        color: var(--color-error);
       }
 
       /* Muted diagnostic line rendered under `Loading lots…` (and the error
@@ -646,125 +647,30 @@ function onLotCancel() {
         margin: -24px auto 40px;
         padding: 0 40px;
         text-align: center;
-        color: #94a3b8;
+        color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
         font-size: 0.8rem;
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       }
 
-  /* ── Modal ─────────────────────────────────────────────────────────────── */
+  /* ── Modal (PR 13: modal shell from `<Modal>` primitive; only inner
+     panel styles remain) ────────────────────────────────────────────────── */
 
-  .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+  .dialog-header {
     display: flex;
     align-items: center;
-    justify-content: center;
-    z-index: 200;
-  }
-
-  .modal-box {
-    background: #fff;
-    border-radius: 12px;
-    padding: 24px;
-    width: 480px;
-    max-width: 95vw;
-    max-height: 90vh;
-    overflow-y: auto;
-    /* DaisyUI v5 ships `.modal-box { opacity: 0; scale: .95; translate: 0 2%;
-       transition: ... }` as the base rule and only animates the box in
-       when nested inside `<dialog class="modal" open>` (or a
-       `.modal-toggle:checked + .modal` / `.modal-open` trigger). The
-       legacy LotDetail overlay uses a plain `<div class="modal-overlay">`
-       parent instead of `<dialog>`, so the box stays at opacity 0 even
-       when the overlay renders — the user sees the dark overlay but
-       not the white modal-box. Override the four DaisyUI animation
-       defaults here so the box is visible without a `<dialog>` parent.
-       TODO(PR 13 cleanup): replace this whole modal block with the
-       `<Modal bind:open={...}>` primitive from src/components/ui/ —
-       that handles focus trap, Escape, backdrop click, and the DaisyUI
-       dialog state machine without the manual override. */
-    opacity: 1;
-    scale: 1;
-    translate: 0;
-    transition: none;
-  }
-
-  .modal-box-wide {
-    width: 720px;
-    max-width: 95vw;
-  }
-
-  .modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     margin-bottom: 16px;
   }
 
-  .modal-header h3 {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: #1e293b;
+  .dialog-header h3 {
     margin: 0;
-  }
-
-  .modal-close {
-    background: none;
-    border: none;
-    cursor: pointer;
     font-size: 1rem;
-    color: #64748b;
-    padding: 4px 8px;
-    border-radius: 4px;
-    transition: background 0.15s;
-  }
-
-  .modal-close:hover {
-    background: #f1f5f9;
-    color: #1e293b;
-  }
-
-  .modal-close:focus-visible {
-    outline: 2px solid #2563eb;
-    outline-offset: 1px;
+    color: var(--color-base-content);
   }
 
   .modal-loading {
     text-align: center;
     padding: 20px;
-    color: #64748b;
-  }
-
-  /* ── Detail tabs ────────────────────────────────────────────────────── */
-  .detail-tabs {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 16px;
-    border-bottom: 1px solid #e5e7eb;
-  }
-
-  .tab-btn {
-    background: none;
-    border: none;
-    padding: 8px 16px;
-    font-size: 0.88rem;
-    cursor: pointer;
-    color: #6b7280;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    font-family: inherit;
-    transition: color 0.15s, border-color 0.15s;
-  }
-
-  .tab-btn:hover {
-    color: #374151;
-  }
-
-  .tab-btn.active {
-    color: #2563eb;
-    border-bottom-color: #2563eb;
-    font-weight: 500;
+    color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
   }
 
   .tab-content {
@@ -780,12 +686,12 @@ function onLotCancel() {
   }
 
   .detail-grid dt {
-    color: #64748b;
+    color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
     font-weight: 500;
   }
 
   .detail-grid dd {
-    color: #1e293b;
+    color: var(--color-base-content);
     margin: 0;
   }
 
@@ -793,58 +699,6 @@ function onLotCancel() {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
-  }
-
-  .btn-primary {
-    background: #2563eb;
-    border: none;
-    border-radius: 6px;
-    padding: 7px 16px;
-    font-size: 0.875rem;
-    font-family: inherit;
-    color: #fff;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-
-  .btn-primary:hover {
-    background: #1d4ed8;
-  }
-
-  .btn-primary:focus-visible {
-    outline: 2px solid #2563eb;
-    outline-offset: 2px;
-  }
-
-  .btn-primary:disabled {
-    background: #93c5fd;
-    cursor: not-allowed;
-  }
-
-  .btn-secondary {
-    background: #fff;
-    color: #374151;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    padding: 7px 16px;
-    font-size: 0.875rem;
-    font-family: inherit;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: #f9fafb;
-  }
-
-  .btn-secondary:disabled {
-    color: #9ca3af;
-    cursor: not-allowed;
-  }
-
-  .btn-secondary:focus-visible {
-    outline: 2px solid #2563eb;
-    outline-offset: 2px;
   }
 
 </style>

@@ -264,7 +264,7 @@
   .dialog-header h3 {
     margin: 0;
     font-size: 1rem;
-    color: var(--color-base-content, #0f172a);
+    color: var(--color-base-content);
   }
 
   /* ── Body ──────────────────────────────────────────────────────────────── */
@@ -301,13 +301,13 @@
 
   .form-group label {
     font-size: 0.85rem;
-    color: var(--color-base-content, #374151);
+    color: var(--color-base-content);
     font-weight: 500;
   }
 
   .hint {
     font-size: 0.78rem;
-    color: var(--color-base-content, #6b7280);
+    color: var(--color-base-content);
     opacity: 0.7;
   }
 
@@ -334,9 +334,9 @@
   }
 
   .delta-preview.no-change {
-    background: var(--color-base-200, #f3f4f6);
-    border: 1px solid var(--color-base-300, #e5e7eb);
-    color: var(--color-base-content, #6b7280);
+    background: var(--color-base-200);
+    border: 1px solid var(--color-base-300);
+    color: var(--color-base-content);
   }
 
   .delta-sign {

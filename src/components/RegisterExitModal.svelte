@@ -16,6 +16,7 @@
   import { humanizeError } from "../lib/errors.js";
   import Modal from "./ui/Modal.svelte";
   import Select from "./ui/Select.svelte";
+  import Listbox from "./ui/Listbox.svelte";
   import Button from "./ui/Button.svelte";
 
   // ── Props ──────────────────────────────────────────────────────────────────
@@ -81,6 +82,23 @@
     value: reason.value,
     label: reason.label(),
   }));
+
+  /**
+   * Source-location options for the `<Listbox>` primitive. Filters
+   * balances to those with stock available and labels each entry
+   * with the existing location id and the available-balance badge.
+   * The empty placeholder is surfaced via a leading `value === ""`
+   * option so the user can clear the selection.
+   */
+  $: sourceLocationOptions = [
+    { value: "", label: $LL.lotMovements.modal.selectLocation() },
+    ...currentBalances
+      .filter((bal) => bal.balance > 0)
+      .map((bal) => ({
+        value: bal.location_id,
+        label: `${bal.location_id} (${$LL.lotMovements.modal.availableOption({ balance: bal.balance })})`,
+      })),
+  ];
 
   /**
    * Local validation for integer-unit products: catches fractional input
@@ -174,20 +192,14 @@
     <div class="dialog-body">
       <div class="form-group">
         <label for="exit-source">{$LL.lotMovements.modal.sourceLocation()}</label>
-        <select
+        <Listbox
           id="exit-source"
-          class="select select-md w-full motion-reduce:transition-none"
-          bind:value={sourceLocationId}
+          value={sourceLocationId}
+          options={sourceLocationOptions}
           disabled={submitting}
           aria-label={$LL.lotMovements.modal.sourceLocation()}
-        >
-          <option value="">{$LL.lotMovements.modal.selectLocation()}</option>
-          {#each currentBalances as bal}
-            {#if bal.balance > 0}
-              <option value={bal.location_id}>{bal.location_id} ({$LL.lotMovements.modal.availableOption({ balance: bal.balance })})</option>
-            {/if}
-          {/each}
-        </select>
+          onchange={(v) => (sourceLocationId = v)}
+        />
       </div>
 
       <div class="form-group">
@@ -274,7 +286,7 @@
   .dialog-header h3 {
     margin: 0;
     font-size: 1rem;
-    color: var(--color-base-content, #0f172a);
+    color: var(--color-base-content);
   }
 
   /* ── Body ──────────────────────────────────────────────────────────────── */
@@ -293,13 +305,13 @@
 
   .form-group label {
     font-size: 0.85rem;
-    color: var(--color-base-content, #374151);
+    color: var(--color-base-content);
     font-weight: 500;
   }
 
   .hint {
     font-size: 0.78rem;
-    color: var(--color-base-content, #6b7280);
+    color: var(--color-base-content);
     opacity: 0.7;
   }
 

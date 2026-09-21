@@ -303,7 +303,7 @@
   .dialog-header h3 {
     margin: 0;
     font-size: 1rem;
-    color: var(--color-base-content, #0f172a);
+    color: var(--color-base-content);
   }
 
   /* ── Body ──────────────────────────────────────────────────────────────── */
@@ -314,7 +314,7 @@
   }
 
   .info-text {
-    color: var(--color-base-content, #6b7280);
+    color: var(--color-base-content);
     opacity: 0.7;
     font-size: 0.88rem;
     margin: 0;
@@ -326,7 +326,7 @@
     gap: 8px;
     margin-bottom: 14px;
     font-size: 0.86rem;
-    color: var(--color-base-content, #374151);
+    color: var(--color-base-content);
   }
 
   .form-group {
@@ -338,13 +338,13 @@
 
   .form-group label {
     font-size: 0.85rem;
-    color: var(--color-base-content, #374151);
+    color: var(--color-base-content);
     font-weight: 500;
   }
 
   .hint {
     font-size: 0.78rem;
-    color: var(--color-base-content, #6b7280);
+    color: var(--color-base-content);
     opacity: 0.7;
   }
 
