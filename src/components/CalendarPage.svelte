@@ -2,6 +2,7 @@
   import { onMount, tick } from "svelte";
   import { LL } from "../i18n/i18n-svelte.js";
   import CalendarMonth from "./CalendarMonth.svelte";
+  import CalendarYearGrid from "./CalendarYearGrid.svelte";
   import {
     listDashboardLots,
     type DashboardFilters,
@@ -289,12 +290,24 @@ const watchdog = window.setTimeout(() => {
     loadStage = "mounted";
     console.log("[CalendarPage] mounted, dispatching loadLots");
     void loadLots();
+    // Close the year-picker overlay on any pointerdown outside the
+    // year-nav toolbar. Mirrors CalendarMonth.svelte's
+    // `onDocumentPointerDown` pattern (capture phase, scoped to the
+    // toolbar via `[data-cal-year-nav]`).
+    function onDocumentPointerDown(event: PointerEvent) {
+      if (!showYearPicker) return;
+      const target = event.target as Node | null;
+      if (target instanceof Element && target.closest("[data-cal-year-nav]")) return;
+      closeYearPicker();
+    }
+    document.addEventListener("pointerdown", onDocumentPointerDown, true);
     // Cleanup invalidates any outstanding load and stops the elapsed-seconds
     // ticker so a stale resolve cannot poke state on a torn-down component
     // (HMR, fast tab switch, unmount).
     return () => {
       loadGeneration++;
       stopElapsedTicker();
+      document.removeEventListener("pointerdown", onDocumentPointerDown, true);
     };
   });
 
@@ -311,6 +324,70 @@ const watchdog = window.setTimeout(() => {
 
   function onDaySelect(e: CustomEvent<string>) {
     selectedDate = e.detail;
+  }
+
+  // ── Year navigation (annual view) ───────────────────────────────────────────
+
+  function prevYear() {
+    if (showYearPicker) closeYearPicker();
+    viewYear = Math.max(1900, viewYear - 1);
+  }
+
+  function nextYear() {
+    if (showYearPicker) closeYearPicker();
+    viewYear = Math.min(2100, viewYear + 1);
+  }
+
+  function goToday() {
+    if (showYearPicker) closeYearPicker();
+    viewYear = new Date().getFullYear();
+    selectedDate = todayDate;
+  }
+
+  function onSelectDate(e: CustomEvent<string>) {
+    selectedDate = e.detail;
+  }
+
+  // ── Year picker overlay (annual view) ──────────────────────────────────────
+  // Modeled on CalendarMonth.svelte's year picker: clicking the year
+  // label opens a decade picker; prev/next-decade chevrons jump by 10
+  // years, clamped to 1900..2100. Selecting a year updates `viewYear`
+  // and closes the picker without touching `selectedDate` (Today is the
+  // only action that re-anchors the selection).
+
+  let showYearPicker = false;
+  let pickerYear: number = viewYear;
+
+  $: decadeStart = Math.floor(pickerYear / 10) * 10;
+  $: decadeYears = Array.from({ length: 10 }, (_, i) => decadeStart + i);
+
+  function openYearPicker() {
+    pickerYear = viewYear;
+    showYearPicker = true;
+  }
+
+  function closeYearPicker() {
+    showYearPicker = false;
+  }
+
+  function selectYear(year: number) {
+    viewYear = year;
+    showYearPicker = false;
+  }
+
+  function prevDecade() {
+    pickerYear = Math.max(1900, pickerYear - 10);
+  }
+
+  function nextDecade() {
+    pickerYear = Math.min(2100, pickerYear + 10);
+  }
+
+  function onYearPickerKeydown(e: KeyboardEvent) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeYearPicker();
+    }
   }
 
   // ── Lot detail ───────────────────────────────────────────────────────────────
@@ -377,6 +454,105 @@ function onLotCancel() {
     </Tooltip>
   </div>
 
+  <!-- Page-level year navigation (owned by CalendarPage, not the grid primitive) -->
+  <div
+    class="cal-year-nav"
+    data-cal-year-nav
+    role="toolbar"
+    aria-label={$LL.calendar.annualHeaderLabel({ year: viewYear })}
+  >
+    <Tooltip text={$LL.calendar.ariaPreviousYear()} position="bottom">
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label={$LL.calendar.ariaPreviousYear()}
+        onclick={prevYear}
+      >
+        ‹
+      </Button>
+    </Tooltip>
+    <Tooltip text={$LL.calendar.ariaOpenYearPicker()} position="bottom">
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label={$LL.calendar.ariaOpenYearPicker()}
+        onclick={openYearPicker}
+      >
+        {viewYear}{#if !showYearPicker} ▼{/if}
+      </Button>
+    </Tooltip>
+    <Tooltip text={$LL.calendar.ariaNextYear()} position="bottom">
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label={$LL.calendar.ariaNextYear()}
+        onclick={nextYear}
+      >
+        ›
+      </Button>
+    </Tooltip>
+    <span data-cal-nav-today>
+      <Button
+        variant="primary"
+        size="sm"
+        aria-label={$LL.calendar.today()}
+        onclick={goToday}
+      >
+        {$LL.calendar.today()}
+      </Button>
+    </span>
+    {#if showYearPicker}
+      <div
+        class="year-picker"
+        role="dialog"
+        aria-label={$LL.calendar.ariaOpenYearPicker()}
+        tabindex="-1"
+        onkeydown={onYearPickerKeydown}
+      >
+        <div class="year-picker-header">
+          <Tooltip text={$LL.calendar.ariaPreviousDecade()} position="bottom">
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label={$LL.calendar.ariaPreviousDecade()}
+              onclick={prevDecade}
+            >
+              ‹
+            </Button>
+          </Tooltip>
+          <span class="decade-label">{decadeStart}–{decadeStart + 9}</span>
+          <Tooltip text={$LL.calendar.ariaNextDecade()} position="bottom">
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label={$LL.calendar.ariaNextDecade()}
+              onclick={nextDecade}
+            >
+              ›
+            </Button>
+          </Tooltip>
+        </div>
+        <div class="year-grid">
+          {#each decadeYears as yr}
+            {@const disabled = yr < 1900 || yr > 2100}
+            <button
+              type="button"
+              class="year-chip"
+              class:year-selected={yr === viewYear}
+              class:year-disabled={disabled}
+              aria-label={$LL.calendar.ariaYear({ year: yr })}
+              aria-pressed={yr === viewYear}
+              {disabled}
+              onclick={() => !disabled && selectYear(yr)}
+            >
+              {yr}
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/if}
+  </div>
+
       {#if loading && lots.length === 0}
         <p class="loading-msg">{$LL.calendar.loadingLots()}</p>
         <p class="loading-diag" role="status" aria-live="polite" data-testid="cal-load-diag">
@@ -394,16 +570,13 @@ function onLotCancel() {
     <div class="cal-layout">
       <!-- Calendar grid -->
       <div class="cal-grid-wrapper">
-        <CalendarMonth
+        <CalendarYearGrid
           {viewYear}
-          {viewMonth}
-          {selectedDate}
           {todayDate}
+          {selectedDate}
           {dayBadges}
-          ariaLabel={$LL.calendar.pageTitle()}
-          on:daySelect={onDaySelect}
-          on:monthChange={onMonthChange}
-          on:viewYearChange={onViewYearChange}
+          ariaLabel={$LL.calendar.annualHeaderLabel({ year: viewYear })}
+          on:selectDate={onSelectDate}
         />
       </div>
 
@@ -608,6 +781,101 @@ function onLotCancel() {
 
   .cal-grid-wrapper {
     flex-shrink: 0;
+  }
+
+  /* ── Year navigation (annual view) ─────────────────────────────────────── */
+
+  .cal-year-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--color-base-200);
+    /* Position context so the absolute-positioned year picker overlay
+       anchors below the nav row (mirrors `.cal-title { position: relative }`
+       in CalendarMonth.svelte). */
+    position: relative;
+  }
+
+  /* ── Year picker overlay (mirrors CalendarMonth.svelte's `.year-picker`
+     visual vocabulary so the two pickers look like siblings) ───────── */
+
+  .year-picker {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    background: var(--color-base-100);
+    border: 1px solid var(--color-base-200);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px color-mix(in oklch, var(--color-base-content) 12%, transparent);
+    padding: 8px;
+    width: 220px;
+  }
+
+  .year-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
+  .decade-label {
+    font-size: 0.8rem;
+    color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+    font-weight: 600;
+  }
+
+  .year-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2px;
+  }
+
+  .year-chip {
+    background: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 4px 2px;
+    border-radius: 4px;
+    color: var(--color-base-content);
+    transition: background 0.1s;
+    text-align: center;
+    font-family: inherit;
+  }
+
+  .year-chip:hover:not(.year-disabled) {
+    background: color-mix(in oklch, var(--color-base-300) 50%, transparent);
+  }
+
+  .year-chip.year-selected {
+    background: var(--color-primary);
+    color: var(--color-base-100);
+    border-color: var(--color-primary);
+  }
+
+  .year-chip.year-disabled {
+    color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
+    cursor: not-allowed;
+  }
+
+  .year-chip:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+
+  /* Responsive breakpoint — same threshold as App.svelte (max-width: 1024px) */
+  @media (max-width: 1024px) {
+    .cal-layout {
+      flex-direction: column;
+    }
+    .day-panel {
+      width: 100%;
+    }
   }
 
   .day-panel {

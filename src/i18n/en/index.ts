@@ -726,6 +726,8 @@ const en: BaseTranslation = {
     ariaNextDecade: "Next decade",
     ariaYear: "Year {year}",
     ariaDayCell: "{month} {day}, {year}",
+    annualHeaderLabel: "Calendar year {year}",
+    tileMonthLabel: "{month} {year}",
   },
 
   backupRestore: {
