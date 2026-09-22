@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher } from "svelte";
+  import { createEventDispatcher, onMount } from "svelte";
   import { LL } from "../i18n/i18n-svelte.js";
   import Button from "./ui/Button.svelte";
   import Tooltip from "./ui/Tooltip.svelte";
@@ -95,7 +95,9 @@
   // ── State ───────────────────────────────────────────────────────────────────
 
   let showYearPicker = false;
+  let showMonthPicker = false;
   let pickerYear: number = viewYear;
+  let rootEl: HTMLDivElement;
 
   // Decades centered around pickerYear (e.g. pickerYear=2026 → 2020–2029)
   $: decadeStart = Math.floor(pickerYear / 10) * 10;
@@ -157,17 +159,81 @@
     dispatch("monthChange", { year: y, month: m });
   }
 
-  function cycleMonth() {
-    // Clicking the month label cycles: Jan→Feb→…→Dec→Jan
-    let m = viewMonth + 1;
-    let y = viewYear;
-    if (m > 12) { m = 1; y += 1; }
-    dispatch("monthChange", { year: y, month: m });
+  function openMonthPicker() {
+    pickerYear = viewYear;
+    showMonthPicker = true;
+    showYearPicker = false; // mutual exclusion
+  }
+
+  function closePickers() {
+    showYearPicker = false;
+    showMonthPicker = false;
+  }
+
+  function closeMonthPicker() {
+    showMonthPicker = false;
+  }
+
+  function selectMonth(month: number) {
+    dispatch("monthChange", { year: pickerYear, month });
+    showMonthPicker = false;
+  }
+
+  function prevPickerYear() {
+    pickerYear = Math.max(1900, pickerYear - 1);
+  }
+
+  function nextPickerYear() {
+    pickerYear = Math.min(2100, pickerYear + 1);
+  }
+
+  function isMonthInRange(year: number, month: number): boolean {
+    // A month is in range iff at least one day in (year, month) lies
+    // within [minDate, maxDate].
+    const lastDay = daysInMonth(year, month);
+    const firstIso = isoDate(year, month, 1);
+    const lastIso  = isoDate(year, month, lastDay);
+    return cmpIso(lastIso, minDate) >= 0 && cmpIso(firstIso, maxDate) <= 0;
+  }
+
+  function onMonthChipKeydown(e: KeyboardEvent) {
+    const target = e.currentTarget as HTMLButtonElement;
+    const idx = MONTH_NAMES.indexOf(target.textContent ?? "");
+    if (idx < 0) return;
+    const cols = 3;
+    let next = idx;
+    switch (e.key) {
+      case "ArrowLeft":  next = idx - 1; break;
+      case "ArrowRight": next = idx + 1; break;
+      case "ArrowUp":    next = idx - cols; break;
+      case "ArrowDown":  next = idx + cols; break;
+      case "Enter":
+      case " ":
+        if (!target.disabled) {
+          e.preventDefault();
+          selectMonth(idx + 1);
+        }
+        return;
+      case "Escape":
+        e.preventDefault();
+        showMonthPicker = false;
+        return;
+      default:
+        return;
+    }
+    e.preventDefault();
+    // Clamp inside the 3-column grid
+    if (next < 0) next = 0;
+    if (next > 11) next = 11;
+    const grid = target.parentElement!.querySelectorAll<HTMLButtonElement>(".month-chip:not(:disabled)");
+    grid.forEach((b) => b.tabIndex = -1);
+    grid[next]?.focus();
   }
 
   function openYearPicker() {
     pickerYear = viewYear;
     showYearPicker = true;
+    showMonthPicker = false; // mutual exclusion
   }
 
   function selectYear(year: number) {
@@ -256,10 +322,11 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
-    if (showYearPicker) {
-      // In year picker, only close on Escape
+    if (showYearPicker || showMonthPicker) {
+      // In any picker, only close on Escape from the day-grid handler.
+      // Picker-internal arrows / Enter / Space are handled by the overlay.
       if (e.key === "Escape") {
-        showYearPicker = false;
+        closePickers();
         e.preventDefault();
       }
       return;
@@ -326,9 +393,21 @@
       year: d.getFullYear(),
     });
   }
+
+  onMount(() => {
+    function onDocumentPointerDown(event: PointerEvent) {
+      if (!showYearPicker && !showMonthPicker) return;
+      const target = event.target as Node | null;
+      if (target && rootEl?.contains(target)) return;
+      closePickers();
+    }
+
+    document.addEventListener("pointerdown", onDocumentPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onDocumentPointerDown, true);
+  });
 </script>
 
-<div class="cal-month" aria-label={ariaLabel} role="application">
+<div class="cal-month" aria-label={ariaLabel} role="application" bind:this={rootEl}>
   <!-- Header -->
   <div class="cal-header">
     <Tooltip text={$LL.calendar.ariaPreviousMonth()} position="bottom">
@@ -396,12 +475,68 @@
             {/each}
           </div>
         </div>
+      {:else if showMonthPicker}
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={$LL.calendar.ariaOpenYearPicker()}
+          onclick={openYearPicker}
+        >
+          {pickerYear}
+        </Button>
+        <div class="month-picker" role="dialog" aria-label={$LL.calendar.ariaCloseMonthPicker()}>
+          <div class="month-picker-header">
+            <Tooltip text={$LL.calendar.ariaPreviousYear()} position="bottom">
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={$LL.calendar.ariaPreviousYear()}
+                onclick={prevPickerYear}
+              >
+                ‹
+              </Button>
+            </Tooltip>
+            <span class="picker-year-label">{pickerYear}</span>
+            <Tooltip text={$LL.calendar.ariaNextYear()} position="bottom">
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={$LL.calendar.ariaNextYear()}
+                onclick={nextPickerYear}
+              >
+                ›
+              </Button>
+            </Tooltip>
+          </div>
+          <div class="month-grid" role="grid" aria-label={$LL.calendar.ariaCloseMonthPicker()}>
+            {#each MONTH_NAMES as monthName, i (i)}
+              {@const m = i + 1}
+              {@const inRange = isMonthInRange(pickerYear, m)}
+              {@const isSelected = pickerYear === viewYear && m === viewMonth}
+              <button
+                type="button"
+                class="month-chip"
+                class:month-selected={isSelected}
+                class:month-disabled={!inRange}
+                aria-label={$LL.calendar.ariaMonth({ month: monthName, year: pickerYear })}
+                aria-pressed={isSelected}
+                aria-disabled={!inRange}
+                tabindex={isSelected ? 0 : -1}
+                disabled={!inRange}
+                on:click={() => inRange && selectMonth(m)}
+                on:keydown={onMonthChipKeydown}
+              >
+                {monthName}
+              </button>
+            {/each}
+          </div>
+        </div>
       {:else}
         <Button
           variant="ghost"
           size="sm"
-          aria-label={$LL.calendar.ariaCycleMonth()}
-          onclick={cycleMonth}
+          aria-label={$LL.calendar.ariaOpenMonthPicker()}
+          onclick={openMonthPicker}
         >
           {MONTH_NAMES[viewMonth - 1] ?? ""}
         </Button>
@@ -695,5 +830,72 @@
 
   .cal-day.day-selected .badge-dot {
     background: color-mix(in oklch, var(--color-base-100) 80%, transparent);
+  }
+
+  /* ── Month picker ─────────────────────────────────────────────────────────── */
+
+  .month-picker {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    background: var(--color-base-100);
+    border: 1px solid var(--color-base-200);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px color-mix(in oklch, var(--color-base-content) 12%, transparent);
+    padding: 8px;
+    width: 240px;
+  }
+
+  .month-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
+  .picker-year-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-base-content);
+  }
+
+  .month-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+  }
+
+  .month-chip {
+    background: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 6px 2px;
+    border-radius: 4px;
+    color: var(--color-base-content);
+    transition: background 0.1s;
+    text-align: center;
+  }
+
+  .month-chip:hover:not(.month-disabled) {
+    background: color-mix(in oklch, var(--color-base-300) 50%, transparent);
+  }
+
+  .month-chip.month-selected {
+    background: var(--color-primary);
+    color: var(--color-base-100);
+    border-color: var(--color-primary);
+  }
+
+  .month-chip.month-disabled {
+    color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
+    cursor: not-allowed;
+  }
+
+  .month-chip:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
   }
 </style>

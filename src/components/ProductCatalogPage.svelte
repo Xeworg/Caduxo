@@ -1,26 +1,4 @@
-<!--
-  ProductCatalogPage.svelte — searchable product catalog (PR 9b of
-  caduxo-daisyui-redesign).
-
-  Migration to shared UI primitives:
-    - Table.svelte (zebra) hosts the per-product list. Numeric /
-      monospaced cells (SKU + barcode) use the local `.cell-mono`
-      utility; the description cell renders a product-link button so
-      screen readers can announce the row action without depending on
-      the row-level click handler.
-    - Badge.svelte renders the active / archived status cell. Active
-      uses `semantic="success"`; archived uses `semantic="neutral"`
-      and reuses the existing `$LL.products.archived()` label.
-    - The "Status" column header reuses `$LL.dashboard.status()`
-      because no `products.table.status` key exists (no new i18n
-      keys per PR 9b's no-new-keys constraint). The same key is
-      used by the dashboard table; the cross-namespace reuse is
-      intentional because "Status" is a generic English / Spanish
-      word.
-
-  Tailwind classes referenced here (for the JIT scanner):
-    table table-zebra
--->
+<!-- ProductCatalogPage.svelte: searchable product catalog. Tailwind scan hints: table table-zebra cell-mono. -->
 <script lang="ts">
   import { onMount } from "svelte";
   import {
