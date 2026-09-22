@@ -1,25 +1,4 @@
-<!--
-  StoresPage.svelte — store + location management (PR 9b of
-  caduxo-daisyui-redesign).
-
-  Migration to shared UI primitives:
-    - Table.svelte (zebra) hosts both the store sidebar and the
-      per-store location list. Each row is keyboard-activatable via
-      tabindex="0" + Enter/Space; the Name cell renders a <button
-      class="store-link"> so screen readers can announce the row
-      action without depending on the row-level click handler.
-    - Badge.svelte renders the active / inactive status cell.
-    - EmptyState.svelte replaces the bespoke .empty-hint text in
-      both the store sidebar and the location list (via the Table
-      primitive's empty slot).
-    - Button.svelte (variant ghost, size icon) replaces the
-      bespoke .btn-icon edit button for locations.
-    - The form blocks (store-form / location-form) and the first-run
-      banner are deliberately left untouched — they are PR 8 scope.
-
-  Tailwind classes referenced here (for the JIT scanner):
-    table table-zebra
--->
+<!-- StoresPage.svelte: store + location management. Tailwind scan hints: table table-zebra. -->
 <script lang="ts">
   import { onMount } from "svelte";
   import {

@@ -2533,9 +2533,27 @@ type RootTranslation = {
 		 */
 		ariaNextMonth: string
 		/**
-		 * C​y​c​l​e​ ​m​o​n​t​h
+		 * O​p​e​n​ ​m​o​n​t​h​ ​p​i​c​k​e​r
 		 */
-		ariaCycleMonth: string
+		ariaOpenMonthPicker: string
+		/**
+		 * C​l​o​s​e​ ​m​o​n​t​h​ ​p​i​c​k​e​r
+		 */
+		ariaCloseMonthPicker: string
+		/**
+		 * P​r​e​v​i​o​u​s​ ​y​e​a​r
+		 */
+		ariaPreviousYear: string
+		/**
+		 * N​e​x​t​ ​y​e​a​r
+		 */
+		ariaNextYear: string
+		/**
+		 * {​m​o​n​t​h​}​ ​{​y​e​a​r​}
+		 * @param {unknown} month
+		 * @param {unknown} year
+		 */
+		ariaMonth: RequiredParams<'month' | 'year'>
 		/**
 		 * O​p​e​n​ ​y​e​a​r​ ​p​i​c​k​e​r
 		 */
@@ -6416,9 +6434,25 @@ export type TranslationFunctions = {
 		 */
 		ariaNextMonth: () => LocalizedString
 		/**
-		 * Cycle month
+		 * Open month picker
 		 */
-		ariaCycleMonth: () => LocalizedString
+		ariaOpenMonthPicker: () => LocalizedString
+		/**
+		 * Close month picker
+		 */
+		ariaCloseMonthPicker: () => LocalizedString
+		/**
+		 * Previous year
+		 */
+		ariaPreviousYear: () => LocalizedString
+		/**
+		 * Next year
+		 */
+		ariaNextYear: () => LocalizedString
+		/**
+		 * {month} {year}
+		 */
+		ariaMonth: (arg: { month: unknown, year: unknown }) => LocalizedString
 		/**
 		 * Open year picker
 		 */
