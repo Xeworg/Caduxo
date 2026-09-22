@@ -9,12 +9,14 @@
   text via the fieldset pattern so consumers do not have to hand-
   roll the spacing.
 
-  When the consumer supplies a `list` prop, the primitive renders
-  a `<datalist id={list}>` slot the consumer fills — used by
-  `ProductForm` to keep its barcode-type and unit-definition
-  autocomplete semantics verbatim (per design §4.2 / spec). The
-  datalist is rendered as a sibling of the fieldset (HTML5 datalist
-  is associated by id, not by DOM containment).
+  Note: an earlier revision surfaced a `<datalist>` snippet slot
+  bound to a `list` prop, but every consumer that needed native
+  autocomplete semantics has since migrated to the themed
+  `Combobox.svelte` primitive. The `list` prop, the `datalist`
+  snippet, and the `<datalist>` render block were all dead code;
+  they were removed in the fix/category-picker-popovers branch
+  cleanup so the primitive owns only the contracts it actually
+  serves today.
 
   No hardcoded user-facing copy: every visible string enters
   through props (`label`, `helper`) or slots (`leading`, `trailing`).
@@ -56,8 +58,6 @@
     helper?: string;
     /** When true, the input renders with `input-error` (red border). */
     invalid?: boolean;
-    /** Optional `id` of a `<datalist>` for autocomplete suggestions. */
-    list?: string;
     size?: InputSize;
     disabled?: boolean;
     /** Native placeholder text. */
@@ -78,13 +78,6 @@
     oninput?: (value: string) => void;
     /** Fired when the input loses focus. */
     onblur?: (event: FocusEvent) => void;
-    /**
-     * Optional `<datalist>` snippet — rendered after the input as a
-     * sibling. The consumer fills it with `<option>` elements. The
-     * datalist's id is the consumer-supplied `list` prop value, so
-     * the native autocomplete wiring works out of the box.
-     */
-    datalist?: Snippet;
   }
 
   let {
@@ -94,7 +87,6 @@
     required = false,
     helper,
     invalid = false,
-    list,
     size = "md",
     disabled = false,
     placeholder,
@@ -106,7 +98,6 @@
     id,
     oninput,
     onblur,
-    datalist,
   }: Props = $props();
 
   const sizeClass = $derived.by((): string => {
@@ -162,7 +153,6 @@
     {disabled}
     {maxlength}
     {minlength}
-    {list}
     class="input {sizeClass} {invalidClass} motion-reduce:transition-none w-full"
     aria-label={ariaLabel}
     aria-describedby={effectiveDescribedBy}
@@ -176,6 +166,3 @@
     <p class="label" id={helperId}>{helper}</p>
   {/if}
 </fieldset>
-{#if datalist}
-  {@render datalist()}
-{/if}

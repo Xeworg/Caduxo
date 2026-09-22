@@ -2,9 +2,10 @@
   ConfigurationPage.svelte — settings surface (PR 8a finish of
   caduxo-daisyui-redesign).
 
-  PR 5 already migrated the language selector (Select), the
-  location-required toggle (Toggle), and the theme switcher section
-  (Select + Alert). PR 8a finishes the page chrome:
+  PR 5 already migrated the language selector (Listbox — themed
+  popover, not a wrapped native `<select>`), the location-required
+  toggle (Toggle), and the theme switcher section (Listbox + Alert).
+  PR 8a finishes the page chrome:
     - Each settings section now lives inside a Card.svelte primitive
       (`tone="default"`).
     - The `.loading-msg` plain-text placeholder is replaced with
@@ -22,7 +23,6 @@
   No business logic changes — only the form chrome.
 
   Tailwind classes referenced here (for the JIT scanner):
-    select select-md select-error
     toggle toggle-primary toggle-md
     alert alert-error alert-info alert-soft
     menu menu-sm rounded-box
@@ -49,7 +49,7 @@
     } from "../i18n/locale.svelte.js";
     import { LL } from "../i18n/i18n-svelte.js";
     import { humanizeError } from "../lib/errors.js";
-    import Select from "./ui/Select.svelte";
+    import Listbox from "./ui/Listbox.svelte";
     import Toggle from "./ui/Toggle.svelte";
     import Alert from "./ui/Alert.svelte";
     import Card from "./ui/Card.svelte";
@@ -388,16 +388,19 @@
                 </div>
 
                 <!--
-                  Select.svelte wraps the native <select>; the visible
-                  surface is the DaisyUI `select select-md` shell while
-                  keyboard / mobile OS sheet / screen-reader semantics
-                  stay intact. `options` carries per-entry display
-                  labels bound to the `configuration.language.names`
-                  dictionary so adding a new locale only requires a
-                  matching dictionary entry.
+                  Language selector. We render the themed `Listbox`
+                  primitive so the open picker inherits the DaisyUI
+                  tokens (no OS-native black dropdown on Chromium /
+                  WebKit). The `value` is bound to the local
+                  `currentLocale` rune so the optimistic update +
+                  rollback in `handleLocaleChange` stays verbatim.
+                  `options` carries per-entry display labels bound to
+                  the `configuration.language.names` dictionary so
+                  adding a new locale only requires a matching
+                  dictionary entry.
                 -->
                 <div class="setting-control">
-                    <Select
+                    <Listbox
                         value={currentLocale}
                         options={AVAILABLE_LOCALES.map((code) => ({
                             value: code,
@@ -485,15 +488,16 @@
 
                 <!--
                   Theme switcher. We render the curated theme set as a
-                  `Select.svelte` list so the switcher inherits the
-                  same keyboard / mobile sheet / screen-reader
-                  semantics as the language picker. The currently
-                  active theme is the selected value, and the
-                  switcher is disabled while an IPC save is in
-                  flight (`switchingTheme`).
+                  themed `Listbox` list so the switcher inherits the
+                  same WAI-ARIA 1.2 select-only combobox contract
+                  (trigger button + popover listbox) as the language
+                  picker, but with no native `<select>` chrome
+                  leaking OS styling. The currently active theme is
+                  the selected value, and the switcher is disabled
+                  while an IPC save is in flight (`switchingTheme`).
                 -->
                 <div class="setting-control">
-                    <Select
+                    <Listbox
                         value={theme.current}
                         options={AVAILABLE_THEMES.map((name) => ({
                             value: name,
@@ -533,14 +537,15 @@
                 <!--
                   Three-option selector (`suggest_fefo` / `require_fefo` /
                   `manual_lot_choice`) mirroring the language picker pattern:
-                  the visible surface is the DaisyUI `select select-md`
-                  shell, the per-option labels come from the
-                  `configuration.scannerFefoPolicy.names` dictionary, and
-                  `savingFefoPolicy` disables the selector while the IPC
-                  save is in flight.
+                  rendered through the themed `Listbox` primitive so the
+                  open picker inherits the DaisyUI tokens (no OS-native
+                  black dropdown on Chromium / WebKit). The per-option
+                  labels come from the `configuration.scannerFefoPolicy.names`
+                  dictionary, and `savingFefoPolicy` disables the selector
+                  while the IPC save is in flight.
                 -->
                 <div class="setting-control">
-                    <Select
+                    <Listbox
                         value={currentFefoPolicy}
                         options={AVAILABLE_FEFO_POLICIES.map((value) => ({
                             value,
@@ -588,13 +593,16 @@
                 <!--
                   Two-option selector (`minimize_to_tray` /
                   `exit_application`) mirroring the language picker
-                  pattern. The selected value is read from the
+                  pattern, but rendered through the themed `Listbox`
+                  primitive so the open picker inherits the DaisyUI
+                  tokens (no OS-native black dropdown on Chromium /
+                  WebKit). The selected value is read from the
                   persisted `SettingsResponse.close_behavior` field;
                   `savingCloseBehavior` disables the selector while the
                   IPC save is in flight.
                 -->
                 <div class="setting-control">
-                    <Select
+                    <Listbox
                         value={currentCloseBehavior}
                         options={AVAILABLE_CLOSE_BEHAVIORS.map((value) => ({
                             value,

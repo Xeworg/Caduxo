@@ -3,6 +3,11 @@
   caduxo-daisyui-redesign PR 7a. Shell markup replaced with the
   shared primitive; business state, validation, submit handlers,
   and visible copy preserved verbatim.
+
+  Source / destination pickers now use the themed `Listbox`
+  primitive instead of `<Select>`. The empty placeholder is folded
+  into the option array as a disabled `value: ""` row (the themed
+  Listbox has no `<option>` slot for an external placeholder).
 -->
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
@@ -11,7 +16,7 @@
   import type { UnitKind } from "../lib/products.js";
   import { humanizeError } from "../lib/errors.js";
   import Modal from "./ui/Modal.svelte";
-  import Select from "./ui/Select.svelte";
+  import Listbox from "./ui/Listbox.svelte";
   import Button from "./ui/Button.svelte";
 
   // ── Props ──────────────────────────────────────────────────────────────────
@@ -139,11 +144,16 @@
   }
 
   /**
-   * Source location options for `<Select>`. The empty placeholder
-   * option is rendered via `value === ""` so the user can clear the
-   * selection without losing the bound rune state.
+   * Source location options for the themed `<Listbox>` primitive.
+   * The empty placeholder is folded in as the first row
+   * (`value: ""`, `disabled: true`) so the user can clear the
+   * selection without losing the bound rune state — the previous
+   * `<Select>` implementation surfaced the same placeholder via a
+   * `leading` snippet, but the Listbox primitive has no `<option>`
+   * slot for an external placeholder row.
    */
   $: sourceLocationOptions = [
+    { value: "", label: $LL.lotMovements.modal.selectLocation(), disabled: true },
     ...sourceLocations.map((loc) => {
       const bal = currentBalances.find((b) => b.location_id === loc.id)?.balance ?? 0;
       return {
@@ -154,11 +164,13 @@
   ];
 
   /**
-   * Destination location options for `<Select>`. Same shape as the
-   * source list minus the balance annotation, per the original
-   * shell.
+   * Destination location options for the themed `<Listbox>`
+   * primitive. Same shape as the source list minus the balance
+   * annotation, per the original shell; the empty placeholder is
+   * folded in identically to the source list.
    */
   $: destinationLocationOptions = [
+    { value: "", label: $LL.lotMovements.modal.selectLocation(), disabled: true },
     ...filteredDestinations.map((loc) => ({
       value: loc.id,
       label: locationLabel(loc),
@@ -217,36 +229,24 @@
       {:else}
         <div class="form-group">
           <label for="move-source">{$LL.lotMovements.modal.sourceLocation()}</label>
-          <Select
+          <Listbox
             id="move-source"
             bind:value={sourceLocationId}
             options={sourceLocationOptions}
             disabled={submitting}
             aria-label={$LL.lotMovements.modal.sourceLocation()}
-          >
-            {#snippet leading()}
-              <option value="" disabled>
-                {$LL.lotMovements.modal.selectLocation()}
-              </option>
-            {/snippet}
-          </Select>
+          />
         </div>
 
         <div class="form-group">
           <label for="move-dest">{$LL.lotMovements.modal.destinationLocation()}</label>
-          <Select
+          <Listbox
             id="move-dest"
             bind:value={destinationLocationId}
             options={destinationLocationOptions}
             disabled={submitting}
             aria-label={$LL.lotMovements.modal.destinationLocation()}
-          >
-            {#snippet leading()}
-              <option value="" disabled>
-                {$LL.lotMovements.modal.selectLocation()}
-              </option>
-            {/snippet}
-          </Select>
+          />
         </div>
 
         <div class="form-group">

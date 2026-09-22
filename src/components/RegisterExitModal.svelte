@@ -1,12 +1,13 @@
 <!--
   RegisterExitModal.svelte — Migrated to Modal.svelte primitive in
   caduxo-daisyui-redesign PR 7b. Shell markup replaced with the
-  shared primitive; the motivo select now uses Select.svelte per
-  the spec. Source-location select, quantity input, and notes
-  textarea stay inline (the source select is a domain list not in
-  scope; textareas and number spinners are out of scope for
-  Input.svelte / Select.svelte). Business state, validation,
-  submit handlers, and visible copy preserved verbatim.
+  shared primitive; the source-location picker and the motivo
+  picker both render through the themed `Listbox` primitive (no
+  native `<select>` so OS black dropdowns cannot leak through).
+  Quantity input and notes textarea stay inline (textareas and
+  number spinners are out of scope for the themed primitives).
+  Business state, validation, submit handlers, and visible copy
+  preserved verbatim.
 -->
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
@@ -15,7 +16,6 @@
   import type { UnitKind } from "../lib/products.js";
   import { humanizeError } from "../lib/errors.js";
   import Modal from "./ui/Modal.svelte";
-  import Select from "./ui/Select.svelte";
   import Listbox from "./ui/Listbox.svelte";
   import Button from "./ui/Button.svelte";
 
@@ -74,14 +74,21 @@
     | "decimal";
 
   /**
-   * Motivo options for the `<Select>` primitive. The value is the
-   * exit-reason code; the label is the i18n string for that reason
-   * (verbatim from the original shell).
+   * Motivo options for the themed `<Listbox>` primitive. The value
+   * is the exit-reason code; the label is the i18n string for that
+   * reason (verbatim from the original shell). The empty
+   * placeholder is folded in as a disabled `value: ""` row — the
+   * themed Listbox has no `<option>` slot for an external
+   * placeholder row, so the previous `<Select>` `leading` snippet
+   * moved into the options array.
    */
-  $: exitReasonOptions = EXIT_REASONS.map((reason) => ({
-    value: reason.value,
-    label: reason.label(),
-  }));
+  $: exitReasonOptions = [
+    { value: "", label: $LL.lotMovements.modal.selectExitReason(), disabled: true },
+    ...EXIT_REASONS.map((reason) => ({
+      value: reason.value,
+      label: reason.label(),
+    })),
+  ];
 
   /**
    * Source-location options for the `<Listbox>` primitive. Filters
@@ -204,19 +211,13 @@
 
       <div class="form-group">
         <label for="exit-reason">{$LL.lotMovements.modal.exitReason()}</label>
-        <Select
+        <Listbox
           id="exit-reason"
           bind:value={exitReason}
           options={exitReasonOptions}
           disabled={submitting}
           aria-label={$LL.lotMovements.modal.exitReason()}
-        >
-          {#snippet leading()}
-            <option value="" disabled>
-              {$LL.lotMovements.modal.selectExitReason()}
-            </option>
-          {/snippet}
-        </Select>
+        />
       </div>
 
       <div class="form-group">

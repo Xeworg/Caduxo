@@ -45,6 +45,7 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { onMount, onDestroy } from "svelte";
+  import { placePopover } from "../../lib/popoverPlacement.js";
 
   /** Normalised option shape used internally. */
   type Normalised = { value: string; id?: string; label?: string };
@@ -258,21 +259,22 @@
 
   // ── Positioning ───────────────────────────────────────────────────────────
 
+  /**
+   * Apply the shared popover placement helper. The Combobox renders a
+   * WAI-ARIA 1.2 select-only combobox where the listbox width matches
+   * the trigger width (floored at 200px), so the helper is called with
+   * `matchTriggerWidth: true` and the CSS `max-height: 260px` value.
+   * See `src/lib/popoverPlacement.ts` for the placement rules.
+   */
   function positionPopover() {
     if (!triggerEl || !popoverEl) return;
-    const rect = triggerEl.getBoundingClientRect();
-    const POPOVER_HEIGHT = 260;
-    const POPOVER_WIDTH = Math.max(rect.width, 200);
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const spaceAbove = rect.top;
-    const placeBelow = spaceBelow >= POPOVER_HEIGHT + 8 || spaceBelow >= spaceAbove;
-    popoverEl.style.top = placeBelow
-      ? `${rect.bottom + 4}px`
-      : `${rect.top - POPOVER_HEIGHT - 4}px`;
-    const left = Math.max(8, Math.min(rect.left, window.innerWidth - POPOVER_WIDTH - 8));
-    popoverEl.style.left = `${left}px`;
-    popoverEl.style.position = "fixed";
-    popoverEl.style.width = `${POPOVER_WIDTH}px`;
+    placePopover({
+      trigger: triggerEl,
+      popover: popoverEl,
+      maxHeight: 260,
+      minWidth: 200,
+      matchTriggerWidth: true,
+    });
   }
 
   // ── Outside-click / scroll ────────────────────────────────────────────────
@@ -288,14 +290,45 @@
     if (isOpen) requestAnimationFrame(() => positionPopover());
   }
 
+  let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+  function onResize() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (isOpen) requestAnimationFrame(() => positionPopover());
+    }, 80);
+  }
+
   onMount(() => {
     document.addEventListener("mousedown", onDocMousedown, true);
     window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
   });
 
   onDestroy(() => {
     document.removeEventListener("mousedown", onDocMousedown, true);
     window.removeEventListener("scroll", onScroll, true);
+    window.removeEventListener("resize", onResize);
+    clearTimeout(resizeTimer);
+  });
+
+  // ── Reactive reposition on content changes ─────────────────────────────────
+
+  /**
+   * Re-position the popover when its rendered content changes (the
+   * user typed a new query, options were re-supplied, etc.). The
+   * reactive block reads `value` and `options` so Svelte tracks them
+   * and re-runs the block when they change. `tick()` waits for
+   * Svelte's DOM update; `requestAnimationFrame` waits for the next
+   * paint so the helper measures the live rendered size.
+   */
+  $effect(() => {
+    if (!isOpen) return;
+    // Touch the inputs we want to react to.
+    void value;
+    void options;
+    tick().then(() => {
+      if (isOpen) requestAnimationFrame(() => positionPopover());
+    });
   });
 </script>
 
@@ -464,9 +497,10 @@
 
   /* DaisyUI `dropdown dropdown-content` classes are also applied in markup
      so the popover inherits DaisyUI's `border-radius` / shadow contract,
-     but the hand-rolled `position: fixed` + manual top/left computed in
-     `positionPopover()` stays unchanged. The visual contract is the only
-     thing borrowed (mirrors the CategoryPicker approach). */
+     but the hand-rolled `position: fixed` + manual top/left computed by
+     the shared `placePopover()` helper in `src/lib/popoverPlacement.ts`
+     is what actually positions the element. The visual contract is the
+     only thing borrowed (mirrors the CategoryPicker approach). */
   .cb-popover {
     position: fixed;
     z-index: 500;

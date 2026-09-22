@@ -16,6 +16,9 @@
         "title": "Caduxo - Product Expiry Tracker",
         "width": 1100,
         "height": 720,
+        "minWidth": 960,
+        "minHeight": 640,
+        "zoomHotkeysEnabled": false,
         "resizable": true,
         "fullscreen": false,
         "devtools": true
