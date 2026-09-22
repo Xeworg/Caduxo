@@ -1330,6 +1330,34 @@ type RootTranslation = {
 			 * @param {unknown} query
 			 */
 			forQuery: RequiredParams<'query'>
+			/**
+			 * C​o​l​u​m​n​s
+			 */
+			toggleColumns: string
+			/**
+			 * T​o​g​g​l​e​ ​v​i​s​i​b​l​e​ ​c​o​l​u​m​n​s
+			 */
+			toggleColumnsAria: string
+			/**
+			 * U​n​i​t
+			 */
+			columnUnit: string
+			/**
+			 * A​l​e​r​t​ ​d​a​y​s
+			 */
+			columnAlertDays: string
+			/**
+			 * C​a​t​e​g​o​r​y
+			 */
+			columnCategory: string
+			/**
+			 * H​i​d​e​ ​a​r​c​h​i​v​e​d​ ​p​r​o​d​u​c​t​s
+			 */
+			hideArchived: string
+			/**
+			 * S​h​o​w​ ​a​r​c​h​i​v​e​d​ ​p​r​o​d​u​c​t​s
+			 */
+			showArchived: string
 		}
 		detail: {
 			/**
@@ -5273,6 +5301,34 @@ export type TranslationFunctions = {
 			 * for "{query}"
 			 */
 			forQuery: (arg: { query: unknown }) => LocalizedString
+			/**
+			 * Columns
+			 */
+			toggleColumns: () => LocalizedString
+			/**
+			 * Toggle visible columns
+			 */
+			toggleColumnsAria: () => LocalizedString
+			/**
+			 * Unit
+			 */
+			columnUnit: () => LocalizedString
+			/**
+			 * Alert days
+			 */
+			columnAlertDays: () => LocalizedString
+			/**
+			 * Category
+			 */
+			columnCategory: () => LocalizedString
+			/**
+			 * Hide archived products
+			 */
+			hideArchived: () => LocalizedString
+			/**
+			 * Show archived products
+			 */
+			showArchived: () => LocalizedString
 		}
 		detail: {
 			/**

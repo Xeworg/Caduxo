@@ -164,6 +164,8 @@ pub struct ProductSearchResult {
     pub sku: String,
     pub description: String,
     pub category_ids: Vec<String>,
+    pub default_unit: Option<String>,
+    pub default_alert_days_before: i32,
     pub primary_barcode: Option<String>,
     pub is_active: bool,
 }

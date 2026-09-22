@@ -394,6 +394,17 @@ const es: BaseTranslation = {
       productCount: "{n} producto",
       productCount_plural: "{n} productos",
       forQuery: 'para "{query}"',
+      // Controles de columnas configurables y de ocultar archivados (PR
+      // `product-catalog-list-preferences`). Las preferencias se persisten
+      // en el localStorage del navegador; en este PR no se agrega un
+      // alcance de ajustes en el backend para estos interruptores.
+      toggleColumns: "Columnas",
+      toggleColumnsAria: "Alternar columnas visibles",
+      columnUnit: "Unidad",
+      columnAlertDays: "Días de alerta",
+      columnCategory: "Categoría",
+      hideArchived: "Ocultar productos archivados",
+      showArchived: "Mostrar productos archivados",
     },
     // Detail page
     detail: {
