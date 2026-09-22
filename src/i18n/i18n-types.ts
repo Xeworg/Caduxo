@@ -2578,6 +2578,17 @@ type RootTranslation = {
 		 * @param {unknown} year
 		 */
 		ariaDayCell: RequiredParams<'day' | 'month' | 'year'>
+		/**
+		 * C​a​l​e​n​d​a​r​ ​y​e​a​r​ ​{​y​e​a​r​}
+		 * @param {unknown} year
+		 */
+		annualHeaderLabel: RequiredParams<'year'>
+		/**
+		 * {​m​o​n​t​h​}​ ​{​y​e​a​r​}
+		 * @param {unknown} month
+		 * @param {unknown} year
+		 */
+		tileMonthLabel: RequiredParams<'month' | 'year'>
 	}
 	backupRestore: {
 		/**
@@ -6473,6 +6484,14 @@ export type TranslationFunctions = {
 		 * {month} {day}, {year}
 		 */
 		ariaDayCell: (arg: { day: unknown, month: unknown, year: unknown }) => LocalizedString
+		/**
+		 * Calendar year {year}
+		 */
+		annualHeaderLabel: (arg: { year: unknown }) => LocalizedString
+		/**
+		 * {month} {year}
+		 */
+		tileMonthLabel: (arg: { month: unknown, year: unknown }) => LocalizedString
 	}
 	backupRestore: {
 		/**
