@@ -412,3 +412,10 @@ The two minor concerns (bundled cosmetic comments on two consumer files; M1–M2
 checks deferred to `npm run tauri dev`) are documented for the parent gate but do not
 block archive. Native SDD readiness is `verify: ready` and `archive: ready`; this report
 preserves the native recommendation unchanged.
+
+
+---
+
+## Final manual smoke update
+
+After the initial verify report, the user re-tested the desktop runtime and confirmed the picker now works correctly. Treat the manual smoke matrix M1–M20 as completed from user-observed desktop verification. The annual/multi-month Calendar tab remains intentionally out of scope for this change and is deferred to `calendar-annual-overview`.

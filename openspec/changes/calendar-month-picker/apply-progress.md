@@ -298,3 +298,17 @@ Manual smoke coverage recorded from user observation:
 - M4 selecting a month updates the view and closes picker: pass.
 - M5/M9/M10 outside/focus remediation: pass after outside-click fix.
 - Annual/multi-month view: not in scope for `calendar-month-picker`.
+
+
+---
+
+## Final manual smoke confirmation
+
+User confirmed the manual desktop smoke pass after re-testing in the Tauri runtime:
+- Month picker opens correctly from the Calendar tab.
+- Month selection works correctly and closes the picker.
+- Year/month picker mutual exclusion works correctly.
+- Clicking outside / focus loss now closes the open month or year picker.
+- Calendar tab remains monthly by design; annual overview remains deferred to `calendar-annual-overview`.
+
+All M1–M20 manual smoke rows in `tasks.md` are marked complete from this user-confirmed desktop verification.
