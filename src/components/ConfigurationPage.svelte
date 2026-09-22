@@ -36,6 +36,8 @@
     import {
         getSettings,
         updateSettings,
+        type CloseBehavior,
+        type FefoPolicy,
         type SettingsResponse,
     } from "../lib/stores.js";
     import {
@@ -136,6 +138,57 @@
     let switchingTheme = false;
     let themeError = "";
 
+    // Scanner FEFO policy selector (`scanner-quick-operations` PR 3).
+    // `currentFefoPolicy` is the optimistic local copy; `savingFefoPolicy`
+    // disables the selector while the IPC save is in flight; `fefoPolicyError`
+    // carries the translated inline error surfaced on failure.
+    const AVAILABLE_FEFO_POLICIES: FefoPolicy[] = [
+        "suggest_fefo",
+        "require_fefo",
+        "manual_lot_choice",
+    ];
+    let currentFefoPolicy: FefoPolicy = "suggest_fefo";
+    let savingFefoPolicy = false;
+    let fefoPolicyError = "";
+
+    // Close-window behaviour selector (`scanner-quick-operations` PR 3).
+    // `currentCloseBehavior` mirrors the persisted value; `savingCloseBehavior`
+    // disables the selector while the IPC save is in flight; `closeBehaviorError`
+    // carries the translated inline error surfaced on failure.
+    const AVAILABLE_CLOSE_BEHAVIORS: CloseBehavior[] = [
+        "minimize_to_tray",
+        "exit_application",
+    ];
+    let currentCloseBehavior: CloseBehavior = "minimize_to_tray";
+    let savingCloseBehavior = false;
+    let closeBehaviorError = "";
+
+    // Per-option display names for the FEFO policy selector. The dictionary
+    // keys live in `configuration.scannerFefoPolicy.names` keyed by the
+    // snake_case wire values (`suggest_fefo`, `require_fefo`,
+    // `manual_lot_choice`), so adding a new option only requires a matching
+    // entry in each locale dictionary.
+    function fefoPolicyLabel(value: FefoPolicy): string {
+        const names = $LL.configuration.scannerFefoPolicy.names as unknown as Record<
+            FefoPolicy,
+            () => string
+        >;
+        return names[value]?.() ?? value;
+    }
+
+    // Per-option display names for the close-behaviour selector. The
+    // dictionary keys live in `configuration.closeBehavior.names` keyed by
+    // the snake_case wire values (`minimize_to_tray`, `exit_application`),
+    // so adding a new option only requires a matching entry in each
+    // locale dictionary.
+    function closeBehaviorLabel(value: CloseBehavior): string {
+        const names = $LL.configuration.closeBehavior.names as unknown as Record<
+            CloseBehavior,
+            () => string
+        >;
+        return names[value]?.() ?? value;
+    }
+
     // ─── Init ───────────────────────────────────────────────────────────────────
 
     onMount(async () => {
@@ -150,6 +203,13 @@
             currentLocale = settings.language_configured
                 ? settings.language
                 : locale.current;
+            // Mirror the persisted FEFO policy + close behaviour so the two
+            // new selectors render the actual current value on first paint.
+            // The backend already returns the curated enum values (with
+            // lenient parsing falling back to the documented defaults), so a
+            // direct cast here is safe.
+            currentFefoPolicy = settings.scanner_fefo_policy;
+            currentCloseBehavior = settings.close_behavior;
         } catch (e) {
             errorMsg = $LL.configuration.language.loadErrorPrefix() + humanizeError(e);
         } finally {
@@ -238,6 +298,62 @@
             themeError = $LL.settings.theme.error({ msg: humanizeError(e) });
         } finally {
             switchingTheme = false;
+        }
+    }
+
+    // ─── FEFO policy selector handler (`scanner-quick-operations` PR 3) ──────
+
+    async function handleFefoPolicyChange(next: string) {
+        const value = next as FefoPolicy;
+        const prev = currentFefoPolicy;
+        if (value === prev) return;
+        // Optimistic update
+        currentFefoPolicy = value;
+        fefoPolicyError = "";
+        savingFefoPolicy = true;
+
+        try {
+            const updated = await updateSettings({ scanner_fefo_policy: value });
+            // Persist the confirmed value; the backend re-emits the full
+            // snapshot so the local `settings` mirror stays in sync with the
+            // persisted row.
+            settings = { ...settings!, scanner_fefo_policy: updated.scanner_fefo_policy };
+        } catch (e) {
+            // Roll back on failure — use the actual caught error so the
+            // structured `CommandError` shape (Tauri) does not collapse to a
+            // hard-coded literal string.
+            currentFefoPolicy = prev;
+            fefoPolicyError =
+                $LL.configuration.language.saveErrorPrefix() + humanizeError(e);
+        } finally {
+            savingFefoPolicy = false;
+        }
+    }
+
+    // ─── Close-behaviour selector handler (`scanner-quick-operations` PR 3) ──
+
+    async function handleCloseBehaviorChange(next: string) {
+        const value = next as CloseBehavior;
+        const prev = currentCloseBehavior;
+        if (value === prev) return;
+        // Optimistic update
+        currentCloseBehavior = value;
+        closeBehaviorError = "";
+        savingCloseBehavior = true;
+
+        try {
+            const updated = await updateSettings({ close_behavior: value });
+            // Persist the confirmed value; the backend re-emits the full
+            // snapshot so the local `settings` mirror stays in sync with the
+            // persisted row.
+            settings = { ...settings!, close_behavior: updated.close_behavior };
+        } catch (e) {
+            // Roll back on failure.
+            currentCloseBehavior = prev;
+            closeBehaviorError =
+                $LL.configuration.language.saveErrorPrefix() + humanizeError(e);
+        } finally {
+            savingCloseBehavior = false;
         }
     }
 </script>
@@ -394,6 +510,115 @@
             {#if themeError}
                 <div class="section-status">
                     <Alert variant="error">{themeError}</Alert>
+                </div>
+            {/if}
+        </Card>
+
+        <!-- ─── Scanner FEFO policy section (PR 3) ──────────────────────── -->
+        <Card tone="default">
+            <h2 class="section-title">
+                {$LL.configuration.scannerFefoPolicy.sectionTitle()}
+            </h2>
+
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">
+                        {$LL.configuration.scannerFefoPolicy.label()}
+                    </span>
+                    <span class="setting-desc">
+                        {$LL.configuration.scannerFefoPolicy.description()}
+                    </span>
+                </div>
+
+                <!--
+                  Three-option selector (`suggest_fefo` / `require_fefo` /
+                  `manual_lot_choice`) mirroring the language picker pattern:
+                  the visible surface is the DaisyUI `select select-md`
+                  shell, the per-option labels come from the
+                  `configuration.scannerFefoPolicy.names` dictionary, and
+                  `savingFefoPolicy` disables the selector while the IPC
+                  save is in flight.
+                -->
+                <div class="setting-control">
+                    <Select
+                        value={currentFefoPolicy}
+                        options={AVAILABLE_FEFO_POLICIES.map((value) => ({
+                            value,
+                            label: fefoPolicyLabel(value),
+                        }))}
+                        size="md"
+                        aria-label={$LL.configuration.scannerFefoPolicy.label()}
+                        disabled={savingFefoPolicy}
+                        onchange={handleFefoPolicyChange}
+                    />
+                </div>
+            </div>
+
+            {#if savingFefoPolicy}
+                <div class="section-status">
+                    <LoadingState
+                        variant="spinner"
+                        label={$LL.configuration.language.saving()}
+                    />
+                </div>
+            {/if}
+            {#if fefoPolicyError}
+                <div class="section-status">
+                    <Alert variant="error">{fefoPolicyError}</Alert>
+                </div>
+            {/if}
+        </Card>
+
+        <!-- ─── Close-window behaviour section (PR 3) ─────────────────── -->
+        <Card tone="default">
+            <h2 class="section-title">
+                {$LL.configuration.closeBehavior.sectionTitle()}
+            </h2>
+
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">
+                        {$LL.configuration.closeBehavior.label()}
+                    </span>
+                    <span class="setting-desc">
+                        {$LL.configuration.closeBehavior.description()}
+                    </span>
+                </div>
+
+                <!--
+                  Two-option selector (`minimize_to_tray` /
+                  `exit_application`) mirroring the language picker
+                  pattern. The selected value is read from the
+                  persisted `SettingsResponse.close_behavior` field;
+                  `savingCloseBehavior` disables the selector while the
+                  IPC save is in flight.
+                -->
+                <div class="setting-control">
+                    <Select
+                        value={currentCloseBehavior}
+                        options={AVAILABLE_CLOSE_BEHAVIORS.map((value) => ({
+                            value,
+                            label: closeBehaviorLabel(value),
+                        }))}
+                        size="md"
+                        aria-label={$LL.configuration.closeBehavior.label()}
+                        disabled={savingCloseBehavior}
+                        onchange={handleCloseBehaviorChange}
+                    />
+                </div>
+            </div>
+
+            {#if savingCloseBehavior}
+                <div class="section-status">
+                    <LoadingState
+                        variant="spinner"
+                        label={$LL.configuration.language.saving()}
+                    />
+                </div>
+            {/if}
+            {#if closeBehaviorError}
+                <div class="section-status">
+                    <Alert variant="error">{closeBehaviorError}</Alert>
                 </div>
             {/if}
         </Card>

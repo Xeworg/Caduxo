@@ -616,6 +616,77 @@ pub async fn find_by_sku_exact(
     }
 }
 
+/// Scanner-only: looks up an **active** product by exact barcode. Returns
+/// the product row only when `is_active = 1`; archived products are
+/// ignored. The existing `find_by_barcode_exact` (used by
+/// `find_product_by_scan` for the dashboard scan/search surface) is
+/// intentionally left untouched because the dashboard must keep surfacing
+/// archived products so the user can locate them in the catalog.
+pub async fn find_active_product_by_barcode_exact(
+    pool: &SqlitePool,
+    barcode: &str,
+) -> Result<Option<ProductSearchResult>, sqlx::Error> {
+    let row: Option<RawProductRow> = sqlx::query_as(
+        r#"
+        SELECT products.id, sku, description, category_id, default_unit,
+               default_unit_id, unit_type,
+               default_alert_days_before, notes, is_active,
+               products.created_at, products.updated_at
+        FROM products
+        INNER JOIN product_barcodes pb ON pb.product_id = products.id
+        WHERE pb.barcode = $1 AND products.is_active = 1
+        "#,
+    )
+    .bind(barcode)
+    .fetch_optional(pool)
+    .await?;
+
+    match row {
+        Some(r) => {
+            let category_ids = get_product_category_ids(pool, &r.id).await?;
+            let primary_barcodes =
+                list_primary_barcodes_for_products(pool, &[r.id.clone()]).await?;
+            let primary_barcode = primary_barcodes.get(&r.id).cloned();
+            Ok(Some(r.into_search_result(category_ids, primary_barcode)))
+        }
+        None => Ok(None),
+    }
+}
+
+/// Scanner-only: looks up an **active** product by exact SKU. Returns the
+/// product row only when `is_active = 1`; archived products are ignored.
+/// The existing `find_by_sku_exact` (used by `find_product_by_scan` for
+/// the dashboard scan/search surface) is intentionally left untouched.
+pub async fn find_active_product_by_sku_exact(
+    pool: &SqlitePool,
+    sku: &str,
+) -> Result<Option<ProductSearchResult>, sqlx::Error> {
+    let row: Option<RawProductRow> = sqlx::query_as(
+        r#"
+        SELECT id, sku, description, category_id, default_unit,
+               default_unit_id, unit_type,
+               default_alert_days_before, notes, is_active,
+               created_at, updated_at
+        FROM products
+        WHERE sku = $1 AND is_active = 1
+        "#,
+    )
+    .bind(sku)
+    .fetch_optional(pool)
+    .await?;
+
+    match row {
+        Some(r) => {
+            let category_ids = get_product_category_ids(pool, &r.id).await?;
+            let primary_barcodes =
+                list_primary_barcodes_for_products(pool, &[r.id.clone()]).await?;
+            let primary_barcode = primary_barcodes.get(&r.id).cloned();
+            Ok(Some(r.into_search_result(category_ids, primary_barcode)))
+        }
+        None => Ok(None),
+    }
+}
+
 /// Checks whether a product has at least one active expiry lots.
 pub async fn product_has_active_lots(
     pool: &SqlitePool,

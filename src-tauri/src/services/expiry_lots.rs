@@ -2067,6 +2067,8 @@ mod tests {
                 require_initial_location_on_lot_create: Some(false),
                 language: None,
                 theme: None,
+                scanner_fefo_policy: None,
+                close_behavior: None,
             },
         )
         .await?;
@@ -2079,6 +2081,8 @@ mod tests {
                 require_initial_location_on_lot_create: Some(true),
                 language: None,
                 theme: None,
+                scanner_fefo_policy: None,
+                close_behavior: None,
             },
         )
         .await?;

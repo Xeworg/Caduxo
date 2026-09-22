@@ -12,5 +12,6 @@ pub mod lot_movements;
 pub mod notifications;
 pub mod products;
 pub mod reports;
+pub mod scanner;
 pub mod stores;
 pub mod unit_definitions;

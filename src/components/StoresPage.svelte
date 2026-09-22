@@ -111,9 +111,14 @@
 
   async function refreshStores() {
     stores = await listStores();
-    // Auto-select first store if none selected
+    // Auto-select first store if none selected. Persist via
+    // `updateSettings` so the backend scanner lookup (which reads
+    // `last_selected_store_id` directly) has a store to use — the
+    // previous behaviour left the persisted id empty and the Scanner
+    // tab failed with "No active store selected" on the first scan.
     if (!selectedStoreId && stores.length > 0) {
       selectedStoreId = stores[0].id;
+      await saveLastSelected(stores[0].id);
     }
   }
 
@@ -180,6 +185,12 @@
         });
         stores = [...stores, created];
         selectedStoreId = created.id;
+        // Persist the freshly created store as the active one so the
+        // backend scanner lookup has a store to resolve against
+        // (regression: previously the new store stayed visible in the
+        // sidebar but `last_selected_store_id` stayed empty and the
+        // Scanner tab kept failing with "No active store selected").
+        await saveLastSelected(created.id);
         if (firstRun) firstRun = false;
         flash($LL.stores.storeCreated(), "success");
       }

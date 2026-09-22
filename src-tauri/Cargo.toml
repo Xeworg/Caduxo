@@ -1,6 +1,6 @@
 [package]
 name = "caduxo"
-version = "0.1.0"
+version = "0.2.0"
 description = "Caduxo - Local-first product expiry tracker"
 authors = ["Caduxo"]
 license = "MIT"
@@ -17,7 +17,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # Tauri core
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["image-png", "tray-icon"] }
 tauri-plugin-log = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-dialog = "2"

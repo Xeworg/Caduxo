@@ -430,6 +430,8 @@ mod tests {
                 require_initial_location_on_lot_create: None,
                 language: None,
                 theme: None,
+                scanner_fefo_policy: None,
+                close_behavior: None,
             },
         )
         .await?;
