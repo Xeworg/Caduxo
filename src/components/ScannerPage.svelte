@@ -77,7 +77,7 @@
     suggestedProductAlertDays,
   } from "../lib/products.js";
   import Button from "./ui/Button.svelte";
-  import Select from "./ui/Select.svelte";
+  import Listbox from "./ui/Listbox.svelte";
   import Input from "./ui/Input.svelte";
   import Alert from "./ui/Alert.svelte";
   import LoadingState from "./ui/LoadingState.svelte";
@@ -899,7 +899,7 @@
       {:else if pickerStoreOptions.length === 0}
         <Alert variant="warning">{$LL.scanner.noStore.body()}</Alert>
       {:else}
-        <Select
+        <Listbox
           value={storeSelectId}
           options={[
             { value: "", label: $LL.lotForm.selectStorePlaceholder(), disabled: true },
@@ -957,7 +957,7 @@
              switch the Scanner context in place. We do NOT navigate
              away — the page just re-resolves the next scan against
              the new active store, dropping any in-progress scan. -->
-        <Select
+        <Listbox
           value={activeStoreSelectId}
           options={pickerStoreOptions}
           aria-label={$LL.scanner.activeStoreContext.label()}
@@ -1133,7 +1133,7 @@
               <span class="muted">({activeProduct.sku})</span>
             </p>
             {#if resolved.match_type === "product_match" && resolved.lots.length > 1}
-              <Select
+              <Listbox
                 value={selectedLotId}
                 options={lotPickerOptions}
                 aria-label={$LL.scanner.sale.lotPickerLabel()}
@@ -1158,7 +1158,7 @@
             {:else if availableBalances.length === 0}
               <Alert variant="warning">{$LL.scanner.sale.invalid.quantity()}</Alert>
             {:else}
-              <Select
+              <Listbox
                 value={locationId}
                 options={locationOptions}
                 aria-label={$LL.scanner.sale.locationLabel()}
@@ -1414,7 +1414,7 @@
               <span class="muted">({activeProduct.sku})</span>
             </p>
             {#if resolved.match_type === "product_match" && resolved.lots.length > 1}
-              <Select
+              <Listbox
                 value={selectedLotId}
                 options={lotPickerOptions}
                 aria-label={$LL.scanner.stockOut.lotPickerLabel()}
@@ -1434,7 +1434,7 @@
               </p>
             {/if}
 
-            <Select
+            <Listbox
               value={exitReason}
               options={[
                 { value: "", label: $LL.scanner.stockOut.reasonPlaceholder(), disabled: true },
@@ -1450,7 +1450,7 @@
             {:else if availableBalances.length === 0}
               <Alert variant="warning">{$LL.scanner.stockOut.invalid.quantity()}</Alert>
             {:else}
-              <Select
+              <Listbox
                 value={locationId}
                 options={locationOptions}
                 aria-label={$LL.scanner.stockOut.locationLabel()}

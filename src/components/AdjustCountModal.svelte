@@ -1,9 +1,11 @@
 <!--
   AdjustCountModal.svelte — Migrated to Modal.svelte primitive in
   caduxo-daisyui-redesign PR 7a. Shell markup replaced with the
-  shared primitive; the "real physical quantity" input now uses
-  Input.svelte per the spec. Business state, validation, submit
-  handlers, and visible copy preserved verbatim.
+  shared primitive; the "real physical quantity" input uses
+  `Input.svelte` and the location picker uses the themed
+  `Listbox.svelte` primitive (no native `<select>` so OS black
+  dropdowns cannot leak through). Business state, validation,
+  submit handlers, and visible copy preserved verbatim.
 -->
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
@@ -13,7 +15,7 @@
   import { humanizeError } from "../lib/errors.js";
   import Modal from "./ui/Modal.svelte";
   import Input from "./ui/Input.svelte";
-  import Select from "./ui/Select.svelte";
+  import Listbox from "./ui/Listbox.svelte";
   import Button from "./ui/Button.svelte";
 
   // ── Props ──────────────────────────────────────────────────────────────────
@@ -78,11 +80,16 @@
   }
 
   /**
-   * Location options for the `<Select>` primitive. The value is the
-   * location id; the label is `id — current balance` (verbatim from
-   * the original shell).
+   * Location options for the themed `<Listbox>` primitive. The
+   * value is the location id; the label is `id — current balance`
+   * (verbatim from the original shell). The empty placeholder is
+   * folded in as a disabled `value: ""` row — the themed Listbox
+   * has no `<option>` slot for an external placeholder row, so the
+   * previous `<Select>` `leading` snippet moved into the options
+   * array.
    */
   $: locationOptions = [
+    { value: "", label: $LL.lotMovements.modal.selectLocation(), disabled: true },
     ...currentBalances.map((bal) => ({
       value: bal.location_id,
       label: `${bal.location_id} — ${$LL.lotMovements.modal.currentBalanceOption({ balance: bal.balance })}`,
@@ -172,19 +179,13 @@
 
       <div class="form-group">
         <label for="adjust-location">{$LL.lotsDetail.location()}</label>
-        <Select
+        <Listbox
           id="adjust-location"
           bind:value={locationId}
           options={locationOptions}
           disabled={submitting}
           aria-label={$LL.lotsDetail.location()}
-        >
-          {#snippet leading()}
-            <option value="" disabled>
-              {$LL.lotMovements.modal.selectLocation()}
-            </option>
-          {/snippet}
-        </Select>
+        />
       </div>
 
       <div class="form-group">

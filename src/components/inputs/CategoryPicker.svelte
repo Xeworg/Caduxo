@@ -4,6 +4,7 @@
     import { tick } from "svelte";
     import { LL } from "../../i18n/i18n-svelte.js";
     import { humanizeError } from "../../lib/errors.js";
+    import { placePopover } from "../../lib/popoverPlacement.js";
     import Button from "../ui/Button.svelte";
     import Icon from "../ui/Icon.svelte";
 
@@ -257,25 +258,23 @@
 
     // ─── Positioning ─────────────────────────────────────────────────────────────
 
+    /**
+     * Apply the shared popover placement helper. The CategoryPicker uses
+     * a fixed 300px width (its themed chip-row design) and the CSS
+     * `max-height: 320px` value, so the helper is called with explicit
+     * `maxHeight` / `width` numbers. See `src/lib/popoverPlacement.ts`
+     * for the placement rules (prefer below when the measured content
+     * fits, clamp to viewport, measure every call so the position
+     * tracks live rendered content such as the inline create row).
+     */
     function positionPopover() {
         if (!triggerEl || !popoverEl) return;
-        const rect = triggerEl.getBoundingClientRect();
-        const POPOVER_HEIGHT = 320;
-        const POPOVER_WIDTH = 300;
-        const spaceBelow = window.innerHeight - rect.bottom;
-        const spaceAbove = rect.top;
-
-        const placeBelow = spaceBelow >= POPOVER_HEIGHT + 8 || spaceBelow >= spaceAbove;
-
-        popoverEl.style.top = placeBelow
-            ? `${rect.bottom + 4}px`
-            : `${rect.top - POPOVER_HEIGHT - 4}px`;
-        const left = Math.max(
-            8,
-            Math.min(rect.left, window.innerWidth - POPOVER_WIDTH - 8),
-        );
-        popoverEl.style.left = `${left}px`;
-        popoverEl.style.position = "fixed";
+        placePopover({
+            trigger: triggerEl,
+            popover: popoverEl,
+            maxHeight: 320,
+            width: 300,
+        });
     }
 
     // ─── Keyboard ergonomics ────────────────────────────────────────────────────
@@ -360,15 +359,61 @@
         if (isOpen) requestAnimationFrame(() => positionPopover());
     }
 
+    // Throttle resize/scroll repositioning so a single resize gesture
+    // does not flood the helper with measurements. The previous
+    // implementation repositioned on every scroll event with no
+    // throttling, which is fine for `scroll` (the browser coalesces)
+    // but `resize` fires once per layout change in rapid succession.
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+    function onResize() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            if (isOpen) requestAnimationFrame(() => positionPopover());
+        }, 80);
+    }
+
     import { onMount, onDestroy } from "svelte";
     onMount(() => {
         document.addEventListener("mousedown", onDocMousedown, true);
         window.addEventListener("scroll", onScroll, true);
+        window.addEventListener("resize", onResize);
     });
     onDestroy(() => {
         document.removeEventListener("mousedown", onDocMousedown, true);
         window.removeEventListener("scroll", onScroll, true);
+        window.removeEventListener("resize", onResize);
+        clearTimeout(resizeTimer);
     });
+
+    // ─── Reactive reposition on content changes ──────────────────────────────────
+
+    /**
+     * The popover must refresh its placement whenever its content
+     * changes (search results updated, inline create row appeared /
+     * disappeared, loading state toggled). The previous fix only
+     * repositioned on open + scroll, which left the popover anchored
+     * to a stale height after the user typed and the create row
+     * appeared — the popover then overflowed the viewport edge or
+     * covered the trigger input.
+     *
+     * The reactive block reads the content inputs Svelte tracks so it
+     * re-runs when any of them change, and it short-circuits when the
+     * popover is closed. `tick()` waits for Svelte to apply the DOM
+     * update; `requestAnimationFrame` waits for the next paint so the
+     * helper measures the live rendered size (not a 0px placeholder
+     * right after `isOpen` flips).
+     */
+    $: if (isOpen) {
+        // Touch the inputs we want to react to.
+        void results;
+        void searching;
+        void creating;
+        void createError;
+        void query;
+        tick().then(() => {
+            if (isOpen) requestAnimationFrame(() => positionPopover());
+        });
+    }
 
     // ─── Popover item click handlers (index-based) ─────────────────────────────────
 
@@ -474,7 +519,18 @@
                     variant="ghost"
                     size="sm"
                     aria-label={$LL.common.close()}
-                    onclick={closePopover}
+                    onclick={(e) => {
+                        // Stop the click from bubbling up to the
+                        // `.cp-trigger` div, which carries
+                        // `on:click={togglePopover}`. Without this guard
+                        // the close handler runs first (closing the
+                        // popover) and then the bubble reaches the
+                        // trigger, which sees the closed state and
+                        // re-opens it — the user clicks X and the
+                        // popover stays open.
+                        e.stopPropagation();
+                        closePopover();
+                    }}
                     id="cp-close-icon"
                 >
                     {#snippet iconStart()}
@@ -511,6 +567,7 @@
                         aria-selected={hasUncategorized}
                         id="cp-option-0"
                         tabindex="0"
+                        on:mousedown={(e) => e.preventDefault()}
                         on:click={() => onItemClick(0)}
                         on:mouseenter={() => (activeIndex = 0)}
                     >
@@ -534,6 +591,7 @@
                         aria-selected={isSelected(cat.id)}
                         id="cp-option-{idx}"
                         tabindex="0"
+                        on:mousedown={(e) => e.preventDefault()}
                         on:click={() => onItemClick(idx)}
                         on:mouseenter={() => (activeIndex = idx)}
                     >
@@ -557,6 +615,7 @@
                         aria-selected="false"
                         id="cp-option-{createIdx}"
                         tabindex="0"
+                        on:mousedown={(e) => e.preventDefault()}
                         on:click={submitInlineCreate}
                         on:mouseenter={() => (activeIndex = createIdx)}
                     >
@@ -702,9 +761,10 @@
 
     /* DaisyUI `dropdown dropdown-content` classes are also applied in markup
        so the popover inherits DaisyUI's `border-radius` / shadow contract,
-       but the hand-rolled `position: fixed` + manual top/left computed in
-       `positionPopover()` stays unchanged. The DaisyUI anchor pattern is
-       NOT used here because the popover is anchored to the trigger's
+       but the hand-rolled `position: fixed` + manual top/left computed by
+       the shared `placePopover()` helper in `src/lib/popoverPlacement.ts`
+       is what actually positions the element. The DaisyUI anchor pattern
+       is NOT used here because the popover is anchored to the trigger's
        bounding rect via JS — the visual contract is the only thing
        borrowed. */
     .cp-popover {

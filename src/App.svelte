@@ -4,9 +4,11 @@
   Migrates the bespoke .nav / .nav-btn / .nav-brand markup to a
   DaisyUI navbar bg-base-200 with navbar-start (Caduxo brand),
   navbar-center (tab buttons rendered as DaisyUI ghost buttons so
-  they pick up aria-current="page"), and navbar-end (a ≤720 px
-  dropdown that holds the overflow tabs so every tab remains
-  reachable via keyboard on small viewports).
+  they pick up aria-current="page"), and navbar-end (a dropdown that
+  holds the overflow tabs so every tab remains reachable whenever
+  the viewport is too narrow to render every Spanish tab label +
+  the brand area without clipping — see the `Responsive overflow`
+  section below).
 
   Renders the dashboard gradient band
   (linear-gradient from primary 5% → base-100) behind the brand
@@ -18,9 +20,67 @@
     btn btn-ghost btn-sm btn-square
     menu menu-sm rounded-box w-56 shadow
     motion-reduce:transition-none
+
+  Also installs the desktop-app layout guard: an `onMount`-scoped
+  zoom guard blocks Ctrl/Cmd + wheel, Linux/WebKitGTK pinch gesture
+  events, and Ctrl/Cmd + `+` / `-` / `=` / `0` (including their
+  numpad variants) so the webview cannot be accidentally zoomed —
+  see the `Zoom guard` section below. The native Tauri window keeps `minWidth: 960` /
+  `minHeight: 640` so the OS still clamps the viewport; the CSS
+  intentionally does NOT pin `.app-shell` / `html` / `body` to a
+  minimum width because that combination forced body-level
+  horizontal scrolling at constrained widths and hid the nav
+  buttons — see `Responsive overflow` and the follow-up commit
+  history in `odd/tasks/fix-category-picker-popovers.md`.
+
+  Responsive overflow
+  ------------------
+  Nine Spanish nav labels (Panel / Tiendas / Productos / Calendario
+  / Reportes / Escáner / Importar / Respaldo / Configuración) plus
+  the brand mark and wordmark need roughly 850–1100 px of navbar
+  width to render without clipping, depending on font and padding.
+  The previous `@media (max-width: 720px)` switch was below both
+  the native 960 px `minWidth` and the user-reported failing
+  width (≈ 873 px on the screenshot they pasted). The breakpoint
+  is now `@media (max-width: 1024px)`: at and below 1024 px the
+  desktop tab row hides and the DaisyUI `navbar-end` overflow
+  dropdown shows, so every destination stays one menu click
+  away. Above 1024 px the desktop tab row is rendered. The CSS
+  no longer pins `.app-shell` or `html` / `body` to a minimum
+  width; that was the source of the previous bug (the body
+  became wider than the viewport, the navbar stayed in desktop
+  mode, the right-most tab buttons were clipped off-screen with
+  no way to scroll to them).
+
+  Zoom guard
+  ----------
+  The guard registers listeners on both `window` and `document`
+  in the capture phase (`{ passive: false, capture: true }` for
+  `wheel` / WebKit `gesture*`, `{ capture: true }` for `keydown`)
+  so it fires before any inner bubbling handler can call
+  `stopPropagation`. Linux/KDE touchpad pinch can reach WebKitGTK
+  as `gesturestart` / `gesturechange` / `gestureend` instead of a
+  Ctrl+wheel event, so those gestures are cancelled explicitly. The
+  keydown handler matches `event.code` (physical-key identifiers
+  — `Equal`, `Minus`, `Digit0`, `NumpadAdd`, `NumpadSubtract`,
+  `Numpad0`) so locale-dependent layouts (AZERTY, Dvorak, numpad)
+  all map to the same blocked keys. The modifier check is
+  `ctrlKey || metaKey`, so every other shortcut (Ctrl+S, Ctrl+R,
+  Ctrl+P, Cmd+Q, Cmd+W) and every plain keypress (typing, scanner
+  Enter, form shortcuts) passes through untouched. On mount we
+  also force `document.documentElement.style.zoom = "1"` as a
+  one-shot reset (typed as `string` on `CSSStyleDeclaration`,
+  supported on Chromium / WebKit / WebView2 / WebKitGTK — the
+  four backends Tauri ships) so any inherited OS-level zoom is
+  cleared before the listeners take over. `onMount`'s returned
+  cleanup tears down every listener when the component unmounts,
+  so the guard never leaks into HMR or future routing. This is a
+  desktop-app layout guard, not an accessibility policy: Caduxo
+  is a fixed-layout desktop application, not a responsive
+  website.
 -->
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import caduxoMark from "./assets/caduxo-mark.png";
   import StoresPage from "./components/StoresPage.svelte";
   import ProductCatalogPage from "./components/ProductCatalogPage.svelte";
@@ -61,6 +121,164 @@
   // The cleanup function is stable and safe to call from onDestroy.
   const stopPeriodicCheck = startPeriodicNotificationCheck();
   onDestroy(() => stopPeriodicCheck());
+
+  // Desktop-app layout guard: prevent the user from accidentally
+  // zooming the webview via Ctrl/Cmd + wheel, Linux/WebKitGTK
+  // touchpad pinch gestures, Ctrl/Cmd + the browser zoom hotkeys
+  // (+ / - / = / 0, including their numpad variants), or opening
+  // browser-native context menu actions such as Inspect / Print.
+  // Caduxo is a fixed-layout desktop application
+  // (not a responsive website), so users have no reason to zoom
+  // the document and the resulting layout deformation is a real
+  // bug, not an accessibility feature.
+  //
+  // The guard is installed in `onMount` (returned cleanup tears it
+  // down on unmount) so registration is tied to the component
+  // lifecycle and does not depend on Svelte's reactive-tracking
+  // path. Listeners are attached in the capture phase on BOTH
+  // `window` and `document`, so the gesture is caught before any
+  // inner bubbling handler can call `stopPropagation` and the
+  // wheel and gesture handlers are non-passive so `preventDefault`
+  // actually suppresses browser zoom on Chromium / WebKit / WebView2 /
+  // WebKitGTK (Tauri's WebKitGTK backend can receive KDE touchpad
+  // pinch as WebKit `gesture*` events instead of Ctrl+wheel).
+  //
+  // The keydown handler checks `event.code` (the physical-key
+  // identifier) instead of `event.key` (the produced character)
+  // so locale-dependent layouts (AZERTY, Dvorak, numpad) all map
+  // to the same blocked keys:
+  //   Equal / Minus / Digit0      — main row (= with Shift is +, - is -, 0)
+  //   NumpadAdd / NumpadSubtract / Numpad0 — numpad equivalents
+  // The modifier check is `ctrlKey || metaKey`. Browser-native
+  // print (`KeyP`) is also suppressed because Caduxo does not expose
+  // printing through the webview chrome; every other shortcut
+  // (Ctrl+S, Ctrl+R, Cmd+Q, Cmd+W, …) and every plain keypress
+  // (normal typing, scanner Enter, form shortcuts) passes through
+  // untouched.
+  //
+  // On mount we also force `document.documentElement.style.zoom =
+  // "1"` as a one-shot reset. The `style.zoom` CSS property is
+  // non-standard (CSS Zoom draft) but is supported on Chromium /
+  // WebKit / WebView2 / WebKitGTK — the four backends Tauri ships
+  // — and is typed as `string` on `CSSStyleDeclaration`, so the
+  // assignment type-checks. The reset clears any zoom level the
+  // webview may have inherited from the OS before the listeners
+  // take over.
+  const ZOOM_KEY_CODES = new Set([
+    "Equal", // = / + (with Shift)
+    "Minus", // -
+    "Digit0", // 0 (main row)
+    "NumpadAdd", // numpad +
+    "NumpadSubtract", // numpad -
+    "Numpad0", // numpad 0
+  ]);
+
+  onMount(() => {
+    if (document.documentElement.style.zoom !== "1") {
+      document.documentElement.style.zoom = "1";
+    }
+
+    const resetDocumentZoom = () => {
+      if (document.documentElement.style.zoom !== "1") {
+        document.documentElement.style.zoom = "1";
+      }
+    };
+    const blockWheelZoom = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        resetDocumentZoom();
+      }
+    };
+    const blockGestureZoom = (event: Event) => {
+      event.preventDefault();
+      resetDocumentZoom();
+    };
+    const blockContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+    };
+    const blockKeyZoom = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (ZOOM_KEY_CODES.has(event.code) || event.code === "KeyP") {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener("wheel", blockWheelZoom, {
+      passive: false,
+      capture: true,
+    });
+    document.addEventListener("wheel", blockWheelZoom, {
+      passive: false,
+      capture: true,
+    });
+    window.addEventListener("keydown", blockKeyZoom, { capture: true });
+    document.addEventListener("keydown", blockKeyZoom, { capture: true });
+    window.addEventListener("contextmenu", blockContextMenu, { capture: true });
+    document.addEventListener("contextmenu", blockContextMenu, {
+      capture: true,
+    });
+    window.addEventListener("gesturestart", blockGestureZoom, {
+      passive: false,
+      capture: true,
+    });
+    document.addEventListener("gesturestart", blockGestureZoom, {
+      passive: false,
+      capture: true,
+    });
+    window.addEventListener("gesturechange", blockGestureZoom, {
+      passive: false,
+      capture: true,
+    });
+    document.addEventListener("gesturechange", blockGestureZoom, {
+      passive: false,
+      capture: true,
+    });
+    window.addEventListener("gestureend", blockGestureZoom, {
+      passive: false,
+      capture: true,
+    });
+    document.addEventListener("gestureend", blockGestureZoom, {
+      passive: false,
+      capture: true,
+    });
+
+    return () => {
+      window.removeEventListener("wheel", blockWheelZoom, {
+        capture: true,
+      });
+      document.removeEventListener("wheel", blockWheelZoom, {
+        capture: true,
+      });
+      window.removeEventListener("keydown", blockKeyZoom, { capture: true });
+      document.removeEventListener("keydown", blockKeyZoom, {
+        capture: true,
+      });
+      window.removeEventListener("contextmenu", blockContextMenu, {
+        capture: true,
+      });
+      document.removeEventListener("contextmenu", blockContextMenu, {
+        capture: true,
+      });
+      window.removeEventListener("gesturestart", blockGestureZoom, {
+        capture: true,
+      });
+      document.removeEventListener("gesturestart", blockGestureZoom, {
+        capture: true,
+      });
+      window.removeEventListener("gesturechange", blockGestureZoom, {
+        capture: true,
+      });
+      document.removeEventListener("gesturechange", blockGestureZoom, {
+        capture: true,
+      });
+      window.removeEventListener("gestureend", blockGestureZoom, {
+        capture: true,
+      });
+      document.removeEventListener("gestureend", blockGestureZoom, {
+        capture: true,
+      });
+    };
+  });
 
   function setTab(next: Tab) {
     activeTab = next;
@@ -221,6 +439,23 @@
     background: var(--color-base-100);
   }
 
+  /* No document- or shell-level `min-width` is set: the previous
+     `.app-shell` + `html` / `body { min-width: 960px }` guard
+     forced body-level horizontal scrolling at constrained widths
+     (e.g. the user-reported ≈ 873 px window) and the navbar stayed
+     in desktop mode, so the right-side tab buttons ended up clipped
+     off-screen with no way to scroll to them. The responsive
+     overflow dropdown (see `.app-tabs` / `.app-overflow` /
+     `@media (max-width: 1024px)` below) now owns the constrained-
+     width UX, while the native Tauri window's `minWidth: 960`
+     (see `src-tauri/tauri.conf.json`) keeps the OS from
+     resizing the window below the app floor in the first place.
+     Individual page components (DashboardPage's grid,
+     ConfigurationPage's two-column row, etc.) carry their own
+     internal `min-width` rules where they need a minimum content
+     width and scroll horizontally inside their containers as
+     needed. */
+
   .app-navbar {
     position: sticky;
     top: 0;
@@ -298,8 +533,15 @@
     vertical-align: middle;
   }
 
-  /* Desktop row visible at ≥ 720 px. The mobile overflow dropdown
-     (.app-overflow) hides at the same breakpoint. */
+  /* Desktop row visible above 1024 px, overflow dropdown below.
+     The previous `@media (max-width: 720px)` switch was below the
+     native 960 px Tauri `minWidth` and the ≈ 873 px width the user
+     pasted in their screenshot, so the desktop row rendered in a
+     clipped state with the right-side buttons cut off. 1024 px is
+     the new cutoff: at and below it, the desktop row hides and the
+     DaisyUI `navbar-end` dropdown shows so every destination is
+     one menu click away. Above 1024 px the desktop row fits the
+     nine Spanish labels + brand area comfortably. */
   .app-tabs {
     display: flex;
     align-items: center;
@@ -310,7 +552,7 @@
     display: none;
   }
 
-  @media (max-width: 720px) {
+  @media (max-width: 1024px) {
     .app-tabs {
       display: none;
     }

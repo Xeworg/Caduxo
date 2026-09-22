@@ -93,6 +93,16 @@
   --noise: 0;
 }
 
+/* ─── Global touch-action policy ─────────────────────────────────────── */
+/* Block browser pinch-to-zoom on Linux/KDE (WebKitGTK) and other
+ * touch surfaces without disabling normal single-finger panning.
+ * Pairs with the WebKit gesture listeners added in `App.svelte`,
+ * which suppress the remaining native zoom signals. */
+html,
+body {
+  touch-action: pan-x pan-y;
+}
+
 /* ─── Project motion tokens ───────────────────────────────────────────── */
 /* Centralised so the verify gate can grep for hand-written
  * `transition: ... 0.Xs` literals and reject them in favour of these

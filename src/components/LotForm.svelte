@@ -4,7 +4,9 @@
 
   Full migration to the shared UI primitives:
     - Input.svelte for text/number fields.
-    - Select.svelte for store + location selects.
+    - Listbox.svelte for store + location closed-choice fields
+      (themed popover; no native `<select>` so OS black dropdowns
+      cannot leak through).
     - Button.svelte for primary / ghost actions.
     - Alert.svelte for error + no-stores-available surfaces.
   The DatePicker primitive (its own component) is preserved verbatim;
@@ -12,7 +14,6 @@
 
   Tailwind classes referenced here (for the JIT scanner):
     input input-md input-error
-    select select-md select-error
     textarea
     btn btn-primary btn-ghost
     alert alert-error alert-soft
@@ -20,7 +21,7 @@
 <script lang="ts">
     import DatePicker from "./DatePicker.svelte";
     import Input from "./ui/Input.svelte";
-    import Select from "./ui/Select.svelte";
+    import Listbox from "./ui/Listbox.svelte";
     import Button from "./ui/Button.svelte";
     import Alert from "./ui/Alert.svelte";
     import {
@@ -184,17 +185,22 @@
         }
     }
 
-    // ── Select option derivations ───────────────────────────────────────────────
+    // ── Listbox option derivations ──────────────────────────────────────────────
 
     // Store options always start with the disabled placeholder row so the
-    // empty-selection state stays visually distinct from a real pick.
+    // empty-selection state stays visually distinct from a real pick. The
+    // placeholder is folded into `options` (rather than supplied via a
+    // `leading` snippet, which was the `<select>`-era pattern) because
+    // the themed Listbox has no `<option>` slot.
     $: storeOptions = [
         { value: "", label: $LL.lotForm.selectStorePlaceholder(), disabled: true },
         ...stores.map((s) => ({ value: s.id, label: s.name })),
     ];
 
     // Location options omit the "no location" entry when the setting
-    // requires a location — keeps the validation contract intact.
+    // requires a location — keeps the validation contract intact. When
+    // the location is optional the `value: ""` row is unselectable
+    // history-free (it's a real choice, not a placeholder).
     $: locationOptions = [
         ...(!requireInitialLocation
             ? [{ value: "", label: $LL.lotForm.noLocation() }]
@@ -294,8 +300,8 @@
         <!-- Store selection. Locked when the Scanner passes
              `lockedStoreId` (Scanner Registration flow) — the user
              cannot change the store from inside this form. Otherwise
-             show the select when multiple stores exist, or a static
-             label when only one store is available. PR
+             show the themed Listbox when multiple stores exist, or a
+             static label when only one store is available. PR
              `scanner-default-store-lock`. -->
         {#if lockedStoreId}
             <div class="store-hint store-hint-locked" role="note">
@@ -308,7 +314,7 @@
                 </span>
             </div>
         {:else if stores.length > 1}
-            <Select
+            <Listbox
                 bind:value={selectedStoreId}
                 options={storeOptions}
                 size="md"
@@ -324,7 +330,7 @@
 
         <!-- Location picker — shown when the store has locations -->
         {#if selectedStoreId && locations.length > 0}
-            <Select
+            <Listbox
                 bind:value={selectedLocationId}
                 options={locationOptions}
                 size="md"
