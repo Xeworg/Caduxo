@@ -312,3 +312,13 @@ User confirmed the manual desktop smoke pass after re-testing in the Tauri runti
 - Calendar tab remains monthly by design; annual overview remains deferred to `calendar-annual-overview`.
 
 All M1–M20 manual smoke rows in `tasks.md` are marked complete from this user-confirmed desktop verification.
+
+
+---
+
+## Pull request opened
+
+- Approved issue: #19 `Add calendar month picker`
+- Pull request: #20 `feat(calendar): add month picker`
+- URL: https://github.com/Xeworg/Caduxo/pull/20
+- Label: `type:feature`
