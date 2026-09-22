@@ -18,6 +18,8 @@
   import Table from "./ui/Table.svelte";
   import Badge from "./ui/Badge.svelte";
   import Alert from "./ui/Alert.svelte";
+  import Toggle from "./ui/Toggle.svelte";
+  import Button from "./ui/Button.svelte";
 
   // ── View state ─────────────────────────────────────────────────────────────
 
@@ -38,14 +40,71 @@
   let errorMsg = "";
   let successMsg = "";
   let exporting = false;
+  let highlightedProductId: string | null = null;
+  let highlightTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Debounce timer for search input
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ── List preferences (PR `product-catalog-list-preferences`) ─────────────
+  //
+  // Preferences live in browser localStorage so they survive reloads and
+  // app restarts. There is intentionally no backend settings scope for
+  // these toggles in this PR — see the ODD task doc for scope notes.
+  //
+  // Description + SKU are always visible (mandatory identifiers for the
+  // row). The other four columns are user-toggleable; the defaults match
+  // the previous fixed-column layout (Barcode, Unit, Alert days, Status).
+  type OptionalColumnKey =
+    | "barcode"
+    | "unit"
+    | "alertDays"
+    | "status";
+
+  const STORAGE_KEY_COLUMNS = "caduxo.products.catalog.columns.v1";
+  const STORAGE_KEY_HIDE_ARCHIVED = "caduxo.products.catalog.hideArchived.v1";
+
+  const DEFAULT_VISIBLE_COLUMNS: OptionalColumnKey[] = [
+    "barcode",
+    "unit",
+    "alertDays",
+    "status",
+  ];
+
+  /** Optional columns offered in the Columns menu. */
+  interface ColumnOption {
+    key: OptionalColumnKey;
+    label: string;
+  }
+
+  let visibleColumns: Set<OptionalColumnKey> = new Set(
+    DEFAULT_VISIBLE_COLUMNS,
+  );
+  let hideArchived = false;
+
+  // Column menu options are reactive so the localized labels update when the
+  // active locale changes.
+  $: columnOptions = [
+    { key: "barcode" as const, label: $LL.products.productBarcode() },
+    { key: "unit" as const, label: $LL.products.catalog.columnUnit() },
+    { key: "alertDays" as const, label: $LL.products.catalog.columnAlertDays() },
+    { key: "status" as const, label: $LL.dashboard.status() },
+  ] satisfies ColumnOption[];
+
+  // Popover open state for the Columns menu. Click-outside / Escape close it.
+  let columnsMenuOpen = false;
+  let columnsMenuRoot: HTMLDivElement | null = null;
+
+  // Restore preserved window scroll position after returning to the list view.
+  // We save the Y position right before any transition out of the list and
+  // restore it (after the list re-mounts) when we come back.
+  let savedListScrollY = 0;
 
   // ── Init ───────────────────────────────────────────────────────────────────
 
   onMount(async () => {
     try {
+      loadPreferences();
       categories = await listCategories();
       await runSearch("");
     } catch (e: unknown) {
@@ -54,6 +113,99 @@
       loading = false;
     }
   });
+
+  // Document-level click + Escape to close the columns menu.
+  // Kept as its own onMount so the callback returns a synchronous cleanup
+  // function (Svelte 5's onMount rejects Promise-returning callbacks).
+  onMount(() => {
+    function onDocClick(event: MouseEvent) {
+      if (!columnsMenuOpen) return;
+      const target = event.target as Node | null;
+      if (
+        columnsMenuRoot &&
+        target &&
+        !columnsMenuRoot.contains(target)
+      ) {
+        columnsMenuOpen = false;
+      }
+    }
+    function onDocKey(event: KeyboardEvent) {
+      if (columnsMenuOpen && event.key === "Escape") {
+        columnsMenuOpen = false;
+      }
+    }
+    document.addEventListener("mousedown", onDocClick, true);
+    document.addEventListener("keydown", onDocKey, true);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick, true);
+      document.removeEventListener("keydown", onDocKey, true);
+    };
+  });
+
+  // ── Preferences (localStorage) ─────────────────────────────────────────────
+
+  function loadPreferences() {
+    if (typeof localStorage === "undefined") return;
+    try {
+      const rawCols = localStorage.getItem(STORAGE_KEY_COLUMNS);
+      if (rawCols) {
+        const parsed = JSON.parse(rawCols);
+        if (Array.isArray(parsed)) {
+          const next = new Set<OptionalColumnKey>();
+          for (const key of parsed) {
+            if (
+              key === "barcode" ||
+              key === "unit" ||
+              key === "alertDays" ||
+              key === "status"
+            ) {
+              next.add(key);
+            }
+          }
+          // Fall back to defaults when storage is empty / invalid.
+          visibleColumns = next.size > 0 ? next : new Set(DEFAULT_VISIBLE_COLUMNS);
+        }
+      }
+      const rawHide = localStorage.getItem(STORAGE_KEY_HIDE_ARCHIVED);
+      if (rawHide === "true") hideArchived = true;
+    } catch {
+      // Corrupt storage → fall back to defaults silently.
+      visibleColumns = new Set(DEFAULT_VISIBLE_COLUMNS);
+      hideArchived = false;
+    }
+  }
+
+  function persistColumns() {
+    if (typeof localStorage === "undefined") return;
+    try {
+      localStorage.setItem(
+        STORAGE_KEY_COLUMNS,
+        JSON.stringify(Array.from(visibleColumns)),
+      );
+    } catch {
+      // localStorage may be unavailable (private mode, quota) — fail silently.
+    }
+  }
+
+  function persistHideArchived() {
+    if (typeof localStorage === "undefined") return;
+    try {
+      localStorage.setItem(
+        STORAGE_KEY_HIDE_ARCHIVED,
+        hideArchived ? "true" : "false",
+      );
+    } catch {
+      // localStorage may be unavailable — fail silently.
+    }
+  }
+
+  function toggleColumn(key: OptionalColumnKey, checked: boolean) {
+    const next = new Set(visibleColumns);
+    if (checked) next.add(key);
+    else next.delete(key);
+    visibleColumns = next;
+    persistColumns();
+  }
 
   // ── Search ─────────────────────────────────────────────────────────────────
 
@@ -90,19 +242,41 @@
     }
   }
 
-  // ── View transitions ──────────────────────────────────────────────────────
+  function highlightProduct(productId: string) {
+    if (highlightTimer) clearTimeout(highlightTimer);
+    highlightedProductId = productId;
+    highlightTimer = setTimeout(() => {
+      highlightedProductId = null;
+      highlightTimer = null;
+    }, 1200);
+  }
+
+  // ── View transitions (with scroll preservation) ───────────────────────────
+
+  function captureListScroll() {
+    if (view !== "list" || typeof window === "undefined") return;
+    savedListScrollY = window.scrollY;
+  }
+
+  function restoreListScroll() {
+    if (typeof window === "undefined") return;
+    // Wait for the list view to actually paint before restoring the Y
+    // position, otherwise the browser may clamp to the pre-layout height.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: savedListScrollY, left: 0, behavior: "auto" });
+      });
+    });
+  }
 
   function startCreate() {
+    captureListScroll();
     selectedProduct = null;
     view = "create";
   }
 
-  function startEdit(product: ProductResponse) {
-    selectedProduct = product;
-    view = "edit";
-  }
-
   function openDetail(product: ProductSearchResult) {
+    captureListScroll();
     selectedProductId = product.id;
     view = "detail";
   }
@@ -110,17 +284,21 @@
   function cancelForm() {
     selectedProduct = null;
     view = "list";
+    restoreListScroll();
   }
 
   async function handleSaved(product: ProductResponse) {
     const wasEditing = view === "edit";
-    flash(
-      wasEditing ? $LL.products.detail.edit() + ` ${product.sku}` : $LL.products.createProduct() + ` ${product.sku}`,
-      "success",
-    );
+    if (!wasEditing) {
+      flash($LL.products.createProduct() + ` ${product.sku}`, "success");
+    }
     selectedProduct = null;
     view = "list";
     await runSearch(appliedQuery);
+    restoreListScroll();
+    if (wasEditing) {
+      highlightProduct(product.id);
+    }
   }
 
   function handleCategoryCreated(category: CategoryResponse) {
@@ -135,11 +313,12 @@
     flash($LL.products.archived(), "success");
     selectedProductId = null;
     view = "list";
-    runSearch(appliedQuery);
+    runSearch(appliedQuery).finally(restoreListScroll);
   }
 
       function handleEditedFromDetail(product: ProductResponse) {
-        startEdit(product);
+        selectedProduct = product;
+        view = "edit";
       }
 
       // ── CSV export (Slice 10a) ───────────────────────────────────────────────
@@ -164,13 +343,19 @@
           }
 
       /**
-       * Products matching the active search query.
-       * When `categoryIds` is non-empty, further filtered client-side by category.
+       * Products matching the active search query, filtered client-side by:
+       *   1. The active category picker selection (existing behaviour).
+       *   2. The hide-archived toggle (new in PR
+       *      `product-catalog-list-preferences`).
        */
       $: displayedProducts = (() => {
-        if (categoryIds.length === 0) return results;
+        let filtered = results;
+        if (hideArchived) {
+          filtered = filtered.filter((p: ProductSearchResult) => p.is_active);
+        }
+        if (categoryIds.length === 0) return filtered;
         const hasUncat = categoryIds.includes(UNCATEGORIZED_SENTINEL);
-        return results.filter((p: ProductSearchResult) => {
+        return filtered.filter((p: ProductSearchResult) => {
           if (p.category_ids.length === 0) return hasUncat;
           return p.category_ids.some((cid: string) => categoryIds.includes(cid));
         });
@@ -184,13 +369,13 @@
           <div class="page-header-actions">
             <button
               class="btn-secondary"
-              on:click={exportProducts}
+              onclick={exportProducts}
               disabled={exporting}
               title={$LL.products.catalog.exportCsvTitle()}
             >
               {exporting ? $LL.products.catalog.exporting() : $LL.products.catalog.exportCsv()}
             </button>
-            <button class="btn-primary" on:click={startCreate}>
+            <button class="btn-primary" onclick={startCreate}>
               + {$LL.products.createProduct()}
             </button>
           </div>
@@ -208,14 +393,15 @@
         <!-- ── Search bar ──────────────────────────────────────────────────── -->
         <div class="search-bar">
           <input
+            class="search-input"
             type="text"
             bind:value={searchQuery}
-            on:input={onSearchInput}
+            oninput={onSearchInput}
             placeholder={$LL.products.catalog.searchPlaceholder()}
             autocomplete="off"
           />
           {#if searchQuery}
-            <button type="button" class="btn-secondary btn-small" on:click={clearSearch}>
+            <button type="button" class="btn-secondary btn-small" onclick={clearSearch}>
               {$LL.products.catalog.clear()}
             </button>
           {/if}
@@ -225,6 +411,51 @@
               {categories}
               includeUncategorized={true}
             />
+          </div>
+
+          <!-- Hide-archived toggle (PR `product-catalog-list-preferences`).
+               Persisted in localStorage. Default false. -->
+          <div class="hide-archived-wrap">
+            <Toggle
+              checked={hideArchived}
+              size="sm"
+              label={hideArchived
+                ? $LL.products.catalog.hideArchived()
+                : $LL.products.catalog.showArchived()}
+              onchange={(checked) => {
+                hideArchived = checked;
+                persistHideArchived();
+              }}
+            />
+          </div>
+
+          <!-- Columns menu: toggles optional columns (Barcode / Unit /
+               Alert days / Status). Description and SKU remain always
+               visible. Preferences persist in localStorage. -->
+          <div class="columns-menu-wrap" bind:this={columnsMenuRoot}>
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-label={$LL.products.catalog.toggleColumnsAria()}
+              onclick={() => (columnsMenuOpen = !columnsMenuOpen)}
+            >
+              {$LL.products.catalog.toggleColumns()}
+            </Button>
+            {#if columnsMenuOpen}
+              <div class="columns-menu" role="group" aria-label={$LL.products.catalog.toggleColumnsAria()}>
+                {#each columnOptions as opt (opt.key)}
+                  <label class="columns-menu-item">
+                    <input
+                      type="checkbox"
+                      class="checkbox checkbox-sm checkbox-primary"
+                      checked={visibleColumns.has(opt.key)}
+                      onchange={(e) => toggleColumn(opt.key, (e.currentTarget as HTMLInputElement).checked)}
+                    />
+                    <span>{opt.label}</span>
+                  </label>
+                {/each}
+              </div>
+            {/if}
           </div>
         </div>
 
@@ -255,8 +486,18 @@
           <tr>
             <th>{$LL.products.productDescription()}</th>
             <th>{$LL.products.productSku()}</th>
-            <th>{$LL.products.productBarcode()}</th>
-            <th>{$LL.dashboard.status()}</th>
+            {#if visibleColumns.has("barcode")}
+              <th>{$LL.products.productBarcode()}</th>
+            {/if}
+            {#if visibleColumns.has("unit")}
+              <th>{$LL.products.catalog.columnUnit()}</th>
+            {/if}
+            {#if visibleColumns.has("alertDays")}
+              <th>{$LL.products.catalog.columnAlertDays()}</th>
+            {/if}
+            {#if visibleColumns.has("status")}
+              <th>{$LL.dashboard.status()}</th>
+            {/if}
           </tr>
         {/snippet}
         {#snippet body()}
@@ -264,9 +505,10 @@
             <tr
               class="product-row"
               class:archived={!product.is_active}
+              class:highlighted={highlightedProductId === product.id}
               tabindex="0"
-              on:click={() => openDetail(product)}
-              on:keydown={(e) => {
+              onclick={() => openDetail(product)}
+              onkeydown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   openDetail(product);
@@ -277,20 +519,30 @@
                 <button
                   type="button"
                   class="product-link"
-                  on:click|stopPropagation={() => openDetail(product)}
+                  onclick={(e) => { e.stopPropagation(); openDetail(product); }}
                 >
                   {product.description}
                 </button>
               </td>
               <td class="cell-mono">{product.sku}</td>
-              <td class="cell-mono">{product.primary_barcode ?? "—"}</td>
-              <td>
-                {#if product.is_active}
-                  <Badge semantic="success" size="sm">{$LL.stores.active()}</Badge>
-                {:else}
-                  <Badge semantic="neutral" size="sm">{$LL.products.archived()}</Badge>
-                {/if}
-              </td>
+              {#if visibleColumns.has("barcode")}
+                <td class="cell-mono">{product.primary_barcode ?? "—"}</td>
+              {/if}
+              {#if visibleColumns.has("unit")}
+                <td>{product.default_unit ?? "—"}</td>
+              {/if}
+              {#if visibleColumns.has("alertDays")}
+                <td class="cell-mono">{product.default_alert_days_before}</td>
+              {/if}
+              {#if visibleColumns.has("status")}
+                <td>
+                  {#if product.is_active}
+                    <Badge semantic="success" size="sm">{$LL.stores.active()}</Badge>
+                  {:else}
+                    <Badge semantic="neutral" size="sm">{$LL.products.archived()}</Badge>
+                  {/if}
+                </td>
+              {/if}
             </tr>
           {/each}
         {/snippet}
@@ -380,10 +632,12 @@
     display: flex;
     gap: 8px;
     margin-bottom: 16px;
+    flex-wrap: wrap;
+    align-items: center;
   }
 
-  .search-bar input {
-    flex: 1;
+  .search-input {
+    flex: 1 1 320px;
     padding: 8px 12px;
     border: 1px solid var(--color-base-300);
     border-radius: 6px;
@@ -391,11 +645,67 @@
     font-family: inherit;
     background: var(--color-base-100);
     color: var(--color-base-content);
+    min-width: 240px;
   }
 
-  .search-bar input:focus {
+  .search-input:focus {
     outline: 2px solid var(--color-primary);
     border-color: var(--color-primary);
+  }
+
+  .category-filter {
+    flex: 0 1 auto;
+  }
+
+  .hide-archived-wrap {
+    flex: 0 0 auto;
+  }
+
+  .columns-menu-wrap {
+    position: relative;
+    flex: 0 0 auto;
+  }
+
+  .columns-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 20;
+    background: var(--color-base-100);
+    border: 1px solid var(--color-base-300);
+    border-radius: 10px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 190px;
+    box-shadow: 0 8px 24px color-mix(in oklch, black 16%, transparent);
+  }
+
+  .columns-menu-item {
+    display: grid;
+    grid-template-columns: 16px 1fr;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    line-height: 1.2;
+    color: var(--color-base-content);
+  }
+
+  .columns-menu-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    margin: 0;
+    padding: 0;
+    flex: 0 0 auto;
+  }
+
+  .columns-menu-item:hover {
+    background: var(--color-base-200);
   }
 
   /* Results */
@@ -423,6 +733,31 @@
   .product-row.archived {
     opacity: 0.65;
     background: color-mix(in oklch, var(--color-base-200) 90%, transparent);
+  }
+
+  .product-row.highlighted {
+    animation: product-row-highlight 1.2s ease-out;
+  }
+
+  @keyframes product-row-highlight {
+    0%,
+    100% {
+      background: inherit;
+      box-shadow: none;
+    }
+    20%,
+    65% {
+      background: color-mix(in oklch, var(--color-primary) 18%, var(--color-base-100));
+      box-shadow: inset 4px 0 0 var(--color-primary);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .product-row.highlighted {
+      animation: none;
+      background: color-mix(in oklch, var(--color-primary) 14%, var(--color-base-100));
+      box-shadow: inset 4px 0 0 var(--color-primary);
+    }
   }
 
   .product-row:focus-visible {

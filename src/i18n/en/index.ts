@@ -396,6 +396,17 @@ const en: BaseTranslation = {
       productCount: "{n} product",
       productCount_plural: "{n} products",
       forQuery: 'for "{query}"',
+      // Configurable column + hide-archived controls (PR
+      // `product-catalog-list-preferences`). Preferences are persisted in
+      // browser localStorage; there is intentionally no backend settings
+      // scope for these toggles in this PR.
+      toggleColumns: "Columns",
+      toggleColumnsAria: "Toggle visible columns",
+      columnUnit: "Unit",
+      columnAlertDays: "Alert days",
+      columnCategory: "Category",
+      hideArchived: "Hide archived products",
+      showArchived: "Show archived products",
     },
     // Detail page
     detail: {

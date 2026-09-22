@@ -117,6 +117,18 @@ export interface ProductSearchResult {
  description: string;
  /** Category ids from the `product_categories` junction table (V4). */
  category_ids: string[];
+ /**
+ * Echoes the catalog `display_name` when `default_unit_id` is set; raw legacy
+ * text otherwise. Mirrors `ProductResponse.default_unit` so the catalog list
+ * can render the same unit column the detail page already shows.
+ */
+ default_unit: string | null;
+ /**
+ * Default alert-days-before-expiry value. Mirrors
+ * `ProductResponse.default_alert_days_before` so the catalog list can render
+ * the same alert-days column the detail page already shows.
+ */
+ default_alert_days_before: number;
  primary_barcode: string | null;
  is_active: boolean;
 }

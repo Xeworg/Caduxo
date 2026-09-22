@@ -784,6 +784,10 @@ impl RawProductRow {
 
     /// Converts the raw row to a `ProductSearchResult`, injecting `category_ids`.
     /// `primary_barcode` is pre-resolved by callers for efficiency.
+    ///
+    /// `default_unit` and `default_alert_days_before` are forwarded verbatim
+    /// from the raw row so the catalog list can render the same unit / alert
+    /// metadata the detail page already shows.
     fn into_search_result(
         self,
         category_ids: Vec<String>,
@@ -794,6 +798,8 @@ impl RawProductRow {
             sku: self.sku,
             description: self.description,
             category_ids,
+            default_unit: self.default_unit,
+            default_alert_days_before: self.default_alert_days_before,
             primary_barcode,
             is_active: self.is_active,
         }
