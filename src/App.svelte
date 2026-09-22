@@ -124,8 +124,10 @@
 
   // Desktop-app layout guard: prevent the user from accidentally
   // zooming the webview via Ctrl/Cmd + wheel, Linux/WebKitGTK
-  // touchpad pinch gestures, or Ctrl/Cmd + the browser zoom hotkeys
-  // (+ / - / = / 0, including their numpad variants). Caduxo is a fixed-layout desktop application
+  // touchpad pinch gestures, Ctrl/Cmd + the browser zoom hotkeys
+  // (+ / - / = / 0, including their numpad variants), or opening
+  // browser-native context menu actions such as Inspect / Print.
+  // Caduxo is a fixed-layout desktop application
   // (not a responsive website), so users have no reason to zoom
   // the document and the resulting layout deformation is a real
   // bug, not an accessibility feature.
@@ -147,10 +149,12 @@
   // to the same blocked keys:
   //   Equal / Minus / Digit0      — main row (= with Shift is +, - is -, 0)
   //   NumpadAdd / NumpadSubtract / Numpad0 — numpad equivalents
-  // The modifier check is `ctrlKey || metaKey`, so every other
-  // shortcut (Ctrl+S, Ctrl+R, Ctrl+P, Cmd+Q, Cmd+W, …) and every
-  // plain keypress (normal typing, scanner Enter, form shortcuts)
-  // passes through untouched.
+  // The modifier check is `ctrlKey || metaKey`. Browser-native
+  // print (`KeyP`) is also suppressed because Caduxo does not expose
+  // printing through the webview chrome; every other shortcut
+  // (Ctrl+S, Ctrl+R, Cmd+Q, Cmd+W, …) and every plain keypress
+  // (normal typing, scanner Enter, form shortcuts) passes through
+  // untouched.
   //
   // On mount we also force `document.documentElement.style.zoom =
   // "1"` as a one-shot reset. The `style.zoom` CSS property is
@@ -189,9 +193,12 @@
       event.preventDefault();
       resetDocumentZoom();
     };
+    const blockContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+    };
     const blockKeyZoom = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey)) return;
-      if (ZOOM_KEY_CODES.has(event.code)) {
+      if (ZOOM_KEY_CODES.has(event.code) || event.code === "KeyP") {
         event.preventDefault();
       }
     };
@@ -206,6 +213,10 @@
     });
     window.addEventListener("keydown", blockKeyZoom, { capture: true });
     document.addEventListener("keydown", blockKeyZoom, { capture: true });
+    window.addEventListener("contextmenu", blockContextMenu, { capture: true });
+    document.addEventListener("contextmenu", blockContextMenu, {
+      capture: true,
+    });
     window.addEventListener("gesturestart", blockGestureZoom, {
       passive: false,
       capture: true,
@@ -240,6 +251,12 @@
       });
       window.removeEventListener("keydown", blockKeyZoom, { capture: true });
       document.removeEventListener("keydown", blockKeyZoom, {
+        capture: true,
+      });
+      window.removeEventListener("contextmenu", blockContextMenu, {
+        capture: true,
+      });
+      document.removeEventListener("contextmenu", blockContextMenu, {
         capture: true,
       });
       window.removeEventListener("gesturestart", blockGestureZoom, {
