@@ -1391,6 +1391,14 @@ type RootTranslation = {
 			 */
 			forQuery: RequiredParams<'query'>
 			/**
+			 * D​i​s​p​l​a​y
+			 */
+			displayFilters: string
+			/**
+			 * S​h​o​w​ ​a​r​c​h​i​v​e​d​ ​o​r​ ​r​e​t​i​r​e​d​ ​p​r​o​d​u​c​t​s
+			 */
+			displayFiltersAria: string
+			/**
 			 * C​o​l​u​m​n​s
 			 */
 			toggleColumns: string
@@ -1422,6 +1430,10 @@ type RootTranslation = {
 			 * S​h​o​w​ ​r​e​t​i​r​e​d​ ​p​r​o​d​u​c​t​s
 			 */
 			showRetired: string
+			/**
+			 * H​i​d​e​ ​r​e​t​i​r​e​d​ ​p​r​o​d​u​c​t​s
+			 */
+			hideRetired: string
 		}
 		detail: {
 			/**
@@ -5486,6 +5498,14 @@ export type TranslationFunctions = {
 			 */
 			forQuery: (arg: { query: unknown }) => LocalizedString
 			/**
+			 * Display
+			 */
+			displayFilters: () => LocalizedString
+			/**
+			 * Show archived or retired products
+			 */
+			displayFiltersAria: () => LocalizedString
+			/**
 			 * Columns
 			 */
 			toggleColumns: () => LocalizedString
@@ -5517,6 +5537,10 @@ export type TranslationFunctions = {
 			 * Show retired products
 			 */
 			showRetired: () => LocalizedString
+			/**
+			 * Hide retired products
+			 */
+			hideRetired: () => LocalizedString
 		}
 		detail: {
 			/**

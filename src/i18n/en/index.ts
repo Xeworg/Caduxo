@@ -415,6 +415,8 @@ const en: BaseTranslation = {
       // `product-catalog-list-preferences`). Preferences are persisted in
       // browser localStorage; there is intentionally no backend settings
       // scope for these toggles in this PR.
+      displayFilters: "Display",
+      displayFiltersAria: "Show archived or retired products",
       toggleColumns: "Columns",
       toggleColumnsAria: "Toggle visible columns",
       columnUnit: "Unit",
@@ -423,6 +425,7 @@ const en: BaseTranslation = {
       hideArchived: "Hide archived products",
       showArchived: "Show archived products",
       showRetired: "Show retired products",
+      hideRetired: "Hide retired products",
     },
     // Detail page
     detail: {

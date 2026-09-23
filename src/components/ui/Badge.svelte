@@ -5,7 +5,7 @@
       soon | normal). Maps to a DaisyUI semantic modifier so urgency
       surfaces stay semantically distinct.
     - `semantic` for general status feedback (success | warning | error
-      | info | neutral).
+      | info | neutral | retired).
   When both are supplied, `urgency` takes precedence. The optional
   `dot` flag renders a leading status dot. The `expired` urgency
   variant composes `motion-safe:animate-urgency-pulse` (PR 12 wires
@@ -20,7 +20,7 @@
 
   Tailwind classes referenced here (for the JIT scanner):
     badge badge-error badge-warning badge-success badge-info badge-neutral
-    badge-sm
+    badge-retired badge-sm
     status status-error status-warning status-success status-info status-neutral
     motion-safe:animate-urgency-pulse
 -->
@@ -39,7 +39,8 @@
     | "warning"
     | "error"
     | "info"
-    | "neutral";
+    | "neutral"
+    | "retired";
 
   export type BadgeSize = "sm" | "md";
 
@@ -80,7 +81,9 @@
   });
 
   const semanticClass = $derived(`badge-${effective}`);
-  const statusClass = $derived(`status-${effective}`);
+  const statusClass = $derived(
+    effective === "retired" ? "status-warning" : `status-${effective}`,
+  );
   const sizeClass = $derived(size === "sm" ? "badge-sm" : "");
 
   // The pulse utility is emitted only for the `expired` urgency
@@ -105,3 +108,15 @@
     {@render children()}
   {/if}
 </span>
+
+<style>
+  .badge-retired {
+    background: color-mix(in oklch, var(--color-warning) 18%, transparent);
+    border-color: color-mix(in oklch, var(--color-warning) 28%, transparent);
+    color: color-mix(
+      in oklch,
+      var(--color-warning) 80%,
+      var(--color-base-content)
+    );
+  }
+</style>

@@ -413,6 +413,8 @@ const es: BaseTranslation = {
       // `product-catalog-list-preferences`). Las preferencias se persisten
       // en el localStorage del navegador; en este PR no se agrega un
       // alcance de ajustes en el backend para estos interruptores.
+      displayFilters: "Mostrar",
+      displayFiltersAria: "Mostrar productos archivados o retirados",
       toggleColumns: "Columnas",
       toggleColumnsAria: "Alternar columnas visibles",
       columnUnit: "Unidad",
@@ -420,7 +422,8 @@ const es: BaseTranslation = {
       columnCategory: "Categoría",
       hideArchived: "Ocultar productos archivados",
       showArchived: "Mostrar productos archivados",
-      showRetired: "Mostrar productos retiradas",
+      showRetired: "Mostrar productos retirados",
+      hideRetired: "Ocultar productos retirados",
     },
     // Detail page
     detail: {
@@ -432,7 +435,7 @@ const es: BaseTranslation = {
       yesArchive: "Sí, archivar",
       archiveThisProduct: "¿Archivar este producto?",
       bannerArchived: "Este producto está archivado.",
-      bannerRetired: "Este producto está retiremento. Ya no está operativo pero su historial se conserva.",
+      bannerRetired: "Este producto está retirado. Ya no está operativo pero su historial se conserva.",
       unarchiveConfirm: "¿Desarchivar este producto? Se restaurará al inventario activo.",
       retireConfirm: "¿Retirar este producto?",
       retireConfirmBody: "Retirar es permanente. No podrás reactivarlo y el SKU y los códigos de barras se liberarán para su reutilización.",

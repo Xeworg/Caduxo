@@ -19,7 +19,6 @@
   import Table from "./ui/Table.svelte";
   import Badge from "./ui/Badge.svelte";
   import Alert from "./ui/Alert.svelte";
-  import Toggle from "./ui/Toggle.svelte";
   import Button from "./ui/Button.svelte";
 
   // ── View state ─────────────────────────────────────────────────────────────
@@ -94,7 +93,10 @@
     { key: "status" as const, label: $LL.dashboard.status() },
   ] satisfies ColumnOption[];
 
-  // Popover open state for the Columns menu. Click-outside / Escape close it.
+  // Popover open state for the Display and Columns menus. Click-outside /
+  // Escape close them.
+  let displayMenuOpen = false;
+  let displayMenuRoot: HTMLDivElement | null = null;
   let columnsMenuOpen = false;
   let columnsMenuRoot: HTMLDivElement | null = null;
 
@@ -117,14 +119,22 @@
     }
   });
 
-  // Document-level click + Escape to close the columns menu.
+  // Document-level click + Escape to close toolbar menus.
   // Kept as its own onMount so the callback returns a synchronous cleanup
   // function (Svelte 5's onMount rejects Promise-returning callbacks).
   onMount(() => {
     function onDocClick(event: MouseEvent) {
-      if (!columnsMenuOpen) return;
       const target = event.target as Node | null;
       if (
+        displayMenuOpen &&
+        displayMenuRoot &&
+        target &&
+        !displayMenuRoot.contains(target)
+      ) {
+        displayMenuOpen = false;
+      }
+      if (
+        columnsMenuOpen &&
         columnsMenuRoot &&
         target &&
         !columnsMenuRoot.contains(target)
@@ -133,7 +143,8 @@
       }
     }
     function onDocKey(event: KeyboardEvent) {
-      if (columnsMenuOpen && event.key === "Escape") {
+      if (event.key === "Escape") {
+        displayMenuOpen = false;
         columnsMenuOpen = false;
       }
     }
@@ -456,36 +467,45 @@
             />
           </div>
 
-          <!-- Hide-archived toggle (PR `product-catalog-list-preferences`).
-               Persisted in localStorage. Default false. -->
-          <div class="hide-archived-wrap">
-            <Toggle
-              checked={hideArchived}
+          <!-- Display menu: toggles archived / retired product visibility.
+               Preferences persist in localStorage. -->
+          <div class="toolbar-menu-wrap" bind:this={displayMenuRoot}>
+            <Button
+              variant="secondary"
               size="sm"
-              label={hideArchived
-                ? $LL.products.catalog.hideArchived()
-                : $LL.products.catalog.showArchived()}
-              onchange={(checked) => {
-                hideArchived = checked;
-                persistHideArchived();
-              }}
-            />
-          </div>
-
-          <!-- Show-retired toggle (PR `product-lifecycle-reusable-identifiers`).
-               Persisted in localStorage. Default false. -->
-          <div class="show-retired-wrap">
-            <Toggle
-              checked={showRetired}
-              size="sm"
-              label={showRetired
-                ? "Hide retired products"
-                : ($LL.products.catalog.showRetired?.() ?? "Show retired products")}
-              onchange={(checked) => {
-                showRetired = checked;
-                persistShowRetired();
-              }}
-            />
+              aria-label={$LL.products.catalog.displayFiltersAria()}
+              onclick={() => (displayMenuOpen = !displayMenuOpen)}
+            >
+              {$LL.products.catalog.displayFilters()}
+            </Button>
+            {#if displayMenuOpen}
+              <div class="toolbar-menu" role="group" aria-label={$LL.products.catalog.displayFiltersAria()}>
+                <label class="toolbar-menu-item">
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm checkbox-primary"
+                    checked={!hideArchived}
+                    onchange={(e) => {
+                      hideArchived = !(e.currentTarget as HTMLInputElement).checked;
+                      persistHideArchived();
+                    }}
+                  />
+                  <span>{$LL.products.catalog.showArchived()}</span>
+                </label>
+                <label class="toolbar-menu-item">
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm checkbox-primary"
+                    checked={showRetired}
+                    onchange={(e) => {
+                      showRetired = (e.currentTarget as HTMLInputElement).checked;
+                      persistShowRetired();
+                    }}
+                  />
+                  <span>{$LL.products.catalog.showRetired()}</span>
+                </label>
+              </div>
+            {/if}
           </div>
 
           <!-- Columns menu: toggles optional columns (Barcode / Unit /
@@ -719,15 +739,13 @@
     flex: 0 1 auto;
   }
 
-  .hide-archived-wrap {
-    flex: 0 0 auto;
-  }
-
+  .toolbar-menu-wrap,
   .columns-menu-wrap {
     position: relative;
     flex: 0 0 auto;
   }
 
+  .toolbar-menu,
   .columns-menu {
     position: absolute;
     top: calc(100% + 6px);
@@ -744,6 +762,7 @@
     box-shadow: 0 8px 24px color-mix(in oklch, black 16%, transparent);
   }
 
+  .toolbar-menu-item,
   .columns-menu-item {
     display: grid;
     grid-template-columns: 16px 1fr;
@@ -757,6 +776,7 @@
     color: var(--color-base-content);
   }
 
+  .toolbar-menu-item input[type="checkbox"],
   .columns-menu-item input[type="checkbox"] {
     width: 16px;
     height: 16px;
@@ -766,6 +786,7 @@
     flex: 0 0 auto;
   }
 
+  .toolbar-menu-item:hover,
   .columns-menu-item:hover {
     background: var(--color-base-200);
   }
