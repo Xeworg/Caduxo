@@ -30,6 +30,10 @@
         listStoreLocations,
         type StoreLocationResponse,
     } from "../lib/stores.js";
+    import {
+        resolveBatchCodeDisplay,
+        resolveLocationDisplay,
+    } from "../lib/lotDisplay.js";
     import { LL } from "../i18n/i18n-svelte.js";
     import { humanizeError } from "../lib/errors.js";
     import Modal from "./ui/Modal.svelte";
@@ -308,6 +312,38 @@
         if (days === 0) return $LL.products.detail.lot.urgencyToday();
         if (days === 1) return $LL.products.detail.lot.urgencyTomorrow();
         return $LL.products.detail.lot.urgencyDays({ days });
+    }
+
+    /**
+     * Display label for a lot's location in the product-detail lot list.
+     * Sentinel ids (`loc-sentinel-*`) render the localized "No location"
+     * placeholder; non-sentinel ids fall back to the raw id since the
+     * list view does not carry a location lookup table.
+     */
+    function lotLocationLabel(lot: ExpiryLotResponse): string {
+        return resolveLocationDisplay(
+            lot.location_id,
+            [],
+            $LL.common.noLocation(),
+        );
+    }
+
+    /**
+     * Display label for a lot's batch code. Missing batch codes render
+     * the localized "No batch code" placeholder rather than falling back
+     * to the location id.
+     */
+    function lotBatchCodeLabel(lot: ExpiryLotResponse): string {
+        return resolveBatchCodeDisplay(lot.batch_code, $LL.lotsDetail.noBatchCode());
+    }
+
+    /** Same as `lotLocationLabel` but for the detail modal, which has a
+     *  store-locations list available for name lookup. */
+    function detailLotLocationLabel(
+        lot: ExpiryLotResponse,
+        locations: StoreLocationResponse[],
+    ): string {
+        return resolveLocationDisplay(lot.location_id, locations, $LL.common.noLocation());
     }
 </script>
 
@@ -640,11 +676,9 @@ on:click={() => onEdit(product)}
                                     {lotQtyUnit(lot)}
                                 </span>
                                 <span class="lot-date">{lotExpLabel(lot)}</span>
-                                {#if lot.batch_code}
-                                    <span class="lot-batch">{lot.batch_code}</span>
-                                {/if}
+                                <span class="lot-batch">{lotBatchCodeLabel(lot)}</span>
                                 {#if lot.location_id}
-                                    <span class="lot-location">{lot.location_id}</span>
+                                    <span class="lot-location">{lotLocationLabel(lot)}</span>
                                 {/if}
                                 {#if lot.status === "archived"}
                                     <span class="badge-archived">{$LL.products.detail.lot.archived()}</span>
@@ -843,10 +877,10 @@ on:click={() => onEdit(product)}
             <dt>{$LL.lotsDetail.quantity()}</dt><dd>{lotQtyUnit(detailLot)}</dd>
             <dt>{$LL.lotsDetail.expiry()}</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
             <dt>{$LL.lotsDetail.alertDays()}</dt><dd>{detailLot.alert_days_before}</dd>
-            <dt>{$LL.lotsDetail.batch()}</dt><dd>{detailLot.batch_code ?? "—"}</dd>
+            <dt>{$LL.lotsDetail.batch()}</dt><dd>{lotBatchCodeLabel(detailLot)}</dd>
             <dt>{$LL.lotsDetail.status()}</dt><dd>{detailLot.status}</dd>
             {#if detailLot.location_id}
-                <dt>{$LL.lotsDetail.location()}</dt><dd>{detailLot.location_id}</dd>
+                <dt>{$LL.lotsDetail.location()}</dt><dd>{detailLotLocationLabel(detailLot, detailLotLocations)}</dd>
             {/if}
             {#if detailLot.resolution}
                 <dt>{$LL.lotsDetail.resolution()}</dt><dd>{detailLot.resolution}</dd>

@@ -558,6 +558,7 @@ const es: BaseTranslation = {
     expiry: "Caducidad",
     alertDays: "Días de alerta",
     batch: "Lote",
+    noBatchCode: "Sin código de lote",
     status: "Estado",
     location: "Ubicación",
     resolution: "Resolución",

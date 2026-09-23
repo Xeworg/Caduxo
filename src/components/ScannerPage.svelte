@@ -72,6 +72,7 @@
   import type { ProductResponse } from "../lib/products.js";
   import { listCategories, type CategoryResponse } from "../lib/products.js";
   import type { ExpiryLotResponse } from "../lib/expiry_lots.js";
+  import { resolveLocationDisplay } from "../lib/lotDisplay.js";
   import Button from "./ui/Button.svelte";
   import Listbox from "./ui/Listbox.svelte";
   import Input from "./ui/Input.svelte";
@@ -289,12 +290,14 @@
     return lotBalances.find((b) => b.location_id === locationId)?.balance ?? 0;
   });
 
-  // Location picker options for Sale and Stock-out.
+  // Location picker options for Sale and Stock-out. Sentinel balances
+  // (loc-sentinel-*) render the localized "No location" label but stay
+  // selectable so stock at the sentinel can still be sold / stocked out.
   let locationOptions = $derived([
     { value: "", label: $LL.scanner.stockOut.reasonPlaceholder() },
     ...availableBalances.map((b) => ({
       value: b.location_id,
-      label: `${b.location_id} (${b.balance})`,
+      label: `${resolveLocationDisplay(b.location_id, [], $LL.common.noLocation())} (${b.balance})`,
     })),
   ]);
 

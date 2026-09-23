@@ -1901,6 +1901,10 @@ type RootTranslation = {
 		 */
 		batch: string
 		/**
+		 * N​o​ ​b​a​t​c​h​ ​c​o​d​e
+		 */
+		noBatchCode: string
+		/**
 		 * S​t​a​t​u​s
 		 */
 		status: string
@@ -5998,6 +6002,10 @@ export type TranslationFunctions = {
 		 * Batch
 		 */
 		batch: () => LocalizedString
+		/**
+		 * No batch code
+		 */
+		noBatchCode: () => LocalizedString
 		/**
 		 * Status
 		 */

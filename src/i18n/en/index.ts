@@ -559,6 +559,7 @@ const en: BaseTranslation = {
     expiry: "Expiry",
     alertDays: "Alert days",
     batch: "Batch",
+    noBatchCode: "No batch code",
     status: "Status",
     location: "Location",
     resolution: "Resolution",
