@@ -749,14 +749,15 @@
 
   function setQuickRoute(next: QuickRoute): void {
     quickRoute = next;
+    const scanned = resolved && resolved.match_type === "unknown" ? resolved.scanned_value : "";
     if (next === "sku") {
-      quickSku = resolved && resolved.match_type === "unknown" ? resolved.scanned_value : "";
-      if (!quickBarcode.trim()) {
+      quickSku = scanned;
+      if (quickBarcode.trim() === scanned) {
         quickBarcode = "";
       }
     } else if (next === "barcode") {
-      quickBarcode = resolved && resolved.match_type === "unknown" ? resolved.scanned_value : "";
-      if (!quickSku.trim()) {
+      quickBarcode = scanned;
+      if (quickSku.trim() === scanned) {
         quickSku = "";
       }
     }
@@ -1255,12 +1256,12 @@
                 bind:value={quickSku}
                 label={$LL.scanner.registration.skuLabel()}
                 required
-                disabled={quickRoute === "barcode"}
+                disabled={quickRoute === "sku"}
               />
               <Input
                 bind:value={quickBarcode}
                 label={$LL.scanner.registration.barcodeLabel()}
-                disabled={quickRoute === "sku"}
+                disabled={quickRoute === "barcode"}
               />
             </div>
 
