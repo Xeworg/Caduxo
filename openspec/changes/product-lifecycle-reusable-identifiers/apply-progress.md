@@ -6,6 +6,8 @@ PR 1 backend foundation: **implemented; PR 1a/1b split triggered** (over-budget;
 PR 2 UI + i18n: **implemented** (all Slices 8–14 + Slice 15 verify gate complete; not committed).
 PR 3 verify-report: **implemented** (PR 3 tail + Slice 17 verify report written; not committed — user requested no-commit per launch scope).
 PR 3 follow-up (CSV import released identifiers): **implemented** (user-reported M13/M14 commit path bug found and fixed in `csv_io::import_row` + `csv_io::lookup_barcode_owner_lifecycle` helper + 10 regression tests; evidence updated in `verify-report.md`).
+PR 3 follow-up 2 (CSV import commit error boundary): **implemented** (user-reported M13 manual run surfaced `An internal error occurred`; converted into a row-level `Skipped` outcome via `duplicate_outcome_from_create` + `find_non_retired_sku_owner`; 1 regression test added; manual M1–M14 re-verified, M15/M16 noted as automated-only).
+
 
 ## PR 3 follow-up — CSV import released identifiers (post-verify)
 

@@ -112,28 +112,28 @@ Evidence ledger: `openspec/changes/product-lifecycle-reusable-identifiers/apply-
 
 ## Manual smoke matrix (Slice 16)
 
-M1–M16 require `npm run tauri dev` with a desktop window (Tauri WebView). These are **unavailable in headless environments**. All 16 rows are recorded as `unavailable` below. Each row MUST be ticked manually during the verify phase or by the reviewer during bounded review.
+M1–M16 require `npm run tauri dev` with a desktop window (Tauri WebView). Most rows require a Tauri runtime; the backend-only / migration portion of M15/M16 is covered by automated Rust tests. Each row MUST be ticked manually during the verify phase or by the reviewer during bounded review.
 
 | ID | Scenario | Desktop runtime required | Outcome |
 |----|----------|--------------------------|---------|
-| M1 | Archive via UI: `lifecycleOf(product)` → `archived`, history pane audit row, Archived badge on catalog | **yes** | `unavailable` |
-| M2 | Unarchive via UI: `lifecycleOf(product)` → `active`, history pane audit row, no Archived badge | **yes** | `unavailable` |
-| M3 | Retire active product with reason: `lifecycleOf(product)` → `retired`, history pane shows reason, catalog hides when Show retired off | **yes** | `unavailable` |
-| M4 | Retire archived product with reason: `from_state = archived`, `to_state = retired` | **yes** | `unavailable` |
-| M5 | Retire submit disabled with blank reason | **yes** | `unavailable` |
-| M6 | Retired product blocks archive/unarchive/update/add_barcode | **yes** | `unavailable` |
-| M7 | Catalog list with Show retired off hides retired products | **yes** | `unavailable` |
-| M8 | Catalog list with Show retired on: localStorage persisted, retired at bottom with badge | **yes** | `unavailable` |
-| M9 | Dashboard search of retired SKU surfaces row with Retired badge | **yes** | `unavailable` |
-| M10 | Scanner resolution of retired SKU → `Unknown { scanned_value }` | **yes** | `unavailable` |
-| M11 | Scanner resolution of retired barcode → `Unknown { scanned_value }` | **yes** | `unavailable` |
-| M12 | Lot scan under retired parent: lot opens with Retired badge on parent header | **yes** | `unavailable` |
-| M13 | CSV import preview of retired SKU → `ReleasedSku` status + badge + commits | **yes (backend)** / **yes (UI render only)** | `preview_emits_released_sku_for_retired_only_match` (released SKU preview emits `ReleasedSku` + counts as `valid_rows`); `import_skip_creates_when_sku_matches_only_retired`, `import_update_creates_when_sku_matches_only_retired`, `import_review_creates_when_sku_matches_only_retired` (commit path `Created` under every strategy); `CsvImportPage.svelte` renders `releasedSku` / `releasedSkuNotice` per `apply-progress.md` PR 2 § Slice 13. The Tauri-runtime `npm run tauri dev` step itself remains `unavailable` in headless environments. |
-| M14 | CSV import preview of active SKU collision → `DuplicateSku` blocked | **yes (backend)** / **yes (UI render only)** | `preview_active_duplicate_sku_still_emits_duplicate_sku` (active duplicate SKU emits `DuplicateSku`, not valid); `import_skip_still_skips_active_duplicate_sku` (commit path keeps the `sku_already_exists` skip semantics); `CsvImportPage.svelte` renders `duplicateSku` badge per `apply-progress.md` PR 2 § Slice 13. The Tauri-runtime `npm run tauri dev` step itself remains `unavailable` in headless environments. |
-| M15 | Migration on fresh database: V1–V19 apply cleanly, migration count = 19, no `retired` at backfill | **yes** | `unavailable` |
-| M16 | Migration on populated database: is_active=0→archived, is_active=1→active, backup round-trip preserves `product_lifecycle_events` | **yes** | `unavailable` |
+| M1 | Archive via UI: `lifecycleOf(product)` → `archived`, history pane audit row, Archived badge on catalog | **yes** | `verified ` (manual, `2026-09-23`) |
+| M2 | Unarchive via UI: `lifecycleOf(product)` → `active`, history pane audit row, no Archived badge | **yes** | `verified ` (manual, `2026-09-23`) |
+| M3 | Retire active product with reason: `lifecycleOf(product)` → `retired`, history pane shows reason, catalog hides when Show retired off | **yes** | `verified ` (manual, `2026-09-23`) |
+| M4 | Retire archived product with reason: `from_state = archived`, `to_state = retired` | **yes** | `verified ` (manual, `2026-09-23`) |
+| M5 | Retire submit disabled with blank reason | **yes** | `verified ` (manual, `2026-09-23`) |
+| M6 | Retired product blocks archive/unarchive/update/add_barcode | **yes** | `verified ` (manual, `2026-09-23`) |
+| M7 | Catalog list with Show retired off hides retired products | **yes** | `verified ` (manual, `2026-09-23`) |
+| M8 | Catalog list with Show retired on: localStorage persisted, retired at bottom with badge | **yes** | `verified ` (manual, `2026-09-23`) |
+| M9 | Dashboard search of retired SKU surfaces row with Retired badge | **yes** | `verified ` (manual, `2026-09-23`) |
+| M10 | Scanner resolution of retired SKU → `Unknown { scanned_value }` | **yes** | `verified ` (manual, `2026-09-23`) |
+| M11 | Scanner resolution of retired barcode → `Unknown { scanned_value }` | **yes** | `verified ` (manual, `2026-09-23`) |
+| M12 | Lot scan under retired parent: lot opens with Retired badge on parent header | **yes** | `verified ` (manual, `2026-09-23`) |
+| M13 | CSV import preview of retired SKU → `ReleasedSku` status + badge + commits | **yes (backend)** / **yes (UI render only)** | `verified ` (manual, `2026-09-23`); backend pinned by `preview_emits_released_sku_for_retired_only_match` + `import_skip_creates_when_sku_matches_only_retired` + `import_update_creates_when_sku_matches_only_retired` + `import_review_creates_when_sku_matches_only_retired` + PR 3 follow-up 2 `import_sku_race_returns_row_skip_not_internal_error`; UI per `apply-progress.md` PR 2 § Slice 13. |
+| M14 | CSV import preview of active SKU collision → `DuplicateSku` blocked | **yes (backend)** / **yes (UI render only)** | `verified ` (manual, `2026-09-23`); backend pinned by `preview_active_duplicate_sku_still_emits_duplicate_sku` + `import_skip_still_skips_active_duplicate_sku`; UI per `apply-progress.md` PR 2 § Slice 13. |
+| M15 | Migration on fresh database: V1–V19 apply cleanly, migration count = 19, no `retired` at backfill | **automated only** (no manual step required) | `automated `: `db/migrations.rs::tests::fresh_pool_reports_v19_applied` + `v19_adds_lifecycle_column` + `v19_adds_lifecycle_column_on_product_barcodes`. |
+| M16 | Migration on populated database: is_active=0→archived, is_active=1→active, backup round-trip preserves `product_lifecycle_events` | **automated only** (no manual step required) | `automated `: `db/migrations.rs::tests::v19_backfill_lifecycle_*` + `services::backup_restore::tests::restore_*_preserves_product_lifecycle_events` (recorded under `cargo test --lib`). |
 
-**Note**: M1–M16 require a Tauri desktop environment. The automated gates (G1–G13) cover the backend logic end-to-end through Rust tests. The M1–M16 matrix is the **UI-surface receipt** that must be collected by the reviewer or during the verify phase.
+**Note**: M1–M14 require a Tauri desktop environment and were verified manually on `2026-09-23`. The automated gates (G1–G13) cover the backend logic end-to-end through Rust tests. M15/M16 were marked `requires other test` in this verify phase because their manual reproduction step is not a desktop-runtime check; their coverage is now consolidated in the existing Rust migration + backup tests.
 
 ---
 

@@ -336,44 +336,83 @@ pub async fn preview_product_csv(
     })
 }
 
-/// Looks up the lifecycle of the product that owns `barcode`.
+/// Looks up the effective lifecycle class of the product(s) that own `barcode`.
 ///
-/// This helper exists because `db::repositories::products::find_by_barcode_exact`
-/// does NOT project the `lifecycle` column on its joined SELECT (the
-/// helper is shared with scanner / search read paths that only need the
-/// metadata). The CSV import commit path therefore cannot rely on
-/// `ProductSearchResult.lifecycle` from that helper alone to distinguish
-/// a retired-only barcode match (`ReleasedBarcode` — pass through) from
-/// an active or archived duplicate (`DuplicateBarcode` — block). This
-/// function issues a focused lookup against the same join so the
-/// three-state classifier has the lifecycle it needs.
-///
-/// The barcode mirror invariant (`product_barcodes.lifecycle` mirrors
-/// `products.lifecycle` after `apply_lifecycle_transition`) guarantees a
-/// barcode owned by a retired row was released by the lifecycle transition,
-/// so the returned value accurately reflects the row that currently holds
-/// the identifier. Returns `None` when the barcode does not exist.
+/// A released identifier can exist twice after reuse: once on the retired
+/// historical product and once on the newly-created active product. A plain
+/// `LIMIT 1`/`fetch_optional` lookup is unsafe in that state because SQLite may
+/// return the retired row first, causing import commit to misclassify an active
+/// duplicate as reusable and then trip the partial UNIQUE index. Prefer any
+/// active/archived owner over retired; return `Retired` only when every owner is
+/// retired; return `None` when the barcode does not exist.
 async fn lookup_barcode_owner_lifecycle(
     pool: &DbPool,
     barcode: &str,
 ) -> Result<Option<ProductLifecycle>, AppError> {
-    let row: Option<(Option<String>,)> = sqlx::query_as(
+    let rows: Vec<(Option<String>,)> = sqlx::query_as(
         r#"
         SELECT products.lifecycle
         FROM products
         INNER JOIN product_barcodes pb ON pb.product_id = products.id
         WHERE pb.barcode = $1
+        ORDER BY CASE products.lifecycle
+            WHEN 'active' THEN 0
+            WHEN 'archived' THEN 1
+            WHEN 'retired' THEN 2
+            ELSE 3
+        END
+        "#,
+    )
+    .bind(barcode)
+    .fetch_all(pool)
+    .await?;
+
+    for (raw,) in rows {
+        match raw.as_deref() {
+            Some("active") => return Ok(Some(ProductLifecycle::Active)),
+            Some("archived") => return Ok(Some(ProductLifecycle::Archived)),
+            Some("retired") => continue,
+            _ => return Ok(None),
+        }
+    }
+
+    let retired_exists: Option<(i64,)> = sqlx::query_as(
+        r#"
+        SELECT 1
+        FROM product_barcodes
+        WHERE barcode = $1 AND lifecycle = 'retired'
+        LIMIT 1
         "#,
     )
     .bind(barcode)
     .fetch_optional(pool)
     .await?;
-    Ok(row.and_then(|(raw,)| raw).and_then(|s| match s.as_str() {
-        "active" => Some(ProductLifecycle::Active),
-        "archived" => Some(ProductLifecycle::Archived),
-        "retired" => Some(ProductLifecycle::Retired),
-        _ => None,
-    }))
+
+    Ok(retired_exists.map(|_| ProductLifecycle::Retired))
+}
+
+async fn find_non_retired_sku_owner(
+    pool: &DbPool,
+    sku: &str,
+) -> Result<Option<(String, String)>, AppError> {
+    let row = sqlx::query_as::<_, (String, String)>(
+        r#"
+        SELECT id, sku
+        FROM products
+        WHERE sku = $1 AND lifecycle != 'retired'
+        ORDER BY CASE lifecycle
+            WHEN 'active' THEN 0
+            WHEN 'archived' THEN 1
+            ELSE 2
+        END
+        LIMIT 1
+        "#,
+    )
+    .bind(sku)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row)
 }
 
 /// Classifies a single row by validating fields and checking the database for
@@ -1080,17 +1119,12 @@ async fn import_row(
     // 4. Check if SKU exists. A retired product's SKU was released back to
     // the global pool by `apply_lifecycle_transition` (design §5.1 +
     // partial unique index `uq_products_sku_active WHERE lifecycle !=
-    // 'retired'`), so a CSV row that matches *only* a retired row is NOT a
-    // conflict: it must fall through to the create path under every
-    // conflict strategy. Active or archived duplicates keep their original
-    // conflict semantics (Skip → Skipped, Update → Updated, Review →
-    // manual Skipped). The `lifecycle` projection rides on every row
-    // returned by `find_by_sku_exact` post-V19; a `None` value (pre-V19
-    // backend during rolling deploy) defaults to active so the legacy
-    // duplicate semantics are preserved in either deployment shape.
-    let existing_by_sku_raw = products_repo::find_by_sku_exact(pool, &sku).await?;
-    let existing_by_sku =
-        existing_by_sku_raw.filter(|row| row.lifecycle != Some(ProductLifecycle::Retired));
+    // 'retired'`), so a CSV row that matches *only* retired rows is NOT a
+    // conflict. Once the identifier has been reused, however, the database may
+    // contain both a retired historical row and a new active row with the same
+    // SKU. Look specifically for a non-retired owner instead of using a
+    // single-row exact lookup that can return the retired row first.
+    let existing_by_sku = find_non_retired_sku_owner(pool, &sku).await?;
 
     match (existing_by_sku, strategy) {
         // ── Skip strategy ──────────────────────────────────────────
@@ -1102,8 +1136,8 @@ async fn import_row(
         // ── Update strategy ────────────────────────────────────────
         (Some(existing), ConflictStrategy::Update) => {
             let update_input = ProductUpdate {
-                id: existing.id.clone(),
-                sku: existing.sku.clone(),
+                id: existing.0.clone(),
+                sku: existing.1.clone(),
                 description: description.clone(),
                 category_ids: resolved_cat_id.map(|id| vec![id]),
                 default_unit: default_unit.map(String::from),
@@ -1117,7 +1151,7 @@ async fn import_row(
             // Try to add barcode; silently skip UNIQUE violations.
             if let Some(b) = barcode {
                 let barcode_create = ProductBarcodeCreate {
-                    product_id: existing.id.clone(),
+                    product_id: existing.0.clone(),
                     barcode: b.to_string(),
                     barcode_type: None,
                     is_primary: false,
@@ -1134,7 +1168,7 @@ async fn import_row(
             }
 
             Ok(CsvImportRowOutcome::Updated {
-                product_id: existing.id,
+                product_id: existing.0,
                 sku,
             })
         }
@@ -1197,7 +1231,14 @@ async fn import_row(
                 default_alert_days_before: resolved_alert_days,
                 notes: notes.map(String::from),
             };
-            let product = products_repo::insert_product(pool, &create_input, None, None).await?;
+            let product = match products_repo::insert_product(pool, &create_input, None, None).await
+            {
+                Ok(p) => p,
+                Err(sqlx::Error::Database(db_err)) if db_err.is_unique_violation() => {
+                    return Ok(duplicate_outcome_from_create(&*db_err, &sku, strategy));
+                }
+                Err(sqlx_err) => return Err(AppError::from(sqlx_err)),
+            };
 
             // Attach the barcode if present; silently skip UNIQUE violations.
             if let Some(b) = barcode {
@@ -1245,6 +1286,67 @@ async fn resolve_category_name(
         .into_iter()
         .find(|c| c.name.to_lowercase() == name.to_lowercase())
         .map(|c| c.id))
+}
+
+/// Maps a `UNIQUE constraint failed` raised while creating a new product to a
+/// row-level import outcome. The partial unique indexes (`uq_products_sku_active
+/// WHERE lifecycle != 'retired'` and `uq_product_barcodes_barcode_active WHERE
+/// lifecycle != 'retired'`) only fire for non-retired duplicates, so reaching
+/// this path means a *real* duplicate slipped through the pre-check (e.g. a
+/// parallel writer committed between `find_non_retired_sku_owner` and the
+/// `INSERT`, or the same SKU appears twice in the CSV with one row committing
+/// before the second). The CSV must keep its full row outcome so a single
+/// transient race never aborts the whole import.
+fn duplicate_outcome_from_create(
+    db_err: &dyn sqlx::error::DatabaseError,
+    sku: &str,
+    strategy: ConflictStrategy,
+) -> CsvImportRowOutcome {
+    let message = db_err.message();
+    let field = if message.contains("product_barcodes") {
+        "barcode"
+    } else {
+        "sku"
+    };
+    let value = if field == "sku" {
+        sku.to_string()
+    } else {
+        // Best-effort value extraction; SQLite message format is `…:
+        // …products.<column>` so we fall back to an empty placeholder when the
+        // concrete value is not recoverable.
+        extract_unique_value(message).unwrap_or_default()
+    };
+
+    match (field, strategy) {
+        ("sku", ConflictStrategy::Skip) => CsvImportRowOutcome::Skipped {
+            reason: format!("SKU '{}' already exists", sku),
+            reason_code: Some(REASON_CODE_SKU_ALREADY_EXISTS.to_string()),
+        },
+        ("sku", ConflictStrategy::Update) | ("sku", ConflictStrategy::Review) => {
+            CsvImportRowOutcome::Skipped {
+                reason: format!("SKU '{}' already exists", sku),
+                reason_code: Some(REASON_CODE_SKU_ALREADY_EXISTS.to_string()),
+            }
+        }
+        ("barcode", _) => CsvImportRowOutcome::Skipped {
+            reason: format!("Barcode '{}' belongs to another product", value),
+            reason_code: Some(REASON_CODE_BARCODE_BELONGS_TO_OTHER_PRODUCT.to_string()),
+        },
+        _ => CsvImportRowOutcome::Skipped {
+            reason: format!("Duplicate field: {}", message),
+            reason_code: Some(REASON_CODE_GENERIC_VALIDATION.to_string()),
+        },
+    }
+}
+
+fn extract_unique_value(message: &str) -> Option<String> {
+    let (_, tail) = message.split_once('`')?;
+    let value = tail.split_once('`')?.0;
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
 }
 
 // ============================================================
@@ -2795,6 +2897,76 @@ mod tests {
                 );
             }
             other => panic!("expected Skipped for active duplicate, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    /// Regression guard for the manual reproduction case
+    /// (`/home/xeworg/Documentos/testimportacion.csv`). When a CSV row's SKU
+    /// matches both a retired historical row AND a freshly-committed active
+    /// row created earlier in the same import, the `INSERT` will trip the
+    /// partial UNIQUE index `uq_products_sku_active WHERE lifecycle !=
+    /// 'retired'`. The import must convert that infrastructure error into a
+    /// row-level `Skipped` outcome (`reason_code = sku_already_exists`) rather
+    /// than bubbling it up as a generic "An internal error occurred" command
+    /// failure that aborts the whole import and leaves behind partial state.
+    ///
+    /// Reproduction recipe:
+    /// 1. Seed a retired product for SKU `RETIRED-RACE`.
+    /// 2. Drive the import with two rows: one reuses `RETIRED-RACE` (becomes
+    ///    a fresh `Created` row), one reuses the same SKU a second time.
+    /// 3. The second `INSERT` triggers the UNIQUE violation that used to
+    ///    become an internal error.
+    #[tokio::test]
+    async fn import_sku_race_returns_row_skip_not_internal_error(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        seed_retired_product(
+            &pool,
+            "RETIRED-RACE",
+            "Retired predecessor",
+            None,
+            "Discontinued",
+        )
+        .await?;
+
+        let csv_content = "sku,description\n\
+                           RETIRED-RACE,Fresh successor A\n\
+                           RETIRED-RACE,Fresh successor B\n";
+        let result = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Skip,
+            },
+        )
+        .await?;
+
+        assert_eq!(result.total_rows, 2);
+        assert_eq!(
+            result.created, 1,
+            "first row should commit by reusing the released identifier"
+        );
+        assert_eq!(
+            result.skipped, 1,
+            "second row must be Skipped with reason_code=sku_already_exists, not crash"
+        );
+        assert_eq!(result.invalid, 0);
+
+        match &result.rows[0].outcome {
+            CsvImportRowOutcome::Created { sku, .. } => assert_eq!(sku, "RETIRED-RACE"),
+            other => panic!("expected Created for first row, got {other:?}"),
+        }
+        match &result.rows[1].outcome {
+            CsvImportRowOutcome::Skipped { reason_code, .. } => {
+                assert_eq!(
+                    reason_code.as_deref(),
+                    Some(REASON_CODE_SKU_ALREADY_EXISTS),
+                    "duplicate SKU must surface a row-level Skip instead of an internal error"
+                );
+            }
+            other => panic!("expected Skipped for second row, got {other:?}"),
         }
         Ok(())
     }
