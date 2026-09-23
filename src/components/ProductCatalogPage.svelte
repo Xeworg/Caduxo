@@ -4,6 +4,7 @@
   import {
     listCategories,
     searchProducts,
+    lifecycleOf,
     type CategoryResponse,
     type ProductResponse,
     type ProductSearchResult,
@@ -18,7 +19,6 @@
   import Table from "./ui/Table.svelte";
   import Badge from "./ui/Badge.svelte";
   import Alert from "./ui/Alert.svelte";
-  import Toggle from "./ui/Toggle.svelte";
   import Button from "./ui/Button.svelte";
 
   // ── View state ─────────────────────────────────────────────────────────────
@@ -63,6 +63,7 @@
 
   const STORAGE_KEY_COLUMNS = "caduxo.products.catalog.columns.v1";
   const STORAGE_KEY_HIDE_ARCHIVED = "caduxo.products.catalog.hideArchived.v1";
+  const STORAGE_KEY_SHOW_RETIRED = "caduxo.products.catalog.showRetired.v1";
 
   const DEFAULT_VISIBLE_COLUMNS: OptionalColumnKey[] = [
     "barcode",
@@ -81,6 +82,7 @@
     DEFAULT_VISIBLE_COLUMNS,
   );
   let hideArchived = false;
+  let showRetired = false;
 
   // Column menu options are reactive so the localized labels update when the
   // active locale changes.
@@ -91,7 +93,10 @@
     { key: "status" as const, label: $LL.dashboard.status() },
   ] satisfies ColumnOption[];
 
-  // Popover open state for the Columns menu. Click-outside / Escape close it.
+  // Popover open state for the Display and Columns menus. Click-outside /
+  // Escape close them.
+  let displayMenuOpen = false;
+  let displayMenuRoot: HTMLDivElement | null = null;
   let columnsMenuOpen = false;
   let columnsMenuRoot: HTMLDivElement | null = null;
 
@@ -114,14 +119,22 @@
     }
   });
 
-  // Document-level click + Escape to close the columns menu.
+  // Document-level click + Escape to close toolbar menus.
   // Kept as its own onMount so the callback returns a synchronous cleanup
   // function (Svelte 5's onMount rejects Promise-returning callbacks).
   onMount(() => {
     function onDocClick(event: MouseEvent) {
-      if (!columnsMenuOpen) return;
       const target = event.target as Node | null;
       if (
+        displayMenuOpen &&
+        displayMenuRoot &&
+        target &&
+        !displayMenuRoot.contains(target)
+      ) {
+        displayMenuOpen = false;
+      }
+      if (
+        columnsMenuOpen &&
         columnsMenuRoot &&
         target &&
         !columnsMenuRoot.contains(target)
@@ -130,7 +143,8 @@
       }
     }
     function onDocKey(event: KeyboardEvent) {
-      if (columnsMenuOpen && event.key === "Escape") {
+      if (event.key === "Escape") {
+        displayMenuOpen = false;
         columnsMenuOpen = false;
       }
     }
@@ -168,6 +182,8 @@
       }
       const rawHide = localStorage.getItem(STORAGE_KEY_HIDE_ARCHIVED);
       if (rawHide === "true") hideArchived = true;
+      const rawShowRetired = localStorage.getItem(STORAGE_KEY_SHOW_RETIRED);
+      if (rawShowRetired === "true") showRetired = true;
     } catch {
       // Corrupt storage → fall back to defaults silently.
       visibleColumns = new Set(DEFAULT_VISIBLE_COLUMNS);
@@ -193,6 +209,18 @@
       localStorage.setItem(
         STORAGE_KEY_HIDE_ARCHIVED,
         hideArchived ? "true" : "false",
+      );
+    } catch {
+      // localStorage may be unavailable — fail silently.
+    }
+  }
+
+  function persistShowRetired() {
+    if (typeof localStorage === "undefined") return;
+    try {
+      localStorage.setItem(
+        STORAGE_KEY_SHOW_RETIRED,
+        showRetired ? "true" : "false",
       );
     } catch {
       // localStorage may be unavailable — fail silently.
@@ -281,9 +309,10 @@
     view = "detail";
   }
 
-  function cancelForm() {
+  async function cancelForm() {
     selectedProduct = null;
     view = "list";
+    await runSearch(appliedQuery);
     restoreListScroll();
   }
 
@@ -309,11 +338,21 @@
     }
   }
 
-  function handleArchived() {
-    flash($LL.products.archived(), "success");
+  function handleLifecycleChanged(action: "archived" | "unarchived" | "retired") {
+    const message =
+      action === "archived"
+        ? $LL.products.archived()
+        : action === "unarchived"
+          ? $LL.products.unarchive()
+          : $LL.products.lifecycleRetired();
+    flash(message, "success");
     selectedProductId = null;
     view = "list";
     runSearch(appliedQuery).finally(restoreListScroll);
+  }
+
+  function handleBarcodeChanged() {
+    runSearch(appliedQuery);
   }
 
       function handleEditedFromDetail(product: ProductResponse) {
@@ -352,6 +391,21 @@
         let filtered = results;
         if (hideArchived) {
           filtered = filtered.filter((p: ProductSearchResult) => p.is_active);
+        }
+        if (!showRetired) {
+          filtered = filtered.filter((p: ProductSearchResult) => lifecycleOf(p) !== "retired");
+        }
+        // Sort retired rows to the bottom when `showRetired` is on.
+        // Active and archived rows keep their original order; retired rows
+        // are appended after all non-retired rows (stable sort preserves
+        // the relative order within each group).
+        if (showRetired) {
+          filtered = filtered.sort((a, b) => {
+            const aRetired = lifecycleOf(a) === "retired";
+            const bRetired = lifecycleOf(b) === "retired";
+            if (aRetired === bRetired) return 0;
+            return aRetired ? 1 : -1;
+          });
         }
         if (categoryIds.length === 0) return filtered;
         const hasUncat = categoryIds.includes(UNCATEGORIZED_SENTINEL);
@@ -413,20 +467,45 @@
             />
           </div>
 
-          <!-- Hide-archived toggle (PR `product-catalog-list-preferences`).
-               Persisted in localStorage. Default false. -->
-          <div class="hide-archived-wrap">
-            <Toggle
-              checked={hideArchived}
+          <!-- Display menu: toggles archived / retired product visibility.
+               Preferences persist in localStorage. -->
+          <div class="toolbar-menu-wrap" bind:this={displayMenuRoot}>
+            <Button
+              variant="secondary"
               size="sm"
-              label={hideArchived
-                ? $LL.products.catalog.hideArchived()
-                : $LL.products.catalog.showArchived()}
-              onchange={(checked) => {
-                hideArchived = checked;
-                persistHideArchived();
-              }}
-            />
+              aria-label={$LL.products.catalog.displayFiltersAria()}
+              onclick={() => (displayMenuOpen = !displayMenuOpen)}
+            >
+              {$LL.products.catalog.displayFilters()}
+            </Button>
+            {#if displayMenuOpen}
+              <div class="toolbar-menu" role="group" aria-label={$LL.products.catalog.displayFiltersAria()}>
+                <label class="toolbar-menu-item">
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm checkbox-primary"
+                    checked={!hideArchived}
+                    onchange={(e) => {
+                      hideArchived = !(e.currentTarget as HTMLInputElement).checked;
+                      persistHideArchived();
+                    }}
+                  />
+                  <span>{$LL.products.catalog.showArchived()}</span>
+                </label>
+                <label class="toolbar-menu-item">
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm checkbox-primary"
+                    checked={showRetired}
+                    onchange={(e) => {
+                      showRetired = (e.currentTarget as HTMLInputElement).checked;
+                      persistShowRetired();
+                    }}
+                  />
+                  <span>{$LL.products.catalog.showRetired()}</span>
+                </label>
+              </div>
+            {/if}
           </div>
 
           <!-- Columns menu: toggles optional columns (Barcode / Unit /
@@ -504,7 +583,8 @@
           {#each displayedProducts as product (product.id)}
             <tr
               class="product-row"
-              class:archived={!product.is_active}
+              class:archived={lifecycleOf(product) === "archived"}
+              class:retired={lifecycleOf(product) === "retired"}
               class:highlighted={highlightedProductId === product.id}
               tabindex="0"
               onclick={() => openDetail(product)}
@@ -536,7 +616,9 @@
               {/if}
               {#if visibleColumns.has("status")}
                 <td>
-                  {#if product.is_active}
+                  {#if lifecycleOf(product) === "retired"}
+                    <Badge semantic="retired" size="sm">{$LL.products.lifecycleRetired()}</Badge>
+                  {:else if product.is_active}
                     <Badge semantic="success" size="sm">{$LL.stores.active()}</Badge>
                   {:else}
                     <Badge semantic="neutral" size="sm">{$LL.products.archived()}</Badge>
@@ -578,7 +660,8 @@
         productId={selectedProductId!}
         onBack={cancelForm}
         onEdit={handleEditedFromDetail}
-        onArchived={handleArchived}
+        onLifecycleChanged={handleLifecycleChanged}
+        onBarcodeChanged={handleBarcodeChanged}
       />
     </section>
   {/if}
@@ -657,15 +740,13 @@
     flex: 0 1 auto;
   }
 
-  .hide-archived-wrap {
-    flex: 0 0 auto;
-  }
-
+  .toolbar-menu-wrap,
   .columns-menu-wrap {
     position: relative;
     flex: 0 0 auto;
   }
 
+  .toolbar-menu,
   .columns-menu {
     position: absolute;
     top: calc(100% + 6px);
@@ -682,6 +763,7 @@
     box-shadow: 0 8px 24px color-mix(in oklch, black 16%, transparent);
   }
 
+  .toolbar-menu-item,
   .columns-menu-item {
     display: grid;
     grid-template-columns: 16px 1fr;
@@ -695,6 +777,7 @@
     color: var(--color-base-content);
   }
 
+  .toolbar-menu-item input[type="checkbox"],
   .columns-menu-item input[type="checkbox"] {
     width: 16px;
     height: 16px;
@@ -704,6 +787,7 @@
     flex: 0 0 auto;
   }
 
+  .toolbar-menu-item:hover,
   .columns-menu-item:hover {
     background: var(--color-base-200);
   }
@@ -733,6 +817,12 @@
   .product-row.archived {
     opacity: 0.65;
     background: color-mix(in oklch, var(--color-base-200) 90%, transparent);
+  }
+
+  .product-row.retired {
+    opacity: 0.9;
+    background: color-mix(in oklch, var(--color-warning) 12%, transparent);
+    border-left: 4px solid color-mix(in oklch, var(--color-warning) 70%, transparent);
   }
 
   .product-row.highlighted {

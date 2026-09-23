@@ -6,7 +6,8 @@ use tauri::State;
 use crate::dto::products::{
     CategoryCreate, CategoryResponse, CategorySearchInput, CategorySearchPage, CategoryUpdate,
     ProductBarcodeCreate, ProductBarcodeRemoveInput, ProductBarcodeResponse, ProductCreate,
-    ProductDetailResponse, ProductResponse, ProductSearchQuery, ProductSearchResult, ProductUpdate,
+    ProductDetailResponse, ProductLifecycleEventResponse, ProductResponse, ProductSearchQuery,
+    ProductSearchResult, ProductUpdate, RetireProductInput,
 };
 use crate::dto::scanner::ScanSearchResult;
 use crate::error::{AppError, CommandError};
@@ -156,6 +157,64 @@ pub async fn update_product(
 pub async fn archive_product(state: State<'_, AppState>, id: String) -> Result<(), CommandError> {
     let pool = state.pool().await;
     service::archive_product(&pool, id)
+        .await
+        .map_err(AppError::into)
+}
+
+/// Reverses a soft archive: `archived → active` (V19).
+///
+/// `locale` (BCP-47 tag) is forwarded to `localize_business_rule` /
+/// `localize_validation` so the `ProductRetiredForMutation` /
+/// `RetireReasonRequired` rejection (when reached via the lifecycle
+/// invariant) reaches the UI in the active locale. Unknown tags fall
+/// back to English via `Locale::parse`.
+#[tauri::command]
+pub async fn unarchive_product(
+    state: State<'_, AppState>,
+    id: String,
+    locale: Option<String>,
+) -> Result<(), CommandError> {
+    let pool = state.pool().await;
+    let loc = resolve_locale(locale);
+    service::unarchive_product(&pool, id)
+        .await
+        .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(AppError::into)
+}
+
+/// Terminal transition: `active|archived → retired` (V19).
+///
+/// `input.reason` is required (non-blank-after-trim); the service layer
+/// enforces the rule. `input.actor` is optional and may be `None` for
+/// system-emitted retires (the current Caduxo UX does not identify the
+/// operator).
+#[tauri::command]
+pub async fn retire_product(
+    state: State<'_, AppState>,
+    input: RetireProductInput,
+    locale: Option<String>,
+) -> Result<(), CommandError> {
+    let pool = state.pool().await;
+    let loc = resolve_locale(locale);
+    service::retire_product(&pool, input)
+        .await
+        .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(AppError::into)
+}
+
+/// Lists lifecycle events for a product, newest first. Powers the
+/// per-product history pane on `ProductDetailPage.svelte`.
+#[tauri::command]
+pub async fn list_product_lifecycle_events(
+    state: State<'_, AppState>,
+    product_id: String,
+) -> Result<Vec<ProductLifecycleEventResponse>, CommandError> {
+    let pool = state.pool().await;
+    service::list_lifecycle_events(&pool, product_id)
         .await
         .map_err(AppError::into)
 }

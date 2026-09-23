@@ -25,6 +25,7 @@ use crate::dto::csv_io::{
     CsvPreviewRowStatus, ReportExportInput,
 };
 use crate::dto::dashboard::DashboardFilters;
+use crate::dto::products::ProductLifecycle;
 use crate::error::{AppError, DomainError, InfrastructureError};
 use crate::pdf::locale::Locale;
 use crate::services::user_messages::{user_message, UserMessage};
@@ -202,6 +203,8 @@ pub async fn preview_product_csv(
     let mut valid_rows: usize = 0;
     let mut duplicate_sku_count: usize = 0;
     let mut duplicate_barcode_count: usize = 0;
+    let mut released_sku_count: usize = 0;
+    let mut released_barcode_count: usize = 0;
     let mut missing_required_count: usize = 0;
 
     for (idx, record_result) in reader.records().enumerate() {
@@ -271,6 +274,22 @@ pub async fn preview_product_csv(
             CsvPreviewRowStatus::Ok => valid_rows += 1,
             CsvPreviewRowStatus::DuplicateSku { .. } => duplicate_sku_count += 1,
             CsvPreviewRowStatus::DuplicateBarcode { .. } => duplicate_barcode_count += 1,
+            CsvPreviewRowStatus::ReleasedSku { .. } => {
+                // Released SKU counts as valid_rows because the import commits
+                // the new product with `lifecycle = active`. The partial unique
+                // index excludes the retired row, so no UNIQUE collision fires
+                // at the SQL layer (design §6.6 + spec `CSV import preview
+                // advisory notice for a released SKU`).
+                released_sku_count += 1;
+                valid_rows += 1;
+            }
+            CsvPreviewRowStatus::ReleasedBarcode { .. } => {
+                // Same release semantics as `ReleasedSku` (mirror column on
+                // `product_barcodes.lifecycle` excludes the retired row from
+                // the partial unique index; the new attach succeeds).
+                released_barcode_count += 1;
+                valid_rows += 1;
+            }
             CsvPreviewRowStatus::MissingRequired { .. } => missing_required_count += 1,
             CsvPreviewRowStatus::Invalid { .. } => {}
             // UnknownUnit is non-blocking (warn-and-continue); still counts as valid.
@@ -310,9 +329,90 @@ pub async fn preview_product_csv(
         invalid_rows,
         duplicate_sku_count,
         duplicate_barcode_count,
+        released_sku_count,
+        released_barcode_count,
         missing_required_count,
         rows,
     })
+}
+
+/// Looks up the effective lifecycle class of the product(s) that own `barcode`.
+///
+/// A released identifier can exist twice after reuse: once on the retired
+/// historical product and once on the newly-created active product. A plain
+/// `LIMIT 1`/`fetch_optional` lookup is unsafe in that state because SQLite may
+/// return the retired row first, causing import commit to misclassify an active
+/// duplicate as reusable and then trip the partial UNIQUE index. Prefer any
+/// active/archived owner over retired; return `Retired` only when every owner is
+/// retired; return `None` when the barcode does not exist.
+async fn lookup_barcode_owner_lifecycle(
+    pool: &DbPool,
+    barcode: &str,
+) -> Result<Option<ProductLifecycle>, AppError> {
+    let rows: Vec<(Option<String>,)> = sqlx::query_as(
+        r#"
+        SELECT products.lifecycle
+        FROM products
+        INNER JOIN product_barcodes pb ON pb.product_id = products.id
+        WHERE pb.barcode = $1
+        ORDER BY CASE products.lifecycle
+            WHEN 'active' THEN 0
+            WHEN 'archived' THEN 1
+            WHEN 'retired' THEN 2
+            ELSE 3
+        END
+        "#,
+    )
+    .bind(barcode)
+    .fetch_all(pool)
+    .await?;
+
+    for (raw,) in rows {
+        match raw.as_deref() {
+            Some("active") => return Ok(Some(ProductLifecycle::Active)),
+            Some("archived") => return Ok(Some(ProductLifecycle::Archived)),
+            Some("retired") => continue,
+            _ => return Ok(None),
+        }
+    }
+
+    let retired_exists: Option<(i64,)> = sqlx::query_as(
+        r#"
+        SELECT 1
+        FROM product_barcodes
+        WHERE barcode = $1 AND lifecycle = 'retired'
+        LIMIT 1
+        "#,
+    )
+    .bind(barcode)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(retired_exists.map(|_| ProductLifecycle::Retired))
+}
+
+async fn find_non_retired_sku_owner(
+    pool: &DbPool,
+    sku: &str,
+) -> Result<Option<(String, String)>, AppError> {
+    let row = sqlx::query_as::<_, (String, String)>(
+        r#"
+        SELECT id, sku
+        FROM products
+        WHERE sku = $1 AND lifecycle != 'retired'
+        ORDER BY CASE lifecycle
+            WHEN 'active' THEN 0
+            WHEN 'archived' THEN 1
+            ELSE 2
+        END
+        LIMIT 1
+        "#,
+    )
+    .bind(sku)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row)
 }
 
 /// Classifies a single row by validating fields and checking the database for
@@ -425,9 +525,32 @@ async fn classify_row(
         }
     }
 
-    // 3. SKU uniqueness check.
-    match crate::db::repositories::products::find_by_sku_exact(pool, &sku).await {
+    // 3. SKU uniqueness check. Three-state classifier:
+    //   - `DuplicateSku`       when the matching row is active or archived
+    //   - `ReleasedSku`        when the matching row is retired
+    //   - `Ok`                 when no row matches
+    // The "active-or-archived wins over retired" rule (design §6.6) is
+    // enforced by `find_by_sku_exact_with_lifecycle_filter` returning the
+    // active/archived match first; the retired-only fallback below emits
+    // `ReleasedSku`.
+    match crate::db::repositories::products::find_by_sku_exact_including_retired(pool, &sku).await {
         Ok(Some(existing)) => {
+            // The lifecycle field rides along on every product row post-V19.
+            // Backward-compatibility: when the column is NULL (older
+            // backend / pre-V19 fresh database), default to `Active` per
+            // design §5.3 dual-read window.
+            if existing.lifecycle == Some(ProductLifecycle::Retired) {
+                return (
+                    CsvPreviewRowStatus::ReleasedSku {
+                        existing_product_id: existing.id,
+                        existing_sku: existing.sku,
+                    },
+                    Some(sku),
+                    barcode.clone(),
+                    None,
+                    None,
+                );
+            }
             return (
                 CsvPreviewRowStatus::DuplicateSku {
                     existing_product_id: existing.id,
@@ -456,8 +579,53 @@ async fn classify_row(
 
     // 4. Barcode uniqueness check (only when a barcode is present).
     if let Some(b) = barcode.as_deref() {
-        match crate::db::repositories::products::find_by_barcode_exact(pool, b).await {
+        match crate::db::repositories::products::find_by_barcode_exact_including_retired(pool, b)
+            .await
+        {
             Ok(Some(existing)) => {
+                // `find_by_barcode_exact` does not project the `lifecycle`
+                // column (it is shared with other read paths), so the
+                // three-state classifier uses the dedicated lifecycle helper
+                // for the barcode owner. The metadata still comes from
+                // `find_by_barcode_exact` so `existing_product_id` and
+                // `existing_barcode` carry the original (possibly retired)
+                // row's identity — important for the "previously associated
+                // with product X" tooltip on `ReleasedBarcode`.
+                //
+                // `classify_row` returns a tuple (not a `Result`), so the
+                // helper's error path is surfaced as an `Invalid` row
+                // rather than via `?`.
+                let owner_lifecycle = match lookup_barcode_owner_lifecycle(pool, b).await {
+                    Ok(lc) => lc,
+                    Err(e) => {
+                        return (
+                            CsvPreviewRowStatus::Invalid {
+                                reason: format!(
+                                    "Database error while checking barcode uniqueness: {e}"
+                                ),
+                                reason_code: Some(REASON_CODE_DB_ERROR.to_string()),
+                            },
+                            Some(sku),
+                            barcode.clone(),
+                            None,
+                            Some(e.to_string()),
+                        );
+                    }
+                };
+                if owner_lifecycle == Some(ProductLifecycle::Retired) {
+                    return (
+                        CsvPreviewRowStatus::ReleasedBarcode {
+                            existing_product_id: existing.id,
+                            existing_barcode: existing
+                                .primary_barcode
+                                .unwrap_or_else(|| b.to_string()),
+                        },
+                        Some(sku),
+                        barcode.clone(),
+                        None,
+                        None,
+                    );
+                }
                 return (
                     CsvPreviewRowStatus::DuplicateBarcode {
                         existing_product_id: existing.id,
@@ -948,8 +1116,15 @@ async fn import_row(
     // 3. Resolve category name to id (single-category CSV import).
     let resolved_cat_id = resolve_category_name(pool, category_name).await?;
 
-    // 4. Check if SKU exists.
-    let existing_by_sku = products_repo::find_by_sku_exact(pool, &sku).await?;
+    // 4. Check if SKU exists. A retired product's SKU was released back to
+    // the global pool by `apply_lifecycle_transition` (design §5.1 +
+    // partial unique index `uq_products_sku_active WHERE lifecycle !=
+    // 'retired'`), so a CSV row that matches *only* retired rows is NOT a
+    // conflict. Once the identifier has been reused, however, the database may
+    // contain both a retired historical row and a new active row with the same
+    // SKU. Look specifically for a non-retired owner instead of using a
+    // single-row exact lookup that can return the retired row first.
+    let existing_by_sku = find_non_retired_sku_owner(pool, &sku).await?;
 
     match (existing_by_sku, strategy) {
         // ── Skip strategy ──────────────────────────────────────────
@@ -961,8 +1136,8 @@ async fn import_row(
         // ── Update strategy ────────────────────────────────────────
         (Some(existing), ConflictStrategy::Update) => {
             let update_input = ProductUpdate {
-                id: existing.id.clone(),
-                sku: existing.sku.clone(),
+                id: existing.0.clone(),
+                sku: existing.1.clone(),
                 description: description.clone(),
                 category_ids: resolved_cat_id.map(|id| vec![id]),
                 default_unit: default_unit.map(String::from),
@@ -976,7 +1151,7 @@ async fn import_row(
             // Try to add barcode; silently skip UNIQUE violations.
             if let Some(b) = barcode {
                 let barcode_create = ProductBarcodeCreate {
-                    product_id: existing.id.clone(),
+                    product_id: existing.0.clone(),
                     barcode: b.to_string(),
                     barcode_type: None,
                     is_primary: false,
@@ -993,7 +1168,7 @@ async fn import_row(
             }
 
             Ok(CsvImportRowOutcome::Updated {
-                product_id: existing.id,
+                product_id: existing.0,
                 sku,
             })
         }
@@ -1006,10 +1181,22 @@ async fn import_row(
 
         // ── SKU does not exist ─────────────────────────────────────
         (None, _) => {
-            // Check barcode collision when the SKU is new.
+            // Check barcode collision when the SKU is new. A retired
+            // product's barcode was released by the lifecycle mirror UPDATE
+            // (`sync_product_barcodes_lifecycle`), so a barcode that
+            // matches only a retired row is NOT a conflict and the new
+            // product may attach the value under every strategy. Active
+            // or archived duplicates keep the original conflict semantics.
+            //
+            // `find_by_barcode_exact` does not project the `lifecycle`
+            // column on its joined SELECT (the helper is shared with
+            // scanner / search read paths that only need the metadata), so
+            // the retired-vs-active/archived distinction uses the dedicated
+            // `lookup_barcode_owner_lifecycle` helper. Same join, focused
+            // SELECT that pulls only the lifecycle column.
             if let Some(b) = barcode {
-                let existing_by_bc = products_repo::find_by_barcode_exact(pool, b).await?;
-                if existing_by_bc.is_some() {
+                let owner_lifecycle = lookup_barcode_owner_lifecycle(pool, b).await?;
+                if owner_lifecycle.is_some() && owner_lifecycle != Some(ProductLifecycle::Retired) {
                     let (reason, code) = match strategy {
                         ConflictStrategy::Skip => (
                             format!("Barcode '{}' belongs to another product", b),
@@ -1044,7 +1231,14 @@ async fn import_row(
                 default_alert_days_before: resolved_alert_days,
                 notes: notes.map(String::from),
             };
-            let product = products_repo::insert_product(pool, &create_input, None, None).await?;
+            let product = match products_repo::insert_product(pool, &create_input, None, None).await
+            {
+                Ok(p) => p,
+                Err(sqlx::Error::Database(db_err)) if db_err.is_unique_violation() => {
+                    return Ok(duplicate_outcome_from_create(&*db_err, &sku, strategy));
+                }
+                Err(sqlx_err) => return Err(AppError::from(sqlx_err)),
+            };
 
             // Attach the barcode if present; silently skip UNIQUE violations.
             if let Some(b) = barcode {
@@ -1094,6 +1288,67 @@ async fn resolve_category_name(
         .map(|c| c.id))
 }
 
+/// Maps a `UNIQUE constraint failed` raised while creating a new product to a
+/// row-level import outcome. The partial unique indexes (`uq_products_sku_active
+/// WHERE lifecycle != 'retired'` and `uq_product_barcodes_barcode_active WHERE
+/// lifecycle != 'retired'`) only fire for non-retired duplicates, so reaching
+/// this path means a *real* duplicate slipped through the pre-check (e.g. a
+/// parallel writer committed between `find_non_retired_sku_owner` and the
+/// `INSERT`, or the same SKU appears twice in the CSV with one row committing
+/// before the second). The CSV must keep its full row outcome so a single
+/// transient race never aborts the whole import.
+fn duplicate_outcome_from_create(
+    db_err: &dyn sqlx::error::DatabaseError,
+    sku: &str,
+    strategy: ConflictStrategy,
+) -> CsvImportRowOutcome {
+    let message = db_err.message();
+    let field = if message.contains("product_barcodes") {
+        "barcode"
+    } else {
+        "sku"
+    };
+    let value = if field == "sku" {
+        sku.to_string()
+    } else {
+        // Best-effort value extraction; SQLite message format is `…:
+        // …products.<column>` so we fall back to an empty placeholder when the
+        // concrete value is not recoverable.
+        extract_unique_value(message).unwrap_or_default()
+    };
+
+    match (field, strategy) {
+        ("sku", ConflictStrategy::Skip) => CsvImportRowOutcome::Skipped {
+            reason: format!("SKU '{}' already exists", sku),
+            reason_code: Some(REASON_CODE_SKU_ALREADY_EXISTS.to_string()),
+        },
+        ("sku", ConflictStrategy::Update) | ("sku", ConflictStrategy::Review) => {
+            CsvImportRowOutcome::Skipped {
+                reason: format!("SKU '{}' already exists", sku),
+                reason_code: Some(REASON_CODE_SKU_ALREADY_EXISTS.to_string()),
+            }
+        }
+        ("barcode", _) => CsvImportRowOutcome::Skipped {
+            reason: format!("Barcode '{}' belongs to another product", value),
+            reason_code: Some(REASON_CODE_BARCODE_BELONGS_TO_OTHER_PRODUCT.to_string()),
+        },
+        _ => CsvImportRowOutcome::Skipped {
+            reason: format!("Duplicate field: {}", message),
+            reason_code: Some(REASON_CODE_GENERIC_VALIDATION.to_string()),
+        },
+    }
+}
+
+fn extract_unique_value(message: &str) -> Option<String> {
+    let (_, tail) = message.split_once('`')?;
+    let value = tail.split_once('`')?.0;
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
 // ============================================================
 // Tests
 // ============================================================
@@ -1108,7 +1363,10 @@ mod tests {
 
     use crate::db::migrations::fresh_test_pool;
     use crate::dto::dashboard::DashboardPreset;
-    use crate::dto::products::{ProductBarcodeCreate, ProductCreate, ProductSearchQuery};
+    use crate::dto::products::{
+        ProductBarcodeCreate, ProductCreate, ProductLifecycle, ProductSearchQuery,
+        RetireProductInput,
+    };
     use crate::services::products as products_service;
 
     // ------------------------------------------------------------
@@ -2100,6 +2358,616 @@ mod tests {
             err,
             AppError::Domain(crate::error::DomainError::Validation { .. })
         ));
+        Ok(())
+    }
+
+    // ------------------------------------------------------------
+    // Released SKU / barcode — preview + import regression suite
+    //
+    // These tests pin the contract from design §6.6: a retired product's
+    // SKU and barcode are released back to the global pool, so a CSV row
+    // whose identifier matches *only* a retired product must preview as
+    // `ReleasedSku` / `ReleasedBarcode` (counted as `valid_rows`) and must
+    // commit as `Created` under every conflict strategy. An active or
+    // archived duplicate must keep blocking under the original conflict
+    // semantics.
+    // ------------------------------------------------------------
+
+    /// Helper: creates a product, then retires it. Returns the retired row
+    /// so individual tests can assert against `id` / `lifecycle`.
+    async fn seed_retired_product(
+        pool: &DbPool,
+        sku: &str,
+        description: &str,
+        barcode: Option<&str>,
+        retire_reason: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let product = products_service::create_product(
+            pool,
+            ProductCreate {
+                sku: sku.to_string(),
+                description: description.to_string(),
+                category_ids: None,
+                default_unit: None,
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+        if let Some(bc) = barcode {
+            products_service::add_barcode(
+                pool,
+                ProductBarcodeCreate {
+                    product_id: product.id.clone(),
+                    barcode: bc.to_string(),
+                    barcode_type: None,
+                    is_primary: true,
+                },
+            )
+            .await?;
+        }
+        products_service::retire_product(
+            pool,
+            RetireProductInput {
+                id: product.id.clone(),
+                reason: retire_reason.to_string(),
+                actor: None,
+            },
+        )
+        .await?;
+        Ok(product.id)
+    }
+
+    /// Preview: a SKU matching only a retired product emits `ReleasedSku`
+    /// and counts as `valid_rows` (import will commit the new product).
+    #[tokio::test]
+    async fn preview_emits_released_sku_for_retired_only_match(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        seed_retired_product(
+            &pool,
+            "RETIRED-SKU",
+            "Retired predecessor",
+            None,
+            "Discontinued",
+        )
+        .await?;
+
+        let csv_content = "sku,description\nRETIRED-SKU,Fresh successor\n";
+        let resp = preview_product_csv(
+            &pool,
+            CsvPreviewInput {
+                content: csv_content.to_string(),
+                mapping: None,
+            },
+        )
+        .await?;
+
+        assert_eq!(resp.total_rows, 1);
+        assert_eq!(
+            resp.released_sku_count, 1,
+            "released SKU counter must increment"
+        );
+        assert_eq!(
+            resp.duplicate_sku_count, 0,
+            "released SKU must NOT count as a duplicate"
+        );
+        assert_eq!(
+            resp.valid_rows, 1,
+            "released SKU counts as valid so the import commits it"
+        );
+        assert_eq!(resp.invalid_rows, 0);
+        match &resp.rows[0].status {
+            CsvPreviewRowStatus::ReleasedSku {
+                existing_sku,
+                existing_product_id,
+            } => {
+                assert_eq!(existing_sku, "RETIRED-SKU");
+                assert!(!existing_product_id.is_empty());
+            }
+            other => panic!("expected ReleasedSku, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    /// Preview: a barcode matching only a retired product emits
+    /// `ReleasedBarcode` and counts as `valid_rows`.
+    #[tokio::test]
+    async fn preview_emits_released_barcode_for_retired_only_match(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        seed_retired_product(
+            &pool,
+            "RETIRED-BC",
+            "Retired barcode owner",
+            Some("7509999999999"),
+            "Discontinued",
+        )
+        .await?;
+
+        let csv_content = "sku,description,barcode\nFRESH-BC,Fresh product,7509999999999\n";
+        let resp = preview_product_csv(
+            &pool,
+            CsvPreviewInput {
+                content: csv_content.to_string(),
+                mapping: None,
+            },
+        )
+        .await?;
+
+        assert_eq!(resp.released_barcode_count, 1);
+        assert_eq!(resp.duplicate_barcode_count, 0);
+        assert_eq!(resp.valid_rows, 1);
+        assert_eq!(resp.invalid_rows, 0);
+        match &resp.rows[0].status {
+            CsvPreviewRowStatus::ReleasedBarcode {
+                existing_barcode,
+                existing_product_id,
+            } => {
+                assert_eq!(existing_barcode, "7509999999999");
+                assert!(!existing_product_id.is_empty());
+            }
+            other => panic!("expected ReleasedBarcode, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    /// Preview: an active (non-retired) duplicate SKU must still emit
+    /// `DuplicateSku` — the released-vs-duplicate split is gated on
+    /// `lifecycle`, not on "is there a row".
+    #[tokio::test]
+    async fn preview_active_duplicate_sku_still_emits_duplicate_sku(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        products_service::create_product(
+            &pool,
+            ProductCreate {
+                sku: "ACTIVE-DUP".into(),
+                description: "Active row".into(),
+                category_ids: None,
+                default_unit: None,
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+
+        let csv_content = "sku,description\nACTIVE-DUP,Fresh description\n";
+        let resp = preview_product_csv(
+            &pool,
+            CsvPreviewInput {
+                content: csv_content.to_string(),
+                mapping: None,
+            },
+        )
+        .await?;
+
+        assert_eq!(resp.duplicate_sku_count, 1);
+        assert_eq!(resp.released_sku_count, 0);
+        assert_eq!(
+            resp.valid_rows, 0,
+            "active duplicate must NOT count as valid"
+        );
+        match &resp.rows[0].status {
+            CsvPreviewRowStatus::DuplicateSku {
+                existing_sku,
+                existing_product_id,
+            } => {
+                assert_eq!(existing_sku, "ACTIVE-DUP");
+                assert!(!existing_product_id.is_empty());
+            }
+            other => panic!("expected DuplicateSku, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    /// Preview: an active (non-retired) duplicate barcode must still emit
+    /// `DuplicateBarcode`. Mirror of the SKU case.
+    #[tokio::test]
+    async fn preview_active_duplicate_barcode_still_emits_duplicate_barcode(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let owner = products_service::create_product(
+            &pool,
+            ProductCreate {
+                sku: "BC-OWNER".into(),
+                description: "Barcode owner".into(),
+                category_ids: None,
+                default_unit: None,
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+        products_service::add_barcode(
+            &pool,
+            ProductBarcodeCreate {
+                product_id: owner.id.clone(),
+                barcode: "7508888888888".into(),
+                barcode_type: None,
+                is_primary: true,
+            },
+        )
+        .await?;
+
+        let csv_content = "sku,description,barcode\nFRESH-OWNER,Fresh,7508888888888\n";
+        let resp = preview_product_csv(
+            &pool,
+            CsvPreviewInput {
+                content: csv_content.to_string(),
+                mapping: None,
+            },
+        )
+        .await?;
+
+        assert_eq!(resp.duplicate_barcode_count, 1);
+        assert_eq!(resp.released_barcode_count, 0);
+        assert_eq!(resp.valid_rows, 0);
+        match &resp.rows[0].status {
+            CsvPreviewRowStatus::DuplicateBarcode {
+                existing_barcode,
+                existing_product_id,
+            } => {
+                assert_eq!(existing_barcode, "7508888888888");
+                assert_eq!(existing_product_id.as_str(), owner.id.as_str());
+            }
+            other => panic!("expected DuplicateBarcode, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    /// Preview summary: when a single CSV mixes a released SKU, a released
+    /// barcode, and an active duplicate SKU, the three counters partition
+    /// the rows correctly and `valid_rows` includes both released counts.
+    #[tokio::test]
+    async fn preview_summary_partitions_released_and_active_duplicates(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        // Released SKU source.
+        seed_retired_product(
+            &pool,
+            "REL-SKU",
+            "Retired SKU predecessor",
+            None,
+            "Discontinued",
+        )
+        .await?;
+        // Released barcode source (different product, distinct SKU).
+        seed_retired_product(
+            &pool,
+            "REL-BC",
+            "Retired barcode predecessor",
+            Some("7507777777777"),
+            "Discontinued",
+        )
+        .await?;
+        // Active duplicate SKU source.
+        products_service::create_product(
+            &pool,
+            ProductCreate {
+                sku: "DUP-SKU".into(),
+                description: "Active duplicate".into(),
+                category_ids: None,
+                default_unit: None,
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+
+        let csv_content = "sku,description,barcode\n\
+                           REL-SKU,Fresh A,\n\
+                           FRESH-SKU,Fresh B,7507777777777\n\
+                           DUP-SKU,Fresh C,\n\
+                           BRAND-NEW,Brand new,\n";
+        let resp = preview_product_csv(
+            &pool,
+            CsvPreviewInput {
+                content: csv_content.to_string(),
+                mapping: None,
+            },
+        )
+        .await?;
+
+        assert_eq!(resp.total_rows, 4);
+        assert_eq!(resp.released_sku_count, 1);
+        assert_eq!(resp.released_barcode_count, 1);
+        assert_eq!(resp.duplicate_sku_count, 1);
+        assert_eq!(resp.duplicate_barcode_count, 0);
+        assert_eq!(
+            resp.valid_rows, 3,
+            "Ok + ReleasedSku + ReleasedBarcode are valid; DuplicateSku is not"
+        );
+        assert_eq!(resp.invalid_rows, 1);
+        Ok(())
+    }
+
+    /// Import (`Skip`): a SKU matching only a retired product must commit
+    /// as `Created`, not `Skipped`. The retired row's identifier was
+    /// released by `apply_lifecycle_transition` so the new product may
+    /// reuse the value (partial unique index excludes the retired row).
+    #[tokio::test]
+    async fn import_skip_creates_when_sku_matches_only_retired(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        seed_retired_product(
+            &pool,
+            "RETIRED-SKU",
+            "Retired predecessor",
+            None,
+            "Discontinued",
+        )
+        .await?;
+
+        let csv_content = "sku,description\nRETIRED-SKU,Fresh successor\n";
+        let result = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Skip,
+            },
+        )
+        .await?;
+
+        assert_eq!(result.total_rows, 1);
+        assert_eq!(result.created, 1);
+        assert_eq!(result.skipped, 0);
+        match &result.rows[0].outcome {
+            CsvImportRowOutcome::Created { sku, .. } => {
+                assert_eq!(sku, "RETIRED-SKU");
+            }
+            other => panic!("expected Created for retired SKU, got {other:?}"),
+        }
+
+        // Verify the new product is active and independent of the retired row.
+        let new_id = match &result.rows[0].outcome {
+            CsvImportRowOutcome::Created { product_id, .. } => product_id.clone(),
+            _ => unreachable!(),
+        };
+        let detail = products_service::get_product(&pool, new_id).await?;
+        assert_eq!(detail.product.lifecycle, Some(ProductLifecycle::Active));
+        Ok(())
+    }
+
+    /// Import (`Update`): a SKU matching only a retired product must commit
+    /// as `Created`, not `Updated` against the retired row. Updates against
+    /// retired rows are forbidden by `apply_lifecycle_transition` and would
+    /// be wrong semantically.
+    #[tokio::test]
+    async fn import_update_creates_when_sku_matches_only_retired(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        seed_retired_product(
+            &pool,
+            "RETIRED-SKU",
+            "Retired predecessor",
+            None,
+            "Discontinued",
+        )
+        .await?;
+
+        let csv_content = "sku,description\nRETIRED-SKU,Fresh successor\n";
+        let result = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Update,
+            },
+        )
+        .await?;
+
+        assert_eq!(result.created, 1);
+        assert_eq!(result.updated, 0);
+        match &result.rows[0].outcome {
+            CsvImportRowOutcome::Created { .. } => {}
+            other => panic!("expected Created for retired SKU, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    /// Import (`Review`): a SKU matching only a retired product must commit
+    /// as `Created`, not `Skipped` with a manual-resolution reason. The
+    /// retired row is not a conflict for the import commit.
+    #[tokio::test]
+    async fn import_review_creates_when_sku_matches_only_retired(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        seed_retired_product(
+            &pool,
+            "RETIRED-SKU",
+            "Retired predecessor",
+            None,
+            "Discontinued",
+        )
+        .await?;
+
+        let csv_content = "sku,description\nRETIRED-SKU,Fresh successor\n";
+        let result = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Review,
+            },
+        )
+        .await?;
+
+        assert_eq!(result.created, 1);
+        assert_eq!(result.skipped, 0);
+        match &result.rows[0].outcome {
+            CsvImportRowOutcome::Created { .. } => {}
+            other => panic!("expected Created for retired SKU, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    /// Import (`Skip`): a barcode matching only a retired product must
+    /// commit as `Created` and attach the barcode to the new product.
+    /// Mirrors the SKU release contract.
+    #[tokio::test]
+    async fn import_skip_creates_and_attaches_when_barcode_matches_only_retired(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        seed_retired_product(
+            &pool,
+            "RETIRED-BC",
+            "Retired barcode owner",
+            Some("7506666666666"),
+            "Discontinued",
+        )
+        .await?;
+
+        let csv_content = "sku,description,barcode\nFRESH-BC,Fresh product,7506666666666\n";
+        let result = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Skip,
+            },
+        )
+        .await?;
+
+        assert_eq!(result.created, 1);
+        assert_eq!(result.skipped, 0);
+        match &result.rows[0].outcome {
+            CsvImportRowOutcome::Created { sku, .. } => assert_eq!(sku, "FRESH-BC"),
+            other => panic!("expected Created for released barcode, got {other:?}"),
+        }
+
+        // Verify the barcode was attached to the new product.
+        let new_id = match &result.rows[0].outcome {
+            CsvImportRowOutcome::Created { product_id, .. } => product_id.clone(),
+            _ => unreachable!(),
+        };
+        let barcodes = products_service::list_barcodes(&pool, new_id).await?;
+        assert!(
+            barcodes.iter().any(|b| b.barcode == "7506666666666"),
+            "released barcode must attach to the newly created product"
+        );
+        Ok(())
+    }
+
+    /// Regression guard: an active duplicate SKU still skips/updates/reviews
+    /// under the original conflict semantics. Released vs. duplicate split
+    /// is gated on `lifecycle`, not on the existence of any row.
+    #[tokio::test]
+    async fn import_skip_still_skips_active_duplicate_sku() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let pool = fresh_test_pool().await?;
+        products_service::create_product(
+            &pool,
+            ProductCreate {
+                sku: "ACTIVE-DUP".into(),
+                description: "Active duplicate".into(),
+                category_ids: None,
+                default_unit: None,
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await?;
+
+        let csv_content = "sku,description\nACTIVE-DUP,Fresh description\n";
+        let result = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Skip,
+            },
+        )
+        .await?;
+
+        assert_eq!(result.created, 0);
+        assert_eq!(result.skipped, 1);
+        match &result.rows[0].outcome {
+            CsvImportRowOutcome::Skipped { reason_code, .. } => {
+                assert_eq!(
+                    reason_code.as_deref(),
+                    Some(REASON_CODE_SKU_ALREADY_EXISTS),
+                    "active duplicate SKU must keep the existing skip semantics"
+                );
+            }
+            other => panic!("expected Skipped for active duplicate, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    /// Regression guard for the manual reproduction case
+    /// (`/home/xeworg/Documentos/testimportacion.csv`). When a CSV row's SKU
+    /// matches both a retired historical row AND a freshly-committed active
+    /// row created earlier in the same import, the `INSERT` will trip the
+    /// partial UNIQUE index `uq_products_sku_active WHERE lifecycle !=
+    /// 'retired'`. The import must convert that infrastructure error into a
+    /// row-level `Skipped` outcome (`reason_code = sku_already_exists`) rather
+    /// than bubbling it up as a generic "An internal error occurred" command
+    /// failure that aborts the whole import and leaves behind partial state.
+    ///
+    /// Reproduction recipe:
+    /// 1. Seed a retired product for SKU `RETIRED-RACE`.
+    /// 2. Drive the import with two rows: one reuses `RETIRED-RACE` (becomes
+    ///    a fresh `Created` row), one reuses the same SKU a second time.
+    /// 3. The second `INSERT` triggers the UNIQUE violation that used to
+    ///    become an internal error.
+    #[tokio::test]
+    async fn import_sku_race_returns_row_skip_not_internal_error(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        seed_retired_product(
+            &pool,
+            "RETIRED-RACE",
+            "Retired predecessor",
+            None,
+            "Discontinued",
+        )
+        .await?;
+
+        let csv_content = "sku,description\n\
+                           RETIRED-RACE,Fresh successor A\n\
+                           RETIRED-RACE,Fresh successor B\n";
+        let result = import_product_csv(
+            &pool,
+            CsvImportInput {
+                content: csv_content.to_string(),
+                mapping: CsvColumnMapping::default(),
+                strategy: ConflictStrategy::Skip,
+            },
+        )
+        .await?;
+
+        assert_eq!(result.total_rows, 2);
+        assert_eq!(
+            result.created, 1,
+            "first row should commit by reusing the released identifier"
+        );
+        assert_eq!(
+            result.skipped, 1,
+            "second row must be Skipped with reason_code=sku_already_exists, not crash"
+        );
+        assert_eq!(result.invalid, 0);
+
+        match &result.rows[0].outcome {
+            CsvImportRowOutcome::Created { sku, .. } => assert_eq!(sku, "RETIRED-RACE"),
+            other => panic!("expected Created for first row, got {other:?}"),
+        }
+        match &result.rows[1].outcome {
+            CsvImportRowOutcome::Skipped { reason_code, .. } => {
+                assert_eq!(
+                    reason_code.as_deref(),
+                    Some(REASON_CODE_SKU_ALREADY_EXISTS),
+                    "duplicate SKU must surface a row-level Skip instead of an internal error"
+                );
+            }
+            other => panic!("expected Skipped for second row, got {other:?}"),
+        }
         Ok(())
     }
 }

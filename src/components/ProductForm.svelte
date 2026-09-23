@@ -34,6 +34,7 @@
     updateProduct,
     suggestedProductAlertDays,
     addProductBarcodeOnCreate,
+    lifecycleOf,
     type CategoryResponse,
     type ProductResponse,
     type UnitKind,
@@ -553,6 +554,19 @@
       />
       <span>{$LL.dashboard.active()}</span>
     </label>
+    <!-- Read-only lifecycle indicator (PR `product-lifecycle-reusable-identifiers`) -->
+    {#if initial}
+      <div class="lifecycle-indicator">
+        <span class="lifecycle-label">{$LL.products.lifecycleEvents()}:</span>
+        {#if lifecycleOf(initial) === "retired"}
+          <span class="lifecycle-badge lifecycle-retired">{$LL.products.lifecycleRetired()}</span>
+        {:else if lifecycleOf(initial) === "archived"}
+          <span class="lifecycle-badge lifecycle-archived">{$LL.products.lifecycleArchived()}</span>
+        {:else}
+          <span class="lifecycle-badge lifecycle-active">{$LL.products.lifecycleActive()}</span>
+        {/if}
+      </div>
+    {/if}
   {/if}
 
   <div class="form-actions">
@@ -687,5 +701,40 @@
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+  }
+
+  /* ── Lifecycle indicator (read-only, PR `product-lifecycle-reusable-identifiers`) ── */
+  .lifecycle-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
+  }
+
+  .lifecycle-label {
+    font-weight: 500;
+  }
+
+  .lifecycle-badge {
+    font-size: 0.75rem;
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-weight: 600;
+  }
+
+  .lifecycle-active {
+    background: color-mix(in oklch, var(--color-success) 15%, transparent);
+    color: var(--color-success);
+  }
+
+  .lifecycle-archived {
+    background: var(--color-base-200);
+    color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+  }
+
+  .lifecycle-retired {
+    background: color-mix(in oklch, var(--color-warning) 18%, transparent);
+    color: color-mix(in oklch, var(--color-warning) 80%, var(--color-base-content));
   }
 </style>

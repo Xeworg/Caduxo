@@ -30,6 +30,25 @@ export interface CategoryUpdate {
 /** Classification of a unit's quantity type, driving LotForm input rules. */
 export type UnitKind = "integer" | "decimal";
 
+// ─── Product lifecycle ──────────────────────────────────────────────────────
+
+/**
+ * Canonical lifecycle state persisted in the `products.lifecycle` column.
+ * The optional field keeps the older frontend binary working during rolling
+ * deployment — the frontend maps `lifecycle ?? (is_active ? "active" : "archived")`
+ * so every UI surface renders correctly against either backend version.
+ */
+export type ProductLifecycle = "active" | "archived" | "retired";
+
+/**
+ * Returns the effective lifecycle state from a product row, using the legacy
+ * `is_active` field as the fallback so the UI is correct against either
+ * backend version during a rolling deployment.
+ */
+export function lifecycleOf(p: { lifecycle?: ProductLifecycle; is_active: boolean }): ProductLifecycle {
+ return p.lifecycle ?? (p.is_active ? "active" : "archived");
+}
+
 // ─── Products ───────────────────────────────────────────────────────────────
 
 export interface ProductResponse {
@@ -46,6 +65,8 @@ export interface ProductResponse {
  default_alert_days_before: number;
  notes: string | null;
  is_active: boolean;
+ /** Canonical lifecycle state. Present after PR 1 backend lands. */
+ lifecycle?: ProductLifecycle;
  created_at: string;
  updated_at: string;
 }
@@ -131,6 +152,8 @@ export interface ProductSearchResult {
  default_alert_days_before: number;
  primary_barcode: string | null;
  is_active: boolean;
+ /** Canonical lifecycle state. Present after PR 1 backend lands. */
+ lifecycle?: ProductLifecycle;
 }
 
 // ─── Scanner / scan-search workflow ────────────────────────────────────────
@@ -188,6 +211,40 @@ export async function updateProduct(
 
 export async function archiveProduct(id: string): Promise<void> {
  return invoke<void>("archive_product", { id });
+}
+
+export async function unarchiveProduct(id: string): Promise<void> {
+ return invoke<void>("unarchive_product", { id });
+}
+
+export interface RetireProductInput {
+ id: string;
+ reason: string;
+ actor?: string | null;
+}
+
+export async function retireProduct(input: RetireProductInput): Promise<void> {
+ return invoke<void>("retire_product", { input });
+}
+
+/** A single entry in a product's lifecycle audit trail. */
+export interface ProductLifecycleEventResponse {
+ id: string;
+ product_id: string;
+ event_type: "archived" | "unarchived" | "retired";
+ from_state: ProductLifecycle;
+ to_state: ProductLifecycle;
+ actor: string | null;
+ reason: string | null;
+ created_at: string;
+}
+
+export async function listProductLifecycleEvents(
+ productId: string,
+): Promise<ProductLifecycleEventResponse[]> {
+ return invoke<ProductLifecycleEventResponse[]>("list_product_lifecycle_events", {
+  productId,
+ });
 }
 
 export async function getProduct(id: string): Promise<ProductDetailResponse> {

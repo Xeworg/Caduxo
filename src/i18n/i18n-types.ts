@@ -1251,6 +1251,66 @@ type RootTranslation = {
 		 * A​r​c​h​i​v​e​d
 		 */
 		archived: string
+		/**
+		 * R​e​t​i​r​e​d
+		 */
+		retired: string
+		/**
+		 * R​e​t​i​r​e
+		 */
+		retire: string
+		/**
+		 * R​e​a​s​o​n​ ​f​o​r​ ​r​e​t​i​r​i​n​g
+		 */
+		retireReason: string
+		/**
+		 * R​e​t​i​r​e​m​e​n​t​ ​r​e​a​s​o​n
+		 */
+		retireReasonLabel: string
+		/**
+		 * I​ ​u​n​d​e​r​s​t​a​n​d​ ​t​h​i​s​ ​i​s​ ​i​r​r​e​v​e​r​s​i​b​l​e
+		 */
+		retireConfirm: string
+		/**
+		 * R​e​t​i​r​i​n​g​ ​a​ ​p​r​o​d​u​c​t​ ​i​s​ ​p​e​r​m​a​n​e​n​t​.​ ​T​h​e​ ​p​r​o​d​u​c​t​ ​a​n​d​ ​i​t​s​ ​l​o​t​ ​h​i​s​t​o​r​y​ ​w​i​l​l​ ​r​e​m​a​i​n​ ​v​i​s​i​b​l​e​ ​b​u​t​ ​t​h​e​ ​S​K​U​ ​a​n​d​ ​b​a​r​c​o​d​e​s​ ​w​i​l​l​ ​b​e​ ​r​e​l​e​a​s​e​d​ ​f​o​r​ ​r​e​u​s​e​.
+		 */
+		retireConfirmBody: string
+		/**
+		 * T​h​i​s​ ​a​c​t​i​o​n​ ​c​a​n​n​o​t​ ​b​e​ ​u​n​d​o​n​e​.
+		 */
+		retireIrreversible: string
+		/**
+		 * L​i​f​e​c​y​c​l​e​ ​h​i​s​t​o​r​y
+		 */
+		lifecycleEvents: string
+		/**
+		 * A​r​c​h​i​v​e​d
+		 */
+		lifecycleEventArchived: string
+		/**
+		 * U​n​a​r​c​h​i​v​e​d
+		 */
+		lifecycleEventUnarchived: string
+		/**
+		 * R​e​t​i​r​e​d
+		 */
+		lifecycleEventRetired: string
+		/**
+		 * O​n​c​e​ ​r​e​t​i​r​e​d​,​ ​a​ ​p​r​o​d​u​c​t​ ​c​a​n​n​o​t​ ​b​e​ ​r​e​a​c​t​i​v​a​t​e​d​.
+		 */
+		retireHistoryNotice: string
+		/**
+		 * A​c​t​i​v​e
+		 */
+		lifecycleActive: string
+		/**
+		 * A​r​c​h​i​v​e​d
+		 */
+		lifecycleArchived: string
+		/**
+		 * R​e​t​i​r​e​d
+		 */
+		lifecycleRetired: string
 		placeholders: {
 			/**
 			 * e​.​g​.​ ​M​I​L​K​-​1​L
@@ -1331,6 +1391,14 @@ type RootTranslation = {
 			 */
 			forQuery: RequiredParams<'query'>
 			/**
+			 * D​i​s​p​l​a​y
+			 */
+			displayFilters: string
+			/**
+			 * S​h​o​w​ ​a​r​c​h​i​v​e​d​ ​o​r​ ​r​e​t​i​r​e​d​ ​p​r​o​d​u​c​t​s
+			 */
+			displayFiltersAria: string
+			/**
 			 * C​o​l​u​m​n​s
 			 */
 			toggleColumns: string
@@ -1358,6 +1426,14 @@ type RootTranslation = {
 			 * S​h​o​w​ ​a​r​c​h​i​v​e​d​ ​p​r​o​d​u​c​t​s
 			 */
 			showArchived: string
+			/**
+			 * S​h​o​w​ ​r​e​t​i​r​e​d​ ​p​r​o​d​u​c​t​s
+			 */
+			showRetired: string
+			/**
+			 * H​i​d​e​ ​r​e​t​i​r​e​d​ ​p​r​o​d​u​c​t​s
+			 */
+			hideRetired: string
 		}
 		detail: {
 			/**
@@ -1388,6 +1464,30 @@ type RootTranslation = {
 			 * A​r​c​h​i​v​e​ ​t​h​i​s​ ​p​r​o​d​u​c​t​?
 			 */
 			archiveThisProduct: string
+			/**
+			 * T​h​i​s​ ​p​r​o​d​u​c​t​ ​i​s​ ​a​r​c​h​i​v​e​d​.
+			 */
+			bannerArchived: string
+			/**
+			 * T​h​i​s​ ​p​r​o​d​u​c​t​ ​i​s​ ​r​e​t​i​r​e​d​.​ ​I​t​ ​i​s​ ​n​o​ ​l​o​n​g​e​r​ ​o​p​e​r​a​t​i​o​n​a​l​ ​b​u​t​ ​i​t​s​ ​h​i​s​t​o​r​y​ ​i​s​ ​p​r​e​s​e​r​v​e​d​.
+			 */
+			bannerRetired: string
+			/**
+			 * U​n​a​r​c​h​i​v​e​ ​t​h​i​s​ ​p​r​o​d​u​c​t​?​ ​I​t​ ​w​i​l​l​ ​b​e​ ​r​e​s​t​o​r​e​d​ ​t​o​ ​t​h​e​ ​a​c​t​i​v​e​ ​i​n​v​e​n​t​o​r​y​.
+			 */
+			unarchiveConfirm: string
+			/**
+			 * R​e​t​i​r​e​ ​t​h​i​s​ ​p​r​o​d​u​c​t​?
+			 */
+			retireConfirm: string
+			/**
+			 * R​e​t​i​r​i​n​g​ ​i​s​ ​p​e​r​m​a​n​e​n​t​.​ ​Y​o​u​ ​w​i​l​l​ ​n​o​t​ ​b​e​ ​a​b​l​e​ ​t​o​ ​r​e​a​c​t​i​v​a​t​e​ ​i​t​ ​a​n​d​ ​t​h​e​ ​S​K​U​ ​a​n​d​ ​b​a​r​c​o​d​e​s​ ​w​i​l​l​ ​b​e​ ​r​e​l​e​a​s​e​d​ ​f​o​r​ ​r​e​u​s​e​.
+			 */
+			retireConfirmBody: string
+			/**
+			 * T​h​i​s​ ​a​c​t​i​o​n​ ​c​a​n​n​o​t​ ​b​e​ ​u​n​d​o​n​e​.
+			 */
+			retireIrreversible: string
 			/**
 			 * U​n​i​t
 			 */
@@ -1800,6 +1900,10 @@ type RootTranslation = {
 		 * B​a​t​c​h
 		 */
 		batch: string
+		/**
+		 * N​o​ ​b​a​t​c​h​ ​c​o​d​e
+		 */
+		noBatchCode: string
 		/**
 		 * S​t​a​t​u​s
 		 */
@@ -3035,7 +3139,31 @@ type RootTranslation = {
 			 * U​n​k​n​o​w​n​ ​u​n​i​t
 			 */
 			unknownUnit: string
+			/**
+			 * R​e​l​e​a​s​e​d​ ​S​K​U
+			 */
+			releasedSku: string
+			/**
+			 * R​e​l​e​a​s​e​d​ ​b​a​r​c​o​d​e
+			 */
+			releasedBarcode: string
 		}
+		/**
+		 * R​e​l​e​a​s​e​d​ ​S​K​U
+		 */
+		releasedSku: string
+		/**
+		 * R​e​l​e​a​s​e​d​ ​b​a​r​c​o​d​e
+		 */
+		releasedBarcode: string
+		/**
+		 * T​h​i​s​ ​S​K​U​ ​w​a​s​ ​p​r​e​v​i​o​u​s​l​y​ ​a​s​s​o​c​i​a​t​e​d​ ​w​i​t​h​ ​a​ ​r​e​t​i​r​e​d​ ​p​r​o​d​u​c​t​ ​—​ ​t​h​e​ ​n​e​w​ ​p​r​o​d​u​c​t​ ​w​i​l​l​ ​b​e​ ​c​r​e​a​t​e​d​.
+		 */
+		releasedSkuNotice: string
+		/**
+		 * T​h​i​s​ ​b​a​r​c​o​d​e​ ​w​a​s​ ​p​r​e​v​i​o​u​s​l​y​ ​a​s​s​o​c​i​a​t​e​d​ ​w​i​t​h​ ​a​ ​r​e​t​i​r​e​d​ ​p​r​o​d​u​c​t​ ​—​ ​t​h​e​ ​n​e​w​ ​p​r​o​d​u​c​t​ ​w​i​l​l​ ​b​e​ ​c​r​e​a​t​e​d​.
+		 */
+		releasedBarcodeNotice: string
 		detailRow: {
 			/**
 			 * R​e​a​d​y​ ​t​o​ ​i​m​p​o​r​t
@@ -3061,6 +3189,14 @@ type RootTranslation = {
 			 * @param {unknown} suggested
 			 */
 			unknownUnitSuggest: RequiredParams<'suggested'>
+			/**
+			 * T​h​i​s​ ​S​K​U​ ​w​a​s​ ​r​e​l​e​a​s​e​d​ ​f​r​o​m​ ​a​ ​r​e​t​i​r​e​d​ ​p​r​o​d​u​c​t​ ​—​ ​i​t​ ​w​i​l​l​ ​b​e​ ​r​e​u​s​e​d​.
+			 */
+			releasedSkuNotice: string
+			/**
+			 * T​h​i​s​ ​b​a​r​c​o​d​e​ ​w​a​s​ ​r​e​l​e​a​s​e​d​ ​f​r​o​m​ ​a​ ​r​e​t​i​r​e​d​ ​p​r​o​d​u​c​t​ ​—​ ​i​t​ ​w​i​l​l​ ​b​e​ ​r​e​u​s​e​d​.
+			 */
+			releasedBarcodeNotice: string
 		}
 		actions: {
 			/**
@@ -3312,6 +3448,10 @@ type RootTranslation = {
 		 * @param {unknown} msg
 		 */
 		searchError: RequiredParams<'msg'>
+		/**
+		 * R​e​t​i​r​e​d​ ​p​r​o​d​u​c​t​ ​—​ ​c​r​e​a​t​e​ ​a​ ​n​e​w​ ​p​r​o​d​u​c​t​ ​w​i​t​h​ ​t​h​i​s​ ​i​d​e​n​t​i​f​i​e​r
+		 */
+		scanRetired: string
 	}
 	scanner: {
 		/**
@@ -5226,6 +5366,66 @@ export type TranslationFunctions = {
 		 * Archived
 		 */
 		archived: () => LocalizedString
+		/**
+		 * Retired
+		 */
+		retired: () => LocalizedString
+		/**
+		 * Retire
+		 */
+		retire: () => LocalizedString
+		/**
+		 * Reason for retiring
+		 */
+		retireReason: () => LocalizedString
+		/**
+		 * Retirement reason
+		 */
+		retireReasonLabel: () => LocalizedString
+		/**
+		 * I understand this is irreversible
+		 */
+		retireConfirm: () => LocalizedString
+		/**
+		 * Retiring a product is permanent. The product and its lot history will remain visible but the SKU and barcodes will be released for reuse.
+		 */
+		retireConfirmBody: () => LocalizedString
+		/**
+		 * This action cannot be undone.
+		 */
+		retireIrreversible: () => LocalizedString
+		/**
+		 * Lifecycle history
+		 */
+		lifecycleEvents: () => LocalizedString
+		/**
+		 * Archived
+		 */
+		lifecycleEventArchived: () => LocalizedString
+		/**
+		 * Unarchived
+		 */
+		lifecycleEventUnarchived: () => LocalizedString
+		/**
+		 * Retired
+		 */
+		lifecycleEventRetired: () => LocalizedString
+		/**
+		 * Once retired, a product cannot be reactivated.
+		 */
+		retireHistoryNotice: () => LocalizedString
+		/**
+		 * Active
+		 */
+		lifecycleActive: () => LocalizedString
+		/**
+		 * Archived
+		 */
+		lifecycleArchived: () => LocalizedString
+		/**
+		 * Retired
+		 */
+		lifecycleRetired: () => LocalizedString
 		placeholders: {
 			/**
 			 * e.g. MILK-1L
@@ -5302,6 +5502,14 @@ export type TranslationFunctions = {
 			 */
 			forQuery: (arg: { query: unknown }) => LocalizedString
 			/**
+			 * Display
+			 */
+			displayFilters: () => LocalizedString
+			/**
+			 * Show archived or retired products
+			 */
+			displayFiltersAria: () => LocalizedString
+			/**
 			 * Columns
 			 */
 			toggleColumns: () => LocalizedString
@@ -5329,6 +5537,14 @@ export type TranslationFunctions = {
 			 * Show archived products
 			 */
 			showArchived: () => LocalizedString
+			/**
+			 * Show retired products
+			 */
+			showRetired: () => LocalizedString
+			/**
+			 * Hide retired products
+			 */
+			hideRetired: () => LocalizedString
 		}
 		detail: {
 			/**
@@ -5359,6 +5575,30 @@ export type TranslationFunctions = {
 			 * Archive this product?
 			 */
 			archiveThisProduct: () => LocalizedString
+			/**
+			 * This product is archived.
+			 */
+			bannerArchived: () => LocalizedString
+			/**
+			 * This product is retired. It is no longer operational but its history is preserved.
+			 */
+			bannerRetired: () => LocalizedString
+			/**
+			 * Unarchive this product? It will be restored to the active inventory.
+			 */
+			unarchiveConfirm: () => LocalizedString
+			/**
+			 * Retire this product?
+			 */
+			retireConfirm: () => LocalizedString
+			/**
+			 * Retiring is permanent. You will not be able to reactivate it and the SKU and barcodes will be released for reuse.
+			 */
+			retireConfirmBody: () => LocalizedString
+			/**
+			 * This action cannot be undone.
+			 */
+			retireIrreversible: () => LocalizedString
 			/**
 			 * Unit
 			 */
@@ -5762,6 +6002,10 @@ export type TranslationFunctions = {
 		 * Batch
 		 */
 		batch: () => LocalizedString
+		/**
+		 * No batch code
+		 */
+		noBatchCode: () => LocalizedString
 		/**
 		 * Status
 		 */
@@ -6959,7 +7203,31 @@ export type TranslationFunctions = {
 			 * Unknown unit
 			 */
 			unknownUnit: () => LocalizedString
+			/**
+			 * Released SKU
+			 */
+			releasedSku: () => LocalizedString
+			/**
+			 * Released barcode
+			 */
+			releasedBarcode: () => LocalizedString
 		}
+		/**
+		 * Released SKU
+		 */
+		releasedSku: () => LocalizedString
+		/**
+		 * Released barcode
+		 */
+		releasedBarcode: () => LocalizedString
+		/**
+		 * This SKU was previously associated with a retired product — the new product will be created.
+		 */
+		releasedSkuNotice: () => LocalizedString
+		/**
+		 * This barcode was previously associated with a retired product — the new product will be created.
+		 */
+		releasedBarcodeNotice: () => LocalizedString
 		detailRow: {
 			/**
 			 * Ready to import
@@ -6981,6 +7249,14 @@ export type TranslationFunctions = {
 			 * Not in catalog — suggested: {suggested}
 			 */
 			unknownUnitSuggest: (arg: { suggested: unknown }) => LocalizedString
+			/**
+			 * This SKU was released from a retired product — it will be reused.
+			 */
+			releasedSkuNotice: () => LocalizedString
+			/**
+			 * This barcode was released from a retired product — it will be reused.
+			 */
+			releasedBarcodeNotice: () => LocalizedString
 		}
 		actions: {
 			/**
@@ -7214,6 +7490,10 @@ export type TranslationFunctions = {
 		 * Search failed: {msg}
 		 */
 		searchError: (arg: { msg: unknown }) => LocalizedString
+		/**
+		 * Retired product — create a new product with this identifier
+		 */
+		scanRetired: () => LocalizedString
 	}
 	scanner: {
 		/**

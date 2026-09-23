@@ -5,9 +5,14 @@
         addProductBarcode,
         removeProductBarcode,
         archiveProduct,
+        unarchiveProduct,
+        retireProduct,
+        listProductLifecycleEvents,
+        lifecycleOf,
         type ProductDetailResponse,
         type ProductResponse,
         type ProductBarcodeResponse,
+        type ProductLifecycleEventResponse,
     } from "../lib/products.js";
     import {
         listExpiryLotsByProduct,
@@ -25,6 +30,10 @@
         listStoreLocations,
         type StoreLocationResponse,
     } from "../lib/stores.js";
+    import {
+        resolveBatchCodeDisplay,
+        resolveLocationDisplay,
+    } from "../lib/lotDisplay.js";
     import { LL } from "../i18n/i18n-svelte.js";
     import { humanizeError } from "../lib/errors.js";
     import Modal from "./ui/Modal.svelte";
@@ -52,7 +61,8 @@
     export let productId: string;
     export let onBack: () => void;
     export let onEdit: (product: ProductResponse) => void;
-    export let onArchived: () => void;
+    export let onLifecycleChanged: (action: "archived" | "unarchived" | "retired") => void;
+    export let onBarcodeChanged: () => void;
 
     // ── State ──────────────────────────────────────────────────────────────────
 
@@ -70,6 +80,17 @@
 
     // Archive confirmation
     let confirmingArchive = false;
+
+    // Unarchive confirmation
+    let confirmingUnarchive = false;
+
+    // Retire two-step confirmation
+    let confirmingRetire = false;   // first step: reason input
+    let retireReason = "";          // reason text
+    let retireSecondConfirm = false; // second step: irreversible ack
+
+    // Lifecycle events (audit trail)
+    let lifecycleEvents: ProductLifecycleEventResponse[] = [];
 
     // Lot sub-views
     let showLotForm = false;
@@ -93,6 +114,9 @@
         try {
             detail = await getProduct(productId);
             lots = await listExpiryLotsByProduct(productId);
+            if (detail) {
+                lifecycleEvents = await listProductLifecycleEvents(detail.product.id);
+            }
         } catch (e: unknown) {
             errorMsg = humanizeError(e);
         } finally {
@@ -134,6 +158,7 @@
             });
             await load();
             resetBarcodeForm();
+            onBarcodeChanged();
         } catch (e: unknown) {
             barcodeError = humanizeError(e);
         } finally {
@@ -145,6 +170,7 @@
         try {
             await removeProductBarcode({ id: b.id });
             await load();
+            onBarcodeChanged();
         } catch (e: unknown) {
             errorMsg = humanizeError(e);
         }
@@ -155,10 +181,45 @@
         try {
             await archiveProduct(detail.product.id);
             confirmingArchive = false;
-            onArchived();
+            await load();
+            onLifecycleChanged("archived");
         } catch (e: unknown) {
             errorMsg = humanizeError(e);
         }
+    }
+
+    async function confirmUnarchive() {
+        if (!detail) return;
+        try {
+            await unarchiveProduct(detail.product.id);
+            confirmingUnarchive = false;
+            await load();
+            onLifecycleChanged("unarchived");
+        } catch (e: unknown) {
+            errorMsg = humanizeError(e);
+        }
+    }
+
+    async function submitRetire() {
+        if (!detail) return;
+        const reason = retireReason.trim();
+        if (!reason) return; // disabled button prevents this, but guard anyway
+        try {
+            await retireProduct({ id: detail.product.id, reason, actor: null });
+            confirmingRetire = false;
+            retireReason = "";
+            retireSecondConfirm = false;
+            await load();
+            onLifecycleChanged("retired");
+        } catch (e: unknown) {
+            errorMsg = humanizeError(e);
+        }
+    }
+
+    function cancelRetire() {
+        confirmingRetire = false;
+        retireReason = "";
+        retireSecondConfirm = false;
     }
 
     // ── Lot handlers ───────────────────────────────────────────────────────────
@@ -252,6 +313,38 @@
         if (days === 1) return $LL.products.detail.lot.urgencyTomorrow();
         return $LL.products.detail.lot.urgencyDays({ days });
     }
+
+    /**
+     * Display label for a lot's location in the product-detail lot list.
+     * Sentinel ids (`loc-sentinel-*`) render the localized "No location"
+     * placeholder; non-sentinel ids fall back to the raw id since the
+     * list view does not carry a location lookup table.
+     */
+    function lotLocationLabel(lot: ExpiryLotResponse): string {
+        return resolveLocationDisplay(
+            lot.location_id,
+            [],
+            $LL.common.noLocation(),
+        );
+    }
+
+    /**
+     * Display label for a lot's batch code. Missing batch codes render
+     * the localized "No batch code" placeholder rather than falling back
+     * to the location id.
+     */
+    function lotBatchCodeLabel(lot: ExpiryLotResponse): string {
+        return resolveBatchCodeDisplay(lot.batch_code, $LL.lotsDetail.noBatchCode());
+    }
+
+    /** Same as `lotLocationLabel` but for the detail modal, which has a
+     *  store-locations list available for name lookup. */
+    function detailLotLocationLabel(
+        lot: ExpiryLotResponse,
+        locations: StoreLocationResponse[],
+    ): string {
+        return resolveLocationDisplay(lot.location_id, locations, $LL.common.noLocation());
+    }
 </script>
 
 <div class="detail-page">
@@ -272,8 +365,10 @@
 <div>
 <div class="title-row">
 <h2>{product.description}</h2>
-{#if !product.is_active}
-<span class="badge-inactive">{$LL.products.archived()}</span>
+{#if lifecycleOf(product) === "retired"}
+<span class="badge-retired">{$LL.products.lifecycleRetired()}</span>
+{:else if !product.is_active}
+<span class="badge-inactive">{$LL.products.lifecycleArchived()}</span>
 {/if}
 </div>
 <div class="meta-row">
@@ -295,6 +390,7 @@
 </div>
 
 <div class="detail-actions">
+{#if lifecycleOf(product) !== "retired"}
 <button
 type="button"
 class="btn-secondary"
@@ -302,40 +398,96 @@ on:click={() => onEdit(product)}
 >
 {$LL.products.detail.edit()}
 </button>
-{#if product.is_active}
-{#if !confirmingArchive}
-<button
-type="button"
-class="btn-danger"
-on:click={() => (confirmingArchive = true)}
->
-{$LL.products.detail.archive()}
-</button>
-{:else}
-<span class="archive-confirm">
-{$LL.products.detail.archiveThisProduct()}
-<button
-type="button"
-class="btn-danger btn-small"
-on:click={confirmArchive}
->
-{$LL.products.detail.yesArchive()}
-</button>
-<button
-type="button"
-class="btn-secondary btn-small"
-on:click={() => (confirmingArchive = false)}
->
-{$LL.common.cancel()}
-</button>
-</span>
 {/if}
+
+{#if lifecycleOf(product) === "active"}
+  {#if !confirmingArchive}
+  <button
+  type="button"
+  class="btn-danger"
+  on:click={() => (confirmingArchive = true)}
+  >
+  {$LL.products.detail.archive()}
+  </button>
+  {:else}
+  <span class="archive-confirm">
+  {$LL.products.detail.archiveThisProduct()}
+  <button
+  type="button"
+  class="btn-danger btn-small"
+  on:click={confirmArchive}
+  >
+  {$LL.products.detail.yesArchive()}
+  </button>
+  <button
+  type="button"
+  class="btn-secondary btn-small"
+  on:click={() => (confirmingArchive = false)}
+  >
+  {$LL.common.cancel()}
+  </button>
+  </span>
+  {/if}
+  <button
+  type="button"
+  class="btn-danger"
+  on:click={() => (confirmingRetire = true)}
+  >
+  {$LL.products.retire()}
+  </button>
+
+{:else if lifecycleOf(product) === "archived"}
+  {#if !confirmingUnarchive}
+  <button
+  type="button"
+  class="btn-secondary"
+  on:click={() => (confirmingUnarchive = true)}
+  >
+  {$LL.products.unarchive()}
+  </button>
+  {:else}
+  <span class="archive-confirm">
+  {$LL.products.detail.unarchiveConfirm()}
+  <button
+  type="button"
+  class="btn-primary btn-small"
+  on:click={confirmUnarchive}
+  >
+  {$LL.common.confirm()}
+  </button>
+  <button
+  type="button"
+  class="btn-secondary btn-small"
+  on:click={() => (confirmingUnarchive = false)}
+  >
+  {$LL.common.cancel()}
+  </button>
+  </span>
+  {/if}
+  <button
+  type="button"
+  class="btn-danger"
+  on:click={() => (confirmingRetire = true)}
+  >
+  {$LL.products.retire()}
+  </button>
 {/if}
 </div>
 </header>
 
         {#if errorMsg}
             <div class="alert alert-error" role="alert">{errorMsg}</div>
+        {/if}
+
+        <!-- ── Lifecycle banner ──────────────────────────────────────────────── -->
+        {#if lifecycleOf(product) === "archived"}
+            <div class="lifecycle-banner banner-archived" role="alert">
+                {$LL.products.detail.bannerArchived()}
+            </div>
+        {:else if lifecycleOf(product) === "retired"}
+            <div class="lifecycle-banner banner-retired" role="alert">
+                {$LL.products.detail.bannerRetired()}
+            </div>
         {/if}
 
         <!-- ── Barcodes ──────────────────────────────────────────────────────── -->
@@ -359,22 +511,24 @@ on:click={() => (confirmingArchive = false)}
                                     <span class="badge-primary">{$LL.products.detail.primary()}</span>
                                 {/if}
                             </div>
-                            <Button
-                                variant="icon"
-                                size="sm"
-                                aria-label={$LL.products.detail.removeBarcode()}
-                                onclick={() => removeBarcode(b)}
-                            >
-                                {#snippet iconStart()}
-                                    <Icon name="x-mark" size="sm" />
-                                {/snippet}
-                            </Button>
+                            {#if lifecycleOf(product) === "active"}
+                                <Button
+                                    variant="icon"
+                                    size="sm"
+                                    aria-label={$LL.products.detail.removeBarcode()}
+                                    onclick={() => removeBarcode(b)}
+                                >
+                                    {#snippet iconStart()}
+                                        <Icon name="x-mark" size="sm" />
+                                    {/snippet}
+                                </Button>
+                            {/if}
                         </li>
                     {/each}
                 </ul>
             {/if}
 
-            {#if product.is_active}
+            {#if lifecycleOf(product) === "active"}
                 <form class="barcode-form" on:submit|preventDefault={submitBarcode}>
                     <div class="grid-2">
                         <label>
@@ -418,11 +572,63 @@ on:click={() => (confirmingArchive = false)}
             {/if}
         </section>
 
+        <!-- ── Lifecycle history (read-only) ───────────────────────────────────── -->
+        {#if lifecycleEvents.length > 0}
+            <section class="section">
+                <div class="section-header">
+                    <h3>{$LL.products.lifecycleEvents()}</h3>
+                </div>
+                <ul class="lifecycle-events">
+                    {#each lifecycleEvents as event (event.id)}
+                        <li class="lifecycle-event">
+                            <div class="event-icon">
+                                {#if event.event_type === "archived"}
+                                    <span class="event-icon-archived" aria-hidden="true">▾</span>
+                                {:else if event.event_type === "unarchived"}
+                                    <span class="event-icon-unarchived" aria-hidden="true">▴</span>
+                                {:else}
+                                    <span class="event-icon-retired" aria-hidden="true">✕</span>
+                                {/if}
+                            </div>
+                            <div class="event-body">
+                                <span class="event-type">
+                                    {#if event.event_type === "archived"}
+                                        {$LL.products.lifecycleEventArchived()}
+                                    {:else if event.event_type === "unarchived"}
+                                        {$LL.products.lifecycleEventUnarchived()}
+                                    {:else}
+                                        {$LL.products.lifecycleEventRetired()}
+                                    {/if}
+                                </span>
+                                <span class="event-arrow">←</span>
+                                <span class="event-to">
+                                    {#if event.to_state === "active"}
+                                        {$LL.products.lifecycleActive()}
+                                    {:else if event.to_state === "archived"}
+                                        {$LL.products.lifecycleArchived()}
+                                    {:else}
+                                        {$LL.products.lifecycleRetired()}
+                                    {/if}
+                                </span>
+                                {#if event.reason}
+                                    <span class="event-reason">— {event.reason}</span>
+                                {/if}
+                                {#if event.actor}
+                                    <span class="event-actor">by {event.actor}</span>
+                                {/if}
+                                <span class="event-date">{formatDate(event.created_at.split("T")[0] ?? event.created_at)}</span>
+                            </div>
+                        </li>
+                    {/each}
+                </ul>
+            </section>
+        {/if}
+
         <!-- ── Expiry lots ──────────────────────────────────────────────────── -->
         <section class="section">
             <div class="section-header">
                 <h3>{$LL.products.detail.expiryLots()}</h3>
-                {#if product.is_active}
+                {#if lifecycleOf(product) === "active"}
                     <button
                         type="button"
                         class="btn-primary btn-small"
@@ -470,11 +676,9 @@ on:click={() => (confirmingArchive = false)}
                                     {lotQtyUnit(lot)}
                                 </span>
                                 <span class="lot-date">{lotExpLabel(lot)}</span>
-                                {#if lot.batch_code}
-                                    <span class="lot-batch">{lot.batch_code}</span>
-                                {/if}
+                                <span class="lot-batch">{lotBatchCodeLabel(lot)}</span>
                                 {#if lot.location_id}
-                                    <span class="lot-location">{lot.location_id}</span>
+                                    <span class="lot-location">{lotLocationLabel(lot)}</span>
                                 {/if}
                                 {#if lot.status === "archived"}
                                     <span class="badge-archived">{$LL.products.detail.lot.archived()}</span>
@@ -484,29 +688,31 @@ on:click={() => (confirmingArchive = false)}
                             </div>
                             <div class="lot-actions">
                                 {#if lot.status === "active"}
-                                    <Button
-                                        variant="icon"
-                                        size="sm"
-                                        aria-label={$LL.products.detail.lot.resolveQty()}
-                                        onclick={() => (resolvingLot = lot)}
-                                    >
-                                        {#snippet iconStart()}
-                                            <Icon name="arrow-down-on-square-stack" size="sm" />
-                                        {/snippet}
-                                    </Button>
-                                    <Button
-                                        variant="icon"
-                                        size="sm"
-                                        aria-label={$LL.products.detail.lot.editLot()}
-                                        onclick={() => {
-                                            editingLot = lot;
-                                            showLotForm = true;
-                                        }}
-                                    >
-                                        {#snippet iconStart()}
-                                            <Icon name="pencil" size="sm" />
-                                        {/snippet}
-                                    </Button>
+                                    {#if lifecycleOf(product) === "active"}
+                                        <Button
+                                            variant="icon"
+                                            size="sm"
+                                            aria-label={$LL.products.detail.lot.resolveQty()}
+                                            onclick={() => (resolvingLot = lot)}
+                                        >
+                                            {#snippet iconStart()}
+                                                <Icon name="arrow-down-on-square-stack" size="sm" />
+                                            {/snippet}
+                                        </Button>
+                                        <Button
+                                            variant="icon"
+                                            size="sm"
+                                            aria-label={$LL.products.detail.lot.editLot()}
+                                            onclick={() => {
+                                                editingLot = lot;
+                                                showLotForm = true;
+                                            }}
+                                        >
+                                            {#snippet iconStart()}
+                                                <Icon name="pencil" size="sm" />
+                                            {/snippet}
+                                        </Button>
+                                    {/if}
                                     <Button
                                         variant="icon"
                                         size="sm"
@@ -517,16 +723,18 @@ on:click={() => (confirmingArchive = false)}
                                             <Icon name="clipboard-document-list" size="sm" />
                                         {/snippet}
                                     </Button>
-                                    <Button
-                                        variant="icon"
-                                        size="sm"
-                                        aria-label={$LL.products.detail.lot.archiveLot()}
-                                        onclick={() => (archivingLot = lot)}
-                                    >
-                                        {#snippet iconStart()}
-                                            <Icon name="archive-box-arrow-down" size="sm" />
-                                        {/snippet}
-                                    </Button>
+                                    {#if lifecycleOf(product) === "active"}
+                                        <Button
+                                            variant="icon"
+                                            size="sm"
+                                            aria-label={$LL.products.detail.lot.archiveLot()}
+                                            onclick={() => (archivingLot = lot)}
+                                        >
+                                            {#snippet iconStart()}
+                                                <Icon name="archive-box-arrow-down" size="sm" />
+                                            {/snippet}
+                                        </Button>
+                                    {/if}
                                 {/if}
                             </div>
                         </li>
@@ -536,6 +744,82 @@ on:click={() => (confirmingArchive = false)}
         </section>
     {/if}
 </div>
+
+<!-- ── Retire two-step confirm modal ──────────────────────────────────────── -->
+{#if confirmingRetire}
+    <Modal
+        bind:open={confirmingRetire}
+        size="md"
+        showClose
+        closeLabel={$LL.common.close()}
+        aria-label={$LL.products.retireConfirm()}
+        oncancel={cancelRetire}
+        onclose={cancelRetire}
+    >
+        {#snippet children()}
+            {#if !retireSecondConfirm}
+                <!-- Step 1: reason input -->
+                <header class="dialog-header">
+                    <h3>{$LL.products.retireConfirm()}</h3>
+                </header>
+                <p class="dialog-body-text">{$LL.products.retireConfirmBody()}</p>
+                <p class="dialog-body-text dialog-warning">{$LL.products.retireIrreversible()}</p>
+                <form class="retire-reason-form" on:submit|preventDefault={() => { if (retireReason.trim()) retireSecondConfirm = true; }}>
+                    <label class="retire-reason-label">
+                        {$LL.products.retireReasonLabel()}
+                        <textarea
+                            bind:value={retireReason}
+                            placeholder={$LL.products.retireReason()}
+                            rows="3"
+                            class="textarea textarea-md"
+                        ></textarea>
+                    </label>
+                    <div class="modal-actions">
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            disabled={!retireReason.trim()}
+                        >
+                            Next →
+                        </Button>
+                        <Button type="button" variant="ghost" onclick={cancelRetire}>
+                            {$LL.common.cancel()}
+                        </Button>
+                    </div>
+                </form>
+            {:else}
+                <!-- Step 2: irreversible acknowledgement -->
+                <header class="dialog-header">
+                    <h3>{$LL.products.retireConfirm()}</h3>
+                </header>
+                <p class="dialog-body-text">
+                    {$LL.products.retireConfirmBody()}
+                </p>
+                <div class="retire-final-check">
+                    <label class="checkbox-wrapper">
+                        <input
+                            type="checkbox"
+                            bind:checked={retireSecondConfirm}
+                        />
+                        {$LL.products.retireConfirm()}
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <Button
+                        variant="danger"
+                        disabled={!retireSecondConfirm}
+                        onclick={submitRetire}
+                    >
+                        {$LL.products.retire()} {$LL.products.retired()}
+                    </Button>
+                    <Button type="button" variant="ghost" onclick={cancelRetire}>
+                        {$LL.common.cancel()}
+                    </Button>
+                </div>
+            {/if}
+        {/snippet}
+    </Modal>
+{/if}
 
 <!-- ── Resolve dialog ─────────────────────────────────────────────────────── -->
 {#if resolvingLot}
@@ -593,10 +877,10 @@ on:click={() => (confirmingArchive = false)}
             <dt>{$LL.lotsDetail.quantity()}</dt><dd>{lotQtyUnit(detailLot)}</dd>
             <dt>{$LL.lotsDetail.expiry()}</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
             <dt>{$LL.lotsDetail.alertDays()}</dt><dd>{detailLot.alert_days_before}</dd>
-            <dt>{$LL.lotsDetail.batch()}</dt><dd>{detailLot.batch_code ?? "—"}</dd>
+            <dt>{$LL.lotsDetail.batch()}</dt><dd>{lotBatchCodeLabel(detailLot)}</dd>
             <dt>{$LL.lotsDetail.status()}</dt><dd>{detailLot.status}</dd>
             {#if detailLot.location_id}
-                <dt>{$LL.lotsDetail.location()}</dt><dd>{detailLot.location_id}</dd>
+                <dt>{$LL.lotsDetail.location()}</dt><dd>{detailLotLocationLabel(detailLot, detailLotLocations)}</dd>
             {/if}
             {#if detailLot.resolution}
                 <dt>{$LL.lotsDetail.resolution()}</dt><dd>{detailLot.resolution}</dd>
@@ -1141,5 +1425,149 @@ on:click={() => (confirmingArchive = false)}
         display: flex;
         justify-content: flex-end;
         gap: 8px;
+    }
+
+    /* ── Lifecycle banners ─────────────────────────────────────────────────── */
+    .lifecycle-banner {
+        padding: 10px 14px;
+        border-radius: 6px;
+        font-size: 0.88rem;
+    }
+
+    .banner-archived {
+        background: color-mix(in oklch, var(--color-base-300) 60%, transparent);
+        color: var(--color-base-content);
+        border: 1px solid var(--color-base-300);
+    }
+
+    .banner-retired {
+        background: color-mix(in oklch, var(--color-warning) 12%, transparent);
+        color: color-mix(in oklch, var(--color-warning) 80%, var(--color-base-content));
+        border: 1px solid color-mix(in oklch, var(--color-warning) 35%, transparent);
+    }
+
+    .badge-retired {
+        font-size: 0.7rem;
+        background: color-mix(in oklch, var(--color-warning) 18%, transparent);
+        color: color-mix(in oklch, var(--color-warning) 80%, var(--color-base-content));
+        border-radius: 4px;
+        padding: 2px 7px;
+    }
+
+    /* ── Lifecycle history section ────────────────────────────────────────── */
+    .lifecycle-events {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .lifecycle-event {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 8px 10px;
+        background: var(--color-base-200);
+        border-radius: 6px;
+        font-size: 0.85rem;
+    }
+
+    .event-icon {
+        flex-shrink: 0;
+        font-size: 1rem;
+        line-height: 1.4;
+    }
+
+    .event-icon-archived { color: color-mix(in oklch, var(--color-base-content) 50%, transparent); }
+    .event-icon-unarchived { color: var(--color-success); }
+    .event-icon-retired { color: var(--color-warning); }
+
+    .event-body {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 4px 8px;
+        color: var(--color-base-content);
+    }
+
+    .event-type {
+        font-weight: 600;
+    }
+
+    .event-arrow {
+        color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
+    }
+
+    .event-reason {
+        font-style: italic;
+        color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
+    }
+
+    .event-actor {
+        font-size: 0.8rem;
+        color: color-mix(in oklch, var(--color-base-content) 55%, transparent);
+    }
+
+    .event-date {
+        font-size: 0.8rem;
+        color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
+        margin-left: auto;
+    }
+
+    /* ── Retire two-step modal ───────────────────────────────────────────── */
+    .dialog-body-text {
+        margin: 0 0 10px;
+        font-size: 0.9rem;
+        color: var(--color-base-content);
+    }
+
+    .dialog-warning {
+        color: var(--color-warning);
+        font-weight: 600;
+    }
+
+    .retire-reason-form {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .retire-reason-label {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 0.85rem;
+        color: var(--color-base-content);
+    }
+
+    .retire-reason-label textarea {
+        padding: 8px 10px;
+        border: 1px solid var(--color-base-300);
+        border-radius: 6px;
+        font-family: inherit;
+        font-size: 0.9rem;
+        resize: vertical;
+        background: var(--color-base-100);
+        color: var(--color-base-content);
+    }
+
+    .retire-reason-label textarea:focus {
+        outline: 2px solid var(--color-primary);
+        border-color: var(--color-primary);
+    }
+
+    .retire-final-check {
+        margin-bottom: 10px;
+    }
+
+    .retire-final-check .checkbox-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        font-size: 0.88rem;
+        color: var(--color-base-content);
     }
 </style>

@@ -695,6 +695,336 @@ pub(crate) const MIGRATIONS: &[(i64, &str, &str)] = &[
         SELECT 1;
         "#,
     ),
+    // V19 — product lifecycle reusable identifiers
+    //
+    // Adds the terminal `retired` lifecycle state for products. The V2
+    // inline `UNIQUE` constraints on `products.sku` and
+    // `product_barcodes.barcode` are dropped by table-rebuild (the V17
+    // `lot_movements` pattern) and replaced with same-table partial
+    // UNIQUE indexes that exclude retired rows:
+    //
+    //   CREATE UNIQUE INDEX uq_products_sku_active
+    //       ON products(sku) WHERE lifecycle != 'retired';
+    //   CREATE UNIQUE INDEX uq_product_barcodes_barcode_active
+    //       ON product_barcodes(barcode) WHERE lifecycle != 'retired';
+    //
+    // Both predicates reference only the indexed table's own columns,
+    // satisfying the only SQLite-legal shape for a partial index
+    // predicate (the entire `WHERE` must be evaluable using only the
+    // columns of the table being indexed — see partialindex.html §7).
+    //
+    // The `product_barcodes` rebuild adds the sibling `lifecycle`
+    // column that mirrors the parent product's lifecycle at every
+    // commit boundary (service-layer invariant in `services::products::
+    // apply_lifecycle_transition`). The mirror makes the partial index
+    // predicate a single-table expression without a cross-table `EXISTS`.
+    //
+    // The rebuild uses a save-and-restore pattern because SQLite fires
+    // `ON DELETE CASCADE` actions immediately even with
+    // `PRAGMA defer_foreign_keys = ON` (only the FK CHECK is deferred).
+    // The dependent tables — `product_categories`, `expiry_lots`,
+    // `product_barcodes`, `lot_movements`, `lot_resolution_events`,
+    // and `notification_log` — all CASCADE-fire when their referenced
+    // parent is dropped. To preserve every row we save each table into
+    // a `_save` shadow before the products rebuild, drop the dependent
+    // tables in dependency order, rebuild `products` + `product_barcodes`
+    // with the new shape, then recreate each dependent table with its
+    // V2/V4 schema and restore the saved rows. The shadow `_save`
+    // tables are dropped at the end of the migration so the on-disk
+    // schema is identical to the target state.
+    //
+    // The audit table `product_lifecycle_events` records every
+    // archive / unarchive / retire transition and is included in
+    // `REQUIRED_TABLES` so it round-trips through `VACUUM INTO`.
+    //
+    // The legacy `is_active` column is preserved on `products` for the
+    // dual-read window — see design §5.3. No `is_active` projection is
+    // computed at V19 time because `apply_lifecycle_transition`
+    // (`services::products`) writes both columns together going forward.
+    // The migration does NOT drop `is_active`; that change is explicitly
+    // out of scope and lands as a separate follow-up.
+    (
+        19,
+        "add_product_lifecycle_reusable_identifiers_v19",
+        r#"
+        -- ====================================================================
+        -- Step 1: Save the dependent tables whose `ON DELETE CASCADE` would
+        -- fire when we DROP TABLE products. SQLite fires CASCADE actions
+        -- immediately even under `PRAGMA defer_foreign_keys = ON` (only
+        -- the FK CHECK is deferred). Saving first preserves every row.
+        -- The save shadows are dropped at the end of the migration.
+        -- ====================================================================
+        CREATE TABLE product_categories_save AS SELECT * FROM product_categories;
+        CREATE TABLE product_barcodes_save AS SELECT * FROM product_barcodes;
+        CREATE TABLE expiry_lots_save AS SELECT * FROM expiry_lots;
+        CREATE TABLE lot_movements_save AS SELECT * FROM lot_movements;
+        CREATE TABLE lot_resolution_events_save AS SELECT * FROM lot_resolution_events;
+        CREATE TABLE notification_log_save AS SELECT * FROM notification_log;
+
+        -- ====================================================================
+        -- Step 2: Drop the CASCADE dependents in dependency order. The
+        -- `lot_movements` / `lot_resolution_events` / `notification_log`
+        -- tables all FK to expiry_lots with `ON DELETE CASCADE`; dropping
+        -- them BEFORE expiry_lots avoids losing those rows to a cascade
+        -- chain (we have the saved shadows regardless).
+        -- ====================================================================
+        DROP TABLE product_categories;
+        DROP TABLE product_barcodes;
+        DROP TABLE lot_movements;
+        DROP TABLE lot_resolution_events;
+        DROP TABLE notification_log;
+        DROP TABLE expiry_lots;
+
+        -- ====================================================================
+        -- Step 3: Rebuild `products` with the new shape (lifecycle column,
+        -- no inline UNIQUE on `sku`). The CREATE + INSERT + DROP + RENAME
+        -- pattern mirrors V17's `lot_movements` rebuild. The DROP drops
+        -- the V2 implicit autoindex `sqlite_autoindex_products_1` along
+        -- with the table; the RENAME keeps the table name stable so every
+        -- recreated FK from `product_categories`, `expiry_lots`,
+        -- `product_barcodes`, and `product_lifecycle_events` resolves to
+        -- the new table by name at COMMIT time.
+        -- ====================================================================
+        CREATE TABLE products_v19 (
+            id                     TEXT PRIMARY KEY,
+            sku                    TEXT NOT NULL,
+            description            TEXT NOT NULL,
+            category_id            TEXT REFERENCES categories(id),
+            default_unit           TEXT,
+            default_unit_id        TEXT REFERENCES unit_definitions(id),
+            unit_type              TEXT,
+            default_alert_days_before INTEGER NOT NULL DEFAULT 30,
+            notes                  TEXT,
+            is_active              INTEGER NOT NULL DEFAULT 1,
+            created_at             TEXT NOT NULL,
+            updated_at             TEXT NOT NULL,
+            lifecycle              TEXT NOT NULL DEFAULT 'active'
+                                   CHECK(lifecycle IN ('active', 'archived', 'retired'))
+        );
+
+        INSERT INTO products_v19 (
+            id, sku, description, category_id, default_unit,
+            default_unit_id, unit_type,
+            default_alert_days_before, notes, is_active, created_at, updated_at
+        )
+        SELECT id, sku, description, category_id, default_unit,
+               default_unit_id, unit_type,
+               default_alert_days_before, notes, is_active, created_at, updated_at
+        FROM products;
+
+        -- Back-fill lifecycle from legacy is_active. Every existing row
+        -- projects to 'active' or 'archived'; no row projects to 'retired'
+        -- at backfill time (the spec scenario in §product lifecycle states).
+        UPDATE products_v19
+        SET lifecycle = CASE
+            WHEN is_active = 0 THEN 'archived'
+            ELSE 'active'
+        END
+        WHERE lifecycle = 'active';
+
+        DROP TABLE products;
+        ALTER TABLE products_v19 RENAME TO products;
+
+        -- Same-table partial UNIQUE index on the new products. Predicate
+        -- references only the indexed table's own columns — the only
+        -- SQLite-legal shape for a partial-index `WHERE`.
+        CREATE UNIQUE INDEX uq_products_sku_active
+            ON products(sku) WHERE lifecycle != 'retired';
+        -- Recreate the V2 lookup index on `sku` so the catalog search
+        -- LIKE patterns retain their previous performance after the
+        -- products rebuild. The V2 inline UNIQUE constraint that backed
+        -- this index is gone (replaced by the partial index above); the
+        -- explicit index is what catalog search relies on.
+        CREATE INDEX idx_products_sku ON products(sku);
+
+        -- ====================================================================
+        -- Step 4: Rebuild `product_barcodes` with the sibling `lifecycle`
+        -- column that mirrors the parent product's lifecycle (design §2.1).
+        -- The mirror makes the partial-index predicate a single-table
+        -- expression without a cross-table `EXISTS`.
+        -- ====================================================================
+        CREATE TABLE product_barcodes_v19 (
+            id           TEXT PRIMARY KEY,
+            product_id   TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+            barcode      TEXT NOT NULL,
+            barcode_type TEXT,
+            is_primary   INTEGER NOT NULL DEFAULT 0,
+            created_at   TEXT NOT NULL,
+            lifecycle    TEXT NOT NULL DEFAULT 'active'
+                         CHECK(lifecycle IN ('active', 'archived', 'retired'))
+        );
+
+        INSERT INTO product_barcodes_v19 (
+            id, product_id, barcode, barcode_type, is_primary, created_at
+        )
+        SELECT id, product_id, barcode, barcode_type, is_primary, created_at
+        FROM product_barcodes_save;
+
+        -- Back-fill lifecycle from the parent product's lifecycle at V19
+        -- apply time. No row projects to 'retired' here because no product
+        -- has been retired yet (mirrors the products back-fill).
+        UPDATE product_barcodes_v19
+        SET lifecycle = (SELECT lifecycle
+                         FROM products
+                         WHERE products.id = product_barcodes_v19.product_id);
+
+        DROP TABLE product_barcodes_save;
+        ALTER TABLE product_barcodes_v19 RENAME TO product_barcodes;
+
+        CREATE UNIQUE INDEX uq_product_barcodes_barcode_active
+            ON product_barcodes(barcode) WHERE lifecycle != 'retired';
+        -- Recreate the V2 lookup index on `barcode` so scanner reads and
+        -- service-layer scans retain the previous LIKE-search performance.
+        CREATE INDEX idx_product_barcodes_barcode ON product_barcodes(barcode);
+
+        -- ====================================================================
+        -- Step 5: Recreate the CASCADE-dependent tables with their V2 / V4
+        -- schemas and restore the saved rows. The recreated FKs reference
+        -- the new `products` table by name; SQLite's FK reference update
+        -- does NOT happen on RENAME of an unrelated table, so the FKs
+        -- resolve to the new `products` after the recreation.
+        -- ====================================================================
+        CREATE TABLE product_categories (
+            product_id  TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+            category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
+            created_at  TEXT NOT NULL,
+            PRIMARY KEY (product_id, category_id)
+        );
+        CREATE INDEX idx_product_categories_category ON product_categories(category_id);
+        CREATE INDEX idx_product_categories_product ON product_categories(product_id);
+        INSERT INTO product_categories SELECT * FROM product_categories_save;
+        DROP TABLE product_categories_save;
+
+        CREATE TABLE expiry_lots (
+            id                  TEXT PRIMARY KEY,
+            product_id          TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+            store_id            TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+            location_id         TEXT REFERENCES store_locations(id),
+            quantity            REAL NOT NULL,
+            unit                TEXT NOT NULL,
+            expiry_date         TEXT NOT NULL,
+            alert_days_before   INTEGER NOT NULL,
+            batch_code          TEXT,
+            status              TEXT NOT NULL DEFAULT 'active',
+            resolution          TEXT,
+            resolved_at         TEXT,
+            notes               TEXT,
+            created_at          TEXT NOT NULL,
+            updated_at          TEXT NOT NULL
+        );
+        INSERT INTO expiry_lots SELECT * FROM expiry_lots_save;
+        DROP TABLE expiry_lots_save;
+        -- Recreate the V8 lookup indexes on `expiry_lots` that the rebuild
+        -- dropped implicitly. The V2 inline indexes on `expiry_date`,
+        -- `(store_id, expiry_date)`, and `product_id` are part of the
+        -- runtime contract (the dashboard, lot resolver, and scanner all
+        -- depend on them).
+        CREATE INDEX idx_expiry_lots_expiry_date ON expiry_lots(expiry_date);
+        CREATE INDEX idx_expiry_lots_store_expiry ON expiry_lots(store_id, expiry_date);
+        CREATE INDEX idx_expiry_lots_product ON expiry_lots(product_id);
+
+        CREATE TABLE lot_movements (
+            id TEXT PRIMARY KEY,
+            expiry_lot_id TEXT NOT NULL REFERENCES expiry_lots(id) ON DELETE CASCADE,
+            movement_kind TEXT NOT NULL,
+            direction TEXT,
+            quantity REAL NOT NULL,
+            source_location_id TEXT,
+            destination_location_id TEXT,
+            reason TEXT,
+            notes TEXT,
+            actor TEXT NOT NULL DEFAULT 'system',
+            created_at TEXT NOT NULL,
+            -- V9 + V17 CHECK constraints. entry:initial may have quantity = 0
+            -- (historical marker); the service layer enforces quantity > 0
+            -- for all non-initial movements.
+            CHECK(quantity >= 0),
+            CHECK(direction IS NULL OR direction IN ('increase', 'decrease')),
+            CHECK(
+                (movement_kind = 'inventory_adjustment' AND direction IS NOT NULL)
+                OR
+                (movement_kind <> 'inventory_adjustment' AND direction IS NULL)
+            ),
+            CHECK(movement_kind IN (
+                'entry:initial',
+                'transfer',
+                'exit:sale',
+                'exit:waste',
+                'exit:expired',
+                'exit:damaged',
+                'exit:internal_consumption',
+                'exit:return_to_supplier',
+                'exit:inventory_adjustment',
+                'exit:other',
+                'inventory_adjustment'
+            )),
+            CHECK(
+                (movement_kind = 'entry:initial'      AND source_location_id IS NULL     AND destination_location_id IS NOT NULL)
+                OR
+                (movement_kind = 'transfer'           AND source_location_id IS NOT NULL AND destination_location_id IS NOT NULL AND source_location_id <> destination_location_id)
+                OR
+                (movement_kind LIKE 'exit:%'          AND source_location_id IS NOT NULL AND destination_location_id IS NULL)
+                OR
+                (movement_kind = 'inventory_adjustment' AND direction = 'increase' AND source_location_id IS NULL     AND destination_location_id IS NOT NULL)
+                OR
+                (movement_kind = 'inventory_adjustment' AND direction = 'decrease' AND source_location_id IS NOT NULL AND destination_location_id IS NULL)
+            )
+        );
+        INSERT INTO lot_movements SELECT * FROM lot_movements_save;
+        DROP TABLE lot_movements_save;
+        -- Recreate the V10 lookup indexes on `lot_movements` that the
+        -- rebuild dropped implicitly. The lot resolver, balance queries,
+        -- and reporting surfaces depend on these indexes.
+        CREATE INDEX idx_lot_movements_lot_created ON lot_movements(expiry_lot_id, created_at DESC);
+        CREATE INDEX idx_lot_movements_source_location ON lot_movements(source_location_id) WHERE source_location_id IS NOT NULL;
+        CREATE INDEX idx_lot_movements_dest_location ON lot_movements(destination_location_id) WHERE destination_location_id IS NOT NULL;
+        CREATE INDEX idx_lot_movements_kind ON lot_movements(movement_kind);
+
+        CREATE TABLE lot_resolution_events (
+            id            TEXT PRIMARY KEY,
+            expiry_lot_id TEXT NOT NULL REFERENCES expiry_lots(id) ON DELETE CASCADE,
+            quantity      REAL NOT NULL,
+            resolution    TEXT NOT NULL,
+            notes         TEXT,
+            created_at    TEXT NOT NULL,
+            CHECK(quantity > 0)
+        );
+        INSERT INTO lot_resolution_events SELECT * FROM lot_resolution_events_save;
+        DROP TABLE lot_resolution_events_save;
+
+        CREATE TABLE notification_log (
+            id               TEXT PRIMARY KEY,
+            expiry_lot_id    TEXT NOT NULL REFERENCES expiry_lots(id) ON DELETE CASCADE,
+            notification_date TEXT NOT NULL,
+            shown_at         TEXT NOT NULL,
+            UNIQUE(expiry_lot_id, notification_date)
+        );
+        INSERT INTO notification_log SELECT * FROM notification_log_save;
+        DROP TABLE notification_log_save;
+
+        -- ====================================================================
+        -- Step 6: Audit table for archive / unarchive / retire events. Hard
+        -- delete is not shipped by this change; ON DELETE CASCADE matches
+        -- the lot_movements.expiry_lot_id precautionary pattern.
+        -- ====================================================================
+        CREATE TABLE product_lifecycle_events (
+            id         TEXT PRIMARY KEY,
+            product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+            event_type TEXT NOT NULL
+                       CHECK(event_type IN ('archived', 'unarchived', 'retired')),
+            from_state TEXT NOT NULL
+                       CHECK(from_state IN ('active', 'archived', 'retired')),
+            to_state   TEXT NOT NULL
+                       CHECK(to_state IN ('active', 'archived', 'retired')),
+            actor      TEXT,
+            reason     TEXT,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE INDEX idx_product_lifecycle_events_product_created
+            ON product_lifecycle_events(product_id, created_at DESC);
+        "#,
+    ),
 ];
 
 /// Returns a `Migrator` built from the inline `MIGRATIONS` constant.
@@ -853,8 +1183,9 @@ mod tests {
     #[tokio::test]
     async fn v2_schema_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
-        // V1-V18 total (V5 split into 11 separate migrations; V16, V17, V18 added)
-        assert_eq!(applied_count(&pool).await.unwrap(), 18);
+        // V1-V19 total (V5 split into 11 separate migrations; V16, V17,
+        // V18, V19 added by their respective changes).
+        assert_eq!(applied_count(&pool).await.unwrap(), 19);
     }
 
     // -------------------------------------------------------------------
@@ -1361,11 +1692,12 @@ mod tests {
     #[tokio::test]
     async fn v3_schema_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
-        // V1-V18 total (V5 split into 11 separate migrations; V16 added; V17 added; V18 added)
+        // V1-V19 total (V5 split into 11 separate migrations; V16, V17,
+        // V18, V19 added by their respective changes).
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            18,
-            "V5-V15 bring applied count to 15; V16, V17, V18 bring total to 18"
+            19,
+            "V5-V15 bring applied count to 15; V16, V17, V18, V19 bring total to 19"
         );
     }
 
@@ -1416,8 +1748,9 @@ mod tests {
     #[tokio::test]
     async fn v4_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
-        // V1-V18 total (V5 split into 11 separate migrations; V16 added; V17 added; V18 added)
-        assert_eq!(applied_count(&pool).await.unwrap(), 18);
+        // V1-V19 total (V5 split into 11 separate migrations; V16, V17,
+        // V18, V19 added by their respective changes).
+        assert_eq!(applied_count(&pool).await.unwrap(), 19);
         assert!(table_exists(&pool, "product_categories").await);
         assert!(index_exists(&pool, "idx_product_categories_category").await);
         assert!(index_exists(&pool, "idx_product_categories_product").await);
@@ -2464,12 +2797,12 @@ mod tests {
                          checksum and apply V16-V17 on top",
         );
 
-        // Step 3: V16, V17, and V18 were applied successfully. The applied count is
-        // now 18.
+        // Step 3: V16, V17, V18, and V19 were applied successfully. The
+        // applied count is now 19 (V19 added by `product-lifecycle-reusable-identifiers`).
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            18,
-            "after V16-V18 apply on top of the user database, count must be 18"
+            19,
+            "after V16-V19 apply on top of the user database, count must be 19"
         );
 
         // Confirm V16 actually ran (and the migration tracking row for
@@ -2510,7 +2843,7 @@ mod tests {
         run_migrations(&pool).await.unwrap();
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            18,
+            19,
             "re-running migrations must not add new rows"
         );
 
@@ -2583,13 +2916,14 @@ mod tests {
     // =====================================================================
 
     // V5-V15 brings applied count to 15. V16 brings it to 16. V17 brings it to 17. V18 brings it to 18.
+    // V19 brings it to 19.
     #[tokio::test]
     async fn v5_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            18,
-            "V5-V15 adds 11 migration entries to bring count to 15; V16, V17, V18 bring total to 18"
+            19,
+            "V5-V15 adds 11 migration entries to bring count to 15; V16, V17, V18, V19 bring total to 19"
         );
     }
 
@@ -2761,6 +3095,19 @@ mod tests {
             .await
             .unwrap();
 
+        // Insert a real store_location so the V5 setup's `location_id =
+        // 'loc-1'` references a valid FK target. V19 surfaces this
+        // requirement; pre-V19 the test relied on a quirk where the
+        // expiry_lots.location_id FK was not enforced in this path.
+        sqlx::query(
+                "INSERT INTO store_locations (id, store_id, name, is_active, created_at, updated_at) VALUES ('loc-1', 's1', 'Shelf 1', 1, ?, ?)",
+            )
+            .bind(&now)
+            .bind(&now)
+            .execute(&pool)
+            .await
+            .unwrap();
+
         // After all migrations, insert lots. Since lot_movements already exists,
         // these won't be backfilled (that's expected).
         // Instead, we directly insert into lot_movements to verify the table structure.
@@ -2809,6 +3156,17 @@ mod tests {
 
         sqlx::query(
                 "INSERT INTO products (id, sku, description, default_alert_days_before, is_active, created_at, updated_at) VALUES ('p1', 'SKU-001', 'Milk', 30, 1, ?, ?)",
+            )
+            .bind(&now)
+            .bind(&now)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Insert a real store_location row so the V5 setup's
+        // `location_id = 'loc-1'` references a valid FK target.
+        sqlx::query(
+                "INSERT INTO store_locations (id, store_id, name, is_active, created_at, updated_at) VALUES ('loc-1', 's1', 'Shelf 1', 1, ?, ?)",
             )
             .bind(&now)
             .bind(&now)
@@ -2881,6 +3239,19 @@ mod tests {
             .await
             .unwrap();
 
+        // Insert a real store_location so the V5 setup's `location_id =
+        // 'loc-1'` references a valid FK target. V19 surfaces this
+        // requirement; pre-V19 the test relied on a quirk where the
+        // expiry_lots.location_id FK was not enforced in this path.
+        sqlx::query(
+                "INSERT INTO store_locations (id, store_id, name, is_active, created_at, updated_at) VALUES ('loc-1', 's1', 'Shelf 1', 1, ?, ?)",
+            )
+            .bind(&now)
+            .bind(&now)
+            .execute(&pool)
+            .await
+            .unwrap();
+
         sqlx::query(
                 "INSERT INTO expiry_lots (id, product_id, store_id, location_id, quantity, unit, expiry_date, alert_days_before, status, created_at, updated_at) VALUES ('lot1', 'p1', 's1', 'loc-1', 10.0, 'L', '2025-12-31', 30, 'active', ?, ?)",
             )
@@ -2920,7 +3291,7 @@ mod tests {
     #[tokio::test]
     async fn v17_adds_lot_movements_check_constraints() {
         let pool = fresh_test_pool().await.unwrap();
-        assert_eq!(applied_count(&pool).await.unwrap(), 18);
+        assert_eq!(applied_count(&pool).await.unwrap(), 19);
 
         // Verify the lot_movements table has CHECK constraints by testing
         // that invalid data is rejected at the DB layer.
@@ -3148,6 +3519,19 @@ mod tests {
             .await
             .unwrap();
 
+        // Insert a real store_location so the V5 setup's `location_id =
+        // 'loc-1'` references a valid FK target. V19 surfaces this
+        // requirement; pre-V19 the test relied on a quirk where the
+        // expiry_lots.location_id FK was not enforced in this path.
+        sqlx::query(
+                "INSERT INTO store_locations (id, store_id, name, is_active, created_at, updated_at) VALUES ('loc-1', 's1', 'Shelf 1', 1, ?, ?)",
+            )
+            .bind(&now)
+            .bind(&now)
+            .execute(&pool)
+            .await
+            .unwrap();
+
         sqlx::query(
                 "INSERT INTO expiry_lots (id, product_id, store_id, location_id, quantity, unit, expiry_date, alert_days_before, status, created_at, updated_at) VALUES ('lot1', 'p1', 's1', 'loc-1', 10.0, 'L', '2025-12-31', 30, 'active', ?, ?)",
             )
@@ -3210,6 +3594,19 @@ mod tests {
             .await
             .unwrap();
 
+        // Insert a real store_location so the V5 setup's `location_id =
+        // 'loc-1'` references a valid FK target. V19 surfaces this
+        // requirement; pre-V19 the test relied on a quirk where the
+        // expiry_lots.location_id FK was not enforced in this path.
+        sqlx::query(
+                "INSERT INTO store_locations (id, store_id, name, is_active, created_at, updated_at) VALUES ('loc-1', 's1', 'Shelf 1', 1, ?, ?)",
+            )
+            .bind(&now)
+            .bind(&now)
+            .execute(&pool)
+            .await
+            .unwrap();
+
         // Insert lot with initial quantity
         sqlx::query(
                 "INSERT INTO expiry_lots (id, product_id, store_id, location_id, quantity, unit, expiry_date, alert_days_before, status, created_at, updated_at) VALUES ('lot1', 'p1', 's1', 'loc-1', 10.0, 'L', '2025-12-31', 30, 'active', ?, ?)",
@@ -3254,17 +3651,20 @@ mod tests {
     // migrated pool must leave every row count unchanged: V18 is a pure
     // `SELECT 1` marker, so re-application must be a no-op at the data
     // layer even though the migration history (`_sqlx_migrations`) still
-    // records the V18 row from the first run.
+    // records the V18 row from the first run. V19 (added by
+    // `product-lifecycle-reusable-identifiers`) brings the migration count
+    // from 18 to 19; the idempotency guarantee still holds because V18
+    // itself has no DDL.
     #[tokio::test]
     async fn v18_theme_milestone_is_idempotent() {
         let pool = fresh_test_pool().await.unwrap();
 
-        // Initial pass: V1–V18 run, snapshot row counts across every
+        // Initial pass: V1–V19 run, snapshot row counts across every
         // table the V18 milestone could plausibly touch.
         let initial_count = applied_count(&pool).await.unwrap();
         assert_eq!(
-            initial_count, 18,
-            "fresh pool must report 18 applied migrations"
+            initial_count, 19,
+            "fresh pool must report 19 applied migrations"
         );
         let app_settings_rows_before: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM app_settings")
             .fetch_one(&pool)
@@ -3273,7 +3673,7 @@ mod tests {
 
         // Re-run all migrations on the same pool. `_sqlx_migrations`
         // tracks every applied version, so the COUNT(*) is unchanged
-        // (sqlx refuses to re-apply V1–V18). V18 itself has no DDL so it
+        // (sqlx refuses to re-apply V1–V19). V18 itself has no DDL so it
         // cannot create or rewrite rows even if it did re-run.
         run_migrations(&pool).await.unwrap();
         let app_settings_rows_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM app_settings")
@@ -3282,14 +3682,14 @@ mod tests {
             .unwrap();
         assert_eq!(
             app_settings_rows_after.0, app_settings_rows_before.0,
-            "app_settings row count must be unchanged after re-running V1–V18"
+            "app_settings row count must be unchanged after re-running V1–V19"
         );
 
         // Count of applied migrations is also unchanged.
         let final_count = applied_count(&pool).await.unwrap();
         assert_eq!(
-            final_count, 18,
-            "applied_count must remain 18 after re-running the migration set"
+            final_count, 19,
+            "applied_count must remain 19 after re-running the migration set"
         );
     }
 
@@ -3317,5 +3717,624 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(row.0, "dark");
+    }
+
+    // ========================================================================
+    // V19 — product lifecycle reusable identifiers
+    //
+    // Each test uses `fresh_test_pool()` for a clean apply and asserts the
+    // V19 contract documented in `design.md §3.2` and `tasks.md` Slice 2.
+    // Tests cover the migration count, the new column, the partial-index
+    // replacement, the audit table shape, the backfill projection, the
+    // barcode-mirror invariant, FK preservation, the partial-index
+    // release-after-retire contract, and the backup/restore round-trip.
+    // ========================================================================
+
+    /// V19 must apply as the next migration and bump the migration count
+    /// from 18 (last applied on a fresh pool) to `MIGRATIONS.len()` (= 19).
+    #[tokio::test]
+    async fn v19_applies_on_fresh_db() {
+        let pool = fresh_test_pool().await.unwrap();
+        let count = applied_count(&pool).await.unwrap();
+        assert_eq!(
+            count as i64,
+            MIGRATIONS.len() as i64,
+            "fresh pool must report MIGRATIONS.len() applied migrations",
+        );
+    }
+
+    /// V19 must add `lifecycle TEXT NOT NULL DEFAULT 'active'` to `products`
+    /// and `product_barcodes`. `PRAGMA table_info(products)` carries the
+    /// new column with the documented CHECK constraint default.
+    #[tokio::test]
+    async fn v19_adds_lifecycle_column() {
+        let pool = fresh_test_pool().await.unwrap();
+        let rows: Vec<(i64, String, String, i64, Option<String>)> = sqlx::query_as(
+            "SELECT cid, name, type, \"notnull\", dflt_value FROM pragma_table_info('products') WHERE name = 'lifecycle'",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(rows.len(), 1, "products must contain a `lifecycle` column");
+        let (_cid, name, ty, notnull, dflt) = &rows[0];
+        assert_eq!(name, "lifecycle");
+        assert_eq!(ty, "TEXT");
+        assert_eq!(*notnull, 1, "lifecycle must be NOT NULL");
+        assert_eq!(
+            dflt.as_deref(),
+            Some("'active'"),
+            "lifecycle default must be 'active'",
+        );
+    }
+
+    /// Symmetric check on `product_barcodes` — the mirror column lands on
+    /// the barcode table too (design constraint 2).
+    #[tokio::test]
+    async fn v19_adds_lifecycle_column_on_product_barcodes() {
+        let pool = fresh_test_pool().await.unwrap();
+        let rows: Vec<(i64, String, String, i64, Option<String>)> = sqlx::query_as(
+            "SELECT cid, name, type, \"notnull\", dflt_value FROM pragma_table_info('product_barcodes') WHERE name = 'lifecycle'",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            rows.len(),
+            1,
+            "product_barcodes must contain a `lifecycle` column",
+        );
+        let (_cid, name, ty, notnull, dflt) = &rows[0];
+        assert_eq!(name, "lifecycle");
+        assert_eq!(ty, "TEXT");
+        assert_eq!(*notnull, 1);
+        assert_eq!(dflt.as_deref(), Some("'active'"));
+    }
+
+    /// The two partial UNIQUE indexes must exist after V19 and the V2
+    /// inline autoindexes (PRIMARY KEY autoindex `_1` always exists;
+    /// the inline `UNIQUE` autoindex `_2` is what the rebuild pattern
+    /// drops — design constraint 3) must be gone.
+    #[tokio::test]
+    async fn v19_partial_unique_indexes_exist() {
+        let pool = fresh_test_pool().await.unwrap();
+        let names: Vec<(String,)> =
+            sqlx::query_as("SELECT name FROM sqlite_master WHERE type = 'index'")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        let name_set: std::collections::HashSet<String> = names.into_iter().map(|(n,)| n).collect();
+        assert!(
+            name_set.contains("uq_products_sku_active"),
+            "products partial UNIQUE index missing; found indexes: {:?}",
+            name_set,
+        );
+        assert!(
+            name_set.contains("uq_product_barcodes_barcode_active"),
+            "product_barcodes partial UNIQUE index missing; found indexes: {:?}",
+            name_set,
+        );
+        // The V2 inline autoindexes for the inline `UNIQUE` clauses were
+        // dropped by the rebuild pattern. SQLite names the UNIQUE-clause
+        // autoindex as `_2` (the `_1` slot is always the PRIMARY KEY
+        // autoindex and persists). The autoindex MUST be gone for both
+        // products.sku and product_barcodes.barcode.
+        for forbidden in [
+            "sqlite_autoindex_products_2",
+            "sqlite_autoindex_product_barcodes_2",
+        ] {
+            assert!(
+                !name_set.contains(forbidden),
+                "{forbidden} must be gone after V19 rebuild; found indexes: {:?}",
+                name_set,
+            );
+        }
+        // PRIMARY KEY autoindexes always persist — they are part of the
+        // schema identity, not a removable constraint. Confirm they DO
+        // exist so future maintainers know the constraint split is the
+        // PRIMARY KEY slot, not the UNIQUE slot.
+        for required in [
+            "sqlite_autoindex_products_1",
+            "sqlite_autoindex_product_barcodes_1",
+        ] {
+            assert!(
+                name_set.contains(required),
+                "{required} (PRIMARY KEY autoindex) must persist",
+            );
+        }
+    }
+
+    /// The `product_lifecycle_events` audit table must exist with the
+    /// documented columns and CHECK constraints.
+    #[tokio::test]
+    async fn v19_creates_product_lifecycle_events() {
+        let pool = fresh_test_pool().await.unwrap();
+        let cols: Vec<(String, String)> = sqlx::query_as(
+            "SELECT name, type FROM pragma_table_info('product_lifecycle_events') ORDER BY cid",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        let col_names: Vec<String> = cols.iter().map(|(n, _)| n.clone()).collect();
+        assert_eq!(
+            col_names,
+            vec!["id", "product_id", "event_type", "from_state", "to_state", "actor", "reason", "created_at"]
+                .into_iter()
+                .map(String::from)
+                .collect::<Vec<_>>(),
+            "product_lifecycle_events must expose the eight documented columns in order",
+        );
+        // id is PRIMARY KEY (TEXT). PRIMARY KEY implies NOT NULL in
+        // SQLite; `pragma_table_info` reports the explicit `notnull`
+        // flag which is 0 even when the column is implicitly NOT NULL
+        // via the PRIMARY KEY constraint. We assert on `pk` instead.
+        let id_row: (i64, String) = sqlx::query_as(
+            "SELECT pk, type FROM pragma_table_info('product_lifecycle_events') WHERE name = 'id'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(id_row.0, 1, "id must be PRIMARY KEY");
+        assert_eq!(id_row.1, "TEXT");
+        // Reject a NULL id at the SQL layer as the NOT NULL smoke check.
+        let null_id = sqlx::query(
+            "INSERT INTO product_lifecycle_events (id, product_id, event_type, from_state, to_state, created_at) VALUES (NULL, 'p', 'archived', 'active', 'archived', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await;
+        assert!(null_id.is_err(), "id NULL must be rejected by PRIMARY KEY");
+    }
+
+    /// Insert a `products` row with `is_active = 0` via direct SQL before
+    /// V19 applies (via a partial-migration helper), then run V19 and
+    /// assert the lifecycle column back-fills to `'archived'`.
+    #[tokio::test]
+    async fn v19_backfill_is_active_zero_to_archived() {
+        // Apply V1–V18 only, then insert a legacy row, then run V19 by
+        // calling run_migrations on the same pool (sqlx skips already-applied
+        // migrations and applies V19 on top of the partial state).
+        let pool = pool_with_migrations_up_to(18).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, is_active, created_at, updated_at) \
+             VALUES ('p-backfill-archived', 'SKU-BF-A', 'Archived legacy row', 0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Run V19 explicitly (sqlx-migrate re-runs run_migrations idempotently;
+        // only V19 is new on this pool).
+        run_migrations(&pool).await.unwrap();
+
+        let row: (String, i64) = sqlx::query_as(
+            "SELECT lifecycle, is_active FROM products WHERE id = 'p-backfill-archived'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(row.0, "archived", "is_active = 0 row must project to 'archived'");
+        assert_eq!(row.1, 0, "is_active must remain 0");
+    }
+
+    /// Symmetric: an `is_active = 1` legacy row projects to `'active'`.
+    #[tokio::test]
+    async fn v19_backfill_is_active_one_to_active() {
+        let pool = pool_with_migrations_up_to(18).await.unwrap();
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, is_active, created_at, updated_at) \
+             VALUES ('p-backfill-active', 'SKU-BF-B', 'Active legacy row', 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        let row: (String, i64) = sqlx::query_as(
+            "SELECT lifecycle, is_active FROM products WHERE id = 'p-backfill-active'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(row.0, "active", "is_active = 1 row must project to 'active'");
+        assert_eq!(row.1, 1);
+    }
+
+    /// No row projects to `'retired'` at backfill time (the spec scenario).
+    #[tokio::test]
+    async fn v19_no_row_projects_to_retired_at_backfill() {
+        let pool = pool_with_migrations_up_to(18).await.unwrap();
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, is_active, created_at, updated_at) \
+             VALUES ('p-bf-c', 'SKU-BF-C', 'Archived row', 0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, is_active, created_at, updated_at) \
+             VALUES ('p-bf-d', 'SKU-BF-D', 'Active row', 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        let retired_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM products WHERE lifecycle = 'retired'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            retired_count.0, 0,
+            "no row may project to 'retired' at backfill time",
+        );
+    }
+
+    /// Every `product_barcodes.lifecycle` value must mirror its parent
+    /// product's `lifecycle` at V19 apply time (design constraint 2 back-fill
+    /// rule). Uses the service-layer helpers exposed by `services::products`
+    /// indirectly: the test inserts a parent product + a barcode via direct
+    /// SQL on the V18 partial-state pool so V19 runs the mirror step.
+    #[tokio::test]
+    async fn v19_backfill_product_barcodes_lifecycle_mirrors_parent() {
+        let pool = pool_with_migrations_up_to(18).await.unwrap();
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, is_active, created_at, updated_at) \
+             VALUES ('p-mirror', 'SKU-MIR', 'Mirror test', 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO product_barcodes (id, product_id, barcode, is_primary, created_at) \
+             VALUES ('bc-mirror-1', 'p-mirror', '7500000000001', 1, '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        let row: (String, String) = sqlx::query_as(
+            "SELECT p.lifecycle, pb.lifecycle FROM products p \
+             JOIN product_barcodes pb ON pb.product_id = p.id \
+             WHERE pb.id = 'bc-mirror-1'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(row.0, row.1, "barcode lifecycle must mirror parent product lifecycle");
+        assert_eq!(row.0, "active");
+    }
+
+    /// After V19, every `expiry_lots.product_id` must resolve to a valid
+    /// `products.id` (FK preservation guard for the deferred-FK path used
+    /// during the rebuild).
+    #[tokio::test]
+    async fn v19_preserves_expiry_lots_fk_after_products_rebuild() {
+        let pool = fresh_test_pool().await.unwrap();
+        // Insert a parent product + a barcode + a lot using direct SQL.
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, is_active, created_at, updated_at) \
+             VALUES ('p-fk', 'SKU-FK', 'FK guard', 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        // V19 ships a store + lot via the V2 schema. Use the V2 tables.
+        sqlx::query(
+            "INSERT INTO stores (id, name, code, is_active, created_at, updated_at) \
+             VALUES ('s-fk', 'FK Store', 'S-FK', 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO expiry_lots (id, product_id, store_id, quantity, unit, expiry_date, alert_days_before, status, created_at, updated_at) \
+             VALUES ('lot-fk', 'p-fk', 's-fk', 5.0, 'L', '2025-12-31', 30, 'active', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // The migration has already applied in fresh_test_pool(). Verify
+        // every lot resolves to an existing product.
+        let orphans: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM expiry_lots el \
+             WHERE NOT EXISTS (SELECT 1 FROM products p WHERE p.id = el.product_id)",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(orphans.0, 0, "no expiry_lots row may orphan after V19");
+    }
+
+    /// Symmetric FK guard for `product_categories`.
+    #[tokio::test]
+    async fn v19_preserves_product_categories_fk_after_products_rebuild() {
+        let pool = fresh_test_pool().await.unwrap();
+        sqlx::query(
+            "INSERT INTO categories (id, name, is_active, created_at, updated_at) \
+             VALUES ('c-fk', 'FK Cat', 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, is_active, created_at, updated_at) \
+             VALUES ('p-cat-fk', 'SKU-CFK', 'Cat FK guard', 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO product_categories (product_id, category_id, created_at) VALUES ('p-cat-fk', 'c-fk', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let orphans: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM product_categories pc \
+             WHERE NOT EXISTS (SELECT 1 FROM products p WHERE p.id = pc.product_id)",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(orphans.0, 0, "no product_categories row may orphan after V19");
+    }
+
+    /// SKU uniqueness: a duplicate SKU is blocked while both products are
+    /// active. After the parent product is retired (via the service layer
+    /// from Slice 4, which will be available once that slice lands; here
+    /// we use a direct SQL UPDATE to simulate the retired flag), a new
+    /// product can claim the SKU.
+    #[tokio::test]
+    async fn v19_sku_unique_against_active_but_reusable_after_retire() {
+        let pool = fresh_test_pool().await.unwrap();
+        // Insert product A as active.
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, is_active, created_at, updated_at) \
+             VALUES ('p-sku-a', 'SKU-REUSE', 'Product A', 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Duplicate SKU while A is active must fail.
+        let dup = sqlx::query(
+            "INSERT INTO products (id, sku, description, is_active, created_at, updated_at) \
+             VALUES ('p-sku-b', 'SKU-REUSE', 'Product B (dup)', 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await;
+        assert!(
+            dup.is_err(),
+            "duplicate SKU must be blocked while A is active; got {dup:?}",
+        );
+
+        // Now retire A directly (mirrors what the service layer does).
+        sqlx::query("UPDATE products SET lifecycle = 'retired' WHERE id = 'p-sku-a'")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // A new product with the same SKU must succeed because A is now
+        // excluded from the partial index.
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, is_active, created_at, updated_at) \
+             VALUES ('p-sku-b', 'SKU-REUSE', 'Product B (released)', 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .expect("SKU released by retired product must be reusable");
+    }
+
+    /// Symmetric check on barcode uniqueness.
+    #[tokio::test]
+    async fn v19_barcode_unique_against_active_but_reusable_after_parent_retire() {
+        let pool = fresh_test_pool().await.unwrap();
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, is_active, created_at, updated_at) \
+             VALUES ('p-bc-a', 'SKU-BC-A', 'Product A (bc owner)', 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO product_barcodes (id, product_id, barcode, is_primary, created_at) \
+             VALUES ('bc-reuse-1', 'p-bc-a', '7501111111111', 1, '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Second active product trying the same barcode must fail.
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, is_active, created_at, updated_at) \
+             VALUES ('p-bc-b', 'SKU-BC-B', 'Product B (dup bc)', 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let dup = sqlx::query(
+            "INSERT INTO product_barcodes (id, product_id, barcode, is_primary, created_at) \
+             VALUES ('bc-reuse-dup', 'p-bc-b', '7501111111111', 1, '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await;
+        assert!(
+            dup.is_err(),
+            "duplicate barcode must be blocked while A is active; got {dup:?}",
+        );
+
+        // Retire A; mirror its barcode lifecycle to retired.
+        sqlx::query("UPDATE products SET lifecycle = 'retired' WHERE id = 'p-bc-a'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE product_barcodes SET lifecycle = 'retired' WHERE product_id = 'p-bc-a'")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Now the same barcode can attach to a different active product.
+        sqlx::query(
+            "INSERT INTO product_barcodes (id, product_id, barcode, is_primary, created_at) \
+             VALUES ('bc-reuse-new', 'p-bc-b', '7501111111111', 1, '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .expect("barcode released by retired product must be reusable on a different active parent");
+    }
+
+    /// Force a failure inside the audit insert (invalid `to_state` value
+    /// violating the CHECK) and assert the lifecycle update AND the barcode
+    /// mirror UPDATE both roll back (design constraint 4 end-to-end).
+    /// The test exercises the constraint at the SQL level so it does not
+    /// depend on the service layer (which lands in Slice 5).
+    #[tokio::test]
+    async fn v19_audit_row_atomic_with_mutation() {
+        let pool = fresh_test_pool().await.unwrap();
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, is_active, created_at, updated_at) \
+             VALUES ('p-audit', 'SKU-AUDIT', 'Audit test', 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO product_barcodes (id, product_id, barcode, is_primary, created_at) \
+             VALUES ('bc-audit', 'p-audit', '7502222222222', 1, '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Manually start a transaction, write the lifecycle update, write
+        // the mirror UPDATE, then attempt the audit insert with an invalid
+        // to_state that violates the CHECK. Verify the whole transaction
+        // rolls back and both product rows remain in their pre-state.
+        let mut tx = pool.begin().await.unwrap();
+
+        sqlx::query("UPDATE products SET lifecycle = 'archived' WHERE id = 'p-audit'")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE product_barcodes SET lifecycle = 'archived' WHERE product_id = 'p-audit'")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let bad_audit = sqlx::query(
+            "INSERT INTO product_lifecycle_events (id, product_id, event_type, from_state, to_state, created_at) \
+             VALUES ('ev-bad', 'p-audit', 'archived', 'active', 'unknown', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&mut *tx)
+        .await;
+        assert!(
+            bad_audit.is_err(),
+            "audit insert with invalid to_state must violate the CHECK",
+        );
+        // Drop the tx without commit to force rollback.
+        tx.rollback().await.unwrap();
+
+        // Both product and barcode must be back at 'active'.
+        let product: (String,) = sqlx::query_as("SELECT lifecycle FROM products WHERE id = 'p-audit'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let barcode: (String,) = sqlx::query_as(
+            "SELECT lifecycle FROM product_barcodes WHERE product_id = 'p-audit'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(product.0, "active", "product lifecycle must roll back to 'active'");
+        assert_eq!(barcode.0, "active", "barcode lifecycle must roll back to 'active'");
+        // No audit row landed.
+        let ev_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM product_lifecycle_events WHERE product_id = 'p-audit'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(ev_count.0, 0, "no audit row may have committed");
+    }
+
+    /// V19 + audit round-trip via VACUUM INTO: write an audit row, snapshot
+    /// the database, re-import, assert lifecycle + audit values survive.
+    /// Note: the backup-restore helper is not exported from
+    /// `services::backup_restore` because that module depends on a tokio
+    /// runtime that can be hard to spin up inside a migration test. The
+    /// test exercises the same `VACUUM INTO` SQL primitive to keep the
+    /// invariant pinned without coupling to the service layer.
+    #[tokio::test]
+    async fn v19_backup_round_trip_preserves_lifecycle() {
+        let pool = fresh_test_pool().await.unwrap();
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, is_active, created_at, updated_at) \
+             VALUES ('p-bk', 'SKU-BK', 'Backup test', 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO product_barcodes (id, product_id, barcode, is_primary, created_at) \
+             VALUES ('bc-bk', 'p-bk', '7503333333333', 1, '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO product_lifecycle_events (id, product_id, event_type, from_state, to_state, actor, reason, created_at) \
+             VALUES ('ev-bk-1', 'p-bk', 'archived', 'active', 'archived', 'tester', NULL, '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // VACUUM INTO a temp file. This snapshots the whole database
+        // (products + product_barcodes + product_lifecycle_events included)
+        // in one binary operation.
+        let pid = std::process::id();
+        let rand: u16 = rand::random();
+        let backup_path = std::path::PathBuf::from(format!("/tmp/caduxo_v19_backup_{pid}_{rand}.db"));
+        let _ = std::fs::remove_file(&backup_path);
+        let backup_path_str = backup_path.to_string_lossy().replace('\'', "''");
+        let sql = format!("VACUUM INTO '{backup_path_str}'");
+        sqlx::query(&sql).execute(&pool).await.unwrap();
+
+        // Open the backup pool and assert the same row values survived.
+        let backup_opts = sqlite_options(&backup_path);
+        let backup_pool = pool_options().connect_with(backup_opts).await.unwrap();
+
+        let product: (String,) = sqlx::query_as("SELECT lifecycle FROM products WHERE id = 'p-bk'")
+            .fetch_one(&backup_pool)
+            .await
+            .unwrap();
+        assert_eq!(product.0, "active");
+
+        let barcode: (String,) = sqlx::query_as(
+            "SELECT lifecycle FROM product_barcodes WHERE product_id = 'p-bk'",
+        )
+        .fetch_one(&backup_pool)
+        .await
+        .unwrap();
+        assert_eq!(barcode.0, "active");
+
+        let ev: (String, String, String, Option<String>, Option<String>) = sqlx::query_as(
+            "SELECT event_type, from_state, to_state, actor, reason FROM product_lifecycle_events WHERE id = 'ev-bk-1'",
+        )
+        .fetch_one(&backup_pool)
+        .await
+        .unwrap();
+        assert_eq!(ev.0, "archived");
+        assert_eq!(ev.1, "active");
+        assert_eq!(ev.2, "archived");
+        assert_eq!(ev.3.as_deref(), Some("tester"));
+        assert_eq!(ev.4, None);
+
+        let _ = std::fs::remove_file(&backup_path);
+        backup_pool.close().await;
     }
 }

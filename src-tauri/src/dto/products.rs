@@ -85,6 +85,12 @@ pub struct ProductUpdate {
 /// Response shape for a product.
 /// `category_ids` is always present and may be empty. The legacy `category_id`
 /// field is dropped from the runtime model; see design §2.2.
+///
+/// `lifecycle` rides along on every product detail so the frontend can
+/// render the lifecycle badge without an extra round-trip; the value is
+/// `None` for pre-V19 backends (dual-read window per design §5.3) and
+/// the frontend derives `lifecycle ?? (is_active ? "active" : "archived")`
+/// to keep the badge correct in either case.
 #[derive(Debug, Clone, Serialize)]
 pub struct ProductResponse {
     pub id: String,
@@ -104,6 +110,9 @@ pub struct ProductResponse {
     pub is_active: bool,
     pub created_at: String,
     pub updated_at: String,
+    /// Lifecycle state of the product. `None` when the backend is on a
+    /// pre-V19 schema (rolling-deploy compatibility).
+    pub lifecycle: Option<ProductLifecycle>,
 }
 
 /// Detail bundle returned by `get_product`: product, its barcodes, and the
@@ -147,6 +156,61 @@ pub struct ProductBarcodeRemoveInput {
 }
 
 // ============================================================
+// Lifecycle
+// ============================================================
+
+/// Product lifecycle state. The wire shape is `snake_case` to match the
+/// stored `lifecycle` TEXT column on `products` (and the sibling mirror
+/// column on `product_barcodes`). The default for newly created
+/// products is `Active`; the terminal state is `Retired`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProductLifecycle {
+    Active,
+    Archived,
+    Retired,
+}
+
+/// Product lifecycle event type. The wire shape is `snake_case`:
+/// `archived`, `unarchived`, `retired`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProductLifecycleEventType {
+    Archived,
+    Unarchived,
+    Retired,
+}
+
+/// Row shape returned by `list_product_lifecycle_events` and surfaced to
+/// the per-product history pane on `ProductDetailPage.svelte`. The
+/// `actor` and `reason` fields are optional because the service-layer
+/// contract allows both to be `NULL` (system-emitted archive / unarchive
+/// events have no actor; only retire events carry a reason).
+#[derive(Debug, Clone, Serialize)]
+pub struct ProductLifecycleEventResponse {
+    pub id: String,
+    pub product_id: String,
+    pub event_type: ProductLifecycleEventType,
+    pub from_state: ProductLifecycle,
+    pub to_state: ProductLifecycle,
+    pub actor: Option<String>,
+    pub reason: Option<String>,
+    pub created_at: String,
+}
+
+/// Input for the `retire_product` IPC. `reason` is REQUIRED and the
+/// service layer enforces non-blank-after-trim (design constraint 5).
+/// `actor` is optional and may be supplied by the frontend when the
+/// operator is identified; the current Caduxo UX passes `None` and the
+/// service layer treats `actor` as `NULL` (system-emitted).
+#[derive(Debug, Deserialize)]
+pub struct RetireProductInput {
+    pub id: String,
+    pub reason: String,
+    pub actor: Option<String>,
+}
+
+// ============================================================
 // Search
 // ============================================================
 
@@ -158,6 +222,12 @@ pub struct ProductSearchQuery {
 
 /// Search hit shape — minimal fields for scan/search results and listing.
 /// `category_ids` replaces the legacy `category_id` field.
+///
+/// `lifecycle` rides along on every search hit so the frontend can render
+/// the lifecycle badge without an extra round-trip; the value is `None`
+/// for pre-V19 backends (dual-read window per design §5.3) and defaults
+/// to `Active` for `is_active = true` / `Archived` for `is_active = false`
+/// in the frontend compatibility helper.
 #[derive(Debug, Clone, Serialize)]
 pub struct ProductSearchResult {
     pub id: String,
@@ -168,6 +238,11 @@ pub struct ProductSearchResult {
     pub default_alert_days_before: i32,
     pub primary_barcode: Option<String>,
     pub is_active: bool,
+    /// Lifecycle state of the product. `None` when the backend is on a
+    /// pre-V19 schema (older binary during rolling deploy); the frontend
+    /// derives `lifecycle ?? (is_active ? "active" : "archived")` to keep
+    /// the badge correct in either case.
+    pub lifecycle: Option<ProductLifecycle>,
 }
 
 // ============================================================

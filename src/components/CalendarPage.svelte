@@ -13,6 +13,7 @@
     type ExpiryLotResponse,
   } from "../lib/expiry_lots.js";
   import { listStores, listStoreLocations, type StoreLocationResponse } from "../lib/stores.js";
+  import { resolveLocationDisplay } from "../lib/lotDisplay.js";
   import LotMovementsPanel from "./LotMovementsPanel.svelte";
   import { humanizeError } from "../lib/errors.js";
   import Table from "./ui/Table.svelte";
@@ -699,10 +700,8 @@ function onLotCancel() {
       </dd>
       <dt>{$LL.dashboard.location()}</dt>
       <dd>
-        {#if detailRow?.location_name}
-          {detailRow.location_name}
-        {:else if detailLot.location_id}
-          {detailLot.location_id}
+        {#if detailLot.location_id}
+          {resolveLocationDisplay(detailLot.location_id, lotDetailLocations, $LL.common.noLocation())}
         {:else}
           —
         {/if}
