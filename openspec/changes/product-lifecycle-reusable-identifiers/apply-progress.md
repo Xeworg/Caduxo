@@ -5,6 +5,42 @@
 PR 1 backend foundation: **implemented; PR 1a/1b split triggered** (over-budget; committed to `feat/product-lifecycle-reusable-identifiers`).
 PR 2 UI + i18n: **implemented** (all Slices 8–14 + Slice 15 verify gate complete; not committed).
 PR 3 verify-report: **implemented** (PR 3 tail + Slice 17 verify report written; not committed — user requested no-commit per launch scope).
+PR 3 follow-up (CSV import released identifiers): **implemented** (user-reported M13/M14 commit path bug found and fixed in `csv_io::import_row` + `csv_io::lookup_barcode_owner_lifecycle` helper + 10 regression tests; evidence updated in `verify-report.md`).
+
+## PR 3 follow-up — CSV import released identifiers (post-verify)
+
+**Trigger**: User reported that M13/M14 (CSV import preview of retired SKU → `ReleasedSku` + commit, CSV import preview of active SKU collision → `DuplicateSku` blocked) was missing in the UI / manual review. Read-only exploration found the frontend preview rendering is present in `CsvImportPage.svelte`, but the backend commit path `csv_io::import_row` had two contract gaps against the preview path:
+
+1. **`import_row` did not filter retired products** from the SKU/barcode conflict checks before applying the conflict strategy. A retired-only match fell through to `Skipped` (Skip), `Updated` (Update), or `Skipped` with `sku_conflict_manual` (Review) instead of creating the new product.
+2. **`db::repositories::products::find_by_barcode_exact` does not project the `lifecycle` column** on its joined SELECT — the helper is shared with scanner / search read paths that only need the metadata, so `ProductSearchResult.lifecycle` is always `None` for barcode matches. This silently broke the three-state barcode classifier in `csv_io::classify_row` (`ReleasedBarcode` was unreachable even for the preview path), and the same gap would have hit the commit path even after fix #1 was in place. `find_by_sku_exact` already projects `lifecycle`, so the SKU side worked.
+
+**Fix (in `src-tauri/src/services/csv_io.rs` only, per the ODD `csv-import-released-identifiers` task's allowed edit surfaces)**:
+
+- Added a dedicated `lookup_barcode_owner_lifecycle(pool, barcode) -> Result<Option<ProductLifecycle>, AppError>` helper that issues a focused SQL lookup against the same `products INNER JOIN product_barcodes ON product_id` join. The helper pulls only the `lifecycle` column and parses it via the same string-mapping used by the repository. Avoids touching the shared `find_by_barcode_exact` contract (and the scanner / search read paths that depend on it).
+- Updated `classify_row`'s barcode classifier to call the helper and emit `ReleasedBarcode` when the owner lifecycle is `Retired`, `DuplicateBarcode` otherwise. The existing `find_by_barcode_exact` call still drives the metadata (`existing_product_id`, `existing_barcode`) so the "previously associated with product X" tooltip keeps pointing at the retired row.
+- Updated `import_row`'s SKU conflict check to filter `find_by_sku_exact` results by `row.lifecycle != Some(ProductLifecycle::Retired)` before applying the conflict strategy (Skip → `Created`, Update → `Created`, Review → `Created`). A `None` lifecycle (pre-V19 backend during rolling deploy) defaults to active so the legacy duplicate semantics are preserved.
+- Updated `import_row`'s barcode conflict check to consult the new helper: an active or archived match keeps `Skipped` / `Skipped` / `Skipped` semantics under the three strategies; a retired-only match falls through to the create path under every strategy (the partial unique index `uq_product_barcodes_barcode_active WHERE lifecycle != 'retired'` already excludes the retired row from uniqueness enforcement, so the new attach succeeds).
+
+**Regression coverage** (10 new tests in `csv_io::tests`):
+
+| Test | Pins |
+|------|------|
+| `preview_emits_released_sku_for_retired_only_match` | `ReleasedSku` preview + `released_sku_count` increments + counts as `valid_rows` |
+| `preview_emits_released_barcode_for_retired_only_match` | `ReleasedBarcode` preview + `released_barcode_count` increments |
+| `preview_active_duplicate_sku_still_emits_duplicate_sku` | regression guard: active duplicate still emits `DuplicateSku`, not `ReleasedSku` |
+| `preview_active_duplicate_barcode_still_emits_duplicate_barcode` | regression guard: active duplicate still emits `DuplicateBarcode` |
+| `preview_summary_partitions_released_and_active_duplicates` | mixed CSV: `valid_rows`, `released_*_count`, `duplicate_*_count`, `invalid_rows` partition correctly |
+| `import_skip_creates_when_sku_matches_only_retired` | Skip strategy commits `Created` for retired SKU |
+| `import_update_creates_when_sku_matches_only_retired` | Update strategy commits `Created` for retired SKU (no mutation of retired row) |
+| `import_review_creates_when_sku_matches_only_retired` | Review strategy commits `Created` for retired SKU (no manual-resolution `Skipped`) |
+| `import_skip_creates_and_attaches_when_barcode_matches_only_retired` | Skip strategy attaches released barcode to the new product |
+| `import_skip_still_skips_active_duplicate_sku` | regression guard: active duplicate keeps the `sku_already_exists` skip semantics |
+
+**Validation**:
+- `cargo test --manifest-path src-tauri/Cargo.toml --lib csv_io` → 39 passed; 0 failed; 0 ignored.
+- `cargo test --manifest-path src-tauri/Cargo.toml --lib` → 746 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out (was 734 before the PR 3 follow-up; +12 reflects the actual count delta after the 10 new regression tests in `csv_io::tests` and 2 helper-related tests surfaced by the existing suite).
+
+**Evidence updated**: `verify-report.md` M13/M14 rows now reference the actual regression tests (the previous rows referenced `classify_row_released_sku` / `classify_row_released_barcode` / `classify_row_active_duplicate_sku_wins_over_released` / `preview_summary_counts_released_rows_as_valid` which were cited in `tasks.md` Slice 6 but never landed in the original PR 1b implementation); spec-scenario coverage matrix gains three new rows for the released SKU / barcode commit contracts and the preview summary partition; PR boundary review letter f documents the `lookup_barcode_owner_lifecycle` helper rationale; G2 / G8 gate counts updated to `746`.
 
 ## File-scope summary (PR 2 net diff)
 
@@ -40,7 +76,7 @@ PR 3 verify-report: **implemented** (PR 3 tail + Slice 17 verify report written;
 | `src-tauri/src/services/products.rs` | **1a** | +390 / -4 (`apply_lifecycle_transition`, `archive_product` refactor, `unarchive_product`, `retire_product`, `list_lifecycle_events`, dual-read window `is_active` rewrite, 5 lifecycle tests) |
 | `src-tauri/src/dto/products.rs` | **1b** | +75 / -0 (`ProductLifecycle`, `ProductLifecycleEventType`, `ProductLifecycleEventResponse`, `RetireProductInput`, `lifecycle` field on `ProductResponse` / `ProductSearchResult`) |
 | `src-tauri/src/dto/csv_io.rs` | **1b** | +27 / -0 (`ReleasedSku`, `ReleasedBarcode`, `released_sku_count`, `released_barcode_count`) |
-| `src-tauri/src/services/csv_io.rs` | **1b** | +60 / -0 (`ReleasedSku` / `ReleasedBarcode` classify branches + summary counter increments + ProductLifecycle import) |
+| `src-tauri/src/services/csv_io.rs` | **1b** | +60 / -0 (`ReleasedSku` / `ReleasedBarcode` classify branches + summary counter increments + ProductLifecycle import) + **PR 3 follow-up** +~30 / -~5 (`lookup_barcode_owner_lifecycle` helper + import_row retired-filter on SKU/barcode conflict checks + 10 regression tests covering released SKU / barcode preview + import commit behavior) |
 | `src-tauri/src/services/backup_restore.rs` | **1b** | +13 / -1 (`product_lifecycle_events` added to `REQUIRED_TABLES`) |
 | `src-tauri/src/services/user_messages.rs` | **1b** | +126 / -1 (`ProductRetiredForMutation`, `RetireReasonRequired`, `ProductRetiredForBarcode` variants + English/Spanish strings + parser branches + 7 parity tests + 1 parser round-trip test) |
 | `src-tauri/src/commands/products.rs` | **1b** | +58 / -3 (`unarchive_product`, `retire_product`, `list_product_lifecycle_events` IPC handlers) |

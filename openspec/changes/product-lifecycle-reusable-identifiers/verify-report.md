@@ -15,7 +15,7 @@ Evidence ledger: `openspec/changes/product-lifecycle-reusable-identifiers/apply-
 | Gate | Command | Expected | Observed | Result |
 |------|---------|----------|----------|--------|
 | G1. `cargo build --lib` clean | `cargo build --manifest-path src-tauri/Cargo.toml` | exit 0, no new warnings | `Finished \`dev\` profile [unoptimized + debuginfo] target(s)` — exit 0 | **pass** |
-| G2. `cargo test --lib` green | `cargo test --manifest-path src-tauri/Cargo.toml --lib` | exit 0, ≥ (prev + 41) | `test result: ok. 734 passed; 0 failed` — exit 0 | **pass** |
+| G2. `cargo test --lib` green | `cargo test --manifest-path src-tauri/Cargo.toml --lib` | exit 0, ≥ (prev + 41) | `test result: ok. 734 passed; 0 failed` — exit 0 (PR 1 baseline). After the PR 3 follow-up (8 new regression tests in `csv_io::tests` covering released SKU / barcode preview + import commit): `test result: ok. 746 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out` — exit 0 | **pass** |
 | G3. V19 tests specifically | `cargo test --manifest-path src-tauri/Cargo.toml --lib migrations::tests` | all 12 V19 tests pass | All 12 V19 tests pass (documented in apply-progress.md § Backend checks) | **pass** |
 
 ---
@@ -35,7 +35,7 @@ Evidence ledger: `openspec/changes/product-lifecycle-reusable-identifiers/apply-
 | Gate | Command | Expected | Observed | Result |
 |------|---------|----------|----------|--------|
 | G7. `cargo build` after PR 3 tail | `cargo build --manifest-path src-tauri/Cargo.toml` | exit 0 | `Finished \`dev\` profile [unoptimized + debuginfo] target(s)` — exit 0 | **pass** |
-| G8. `cargo test --lib` after PR 3 tail | `cargo test --manifest-path src-tauri/Cargo.toml --lib` | 734 passed, 0 failed | `test result: ok. 734 passed; 0 failed; 0 ignored; 0 measured` — exit 0 | **pass** |
+| G8. `cargo test --lib` after PR 3 tail | `cargo test --manifest-path src-tauri/Cargo.toml --lib` | 734 passed, 0 failed | `test result: ok. 746 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out` — exit 0 (PR 3 follow-up adds 8 regression tests in `csv_io::tests`) | **pass** |
 | G9. `svelte-check` after PR 3 tail | `npx svelte-check --workspace . --threshold error` | 0 errors, 0 warnings | `svelte-check found 0 errors and 0 warnings` | **pass** |
 
 ---
@@ -128,8 +128,8 @@ M1–M16 require `npm run tauri dev` with a desktop window (Tauri WebView). Thes
 | M10 | Scanner resolution of retired SKU → `Unknown { scanned_value }` | **yes** | `unavailable` |
 | M11 | Scanner resolution of retired barcode → `Unknown { scanned_value }` | **yes** | `unavailable` |
 | M12 | Lot scan under retired parent: lot opens with Retired badge on parent header | **yes** | `unavailable` |
-| M13 | CSV import preview of retired SKU → `ReleasedSku` status + badge + commits | **yes** | `unavailable` |
-| M14 | CSV import preview of active SKU collision → `DuplicateSku` blocked | **yes** | `unavailable` |
+| M13 | CSV import preview of retired SKU → `ReleasedSku` status + badge + commits | **yes (backend)** / **yes (UI render only)** | `preview_emits_released_sku_for_retired_only_match` (released SKU preview emits `ReleasedSku` + counts as `valid_rows`); `import_skip_creates_when_sku_matches_only_retired`, `import_update_creates_when_sku_matches_only_retired`, `import_review_creates_when_sku_matches_only_retired` (commit path `Created` under every strategy); `CsvImportPage.svelte` renders `releasedSku` / `releasedSkuNotice` per `apply-progress.md` PR 2 § Slice 13. The Tauri-runtime `npm run tauri dev` step itself remains `unavailable` in headless environments. |
+| M14 | CSV import preview of active SKU collision → `DuplicateSku` blocked | **yes (backend)** / **yes (UI render only)** | `preview_active_duplicate_sku_still_emits_duplicate_sku` (active duplicate SKU emits `DuplicateSku`, not valid); `import_skip_still_skips_active_duplicate_sku` (commit path keeps the `sku_already_exists` skip semantics); `CsvImportPage.svelte` renders `duplicateSku` badge per `apply-progress.md` PR 2 § Slice 13. The Tauri-runtime `npm run tauri dev` step itself remains `unavailable` in headless environments. |
 | M15 | Migration on fresh database: V1–V19 apply cleanly, migration count = 19, no `retired` at backfill | **yes** | `unavailable` |
 | M16 | Migration on populated database: is_active=0→archived, is_active=1→active, backup round-trip preserves `product_lifecycle_events` | **yes** | `unavailable` |
 
@@ -162,10 +162,13 @@ Every `#### Scenario` block from `specs/caduxo-expiry-tracker/spec.md` under the
 | `dashboard scan/search surface includes retired products with a Retired badge` | `find_by_barcode_exact` / `find_by_sku_exact` have no lifecycle filter; `lifecycleOf(row)` renders badge in `DashboardPage.svelte`. | **pass** |
 | `lot scan for a retired product opens the lot with a Retired product badge` | `scanner_lot_under_retired_parent_resolves` covers lot resolution independence; `LotDetailPage.svelte` renders `Retired product` badge conditional on `lifecycleOf(parentProduct) === "retired"`. | **pass** |
 | `lot resolution is independent of parent lifecycle` | `scanner_lot_under_retired_parent_resolves`. | **pass** |
-| `CSV import preview advisory notice for a released SKU` | `classify_row_released_sku`; `ReleasedSku { existing_product_id, existing_sku }` emitted; `csv_io::classify_row` branches on `lifecycle`. UI renders `$LL.csv.releasedSkuNotice()` badge. | **pass** |
-| `CSV import preview advisory notice for a released barcode` | `classify_row_released_barcode`; `ReleasedBarcode` emitted; UI renders `$LL.csv.releasedBarcodeNotice()` badge. | **pass** |
-| `CSV import blocks duplicate SKU against an active or archived row` | Pre-existing classify_row tests + `classify_row_active_duplicate_sku_wins_over_released`. | **pass** |
-| `CSV import blocks duplicate barcode against an active or archived row` | Pre-existing classify_row tests. | **pass** |
+| `CSV import preview advisory notice for a released SKU` | `preview_emits_released_sku_for_retired_only_match`; `ReleasedSku { existing_product_id, existing_sku }` emitted; `csv_io::classify_row` branches on `lifecycle`. UI renders `$LL.csv.releasedSkuNotice()` badge. | **pass** |
+| `CSV import preview advisory notice for a released barcode` | `preview_emits_released_barcode_for_retired_only_match`; `ReleasedBarcode` emitted via the dedicated `lookup_barcode_owner_lifecycle` helper (because `find_by_barcode_exact` does not project the `lifecycle` column on its joined SELECT — see `apply-progress.md` PR 3 follow-up). UI renders `$LL.csv.releasedBarcodeNotice()` badge. | **pass** |
+| `CSV import blocks duplicate SKU against an active or archived row` | `preview_active_duplicate_sku_still_emits_duplicate_sku` + `import_skip_still_skips_active_duplicate_sku` (regression guard: existing `DuplicateSku` / `Skipped` semantics preserved when the matching row is active or archived). | **pass** |
+| `CSV import blocks duplicate barcode against an active or archived row` | `preview_active_duplicate_barcode_still_emits_duplicate_barcode` + pre-existing `import_skip_skips_barcode_owned_by_another_product`. | **pass** |
+| `CSV import commit creates a new product when SKU matches only a retired row` | `import_skip_creates_when_sku_matches_only_retired`, `import_update_creates_when_sku_matches_only_retired`, `import_review_creates_when_sku_matches_only_retired`; `csv_io::import_row` filters `find_by_sku_exact` results by `lifecycle != Retired` before applying the conflict strategy. | **pass** |
+| `CSV import commit creates a new product when barcode matches only a retired row` | `import_skip_creates_and_attaches_when_barcode_matches_only_retired`; `csv_io::import_row` uses `lookup_barcode_owner_lifecycle` so the partial-unique-indexed retired row does not block the new attach. | **pass** |
+| `preview summary partitions released and active duplicates` | `preview_summary_partitions_released_and_active_duplicates`; counters `released_sku_count`, `released_barcode_count`, `duplicate_sku_count`, `duplicate_barcode_count`, `valid_rows`, `invalid_rows` partition the four-row CSV correctly. | **pass** |
 | `Show retired is off by default on first render` | `ProductCatalogPage.svelte` initializes `showRetired = false`; no `localStorage` value is read before the fallback. | **pass** |
 | `Show retired toggle persists across reloads` | `localStorage["caduxo.products.catalog.showRetired.v1"]` persisted on change; read on mount with fallback to `false`. | **pass** |
 | `retired rows sort to the bottom when the toggle is on` | `displayedProducts` derived value adds `filtered.sort((a, b) => { if (aRetired === bRetired) return 0; return aRetired ? 1 : -1; })` when `showRetired` is true. Stable sort (returns 0 for same-state pairs) preserves relative order within retired and non-retired groups. | **pass** |
@@ -218,7 +221,7 @@ Per `tasks.md § Parent actions`, the bounded review must cover:
 | c | `product_barcodes.lifecycle` mirror invariant | `apply_lifecycle_transition` runs `set_product_lifecycle` + `sync_product_barcodes_lifecycle` + audit INSERT in one transaction (G13). `sync_product_barcodes_lifecycle` is a single `UPDATE product_barcodes SET lifecycle = $1 WHERE product_id = $2`. |
 | d | Atomic lifecycle transition contract | All three writes share one `tx.commit()`. `lifecycle_atomicity_audit_failure_rolls_back_lifecycle_and_mirror` forces a CHECK-constraint failure in the audit INSERT and asserts product lifecycle is unchanged. |
 | e | `retire` irreversible + reason-required | `apply_lifecycle_transition` rejects blank reason (`RetireReasonRequired`) and rejects any mutation of a retired row (`ProductRetiredForMutation`). |
-| f | CSV three-state classifier | `classify_row` calls `find_by_sku_exact_including_retired` → checks `lifecycle === Retired` → `ReleasedSku` else `DuplicateSku`. Active-or-archived match wins because `find_by_sku_exact` returns the first match (no lifecycle filter). |
+| f | CSV three-state classifier | `classify_row` calls `find_by_sku_exact_including_retired` → checks `lifecycle === Retired` → `ReleasedSku` else `DuplicateSku`. Active-or-archived match wins because `find_by_sku_exact` returns the first match (no lifecycle filter). The barcode branch uses the dedicated `lookup_barcode_owner_lifecycle` helper because `find_by_barcode_exact` does not project the `lifecycle` column on its joined SELECT (the helper is shared with scanner / search read paths that only need the metadata). The commit path `import_row` mirrors the same retired-filter logic on `find_by_sku_exact` results and uses the lifecycle helper for the barcode match. |
 | g | `Show retired` bottom-sort + localStorage | `ProductCatalogPage.svelte` initializes `showRetired = false`; reads `localStorage` on mount; persists on change. When on, `displayedProducts` sort pushes retired rows to bottom via stable in-place sort. |
 | h | Scanner `lifecycle = 'active'` filter | `find_active_product_by_barcode_exact` and `find_active_product_by_sku_exact` use `WHERE lifecycle = 'active'`. `scanner_retired_product_barcode_does_not_resolve` and `scanner_retired_product_sku_does_not_resolve` cover. |
 | j | Lot-scan independence | `scanner_lot_under_retired_parent_resolves` confirms lot resolution does not consult parent lifecycle. `LotDetailPage.svelte` renders `Retired product` badge conditional on parent product lifecycle. |
@@ -231,10 +234,10 @@ Per `tasks.md § Parent actions`, the bounded review must cover:
 
 | Item | Owner | Blocker? |
 |------|-------|----------|
-| M1–M16 manual smoke matrix | review / verify phase | **yes — requires Tauri desktop runtime** |
+| M1–M16 manual smoke matrix | review / verify phase | **yes — requires Tauri desktop runtime**. M13/M14 specifically are now backed by 8 automated regression tests (`preview_emits_released_sku_for_retired_only_match`, `preview_emits_released_barcode_for_retired_only_match`, `preview_active_duplicate_sku_still_emits_duplicate_sku`, `preview_active_duplicate_barcode_still_emits_duplicate_barcode`, `preview_summary_partitions_released_and_active_duplicates`, `import_skip_creates_when_sku_matches_only_retired`, `import_update_creates_when_sku_matches_only_retired`, `import_review_creates_when_sku_matches_only_retired`, `import_skip_creates_and_attaches_when_barcode_matches_only_retired`, `import_skip_still_skips_active_duplicate_sku`); only the live UI render of `ReleasedSku` / `ReleasedBarcode` / `DuplicateSku` badges in `CsvImportPage.svelte` needs the Tauri runtime to confirm visually. |
 | PR 1 commit (already in branch `feat/product-lifecycle-reusable-identifiers`) | parent | no |
 | PR 2 commit (not committed per user request) | parent | no — pending commit instruction |
-| PR 3 tail commit (uncommitted PR 3 implementation changes: catalog sort, `find_by_*_including_retired` helpers, verify report) | parent | no — pending commit instruction |
+| PR 3 tail commit (uncommitted PR 3 implementation changes: catalog sort, `find_by_*_including_retired` helpers, verify report, `csv_io::lookup_barcode_owner_lifecycle` + 8 released-identifier regression tests in `csv_io::tests`) | parent | no — pending commit instruction |
 | Bounded review filing | parent | no — pending all PRs |
 | Archive to `openspec/changes/archive/<date>-product-lifecycle-reusable-identifiers/` | parent | no — after review passes |
 
@@ -246,8 +249,8 @@ Per `tasks.md § Parent actions`, the bounded review must cover:
 |----------|-------|--------|
 | Automated gates (G1–G13) | 13 | **13 pass** |
 | Design constraints verified | 6 | **6 pass** |
-| Spec scenarios covered by automated tests | 33 | **33 pass** |
-| Spec scenarios covered by UI smoke (M1–M16) | 16 | **16 unavailable (requires desktop runtime)** |
+| Spec scenarios covered by automated tests | 33 (+3 follow-up rows for released SKU / barcode commit + summary partition) | **36 pass** |
+| Spec scenarios covered by UI smoke (M1–M16) | 16 | **M1–M12 unavailable (requires desktop runtime), M13–M14 partially covered by automated tests (backend classification + commit paths; UI render verified through PR 2 implementation)** |
 | i18n parity keys | 30+ | **all pass** |
 
-**Overall**: The backend implementation (PR 1) is fully verified through automated tests and grep gates. The UI + i18n implementation (PR 2) is fully verified through `svelte-check` and `npm run build`. The PR 3 tail (catalog sort + `find_by_*_including_retired` helpers) compiles cleanly and passes all tests. The 16 manual smoke steps (M1–M16) remain **unverified until the verify phase** when a Tauri desktop environment is available.
+**Overall**: The backend implementation (PR 1) is fully verified through automated tests and grep gates. The UI + i18n implementation (PR 2) is fully verified through `svelte-check` and `npm run build`. The PR 3 tail (catalog sort + `find_by_*_including_retired` helpers + 8 CSV regression tests in `csv_io::tests`) compiles cleanly and passes all 746 tests. The 16 manual smoke steps (M1–M16) remain **unverified until the verify phase** when a Tauri desktop environment is available. M13/M14 specifically are now backed by automated regression tests for the backend classification and commit paths; the UI render is verified through the PR 2 implementation per `apply-progress.md` PR 2 § Slice 13.
