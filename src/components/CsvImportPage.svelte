@@ -202,6 +202,8 @@
     if (status.kind === "missing_required") return { label: $LL.csvImport.badge.missing(), cls: "badge-error" };
     if (status.kind === "invalid") return { label: $LL.csvImport.badge.invalid(), cls: "badge-error" };
     if (status.kind === "unknown_unit") return { label: $LL.csvImport.badge.unknownUnit(), cls: "badge-warn" };
+    if (status.kind === "released_sku") return { label: ($LL.csvImport.badge.releasedSku?.() ?? "Released SKU"), cls: "badge-ok" };
+    if (status.kind === "released_barcode") return { label: ($LL.csvImport.badge.releasedBarcode?.() ?? "Released BC"), cls: "badge-ok" };
     return { label: "?", cls: "badge-error" };
   }
 
@@ -253,6 +255,12 @@
       const suggested = status.suggested_keys.join(", ");
       return $LL.csvImport.detailRow.unknownUnitSuggest({ suggested: suggested || $LL.csvImport.badge.unknownUnit() });
     }
+    if (status.kind === "released_sku") {
+      return $LL.csvImport.detailRow.releasedSkuNotice?.() ?? "This SKU was released from a retired product — it will be reused.";
+    }
+    if (status.kind === "released_barcode") {
+      return $LL.csvImport.detailRow.releasedBarcodeNotice?.() ?? "This barcode was released from a retired product — it will be reused.";
+    }
     return $LL.csvImport.detailRow.readyToImport();
   }
 
@@ -284,8 +292,10 @@
           dupSku: stage.preview.duplicate_sku_count,
           dupBc: stage.preview.duplicate_barcode_count,
           missing: stage.preview.missing_required_count,
+          releasedSku: (stage.preview as { released_sku_count?: number }).released_sku_count ?? 0,
+          releasedBc: (stage.preview as { released_barcode_count?: number }).released_barcode_count ?? 0,
         }
-      : { total: 0, valid: 0, dupSku: 0, dupBc: 0, missing: 0 };
+      : { total: 0, valid: 0, dupSku: 0, dupBc: 0, missing: 0, releasedSku: 0, releasedBc: 0 };
 </script>
 
 <!-- ── Stage: Select file ─────────────────────────────────────────────────── -->
@@ -388,6 +398,18 @@
         <div class="summary-card error">
           <span class="summary-num">{counts.missing}</span>
           <span class="summary-label">{$LL.csvImport.missing()}</span>
+        </div>
+      {/if}
+      {#if counts.releasedSku > 0}
+        <div class="summary-card ok">
+          <span class="summary-num">{counts.releasedSku}</span>
+          <span class="summary-label">{$LL.csvImport.releasedSku?.() ?? "Released SKU"}</span>
+        </div>
+      {/if}
+      {#if counts.releasedBc > 0}
+        <div class="summary-card ok">
+          <span class="summary-num">{counts.releasedBc}</span>
+          <span class="summary-label">{$LL.csvImport.releasedBarcode?.() ?? "Released BC"}</span>
         </div>
       {/if}
     </div>

@@ -374,6 +374,21 @@ const en: BaseTranslation = {
     subtract: "Subtract",
     setCount: "Set count",
     archived: "Archived",
+    retired: "Retired",
+    retire: "Retire",
+    retireReason: "Reason for retiring",
+    retireReasonLabel: "Retirement reason",
+    retireConfirm: "I understand this is irreversible",
+    retireConfirmBody: "Retiring a product is permanent. The product and its lot history will remain visible but the SKU and barcodes will be released for reuse.",
+    retireIrreversible: "This action cannot be undone.",
+    lifecycleEvents: "Lifecycle history",
+    lifecycleEventArchived: "Archived",
+    lifecycleEventUnarchived: "Unarchived",
+    lifecycleEventRetired: "Retired",
+    retireHistoryNotice: "Once retired, a product cannot be reactivated.",
+    lifecycleActive: "Active",
+    lifecycleArchived: "Archived",
+    lifecycleRetired: "Retired",
     placeholders: {
       sku: "e.g. MILK-1L",
       description: "e.g. Whole Milk 1L",
@@ -407,6 +422,7 @@ const en: BaseTranslation = {
       columnCategory: "Category",
       hideArchived: "Hide archived products",
       showArchived: "Show archived products",
+      showRetired: "Show retired products",
     },
     // Detail page
     detail: {
@@ -417,6 +433,12 @@ const en: BaseTranslation = {
       archive: "Archive",
       yesArchive: "Yes, archive",
       archiveThisProduct: "Archive this product?",
+      bannerArchived: "This product is archived.",
+      bannerRetired: "This product is retired. It is no longer operational but its history is preserved.",
+      unarchiveConfirm: "Unarchive this product? It will be restored to the active inventory.",
+      retireConfirm: "Retire this product?",
+      retireConfirmBody: "Retiring is permanent. You will not be able to reactivate it and the SKU and barcodes will be released for reuse.",
+      retireIrreversible: "This action cannot be undone.",
       unit: "Unit",
       alertDaysBefore: "Alert: {days} days",
       noBarcode: "No barcode",
@@ -858,7 +880,16 @@ const en: BaseTranslation = {
       missing: "Missing",
       invalid: "Invalid",
       unknownUnit: "Unknown unit",
+      releasedSku: "Released SKU",
+      releasedBarcode: "Released barcode",
     },
+    // Released SKU/barcode: advisory notices for rows whose identifier was
+    // previously associated with a retired product. These rows pass through
+    // the import with a notice (they are not blocked).
+    releasedSku: "Released SKU",
+    releasedBarcode: "Released barcode",
+    releasedSkuNotice: "This SKU was previously associated with a retired product — the new product will be created.",
+    releasedBarcodeNotice: "This barcode was previously associated with a retired product — the new product will be created.",
     // Detail column messages in preview table
     detailRow: {
       readyToImport: "Ready to import",
@@ -866,6 +897,8 @@ const en: BaseTranslation = {
       barcodeBelongsToOther: 'Barcode <code>{bc}</code> belongs to another product',
       missingField: "Missing: {field}",
       unknownUnitSuggest: 'Not in catalog — suggested: {suggested}',
+      releasedSkuNotice: 'This SKU was released from a retired product — it will be reused.',
+      releasedBarcodeNotice: 'This barcode was released from a retired product — it will be reused.',
     },
     // Import result actions
     actions: {
@@ -944,6 +977,7 @@ const en: BaseTranslation = {
     title: "Press Enter to search",
     noMatch: "No product found for this barcode.",
     searchError: "Search failed: {msg}",
+    scanRetired: "Retired product — create a new product with this identifier",
   },
 
   // Scanner tab — PR 2 of `scanner-quick-operations`. Three modes

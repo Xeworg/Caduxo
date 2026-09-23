@@ -71,6 +71,26 @@ export type CsvPreviewRowStatus =
         kind: "unknown_unit";
         raw_value: string;
         suggested_keys: string[];
+     }
+   | {
+        /**
+         * SKU matches only a retired product. Advisory — the row passes
+         * through the import and the barcode/SKU is released for reuse.
+         * (PR `product-lifecycle-reusable-identifiers`).
+         */
+        kind: "released_sku";
+        existing_product_id: string;
+        existing_sku: string;
+     }
+   | {
+        /**
+         * Barcode matches only a retired product. Advisory — the row passes
+         * through the import and the barcode is released for reuse.
+         * (PR `product-lifecycle-reusable-identifiers`).
+         */
+        kind: "released_barcode";
+        existing_product_id: string;
+        existing_barcode: string;
      };
 
 export interface CsvPreviewRow {
@@ -95,6 +115,10 @@ export interface CsvPreviewResponse {
    duplicate_sku_count: number;
    duplicate_barcode_count: number;
    missing_required_count: number;
+   /** Advisory count of rows whose SKU matches only a retired product (PR `product-lifecycle-reusable-identifiers`). */
+   released_sku_count: number;
+   /** Advisory count of rows whose barcode matches only a retired product (PR `product-lifecycle-reusable-identifiers`). */
+   released_barcode_count: number;
    rows: CsvPreviewRow[];
 }
 

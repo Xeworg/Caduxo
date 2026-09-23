@@ -372,6 +372,21 @@ const es: BaseTranslation = {
     subtract: "Restar",
     setCount: "Fijar cantidad",
     archived: "Archivado",
+    retired: "Retirado",
+    retire: "Retirar",
+    retireReason: "Motivo del retiro",
+    retireReasonLabel: "Motivo del retiro",
+    retireConfirm: "Entiendo que esto es irreversible",
+    retireConfirmBody: "Retirar un producto es permanente. El producto y su historial de lotes permanecerán visibles pero el SKU y los códigos de barras se liberarán para su reutilización.",
+    retireIrreversible: "Esta acción no se puede deshacer.",
+    lifecycleEvents: "Historial de ciclo de vida",
+    lifecycleEventArchived: "Archivado",
+    lifecycleEventUnarchived: "Desarchivado",
+    lifecycleEventRetired: "Retirado",
+    retireHistoryNotice: "Una vez retirado, un producto no se puede volver a activar.",
+    lifecycleActive: "Activo",
+    lifecycleArchived: "Archivado",
+    lifecycleRetired: "Retirado",
     placeholders: {
       sku: "p. ej. LECHE-1L",
       description: "p. ej. Leche entera 1L",
@@ -405,6 +420,7 @@ const es: BaseTranslation = {
       columnCategory: "Categoría",
       hideArchived: "Ocultar productos archivados",
       showArchived: "Mostrar productos archivados",
+      showRetired: "Mostrar productos retiradas",
     },
     // Detail page
     detail: {
@@ -415,6 +431,12 @@ const es: BaseTranslation = {
       archive: "Archivar",
       yesArchive: "Sí, archivar",
       archiveThisProduct: "¿Archivar este producto?",
+      bannerArchived: "Este producto está archivado.",
+      bannerRetired: "Este producto está retiremento. Ya no está operativo pero su historial se conserva.",
+      unarchiveConfirm: "¿Desarchivar este producto? Se restaurará al inventario activo.",
+      retireConfirm: "¿Retirar este producto?",
+      retireConfirmBody: "Retirar es permanente. No podrás reactivarlo y el SKU y los códigos de barras se liberarán para su reutilización.",
+      retireIrreversible: "Esta acción no se puede deshacer.",
       unit: "Unidad",
       alertDaysBefore: "Alerta: {days} días",
       noBarcode: "Sin código de barras",
@@ -858,7 +880,16 @@ const es: BaseTranslation = {
       missing: "Falta",
       invalid: "Inválido",
       unknownUnit: "Unidad desconocida",
+      releasedSku: "SKU liberado",
+      releasedBarcode: "Código liberado",
     },
+    // Released SKU/barcode: advisory notices for rows whose identifier was
+    // previously associated with a retired product. These rows pass through
+    // the import with a notice (they are not blocked).
+    releasedSku: "SKU liberado",
+    releasedBarcode: "Código liberado",
+    releasedSkuNotice: "Este SKU estaba asociado a un producto retirado — se creará el nuevo producto.",
+    releasedBarcodeNotice: "Este código de barras estaba asociado a un producto retirado — se creará el nuevo producto.",
     // Detail column messages in preview table
     detailRow: {
       readyToImport: "Listo para importar",
@@ -866,6 +897,8 @@ const es: BaseTranslation = {
       barcodeBelongsToOther: 'El código de barras <code>{bc}</code> pertenece a otro producto',
       missingField: "Falta: {field}",
       unknownUnitSuggest: 'No está en el catálogo — sugerido: {suggested}',
+      releasedSkuNotice: 'Este SKU se liberó de un producto retirado — se reutilizará.',
+      releasedBarcodeNotice: 'Este código de barras se liberó de un producto retirado — se reutilizará.',
     },
     // Import result actions
     actions: {
@@ -944,6 +977,7 @@ const es: BaseTranslation = {
     title: "Pulsa Intro para buscar",
     noMatch: "No se encontró ningún producto para este código de barras.",
     searchError: "Error en la búsqueda: {msg}",
+    scanRetired: "Producto retirado — crea un nuevo producto con este identificador",
   },
 
   // Pestaña Escáner — PR 2 de `scanner-quick-operations`. Tres modos

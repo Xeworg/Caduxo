@@ -4,6 +4,7 @@
   import {
     listCategories,
     searchProducts,
+    lifecycleOf,
     type CategoryResponse,
     type ProductResponse,
     type ProductSearchResult,
@@ -63,6 +64,7 @@
 
   const STORAGE_KEY_COLUMNS = "caduxo.products.catalog.columns.v1";
   const STORAGE_KEY_HIDE_ARCHIVED = "caduxo.products.catalog.hideArchived.v1";
+  const STORAGE_KEY_SHOW_RETIRED = "caduxo.products.catalog.showRetired.v1";
 
   const DEFAULT_VISIBLE_COLUMNS: OptionalColumnKey[] = [
     "barcode",
@@ -81,6 +83,7 @@
     DEFAULT_VISIBLE_COLUMNS,
   );
   let hideArchived = false;
+  let showRetired = false;
 
   // Column menu options are reactive so the localized labels update when the
   // active locale changes.
@@ -168,6 +171,8 @@
       }
       const rawHide = localStorage.getItem(STORAGE_KEY_HIDE_ARCHIVED);
       if (rawHide === "true") hideArchived = true;
+      const rawShowRetired = localStorage.getItem(STORAGE_KEY_SHOW_RETIRED);
+      if (rawShowRetired === "true") showRetired = true;
     } catch {
       // Corrupt storage → fall back to defaults silently.
       visibleColumns = new Set(DEFAULT_VISIBLE_COLUMNS);
@@ -193,6 +198,18 @@
       localStorage.setItem(
         STORAGE_KEY_HIDE_ARCHIVED,
         hideArchived ? "true" : "false",
+      );
+    } catch {
+      // localStorage may be unavailable — fail silently.
+    }
+  }
+
+  function persistShowRetired() {
+    if (typeof localStorage === "undefined") return;
+    try {
+      localStorage.setItem(
+        STORAGE_KEY_SHOW_RETIRED,
+        showRetired ? "true" : "false",
       );
     } catch {
       // localStorage may be unavailable — fail silently.
@@ -353,6 +370,9 @@
         if (hideArchived) {
           filtered = filtered.filter((p: ProductSearchResult) => p.is_active);
         }
+        if (!showRetired) {
+          filtered = filtered.filter((p: ProductSearchResult) => lifecycleOf(p) !== "retired");
+        }
         if (categoryIds.length === 0) return filtered;
         const hasUncat = categoryIds.includes(UNCATEGORIZED_SENTINEL);
         return filtered.filter((p: ProductSearchResult) => {
@@ -425,6 +445,22 @@
               onchange={(checked) => {
                 hideArchived = checked;
                 persistHideArchived();
+              }}
+            />
+          </div>
+
+          <!-- Show-retired toggle (PR `product-lifecycle-reusable-identifiers`).
+               Persisted in localStorage. Default false. -->
+          <div class="show-retired-wrap">
+            <Toggle
+              checked={showRetired}
+              size="sm"
+              label={showRetired
+                ? "Hide retired products"
+                : ($LL.products.catalog.showRetired?.() ?? "Show retired products")}
+              onchange={(checked) => {
+                showRetired = checked;
+                persistShowRetired();
               }}
             />
           </div>
@@ -536,7 +572,9 @@
               {/if}
               {#if visibleColumns.has("status")}
                 <td>
-                  {#if product.is_active}
+                  {#if lifecycleOf(product) === "retired"}
+                    <Badge semantic="warning" size="sm">{$LL.products.lifecycleRetired()}</Badge>
+                  {:else if product.is_active}
                     <Badge semantic="success" size="sm">{$LL.stores.active()}</Badge>
                   {:else}
                     <Badge semantic="neutral" size="sm">{$LL.products.archived()}</Badge>

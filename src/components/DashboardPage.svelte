@@ -17,6 +17,7 @@
   import {
     getProduct,
     listCategories,
+    lifecycleOf,
     type ProductDetailResponse,
     type CategoryResponse,
     type ProductResponse,
@@ -27,7 +28,6 @@
     type ExpiryLotResponse,
   } from "../lib/expiry_lots.js";
   import { exportReportWithDialog } from "../lib/csv.js";
-  import { UNCATEGORIZED_SENTINEL } from "../lib/categories.js";
   import CategoryPicker from "./inputs/CategoryPicker.svelte";
   import {
     listUnitDefinitions,
@@ -792,7 +792,16 @@
           <dt>{$LL.dashboard.category()}</dt><dd>{detailProduct.categories.length > 0 ? detailProduct.categories.map(c => c.name).join(", ") : "—"}</dd>
           <dt>{$LL.dashboard.unit()}</dt><dd>{detailProduct.product.default_unit ?? "—"}</dd>
           <dt>{$LL.dashboard.alertDaysBefore()}</dt><dd>{detailProduct.product.default_alert_days_before}</dd>
-          <dt>{$LL.dashboard.status()}</dt><dd>{detailProduct.product.is_active ? $LL.dashboard.active() : $LL.dashboard.archived()}</dd>
+          <dt>{$LL.dashboard.status()}</dt>
+          <dd>
+            {#if lifecycleOf(detailProduct.product) === "retired"}
+              <span class="lifecycle-badge-retired">{$LL.products.lifecycleRetired()}</span>
+            {:else if lifecycleOf(detailProduct.product) === "archived"}
+              <span class="lifecycle-badge-archived">{$LL.products.lifecycleArchived()}</span>
+            {:else}
+              <span class="lifecycle-badge-active">{$LL.products.lifecycleActive()}</span>
+            {/if}
+          </dd>
           {#if detailProduct.barcodes.length > 0}
             <dt>{$LL.dashboard.barcode}s</dt>
             <dd>
@@ -1279,5 +1288,36 @@
     margin-top: 6px;
     padding-top: 10px;
     border-top: 1px dashed var(--color-base-300);
+  }
+
+  /* ── Lifecycle badges in product modal (PR `product-lifecycle-reusable-identifiers`) ── */
+  .lifecycle-badge-retired {
+    display: inline-block;
+    font-size: 0.75rem;
+    background: color-mix(in oklch, var(--color-warning) 18%, transparent);
+    color: color-mix(in oklch, var(--color-warning) 80%, var(--color-base-content));
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .lifecycle-badge-archived {
+    display: inline-block;
+    font-size: 0.75rem;
+    background: var(--color-base-200);
+    color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .lifecycle-badge-active {
+    display: inline-block;
+    font-size: 0.75rem;
+    background: color-mix(in oklch, var(--color-success) 15%, transparent);
+    color: var(--color-success);
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-weight: 600;
   }
 </style>

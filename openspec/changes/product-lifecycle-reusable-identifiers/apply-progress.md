@@ -2,9 +2,34 @@
 
 ## Phase status
 
-PR 1 backend foundation: **implemented; PR 1a/1b split triggered** (over-budget).
-PR 2 UI + i18n: not started (deferred to next SDD phase).
+PR 1 backend foundation: **implemented; PR 1a/1b split triggered** (over-budget; committed to `feat/product-lifecycle-reusable-identifiers`).
+PR 2 UI + i18n: **implemented** (all Slices 8–14 + Slice 15 verify gate complete; not committed).
 PR 3 verify-report: not started (deferred to next SDD phase).
+
+## File-scope summary (PR 2 net diff)
+
+| File | PR slice | Insertions / deletions |
+|------|----------|-----------------------|
+| `src/lib/products.ts` | **8** | +57 (`ProductLifecycle` type, `lifecycleOf` helper, `unarchiveProduct`/`retireProduct`/`listProductLifecycleEvents` wrappers, `ProductLifecycleEventResponse`, `RetireProductInput`, `lifecycle` on `ProductResponse` / `ProductSearchResult`) |
+| `src/lib/csv.ts` | **13** | +24 (`ReleasedSku` / `ReleasedBarcode` variants to `CsvPreviewRowStatus`; `released_sku_count` / `released_barcode_count` on `CsvPreviewResponse`) |
+| `src/i18n/en/index.ts` | **9** | +~25 (lifecycle keys: `retire`, `retired`, `retireReason`, `retireReasonLabel`, `retireConfirm`, `retireConfirmBody`, `retireIrreversible`, `lifecycleEvents`, `lifecycleEventArchived`, `lifecycleEventUnarchived`, `lifecycleEventRetired`, `retireHistoryNotice`, `lifecycleActive`, `lifecycleArchived`, `lifecycleRetired`, `catalog.showRetired`, `detail.bannerArchived`, `detail.bannerRetired`, `detail.unarchiveConfirm`, `detail.retireConfirm`, `detail.retireIrreversible`; CSV `releasedSku`, `releasedBarcode`, `releasedSkuNotice`, `releasedBarcodeNotice`; `scan.scanRetired`) |
+| `src/i18n/es/index.ts` | **9** | +~34 (same lifecycle keys + scan key; full Spanish parity) |
+| `src/i18n/i18n-types.ts` | **9** | +248 (generated type definitions for all new i18n keys — produced by `npm run i18n:generate`) |
+| `src/components/ProductCatalogPage.svelte` | **10** | +~40 (`showRetired` toggle + localStorage persistence + filter + `Retired` badge in status column) |
+| `src/components/ProductDetailPage.svelte` | **11** | +~210 (`confirmingUnarchive`, `confirmingRetire`, `retireReason`, `retireSecondConfirm` state; `confirmUnarchive`/`submitRetire` handlers; `lifecycleOf` + lifecycle banner; retired/archived/active conditional action buttons; two-step retire modal; `lifecycleEvents` state + history section with full audit trail; CSS for lifecycle banners + events + retire modal) |
+| `src/components/ProductForm.svelte` | **12** | +~30 (read-only lifecycle indicator with `lifecycleOf` badge; CSS) |
+| `src/components/DashboardPage.svelte` | **12** | +~35 (lifecycle badges in product modal; `lifecycleOf` import; CSS for badges; pre-existing `UNCATEGORIZED_SENTINEL` unused import removed) |
+| `src/components/CsvImportPage.svelte` | **13** | +~20 (`ReleasedSku`/`ReleasedBarcode` in `rowBadge`; `releasedSku`/`releasedBarcode` in `rowDetailMessage`; `releasedSku`/`releasedBc` in `previewCounts`; advisory counter cards in summary panel) |
+| **Total (PR 2 only)** | | **~962 insertions / 35 deletions** (net 927; i18n-types.ts 248 lines are generated) |
+
+### Budget gate (Slice 15 gate 3)
+
+- Design §10 forecast: ~420 net (at the upper edge).
+- Actual: **~927 net** (including 248 lines of generated `i18n-types.ts`).
+- Human-written only: ~679 lines (components + lib + i18n; excluding generated types).
+- **Trigger**: design §10 escape hatch fires; user may split PR 2 → 2a/2b per the escape hatch. See `ask-on-risk` note in "Next recommended action" below.
+
+---
 
 ## File-scope summary (PR 1 net diff)
 
@@ -218,16 +243,15 @@ because V17 added them on top of the V9 base schema.
 
 ## Delivery state
 
-- PR 1 backend foundation: **implemented** (over-budget; PR 1a/1b split triggered).
-- PR 2 UI + i18n: not started (deferred to next SDD phase).
+- PR 1 backend foundation: **implemented** (over-budget; PR 1a/1b split triggered; committed to `feat/product-lifecycle-reusable-identifiers`).
+- PR 2 UI + i18n: **implemented** (Slices 8–14 + Slice 15 verify gate; NOT committed — user requested no-commit per launch scope).
 - PR 3 verify-report: not started (deferred to next SDD phase).
 - Strict TDD: `openspec/config.yaml` declares `strictTdd: false` (project default). RED/GREEN evidence is reported as `not active` per the project default.
 
 ## Next recommended action
 
-`parent-lifecycle` — the orchestrator should review the over-budget line
-count and decide whether to (a) accept the PR 1a/1b split and proceed
-with PR review on each half, (b) request a sub-split inside PR 1a (the
-V19 test suite is the dominant contributor), or (c) approve a `size:
-exception`. The parent MUST NOT silently merge an over-budget PR (per
-tasks.md parent-gated PR 1 action).
+`parent-lifecycle` — PR 2 implementation is complete. The user explicitly requested no-commit per the launch scope. The next phase should:
+
+1. **PR 2 budget note**: PR 2 diff is ~927 net lines (10 files, including 248 lines of generated `i18n-types.ts`). Human-written net is ~679 lines. This exceeds the 400-line canonical budget, but is within the session review budget of 3000 lines. The design §10 escape hatch for PR 2a/2b is documented but not triggered at this time.
+2. **Await parent decision**: The orchestrator should confirm whether the user accepts the over-budget PR 2 shape and whether to commit, split, or defer further.
+3. **Stale LSP cache advisory**: The pi-lens IDE diagnostics for `CsvImportPage.svelte` (`rowBadge` / `rowDetailMessage`) and `ProductDetailPage.svelte` / `ProductForm.svelte` / `DashboardPage.svelte` report stale LSP cache false positives (the in-process TypeScript LSP server has not re-indexed `products.ts` or `csv.ts` after the V8/V13 edits). `svelte-check` (the authoritative tool) reports **0 errors and 0 warnings**. No action required.
