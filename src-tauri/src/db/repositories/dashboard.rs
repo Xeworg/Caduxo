@@ -23,7 +23,12 @@ pub async fn list_dashboard_lots(
     // Build the base SELECT with LEFT JOINs for optional location.
     // We always filter to status = 'active' so resolved/archived lots never appear.
     let mut query =
-            "SELECT\n                el.id             AS lot_id,\n                el.product_id,\n                p.sku,\n                p.description,\n                el.store_id,\n                s.name            AS store_name,\n                el.location_id,\n                sl.name           AS location_name,\n                el.quantity,\n                el.unit,\n                el.expiry_date,\n                el.alert_days_before,\n                el.batch_code,\n                el.status,\n                ''                AS urgency,\n                0                 AS days_remaining,\n                p.default_unit_id,\n                p.unit_type\n            FROM expiry_lots AS el\n            JOIN products    AS p  ON p.id = el.product_id\n            JOIN stores      AS s  ON s.id = el.store_id\n            LEFT JOIN store_locations AS sl ON sl.id = el.location_id\n            WHERE el.status = 'active'\n              AND (? IS NULL OR el.store_id = ?)\n              AND (? IS NULL OR el.location_id = ?)\n            "
+            "SELECT\n                el.id             AS lot_id,\n                el.product_id,\n                p.sku,\n                p.description,\n                el.store_id,\n                s.name            AS store_name,\n                el.location_id,\n                sl.name           AS location_name,\n                el.quantity,\n                el.unit,\n                el.expiry_date,\n                el.alert_days_before,\n                el.batch_code,\n                el.status,\n                ''                AS urgency,\n                0                 AS days_remaining,\n                p.default_unit_id,\n                p.unit_type\n            FROM expiry_lots AS el\n            JOIN products    AS p  ON p.id = el.product_id\n            JOIN stores      AS s  ON s.id = el.store_id\n            LEFT JOIN store_locations AS sl ON sl.id = el.location_id
+            WHERE el.status = 'active'
+              AND p.lifecycle != 'retired'
+              AND (? IS NULL OR el.store_id = ?)
+              AND (? IS NULL OR el.location_id = ?)
+            "
             .to_string();
 
     // Category filter with sentinel-aware ANY-of semantics.
@@ -223,6 +228,88 @@ mod tests {
         // Ordered by expiry_date ASC
         assert_eq!(rows[0].expiry_date, "2020-01-01", "expired first");
         assert_eq!(rows[1].expiry_date.len(), 10, "today expiry has valid date");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn excludes_lots_whose_product_is_retired() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_a, _store_b) = seed_schema(&pool).await?;
+        let now = Utc::now().to_rfc3339();
+        let retired_product_id = Uuid::new_v4().to_string();
+        let retired_lot_id = Uuid::new_v4().to_string();
+
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, default_alert_days_before,
+                                  is_active, lifecycle, created_at, updated_at)
+             VALUES ($1, 'DASH-RETIRED', 'Retired Dashboard Product', 7, 1, 'retired', $2, $3)",
+        )
+        .bind(&retired_product_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await?;
+
+        sqlx::query(
+            "INSERT INTO expiry_lots (id, product_id, store_id, location_id, quantity, unit,
+                                      expiry_date, alert_days_before, status,
+                                      created_at, updated_at)
+             VALUES ($1, $2, $3, NULL, 1.0, 'pcs', '2099-12-31', 7, 'active', $4, $5)",
+        )
+        .bind(&retired_lot_id)
+        .bind(&retired_product_id)
+        .bind(&store_a)
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await?;
+
+        let rows = super::list_dashboard_lots(&pool, &DashboardFilters::default()).await?;
+        assert!(
+            rows.iter().all(|r| r.product_id != retired_product_id),
+            "dashboard operational lots must exclude retired parent products"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn includes_lots_whose_product_is_archived() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_a, _store_b) = seed_schema(&pool).await?;
+        let now = Utc::now().to_rfc3339();
+        let archived_product_id = Uuid::new_v4().to_string();
+        let archived_lot_id = Uuid::new_v4().to_string();
+
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, default_alert_days_before,
+                                  is_active, lifecycle, created_at, updated_at)
+             VALUES ($1, 'DASH-ARCHIVED', 'Archived Dashboard Product', 7, 0, 'archived', $2, $3)",
+        )
+        .bind(&archived_product_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await?;
+
+        sqlx::query(
+            "INSERT INTO expiry_lots (id, product_id, store_id, location_id, quantity, unit,
+                                      expiry_date, alert_days_before, status,
+                                      created_at, updated_at)
+             VALUES ($1, $2, $3, NULL, 1.0, 'pcs', '2099-12-31', 7, 'active', $4, $5)",
+        )
+        .bind(&archived_lot_id)
+        .bind(&archived_product_id)
+        .bind(&store_a)
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await?;
+
+        let rows = super::list_dashboard_lots(&pool, &DashboardFilters::default()).await?;
+        assert!(
+            rows.iter().any(|r| r.product_id == archived_product_id),
+            "archived products are recoverable and their active lots stay visible operationally"
+        );
         Ok(())
     }
 

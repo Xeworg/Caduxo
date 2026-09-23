@@ -583,7 +583,8 @@
           {#each displayedProducts as product (product.id)}
             <tr
               class="product-row"
-              class:archived={!product.is_active}
+              class:archived={lifecycleOf(product) === "archived"}
+              class:retired={lifecycleOf(product) === "retired"}
               class:highlighted={highlightedProductId === product.id}
               tabindex="0"
               onclick={() => openDetail(product)}
@@ -616,7 +617,7 @@
               {#if visibleColumns.has("status")}
                 <td>
                   {#if lifecycleOf(product) === "retired"}
-                    <Badge semantic="warning" size="sm">{$LL.products.lifecycleRetired()}</Badge>
+                    <Badge semantic="retired" size="sm">{$LL.products.lifecycleRetired()}</Badge>
                   {:else if product.is_active}
                     <Badge semantic="success" size="sm">{$LL.stores.active()}</Badge>
                   {:else}
@@ -816,6 +817,12 @@
   .product-row.archived {
     opacity: 0.65;
     background: color-mix(in oklch, var(--color-base-200) 90%, transparent);
+  }
+
+  .product-row.retired {
+    opacity: 0.9;
+    background: color-mix(in oklch, var(--color-warning) 12%, transparent);
+    border-left: 4px solid color-mix(in oklch, var(--color-warning) 70%, transparent);
   }
 
   .product-row.highlighted {
