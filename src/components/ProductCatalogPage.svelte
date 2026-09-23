@@ -298,9 +298,10 @@
     view = "detail";
   }
 
-  function cancelForm() {
+  async function cancelForm() {
     selectedProduct = null;
     view = "list";
+    await runSearch(appliedQuery);
     restoreListScroll();
   }
 
@@ -326,11 +327,21 @@
     }
   }
 
-  function handleArchived() {
-    flash($LL.products.archived(), "success");
+  function handleLifecycleChanged(action: "archived" | "unarchived" | "retired") {
+    const message =
+      action === "archived"
+        ? $LL.products.archived()
+        : action === "unarchived"
+          ? $LL.products.unarchive()
+          : $LL.products.lifecycleRetired();
+    flash(message, "success");
     selectedProductId = null;
     view = "list";
     runSearch(appliedQuery).finally(restoreListScroll);
+  }
+
+  function handleBarcodeChanged() {
+    runSearch(appliedQuery);
   }
 
       function handleEditedFromDetail(product: ProductResponse) {
@@ -628,7 +639,8 @@
         productId={selectedProductId!}
         onBack={cancelForm}
         onEdit={handleEditedFromDetail}
-        onArchived={handleArchived}
+        onLifecycleChanged={handleLifecycleChanged}
+        onBarcodeChanged={handleBarcodeChanged}
       />
     </section>
   {/if}

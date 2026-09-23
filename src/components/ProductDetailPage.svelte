@@ -57,7 +57,8 @@
     export let productId: string;
     export let onBack: () => void;
     export let onEdit: (product: ProductResponse) => void;
-    export let onArchived: () => void;
+    export let onLifecycleChanged: (action: "archived" | "unarchived" | "retired") => void;
+    export let onBarcodeChanged: () => void;
 
     // ── State ──────────────────────────────────────────────────────────────────
 
@@ -153,6 +154,7 @@
             });
             await load();
             resetBarcodeForm();
+            onBarcodeChanged();
         } catch (e: unknown) {
             barcodeError = humanizeError(e);
         } finally {
@@ -164,6 +166,7 @@
         try {
             await removeProductBarcode({ id: b.id });
             await load();
+            onBarcodeChanged();
         } catch (e: unknown) {
             errorMsg = humanizeError(e);
         }
@@ -175,7 +178,7 @@
             await archiveProduct(detail.product.id);
             confirmingArchive = false;
             await load();
-            onArchived();
+            onLifecycleChanged("archived");
         } catch (e: unknown) {
             errorMsg = humanizeError(e);
         }
@@ -187,6 +190,7 @@
             await unarchiveProduct(detail.product.id);
             confirmingUnarchive = false;
             await load();
+            onLifecycleChanged("unarchived");
         } catch (e: unknown) {
             errorMsg = humanizeError(e);
         }
@@ -202,6 +206,7 @@
             retireReason = "";
             retireSecondConfirm = false;
             await load();
+            onLifecycleChanged("retired");
         } catch (e: unknown) {
             errorMsg = humanizeError(e);
         }
