@@ -27,7 +27,7 @@
 use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItemBuilder},
-    tray::{TrayIconBuilder, TrayIconEvent},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager,
 };
 
@@ -147,7 +147,7 @@ fn install_tray(
     let handle_for_menu = handle.clone();
     let mut builder = TrayIconBuilder::with_id(TRAY_ICON_ID)
         .menu(&menu)
-        .show_menu_on_left_click(true)
+        .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id().as_ref() {
             TRAY_MENU_RESTORE_ID => {
                 if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
@@ -161,8 +161,18 @@ fn install_tray(
             _ => {}
         })
         .on_tray_icon_event(move |tray, event| {
-            // Single click on the tray icon also restores the window.
-            if matches!(event, TrayIconEvent::Click { .. }) {
+            // On Windows, auto-showing the menu and focusing the window on
+            // the same click races the native popup menu and dismisses it.
+            // Keep the platform-standard split: left click restores the
+            // window, right click opens the tray menu.
+            if matches!(
+                event,
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                }
+            ) {
                 if let Some(window) = tray.app_handle().get_webview_window(MAIN_WINDOW_LABEL) {
                     let _ = window.show();
                     let _ = window.set_focus();
