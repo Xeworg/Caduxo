@@ -349,6 +349,7 @@
 </div>
 
 <div class="detail-actions">
+{#if lifecycleOf(product) !== "retired"}
 <button
 type="button"
 class="btn-secondary"
@@ -356,6 +357,7 @@ on:click={() => onEdit(product)}
 >
 {$LL.products.detail.edit()}
 </button>
+{/if}
 
 {#if lifecycleOf(product) === "active"}
   {#if !confirmingArchive}
@@ -468,16 +470,18 @@ on:click={() => onEdit(product)}
                                     <span class="badge-primary">{$LL.products.detail.primary()}</span>
                                 {/if}
                             </div>
-                            <Button
-                                variant="icon"
-                                size="sm"
-                                aria-label={$LL.products.detail.removeBarcode()}
-                                onclick={() => removeBarcode(b)}
-                            >
-                                {#snippet iconStart()}
-                                    <Icon name="x-mark" size="sm" />
-                                {/snippet}
-                            </Button>
+                            {#if lifecycleOf(product) === "active"}
+                                <Button
+                                    variant="icon"
+                                    size="sm"
+                                    aria-label={$LL.products.detail.removeBarcode()}
+                                    onclick={() => removeBarcode(b)}
+                                >
+                                    {#snippet iconStart()}
+                                        <Icon name="x-mark" size="sm" />
+                                    {/snippet}
+                                </Button>
+                            {/if}
                         </li>
                     {/each}
                 </ul>
@@ -583,7 +587,7 @@ on:click={() => onEdit(product)}
         <section class="section">
             <div class="section-header">
                 <h3>{$LL.products.detail.expiryLots()}</h3>
-                {#if product.is_active}
+                {#if lifecycleOf(product) === "active"}
                     <button
                         type="button"
                         class="btn-primary btn-small"
@@ -645,29 +649,31 @@ on:click={() => onEdit(product)}
                             </div>
                             <div class="lot-actions">
                                 {#if lot.status === "active"}
-                                    <Button
-                                        variant="icon"
-                                        size="sm"
-                                        aria-label={$LL.products.detail.lot.resolveQty()}
-                                        onclick={() => (resolvingLot = lot)}
-                                    >
-                                        {#snippet iconStart()}
-                                            <Icon name="arrow-down-on-square-stack" size="sm" />
-                                        {/snippet}
-                                    </Button>
-                                    <Button
-                                        variant="icon"
-                                        size="sm"
-                                        aria-label={$LL.products.detail.lot.editLot()}
-                                        onclick={() => {
-                                            editingLot = lot;
-                                            showLotForm = true;
-                                        }}
-                                    >
-                                        {#snippet iconStart()}
-                                            <Icon name="pencil" size="sm" />
-                                        {/snippet}
-                                    </Button>
+                                    {#if lifecycleOf(product) === "active"}
+                                        <Button
+                                            variant="icon"
+                                            size="sm"
+                                            aria-label={$LL.products.detail.lot.resolveQty()}
+                                            onclick={() => (resolvingLot = lot)}
+                                        >
+                                            {#snippet iconStart()}
+                                                <Icon name="arrow-down-on-square-stack" size="sm" />
+                                            {/snippet}
+                                        </Button>
+                                        <Button
+                                            variant="icon"
+                                            size="sm"
+                                            aria-label={$LL.products.detail.lot.editLot()}
+                                            onclick={() => {
+                                                editingLot = lot;
+                                                showLotForm = true;
+                                            }}
+                                        >
+                                            {#snippet iconStart()}
+                                                <Icon name="pencil" size="sm" />
+                                            {/snippet}
+                                        </Button>
+                                    {/if}
                                     <Button
                                         variant="icon"
                                         size="sm"
@@ -678,16 +684,18 @@ on:click={() => onEdit(product)}
                                             <Icon name="clipboard-document-list" size="sm" />
                                         {/snippet}
                                     </Button>
-                                    <Button
-                                        variant="icon"
-                                        size="sm"
-                                        aria-label={$LL.products.detail.lot.archiveLot()}
-                                        onclick={() => (archivingLot = lot)}
-                                    >
-                                        {#snippet iconStart()}
-                                            <Icon name="archive-box-arrow-down" size="sm" />
-                                        {/snippet}
-                                    </Button>
+                                    {#if lifecycleOf(product) === "active"}
+                                        <Button
+                                            variant="icon"
+                                            size="sm"
+                                            aria-label={$LL.products.detail.lot.archiveLot()}
+                                            onclick={() => (archivingLot = lot)}
+                                        >
+                                            {#snippet iconStart()}
+                                                <Icon name="archive-box-arrow-down" size="sm" />
+                                            {/snippet}
+                                        </Button>
+                                    {/if}
                                 {/if}
                             </div>
                         </li>
