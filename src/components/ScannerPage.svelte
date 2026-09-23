@@ -70,12 +70,8 @@
     type MovementKind,
   } from "../lib/lot_movements.js";
   import type { ProductResponse } from "../lib/products.js";
+  import { listCategories, type CategoryResponse } from "../lib/products.js";
   import type { ExpiryLotResponse } from "../lib/expiry_lots.js";
-  import {
-    createProduct,
-    addProductBarcodeOnCreate,
-    suggestedProductAlertDays,
-  } from "../lib/products.js";
   import Button from "./ui/Button.svelte";
   import Listbox from "./ui/Listbox.svelte";
   import Input from "./ui/Input.svelte";
@@ -83,6 +79,7 @@
   import LoadingState from "./ui/LoadingState.svelte";
   import EmptyState from "./ui/EmptyState.svelte";
   import LotForm from "./LotForm.svelte";
+  import ProductForm from "./ProductForm.svelte";
 
   // ── Mode union ────────────────────────────────────────────────────────────
   type Mode = "sale" | "registration" | "stock_out";
@@ -183,19 +180,16 @@
   let successNotice = $state("");
 
   // Registration-specific state.
-  // For Unknown scans: route the scanned value into either SKU or barcode.
-  type QuickRoute = "sku" | "barcode" | "unrouted";
-  let quickRoute = $state<QuickRoute>("unrouted");
-  let quickSku = $state("");
-  let quickBarcode = $state("");
-  let quickDescription = $state("");
-  let quickAlertDaysStr = $state("30");
-  let quickAlertDays = $derived(
-    Number.parseInt(quickAlertDaysStr, 10) || 0,
-  );
-  let quickNotes = $state("");
-  let quickCreateBusy = $state(false);
-  let quickCreateError = $state("");
+  // For Unknown scans: mount the canonical ProductForm (PR
+  // `scanner-form-reuse`). The form owns SKU/description/notes/barcode
+  // editing; the Scanner only tracks whether the form is open and what
+  // scanned value seeded its UPC field via `prefillUpc`.
+  let quickCreateOpen = $state(false);
+  let quickCreateScannedValue = $state("");
+  // Category list fed into ProductForm's CategoryPicker. Fetched once
+  // per Unknown scan; mutated by inline category creates so the
+  // picker's chip set stays in sync within the same mount.
+  let quickCreateCategories = $state<CategoryResponse[]>([]);
 
   // LotMatch/ProductMatch registration flow: open the existing LotForm.
   let registrationLotFormOpen = $state(false);
@@ -570,16 +564,16 @@
       selectedLotId = result.lot.id;
       locationId = "";
     } else {
-      // Unknown — clear the selection for the previous resolve so the
-      // Registration quick-create form starts clean.
+      // Unknown — clear the lot/location for the previous resolve and
+      // open the canonical ProductForm for quick-create. The form is
+      // keyed by the scanned value so each new Unknown scan remounts a
+      // fresh form that picks up the new UPC prefill. Category list
+      // is fetched lazily (one round-trip per Unknown resolution).
       selectedLotId = "";
       locationId = "";
-      quickRoute = "unrouted";
-      quickSku = result.scanned_value;
-      quickBarcode = "";
-      quickDescription = "";
-      quickAlertDaysStr = "30";
-      quickNotes = "";
+      quickCreateOpen = true;
+      quickCreateScannedValue = result.scanned_value;
+      void loadQuickCreateCategories();
     }
   }
 
@@ -747,120 +741,66 @@
 
   // ── Registration: quick product creation (Unknown) ────────────────────────
 
-  function setQuickRoute(next: QuickRoute): void {
-    quickRoute = next;
-    const scanned = resolved && resolved.match_type === "unknown" ? resolved.scanned_value : "";
-    if (next === "sku") {
-      quickSku = scanned;
-      if (quickBarcode.trim() === scanned) {
-        quickBarcode = "";
-      }
-    } else if (next === "barcode") {
-      quickBarcode = scanned;
-      if (quickSku.trim() === scanned) {
-        quickSku = "";
-      }
-    }
-    // "unrouted" leaves the inputs alone so the user can decide.
-  }
+  // Reuses the canonical ProductForm (PR `scanner-form-reuse`).
+  // The Scanner no longer maintains SKU/barcode/description/alert-days
+  // state; ProductForm owns that surface plus barcode attach via its
+  // own `prefillUpc` + `addProductBarcodeOnCreate` flow.
 
-  async function confirmQuickCreate(): Promise<void> {
-    if (!resolved || resolved.match_type !== "unknown") return;
-    if (quickRoute === "unrouted") {
-      quickCreateError = $LL.scanner.registration.routeUnrouted();
-      return;
-    }
-    if (!quickSku.trim()) {
-      quickCreateError = $LL.scanner.registration.invalid.sku();
-      return;
-    }
-    if (!quickDescription.trim()) {
-      quickCreateError = $LL.scanner.registration.invalid.description();
-      return;
-    }
-    if (quickAlertDays < 0) {
-      quickCreateError = $LL.scanner.registration.invalid.alertDays();
-      return;
-    }
-
-    quickCreateBusy = true;
-    quickCreateError = "";
+  /**
+   * Fetches the master category list for the ProductForm's
+   * CategoryPicker. Triggered lazily on each Unknown resolve so the
+   * Scanner only pays the round-trip when it actually needs to show
+   * the form. Errors fall back to an empty list — the CategoryPicker
+   * already handles that case.
+   */
+  async function loadQuickCreateCategories(): Promise<void> {
     try {
-      const sku = quickRoute === "sku" ? resolved.scanned_value : quickSku.trim();
-      const created = await createProduct({
-        sku,
-        description: quickDescription.trim(),
-        category_ids: null,
-        default_unit: null,
-        default_unit_id: null,
-        default_alert_days_before: quickAlertDays,
-        notes: quickNotes.trim() || null,
-      });
-      successNotice = $LL.scanner.registration.successProduct({ sku: created.sku });
-
-      // Attach the barcode when the user routed the scanned value to the
-      // barcode slot. The wrapper returns a structured failure rather
-      // than throwing on duplicate so the user gets inline feedback.
-      if (quickRoute === "barcode" && quickBarcode.trim()) {
-        const result = await addProductBarcodeOnCreate({
-          product_id: created.id,
-          barcode: quickBarcode.trim(),
-          barcode_type: null,
-          is_primary: false,
-        });
-        if (result.ok) {
-          successNotice = `${successNotice} ${$LL.scanner.registration.successBarcode({
-            barcode: result.barcode.barcode,
-          })}`;
-        } else {
-          // Non-fatal — the product is already created. Surface the
-          // barcode failure as an inline notice so the user can retry
-          // via the Products page.
-          quickCreateError = result.message;
-        }
-      }
-
-      // Reset the form so the next scan resumes the empty state.
-      resolved = null;
-      quickRoute = "unrouted";
-      quickSku = "";
-      quickBarcode = "";
-      quickDescription = "";
-      quickAlertDaysStr = "30";
-      quickNotes = "";
-      lastResolvedAt = 0;
-      lastResolvedValue = "";
-    } catch (e) {
-      quickCreateError = $LL.scanner.errors.saveFailed({
-        msg: humanizeError(e),
-      });
-    } finally {
-      quickCreateBusy = false;
-    }
-  }
-
-  // Helper: suggested alert days default (mirrors the dashboard default).
-  async function loadSuggestedAlertDays(): Promise<void> {
-    try {
-      const v = await suggestedProductAlertDays();
-      quickAlertDaysStr = String(v);
+      quickCreateCategories = await listCategories();
     } catch {
-      // Keep the local default of 30.
+      quickCreateCategories = [];
     }
   }
 
-  // When the user enters Registration mode for an Unknown scan, pull the
-  // suggested alert days from the backend so the form starts with a sane
-  // default (matches the existing ProductForm behaviour).
-  $effect(() => {
-    if (
-      mode === "registration" &&
-      resolved?.match_type === "unknown" &&
-      quickAlertDaysStr === ""
-    ) {
-      void loadSuggestedAlertDays();
+  /**
+   * ProductForm callback after a successful save. Mirrors the
+   * success-reset behaviour of the previous inline flow: show the
+   * success notice, drop the resolved scan so the next scan starts
+   * fresh, and clear the debounce guard.
+   */
+  function onQuickCreateSaved(product: ProductResponse): void {
+    successNotice = $LL.scanner.registration.successProduct({ sku: product.sku });
+    quickCreateOpen = false;
+    resolved = null;
+    selectedLotId = "";
+    quantityStr = "1";
+    locationId = "";
+    lotBalances = [];
+    lastResolvedAt = 0;
+    lastResolvedValue = "";
+  }
+
+  /**
+   * ProductForm cancel callback. Closes the form and drops the
+   * resolved scan so the user can scan a different value or switch
+   * modes without seeing a stale Unknown result.
+   */
+  function closeQuickCreate(): void {
+    quickCreateOpen = false;
+    resolved = null;
+    lastResolvedAt = 0;
+    lastResolvedValue = "";
+  }
+
+  /**
+   * ProductForm callback for inline category creates from inside the
+   * CategoryPicker. Merges the new category into our local list so
+   * the picker's chip set stays in sync within the same mount.
+   */
+  function onQuickCreateCategoryCreated(category: CategoryResponse): void {
+    if (!quickCreateCategories.find((c) => c.id === category.id)) {
+      quickCreateCategories = [...quickCreateCategories, category];
     }
-  });
+  }
 </script>
 
 <div class="scanner-page">
@@ -1225,95 +1165,25 @@
               <code class="scanned-code">{resolved.scanned_value || $LL.scanner.registration.scannedValuePlaceholder()}</code>
             </p>
 
-            <fieldset class="fieldset">
-              <legend class="fieldset-legend sr-only">{$LL.scanner.registration.unknownHeading()}</legend>
-              <div class="route-row">
-                <label class="route-option">
-                  <input
-                    type="radio"
-                    name="quick-route"
-                    class="radio radio-primary radio-sm"
-                    checked={quickRoute === "sku"}
-                    onchange={() => setQuickRoute("sku")}
-                  />
-                  <span>{$LL.scanner.registration.routeAsSku()}</span>
-                </label>
-                <label class="route-option">
-                  <input
-                    type="radio"
-                    name="quick-route"
-                    class="radio radio-primary radio-sm"
-                    checked={quickRoute === "barcode"}
-                    onchange={() => setQuickRoute("barcode")}
-                  />
-                  <span>{$LL.scanner.registration.routeAsBarcode()}</span>
-                </label>
-              </div>
-            </fieldset>
-
-            <div class="grid-2">
-              <Input
-                bind:value={quickSku}
-                label={$LL.scanner.registration.skuLabel()}
-                required
-                disabled={quickRoute === "sku"}
-              />
-              <Input
-                bind:value={quickBarcode}
-                label={$LL.scanner.registration.barcodeLabel()}
-                disabled={quickRoute === "barcode"}
-              />
-            </div>
-
-            <Input
-              bind:value={quickDescription}
-              label={$LL.scanner.registration.descriptionLabel()}
-              required
-            />
-
-            <fieldset class="fieldset">
-              <legend class="fieldset-legend">
-                {$LL.scanner.registration.alertDaysLabel()}
-              </legend>
-              <input
-                type="number"
-                class="input input-md motion-reduce:transition-none w-full"
-                min="0"
-                step="1"
-                inputmode="numeric"
-                value={quickAlertDaysStr}
-                oninput={(e: Event) => {
-                  const target = e.currentTarget as HTMLInputElement;
-                  quickAlertDaysStr = target.value;
-                }}
-              />
-            </fieldset>
-
-            <fieldset class="fieldset">
-              <legend class="fieldset-legend">{$LL.scanner.registration.notesLabel()}</legend>
-              <textarea
-                class="textarea textarea-md w-full motion-reduce:transition-none"
-                rows="2"
-                bind:value={quickNotes}
-              ></textarea>
-            </fieldset>
-
-            {#if quickCreateError}
-              <Alert variant="error">{quickCreateError}</Alert>
+            {#if quickCreateOpen}
+              <!-- Reuses the canonical ProductForm (PR
+                   `scanner-form-reuse`). Keyed by the scanned value so
+                   each new Unknown resolution remounts a fresh form
+                   that seeds the barcode field via `prefillUpc`.
+                   ProductForm owns the create + barcode-attach flow
+                   internally and surfaces its own errors. -->
+              {#key quickCreateScannedValue}
+                <ProductForm
+                  mode="create"
+                  initial={null}
+                  categories={quickCreateCategories}
+                  prefillUpc={quickCreateScannedValue}
+                  onSaved={onQuickCreateSaved}
+                  onCancel={closeQuickCreate}
+                  onCategoryCreated={onQuickCreateCategoryCreated}
+                />
+              {/key}
             {/if}
-
-            <div class="confirm-row">
-              <Button
-                variant="primary"
-                disabled={quickCreateBusy || quickRoute === "unrouted"}
-                loading={quickCreateBusy}
-                onclick={() => void confirmQuickCreate()}
-              >
-                {quickCreateBusy
-                  ? $LL.scanner.registration.creating()
-                  : $LL.scanner.registration.createProduct()}
-              </Button>
-            </div>
           </div>
         {:else if resolved && activeProduct}
           <div class="registration-existing">
@@ -1344,6 +1214,8 @@
                 productUnitKind={activeProduct.unit_type ?? "decimal"}
                 lockedStoreId={settings?.last_selected_store_id ?? null}
                 lockedStoreName={activeStore?.name ?? ""}
+                productDescription={activeProduct.description}
+                productSku={activeProduct.sku}
                 onSaved={onRegistrationLotSaved}
                 onCancel={closeRegistrationLotForm}
               />
@@ -1622,28 +1494,6 @@
     margin: -6px 0 0;
     font-size: 0.78rem;
     color: var(--color-error);
-  }
-
-  .grid-2 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
-
-  .route-row {
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-    padding: 8px 0;
-  }
-
-  .route-option {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.92rem;
-    color: var(--color-base-content);
-    cursor: pointer;
   }
 
   .confirm-row {

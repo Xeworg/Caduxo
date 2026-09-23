@@ -75,6 +75,15 @@
      * when the parent cannot resolve a name (e.g. stale persisted id).
      */
     export let lockedStoreName: string = "";
+    /**
+     * Optional product context. When supplied, a read-only summary is
+     * rendered above the form fields so the user sees which product
+     * the lot belongs to (e.g. when the form is opened from the
+     * Scanner Registration flow). Both fields are optional and
+     * independently renderable so the caller can pass either or both.
+     */
+    export let productDescription: string = "";
+    export let productSku: string = "";
     /** Called after a successful save. */
     export let onSaved: (lot: ExpiryLotResponse) => void;
     /** Called when the user cancels. */
@@ -282,6 +291,22 @@
             : $LL.lotForm.createTitle()}
     </h3>
 
+    {#if productDescription || productSku}
+        <!-- Optional product context. Shown when the caller passes
+             either the SKU or the description (e.g. Scanner
+             Registration flow) so the user always sees which product
+             the lot belongs to before they fill in the per-lot fields. -->
+        <p class="product-context">
+            {#if productSku}
+                <span class="product-context-label">{$LL.products.productSku()}:</span>
+                <strong>{productSku}</strong>
+            {/if}
+            {#if productDescription}
+                <span class="product-context-description">{productDescription}</span>
+            {/if}
+        </p>
+    {/if}
+
     {#if mode === "edit"}
         <p class="metadata-only-notice" role="note">
             {$LL.lotForm.quantityUseMovementHint()}
@@ -461,6 +486,38 @@
     .form-title {
         margin: 0 0 4px;
         font-size: 1rem;
+    }
+
+    /* Optional product context: read-only summary rendered above the
+       form when the caller passes `productDescription` or `productSku`.
+       Mirrors the inline-note pattern from the locked-store hint so the
+       Scanner Registration flow can show "this lot belongs to product
+       X" without the user losing track of which product they are
+       creating a lot for. */
+    .product-context {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 8px;
+        margin: 0 0 4px;
+        padding: 6px 10px;
+        background: color-mix(in oklch, var(--color-info) 8%, transparent);
+        border: 1px solid color-mix(in oklch, var(--color-info) 35%, transparent);
+        border-radius: 6px;
+        font-size: 0.85rem;
+        color: var(--color-base-content);
+    }
+
+    .product-context-label {
+        font-size: 0.74rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--color-info);
+    }
+
+    .product-context-description {
+        color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
     }
 
     .grid-2 {
