@@ -373,6 +373,18 @@
         if (!showRetired) {
           filtered = filtered.filter((p: ProductSearchResult) => lifecycleOf(p) !== "retired");
         }
+        // Sort retired rows to the bottom when `showRetired` is on.
+        // Active and archived rows keep their original order; retired rows
+        // are appended after all non-retired rows (stable sort preserves
+        // the relative order within each group).
+        if (showRetired) {
+          filtered = filtered.sort((a, b) => {
+            const aRetired = lifecycleOf(a) === "retired";
+            const bRetired = lifecycleOf(b) === "retired";
+            if (aRetired === bRetired) return 0;
+            return aRetired ? 1 : -1;
+          });
+        }
         if (categoryIds.length === 0) return filtered;
         const hasUncat = categoryIds.includes(UNCATEGORIZED_SENTINEL);
         return filtered.filter((p: ProductSearchResult) => {

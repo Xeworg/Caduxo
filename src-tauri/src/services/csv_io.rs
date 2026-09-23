@@ -454,7 +454,7 @@ async fn classify_row(
     // enforced by `find_by_sku_exact_with_lifecycle_filter` returning the
     // active/archived match first; the retired-only fallback below emits
     // `ReleasedSku`.
-    match crate::db::repositories::products::find_by_sku_exact(pool, &sku).await {
+    match crate::db::repositories::products::find_by_sku_exact_including_retired(pool, &sku).await {
         Ok(Some(existing)) => {
             // The lifecycle field rides along on every product row post-V19.
             // Backward-compatibility: when the column is NULL (older
@@ -500,7 +500,9 @@ async fn classify_row(
 
     // 4. Barcode uniqueness check (only when a barcode is present).
     if let Some(b) = barcode.as_deref() {
-        match crate::db::repositories::products::find_by_barcode_exact(pool, b).await {
+        match crate::db::repositories::products::find_by_barcode_exact_including_retired(pool, b)
+            .await
+        {
             Ok(Some(existing)) => {
                 if existing.lifecycle == Some(ProductLifecycle::Retired) {
                     return (

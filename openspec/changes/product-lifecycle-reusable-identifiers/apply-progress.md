@@ -4,7 +4,7 @@
 
 PR 1 backend foundation: **implemented; PR 1a/1b split triggered** (over-budget; committed to `feat/product-lifecycle-reusable-identifiers`).
 PR 2 UI + i18n: **implemented** (all Slices 8–14 + Slice 15 verify gate complete; not committed).
-PR 3 verify-report: not started (deferred to next SDD phase).
+PR 3 verify-report: **implemented** (PR 3 tail + Slice 17 verify report written; not committed — user requested no-commit per launch scope).
 
 ## File-scope summary (PR 2 net diff)
 
@@ -245,7 +245,7 @@ because V17 added them on top of the V9 base schema.
 
 - PR 1 backend foundation: **implemented** (over-budget; PR 1a/1b split triggered; committed to `feat/product-lifecycle-reusable-identifiers`).
 - PR 2 UI + i18n: **implemented** (Slices 8–14 + Slice 15 verify gate; NOT committed — user requested no-commit per launch scope).
-- PR 3 verify-report: not started (deferred to next SDD phase).
+- PR 3 verify-report: **implemented** (PR 3 tail + Slice 17 verify report written; not committed per launch scope).
 - Strict TDD: `openspec/config.yaml` declares `strictTdd: false` (project default). RED/GREEN evidence is reported as `not active` per the project default.
 
 ## Next recommended action
@@ -255,3 +255,49 @@ because V17 added them on top of the V9 base schema.
 1. **PR 2 budget note**: PR 2 diff is ~927 net lines (10 files, including 248 lines of generated `i18n-types.ts`). Human-written net is ~679 lines. This exceeds the 400-line canonical budget, but is within the session review budget of 3000 lines. The design §10 escape hatch for PR 2a/2b is documented but not triggered at this time.
 2. **Await parent decision**: The orchestrator should confirm whether the user accepts the over-budget PR 2 shape and whether to commit, split, or defer further.
 3. **Stale LSP cache advisory**: The pi-lens IDE diagnostics for `CsvImportPage.svelte` (`rowBadge` / `rowDetailMessage`) and `ProductDetailPage.svelte` / `ProductForm.svelte` / `DashboardPage.svelte` report stale LSP cache false positives (the in-process TypeScript LSP server has not re-indexed `products.ts` or `csv.ts` after the V8/V13 edits). `svelte-check` (the authoritative tool) reports **0 errors and 0 warnings**. No action required.
+
+---
+
+## PR 3 tail — additional work completed this launch
+
+### Files changed (uncommitted)
+
+| File | Change | Lines |
+|------|--------|-------|
+| `src/components/ProductCatalogPage.svelte` | In-memory stable sort: retired rows pushed to bottom of `displayedProducts` when `showRetired` is on. Sort is stable (returns 0 for same-state pairs), preserving relative order within retired and non-retired groups. | +13 |
+| `src-tauri/src/db/repositories/products.rs` | Added `find_by_barcode_exact_including_retired` and `find_by_sku_exact_including_retired` named aliases (delegating to the existing no-filter helpers). Makes the CSV classify contract explicit and resolves dead-code lint on the aliases. | +22 |
+| `src-tauri/src/services/csv_io.rs` | `classify_row` now calls the explicit `find_by_*_including_retired` helpers instead of the old unqualified names. | ±2 |
+| `openspec/changes/product-lifecycle-reusable-identifiers/verify-report.md` | New file: full verify gate report with G1–G13 automated results, M1–M16 manual smoke outcomes (all `unavailable`; requires Tauri desktop), spec-scenario matrix, design constraint audit, i18n parity check, bounded-review gate checklist. | +~300 |
+
+### Automated gate evidence (PR 3 tail)
+
+```bash
+$ cargo build --manifest-path src-tauri/Cargo.toml
+Finished `dev` profile [unoptimized + debuginfo] target(s) in 31.69s  # exit 0
+
+$ cargo test --manifest-path src-tauri/Cargo.toml --lib
+test result: ok. 734 passed; 0 failed; 0 ignored; 0 measured  # exit 0
+
+$ cargo test --manifest-path src-tauri/Cargo.toml --lib csv  # CSV module only
+test result: ok. 29 passed; 0 failed  # exit 0
+
+$ npx svelte-check --workspace . --threshold error
+svelte-check found 0 errors and 0 warnings  # exit 0
+```
+
+### Catalog sort behaviour
+
+When `showRetired` is on, the `displayedProducts` derived value applies a stable in-memory sort that pushes retired rows after all non-retired rows:
+
+```typescript
+if (showRetired) {
+  filtered = filtered.sort((a, b) => {
+    const aRetired = lifecycleOf(a) === "retired";
+    const bRetired = lifecycleOf(b) === "retired";
+    if (aRetired === bRetired) return 0; // stable: preserve relative order
+    return aRetired ? 1 : -1;
+  });
+}
+```
+
+Rationale for in-memory sort over SQL push-down: `search_products` is the only caller of `repo::search_products`, so SQL push-down would be safe — but the in-memory approach keeps the sort behaviour encapsulated in the UI component and adds no coupling to the backend query contract.

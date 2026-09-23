@@ -549,20 +549,17 @@ pub async fn get_product_lifecycle(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     id: &str,
 ) -> Result<Option<ProductLifecycle>, sqlx::Error> {
-    let row: Option<(Option<String>,)> = sqlx::query_as(
-        "SELECT lifecycle FROM products WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_optional(&mut **tx)
-    .await?;
-    Ok(row
-        .and_then(|(raw,)| raw)
-        .and_then(|s| match s.as_str() {
-            "active" => Some(ProductLifecycle::Active),
-            "archived" => Some(ProductLifecycle::Archived),
-            "retired" => Some(ProductLifecycle::Retired),
-            _ => None,
-        }))
+    let row: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT lifecycle FROM products WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&mut **tx)
+            .await?;
+    Ok(row.and_then(|(raw,)| raw).and_then(|s| match s.as_str() {
+        "active" => Some(ProductLifecycle::Active),
+        "archived" => Some(ProductLifecycle::Archived),
+        "retired" => Some(ProductLifecycle::Retired),
+        _ => None,
+    }))
 }
 
 /// Writes `lifecycle` on `products` inside the caller's transaction. Returns
@@ -579,14 +576,12 @@ pub async fn set_product_lifecycle(
         ProductLifecycle::Archived => "archived",
         ProductLifecycle::Retired => "retired",
     };
-    let affected = sqlx::query(
-        "UPDATE products SET lifecycle = $1, updated_at = $2 WHERE id = $3",
-    )
-    .bind(lifecycle_str)
-    .bind(Utc::now().to_rfc3339())
-    .bind(id)
-    .execute(&mut **tx)
-    .await?;
+    let affected = sqlx::query("UPDATE products SET lifecycle = $1, updated_at = $2 WHERE id = $3")
+        .bind(lifecycle_str)
+        .bind(Utc::now().to_rfc3339())
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
     Ok(affected.rows_affected() > 0)
 }
 
@@ -604,13 +599,11 @@ pub async fn sync_product_barcodes_lifecycle(
         ProductLifecycle::Archived => "archived",
         ProductLifecycle::Retired => "retired",
     };
-    let affected = sqlx::query(
-        "UPDATE product_barcodes SET lifecycle = $1 WHERE product_id = $2",
-    )
-    .bind(lifecycle_str)
-    .bind(product_id)
-    .execute(&mut **tx)
-    .await?;
+    let affected = sqlx::query("UPDATE product_barcodes SET lifecycle = $1 WHERE product_id = $2")
+        .bind(lifecycle_str)
+        .bind(product_id)
+        .execute(&mut **tx)
+        .await?;
     Ok(affected.rows_affected())
 }
 
@@ -853,6 +846,38 @@ pub async fn find_active_product_by_sku_exact(
         }
         None => Ok(None),
     }
+}
+
+/// Looks up a product by exact barcode, returning every match including retired
+/// rows. The CSV classifier uses this to distinguish "retired-only match"
+/// (`ReleasedSku` / `ReleasedBarcode`) from "active-or-archived match"
+/// (`DuplicateSku` / `DuplicateBarcode`). The `lifecycle` field on the returned
+/// row drives the three-state classification in `csv_io::classify_row`.
+///
+/// This is a named alias for `find_by_barcode_exact` (which has no lifecycle
+/// filter and therefore already includes retired rows). The alias makes the
+/// classification contract explicit and self-documenting.
+pub async fn find_by_barcode_exact_including_retired(
+    pool: &SqlitePool,
+    barcode: &str,
+) -> Result<Option<ProductSearchResult>, sqlx::Error> {
+    find_by_barcode_exact(pool, barcode).await
+}
+
+/// Looks up a product by exact SKU, returning every match including retired rows.
+/// The CSV classifier uses this to distinguish "retired-only match"
+/// (`ReleasedSku`) from "active-or-archived match" (`DuplicateSku`). The `lifecycle`
+/// field on the returned row drives the three-state classification in
+/// `csv_io::classify_row`.
+///
+/// This is a named alias for `find_by_sku_exact` (which has no lifecycle filter
+/// and therefore already includes retired rows). The alias makes the classification
+/// contract explicit and self-documenting.
+pub async fn find_by_sku_exact_including_retired(
+    pool: &SqlitePool,
+    sku: &str,
+) -> Result<Option<ProductSearchResult>, sqlx::Error> {
+    find_by_sku_exact(pool, sku).await
 }
 
 /// Checks whether a product has at least one active expiry lots.
