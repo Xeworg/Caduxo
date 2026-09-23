@@ -683,6 +683,146 @@ mod tests {
         ));
         Ok(())
     }
+
+    // ========================================================================
+    // Lifecycle-aware scanner coverage (V19 — product-lifecycle-reusable-identifiers)
+    //
+    // The scanner resolver routes barcode / SKU lookups through
+    // `find_active_product_by_*_exact`, which after V19 filters on
+    // `lifecycle = 'active'` instead of `is_active = 1`. Retired products
+    // are excluded from operational paths (spec scenario `scanner
+    // resolver does not match a barcode / SKU owned only by a retired
+    // product`); lot scans stay unaffected (spec `lot-code scans for
+    // retired products`).
+    // ========================================================================
+
+    /// Retired product's barcode must NOT match the scanner resolver —
+    /// the active helper filters on `lifecycle = 'active'`.
+    #[tokio::test]
+    async fn scanner_retired_product_barcode_does_not_resolve() {
+        use crate::dto::products::{ProductBarcodeCreate, RetireProductInput};
+        use crate::services::products::create_product;
+        use crate::dto::products::ProductCreate;
+        use crate::db::repositories::settings as settings_repo;
+        let pool = fresh_test_pool().await.unwrap();
+        let (store_id, _lot_product_id, _batch_code, _lot_id) = seed_lot(&pool).await.unwrap();
+        // Persist the active store so the scanner resolver accepts the lookup.
+        settings_repo::set_last_selected_store_id(&pool, Some(&store_id))
+            .await
+            .unwrap();
+        let p = create_product(
+            &pool,
+            ProductCreate {
+                sku: "SKU-LSR-BC".into(),
+                description: "Scanner retired-barcode test".into(),
+                category_ids: None,
+                default_unit: None,
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await
+        .unwrap();
+        add_barcode(
+            &pool,
+            ProductBarcodeCreate {
+                product_id: p.id.clone(),
+                barcode: "7505555555555".into(),
+                barcode_type: Some("EAN13".into()),
+                is_primary: true,
+            },
+        )
+        .await
+        .unwrap();
+        crate::services::products::retire_product(
+            &pool,
+            RetireProductInput {
+                id: p.id.clone(),
+                reason: "Discontinued".into(),
+                actor: None,
+            },
+        )
+        .await
+        .unwrap();
+        let result = resolve_scanner_code(&pool, "7505555555555").await.unwrap();
+        assert!(
+            matches!(result, ScannerResolveResult::Unknown { .. }),
+            "retired-product barcode must resolve to Unknown",
+        );
+    }
+
+    /// Symmetric check for SKU lookup.
+    #[tokio::test]
+    async fn scanner_retired_product_sku_does_not_resolve() {
+        use crate::dto::products::{ProductCreate, RetireProductInput};
+        use crate::services::products::create_product;
+        use crate::db::repositories::settings as settings_repo;
+        let pool = fresh_test_pool().await.unwrap();
+        let (store_id, _lot_product_id, _batch_code, _lot_id) = seed_lot(&pool).await.unwrap();
+        settings_repo::set_last_selected_store_id(&pool, Some(&store_id))
+            .await
+            .unwrap();
+        let p = create_product(
+            &pool,
+            ProductCreate {
+                sku: "SKU-LSR-SKU".into(),
+                description: "Scanner retired-SKU test".into(),
+                category_ids: None,
+                default_unit: None,
+                default_unit_id: None,
+                default_alert_days_before: 30,
+                notes: None,
+            },
+        )
+        .await
+        .unwrap();
+        crate::services::products::retire_product(
+            &pool,
+            RetireProductInput {
+                id: p.id.clone(),
+                reason: "Discontinued".into(),
+                actor: None,
+            },
+        )
+        .await
+        .unwrap();
+        let result = resolve_scanner_code(&pool, "SKU-LSR-SKU").await.unwrap();
+        assert!(
+            matches!(result, ScannerResolveResult::Unknown { .. }),
+            "retired-product SKU must resolve to Unknown",
+        );
+    }
+
+    /// Lot-code scan resolution is independent of the parent product's
+    /// lifecycle. A lot under a retired parent still resolves by its
+    /// batch_code (spec `lot resolution is independent of parent
+    /// lifecycle`).
+    #[tokio::test]
+    async fn scanner_lot_under_retired_parent_resolves() {
+        use crate::dto::products::RetireProductInput;
+        use crate::db::repositories::settings as settings_repo;
+        let pool = fresh_test_pool().await.unwrap();
+        let (store_id, lot_product_id, batch_code, _lot_id) = seed_lot(&pool).await.unwrap();
+        settings_repo::set_last_selected_store_id(&pool, Some(&store_id))
+            .await
+            .unwrap();
+        crate::services::products::retire_product(
+            &pool,
+            RetireProductInput {
+                id: lot_product_id,
+                reason: "Discontinued".into(),
+                actor: None,
+            },
+        )
+        .await
+        .unwrap();
+        let result = resolve_scanner_code(&pool, &batch_code).await.unwrap();
+        assert!(
+            matches!(result, ScannerResolveResult::LotMatch { .. }),
+            "lot under retired parent must still resolve",
+        );
+    }
 }
 
 // ExpiryLotResponse / ProductResponse are used by the public API; this

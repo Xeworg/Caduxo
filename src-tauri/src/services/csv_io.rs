@@ -25,6 +25,7 @@ use crate::dto::csv_io::{
     CsvPreviewRowStatus, ReportExportInput,
 };
 use crate::dto::dashboard::DashboardFilters;
+use crate::dto::products::ProductLifecycle;
 use crate::error::{AppError, DomainError, InfrastructureError};
 use crate::pdf::locale::Locale;
 use crate::services::user_messages::{user_message, UserMessage};
@@ -202,6 +203,8 @@ pub async fn preview_product_csv(
     let mut valid_rows: usize = 0;
     let mut duplicate_sku_count: usize = 0;
     let mut duplicate_barcode_count: usize = 0;
+    let mut released_sku_count: usize = 0;
+    let mut released_barcode_count: usize = 0;
     let mut missing_required_count: usize = 0;
 
     for (idx, record_result) in reader.records().enumerate() {
@@ -271,6 +274,22 @@ pub async fn preview_product_csv(
             CsvPreviewRowStatus::Ok => valid_rows += 1,
             CsvPreviewRowStatus::DuplicateSku { .. } => duplicate_sku_count += 1,
             CsvPreviewRowStatus::DuplicateBarcode { .. } => duplicate_barcode_count += 1,
+            CsvPreviewRowStatus::ReleasedSku { .. } => {
+                // Released SKU counts as valid_rows because the import commits
+                // the new product with `lifecycle = active`. The partial unique
+                // index excludes the retired row, so no UNIQUE collision fires
+                // at the SQL layer (design §6.6 + spec `CSV import preview
+                // advisory notice for a released SKU`).
+                released_sku_count += 1;
+                valid_rows += 1;
+            }
+            CsvPreviewRowStatus::ReleasedBarcode { .. } => {
+                // Same release semantics as `ReleasedSku` (mirror column on
+                // `product_barcodes.lifecycle` excludes the retired row from
+                // the partial unique index; the new attach succeeds).
+                released_barcode_count += 1;
+                valid_rows += 1;
+            }
             CsvPreviewRowStatus::MissingRequired { .. } => missing_required_count += 1,
             CsvPreviewRowStatus::Invalid { .. } => {}
             // UnknownUnit is non-blocking (warn-and-continue); still counts as valid.
@@ -310,6 +329,8 @@ pub async fn preview_product_csv(
         invalid_rows,
         duplicate_sku_count,
         duplicate_barcode_count,
+        released_sku_count,
+        released_barcode_count,
         missing_required_count,
         rows,
     })
@@ -425,9 +446,32 @@ async fn classify_row(
         }
     }
 
-    // 3. SKU uniqueness check.
+    // 3. SKU uniqueness check. Three-state classifier:
+    //   - `DuplicateSku`       when the matching row is active or archived
+    //   - `ReleasedSku`        when the matching row is retired
+    //   - `Ok`                 when no row matches
+    // The "active-or-archived wins over retired" rule (design §6.6) is
+    // enforced by `find_by_sku_exact_with_lifecycle_filter` returning the
+    // active/archived match first; the retired-only fallback below emits
+    // `ReleasedSku`.
     match crate::db::repositories::products::find_by_sku_exact(pool, &sku).await {
         Ok(Some(existing)) => {
+            // The lifecycle field rides along on every product row post-V19.
+            // Backward-compatibility: when the column is NULL (older
+            // backend / pre-V19 fresh database), default to `Active` per
+            // design §5.3 dual-read window.
+            if existing.lifecycle == Some(ProductLifecycle::Retired) {
+                return (
+                    CsvPreviewRowStatus::ReleasedSku {
+                        existing_product_id: existing.id,
+                        existing_sku: existing.sku,
+                    },
+                    Some(sku),
+                    barcode.clone(),
+                    None,
+                    None,
+                );
+            }
             return (
                 CsvPreviewRowStatus::DuplicateSku {
                     existing_product_id: existing.id,
@@ -458,6 +502,20 @@ async fn classify_row(
     if let Some(b) = barcode.as_deref() {
         match crate::db::repositories::products::find_by_barcode_exact(pool, b).await {
             Ok(Some(existing)) => {
+                if existing.lifecycle == Some(ProductLifecycle::Retired) {
+                    return (
+                        CsvPreviewRowStatus::ReleasedBarcode {
+                            existing_product_id: existing.id,
+                            existing_barcode: existing
+                                .primary_barcode
+                                .unwrap_or_else(|| b.to_string()),
+                        },
+                        Some(sku),
+                        barcode.clone(),
+                        None,
+                        None,
+                    );
+                }
                 return (
                     CsvPreviewRowStatus::DuplicateBarcode {
                         existing_product_id: existing.id,

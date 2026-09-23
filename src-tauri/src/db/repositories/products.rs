@@ -15,7 +15,8 @@ use uuid::Uuid;
 
 use crate::dto::products::{
     CategoryCreate, CategoryResponse, CategoryUpdate, ProductBarcodeCreate, ProductBarcodeResponse,
-    ProductCreate, ProductResponse, ProductSearchQuery, ProductSearchResult, ProductUpdate,
+    ProductCreate, ProductLifecycle, ProductLifecycleEventResponse, ProductResponse,
+    ProductSearchQuery, ProductSearchResult, ProductUpdate,
 };
 use crate::dto::unit_definitions::UnitKind;
 
@@ -274,7 +275,7 @@ pub async fn get_product(
         SELECT id, sku, description, category_id, default_unit,
                default_unit_id, unit_type,
                default_alert_days_before, notes, is_active,
-               created_at, updated_at
+               created_at, updated_at, lifecycle
         FROM products
         WHERE id = $1
         "#,
@@ -347,21 +348,12 @@ pub async fn update_product(
     get_product(pool, &input.id).await
 }
 
-/// Soft-archives a product (`is_active = 0`). Returns `true` if a row was
-/// updated, `false` if the product did not exist.
-pub async fn archive_product(pool: &SqlitePool, id: &str) -> Result<bool, sqlx::Error> {
-    let now = Utc::now().to_rfc3339();
-    let affected = sqlx::query(
-        r#"
-        UPDATE products SET is_active = 0, updated_at = $1 WHERE id = $2
-        "#,
-    )
-    .bind(&now)
-    .bind(id)
-    .execute(pool)
-    .await?;
-    Ok(affected.rows_affected() > 0)
-}
+/// NOTE: the legacy `repo::archive_product` (single-column `is_active = 0`)
+/// was removed by `product-lifecycle-reusable-identifiers` (PR 1). Archive
+/// now routes through `services::products::apply_lifecycle_transition`
+/// which writes `lifecycle`, the sibling `product_barcodes.lifecycle`
+/// mirror, AND the `product_lifecycle_events` row inside one transaction.
+/// See design §4.3 and tasks.md Slice 5.
 
 /// Returns the catalog-resolved unit kind for a product, or `None` when the
 /// product has no catalog link (legacy / uncatalogued).
@@ -402,7 +394,7 @@ pub async fn search_products(
         SELECT id, sku, description, category_id, default_unit,
                default_unit_id, unit_type,
                default_alert_days_before, notes, is_active,
-               created_at, updated_at
+               created_at, updated_at, lifecycle
         FROM products
         WHERE description LIKE $1
            OR sku           LIKE $1
@@ -547,6 +539,182 @@ pub async fn remove_barcode(pool: &SqlitePool, id: &str) -> Result<bool, sqlx::E
 }
 
 // ============================================================
+// Lifecycle (V19 — product-lifecycle-reusable-identifiers)
+// ============================================================
+
+/// Reads the lifecycle value of a product inside the caller's transaction.
+/// Returns `None` for missing rows or pre-V19 backends (dual-read window —
+/// design §5.3).
+pub async fn get_product_lifecycle(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    id: &str,
+) -> Result<Option<ProductLifecycle>, sqlx::Error> {
+    let row: Option<(Option<String>,)> = sqlx::query_as(
+        "SELECT lifecycle FROM products WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(row
+        .and_then(|(raw,)| raw)
+        .and_then(|s| match s.as_str() {
+            "active" => Some(ProductLifecycle::Active),
+            "archived" => Some(ProductLifecycle::Archived),
+            "retired" => Some(ProductLifecycle::Retired),
+            _ => None,
+        }))
+}
+
+/// Writes `lifecycle` on `products` inside the caller's transaction. Returns
+/// `true` when a row was updated. Does NOT touch `is_active`; the
+/// dual-read window helper `set_lifecycle_and_legacy_is_active` writes both
+/// columns together at the service-layer boundary (design §5.2).
+pub async fn set_product_lifecycle(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    id: &str,
+    lifecycle: ProductLifecycle,
+) -> Result<bool, sqlx::Error> {
+    let lifecycle_str = match lifecycle {
+        ProductLifecycle::Active => "active",
+        ProductLifecycle::Archived => "archived",
+        ProductLifecycle::Retired => "retired",
+    };
+    let affected = sqlx::query(
+        "UPDATE products SET lifecycle = $1, updated_at = $2 WHERE id = $3",
+    )
+    .bind(lifecycle_str)
+    .bind(Utc::now().to_rfc3339())
+    .bind(id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(affected.rows_affected() > 0)
+}
+
+/// Mirrors a parent product's `lifecycle` onto every `product_barcodes`
+/// row owned by that product. Used inside `apply_lifecycle_transition` to
+/// keep the sibling mirror column in sync (design constraint 2).
+/// Returns the number of barcode rows updated.
+pub async fn sync_product_barcodes_lifecycle(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    product_id: &str,
+    lifecycle: ProductLifecycle,
+) -> Result<u64, sqlx::Error> {
+    let lifecycle_str = match lifecycle {
+        ProductLifecycle::Active => "active",
+        ProductLifecycle::Archived => "archived",
+        ProductLifecycle::Retired => "retired",
+    };
+    let affected = sqlx::query(
+        "UPDATE product_barcodes SET lifecycle = $1 WHERE product_id = $2",
+    )
+    .bind(lifecycle_str)
+    .bind(product_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(affected.rows_affected())
+}
+
+/// Lists lifecycle events for a product, newest first. Powers the
+/// per-product history pane (`ProductDetailPage.svelte`).
+pub async fn list_lifecycle_events(
+    pool: &SqlitePool,
+    product_id: &str,
+) -> Result<Vec<ProductLifecycleEventResponse>, sqlx::Error> {
+    let rows: Vec<(
+        String,
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        String,
+    )> = sqlx::query_as(
+        r#"
+        SELECT id, product_id, event_type, from_state, to_state, actor, reason, created_at
+        FROM product_lifecycle_events
+        WHERE product_id = $1
+        ORDER BY created_at DESC, id DESC
+        "#,
+    )
+    .bind(product_id)
+    .fetch_all(pool)
+    .await?;
+    let mut out = Vec::with_capacity(rows.len());
+    for (id, product_id, event_type, from_state, to_state, actor, reason, created_at) in rows {
+        out.push(ProductLifecycleEventResponse {
+            id,
+            product_id,
+            event_type: match event_type.as_str() {
+                "archived" => crate::dto::products::ProductLifecycleEventType::Archived,
+                "unarchived" => crate::dto::products::ProductLifecycleEventType::Unarchived,
+                "retired" => crate::dto::products::ProductLifecycleEventType::Retired,
+                _ => crate::dto::products::ProductLifecycleEventType::Archived,
+            },
+            from_state: match from_state.as_str() {
+                "active" => ProductLifecycle::Active,
+                "archived" => ProductLifecycle::Archived,
+                "retired" => ProductLifecycle::Retired,
+                _ => ProductLifecycle::Active,
+            },
+            to_state: match to_state.as_str() {
+                "active" => ProductLifecycle::Active,
+                "archived" => ProductLifecycle::Archived,
+                "retired" => ProductLifecycle::Retired,
+                _ => ProductLifecycle::Active,
+            },
+            actor,
+            reason,
+            created_at,
+        });
+    }
+    Ok(out)
+}
+
+/// Inserts a row into `product_lifecycle_events`. Called by the service
+/// layer inside `apply_lifecycle_transition`'s `BEGIN` block so the audit
+/// row shares a transaction with the lifecycle / mirror writes
+/// (design constraint 4).
+pub async fn insert_lifecycle_event(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event: &ProductLifecycleEventResponse,
+) -> Result<(), sqlx::Error> {
+    let event_type_str = match event.event_type {
+        crate::dto::products::ProductLifecycleEventType::Archived => "archived",
+        crate::dto::products::ProductLifecycleEventType::Unarchived => "unarchived",
+        crate::dto::products::ProductLifecycleEventType::Retired => "retired",
+    };
+    let from_state_str = match event.from_state {
+        ProductLifecycle::Active => "active",
+        ProductLifecycle::Archived => "archived",
+        ProductLifecycle::Retired => "retired",
+    };
+    let to_state_str = match event.to_state {
+        ProductLifecycle::Active => "active",
+        ProductLifecycle::Archived => "archived",
+        ProductLifecycle::Retired => "retired",
+    };
+    sqlx::query(
+        r#"
+        INSERT INTO product_lifecycle_events
+            (id, product_id, event_type, from_state, to_state, actor, reason, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        "#,
+    )
+    .bind(&event.id)
+    .bind(&event.product_id)
+    .bind(event_type_str)
+    .bind(from_state_str)
+    .bind(to_state_str)
+    .bind(&event.actor)
+    .bind(&event.reason)
+    .bind(&event.created_at)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+// ============================================================
 // Exact lookups for scanner workflow
 // ============================================================
 
@@ -595,7 +763,7 @@ pub async fn find_by_sku_exact(
         SELECT id, sku, description, category_id, default_unit,
                default_unit_id, unit_type,
                default_alert_days_before, notes, is_active,
-               created_at, updated_at
+               created_at, updated_at, lifecycle
         FROM products
         WHERE sku = $1
         "#,
@@ -631,10 +799,10 @@ pub async fn find_active_product_by_barcode_exact(
         SELECT products.id, sku, description, category_id, default_unit,
                default_unit_id, unit_type,
                default_alert_days_before, notes, is_active,
-               products.created_at, products.updated_at
+               products.created_at, products.updated_at, products.lifecycle
         FROM products
         INNER JOIN product_barcodes pb ON pb.product_id = products.id
-        WHERE pb.barcode = $1 AND products.is_active = 1
+        WHERE pb.barcode = $1 AND products.lifecycle = 'active'
         "#,
     )
     .bind(barcode)
@@ -666,9 +834,9 @@ pub async fn find_active_product_by_sku_exact(
         SELECT id, sku, description, category_id, default_unit,
                default_unit_id, unit_type,
                default_alert_days_before, notes, is_active,
-               created_at, updated_at
+               created_at, updated_at, lifecycle
         FROM products
-        WHERE sku = $1 AND is_active = 1
+        WHERE sku = $1 AND lifecycle = 'active'
         "#,
     )
     .bind(sku)
@@ -715,7 +883,7 @@ pub async fn list_all_products_for_export(
         SELECT id, sku, description, category_id, default_unit,
                default_unit_id, unit_type,
                default_alert_days_before, notes, is_active,
-               created_at, updated_at
+               created_at, updated_at, lifecycle
         FROM products
         ORDER BY sku ASC
         "#,
@@ -742,6 +910,11 @@ pub async fn list_all_products_for_export(
 /// Intermediate row type for product queries. `category_id` is kept so the
 /// raw SELECT can use `SELECT *` without schema errors; it is NOT used in
 /// the runtime model — see the module-level invariant comment.
+///
+/// `lifecycle` is added by V19 (`product-lifecycle-reusable-identifiers`).
+/// The column is `#[sqlx(default)]` so SELECT * against a pre-V19 database
+/// does not fail; the dual-read window maps `None` → the legacy
+/// `is_active` projection in the runtime helpers (design §5.3).
 #[derive(Debug, sqlx::FromRow)]
 struct RawProductRow {
     id: String,
@@ -757,11 +930,16 @@ struct RawProductRow {
     is_active: bool,
     created_at: String,
     updated_at: String,
+    #[sqlx(default)]
+    lifecycle: Option<String>,
 }
 
 impl RawProductRow {
     /// Converts the raw row to a `ProductResponse`, injecting `category_ids`
-    /// from the junction table read.
+    /// from the junction table read. The `lifecycle` column is mapped from
+    /// the raw TEXT to the typed `ProductLifecycle` enum; a `None` raw value
+    /// (pre-V19 backend) stays `None` on the wire so the frontend derives
+    /// the badge from `is_active` per design §5.3.
     fn into_response(self, category_ids: Vec<String>) -> ProductResponse {
         ProductResponse {
             id: self.id,
@@ -779,6 +957,7 @@ impl RawProductRow {
             is_active: self.is_active,
             created_at: self.created_at,
             updated_at: self.updated_at,
+            lifecycle: self.lifecycle.as_deref().and_then(parse_lifecycle),
         }
     }
 
@@ -787,7 +966,8 @@ impl RawProductRow {
     ///
     /// `default_unit` and `default_alert_days_before` are forwarded verbatim
     /// from the raw row so the catalog list can render the same unit / alert
-    /// metadata the detail page already shows.
+    /// metadata the detail page already shows. `lifecycle` is the parsed
+    /// enum (or `None` for pre-V19 backends).
     fn into_search_result(
         self,
         category_ids: Vec<String>,
@@ -802,7 +982,21 @@ impl RawProductRow {
             default_alert_days_before: self.default_alert_days_before,
             primary_barcode,
             is_active: self.is_active,
+            lifecycle: self.lifecycle.as_deref().and_then(parse_lifecycle),
         }
+    }
+}
+
+/// Parses a raw `lifecycle` TEXT value into the typed `ProductLifecycle`
+/// enum. Returns `None` for unrecognized values so the dual-read window
+/// falls back to the legacy `is_active` projection (design §5.3).
+fn parse_lifecycle(raw: &str) -> Option<crate::dto::products::ProductLifecycle> {
+    use crate::dto::products::ProductLifecycle;
+    match raw {
+        "active" => Some(ProductLifecycle::Active),
+        "archived" => Some(ProductLifecycle::Archived),
+        "retired" => Some(ProductLifecycle::Retired),
+        _ => None,
     }
 }
 

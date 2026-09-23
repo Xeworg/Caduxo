@@ -178,6 +178,26 @@ pub enum UserMessage {
     /// Product catalog business rule: a barcode cannot be added to a
     /// product that has been soft-archived.
     ProductArchivedForBarcode,
+    /// Product catalog business rule: a retired product cannot be mutated
+    /// by any IPC (archive / unarchive / retire / update_product /
+    /// add_barcode / remove_barcode). The retired row is terminal —
+    /// design constraint 5 + spec scenario `retired product cannot be
+    /// reactivated`. Carries no fields; the parser matches the constant
+    /// text round-trip.
+    ProductRetiredForMutation,
+    /// Product catalog validation: the retire IPC requires a non-blank
+    /// `reason` (design constraint 5). The frontend disables the submit
+    /// button until the trimmed reason is non-empty; this variant is the
+    /// backend's defence-in-depth message if the frontend check slips
+    /// through.
+    RetireReasonRequired,
+    /// Product catalog business rule: a barcode cannot be added to a
+    /// retired product. Parallel to `ProductArchivedForBarcode` so the
+    /// IPC surface can distinguish archived vs retired in the user
+    /// message. The scanner / operational paths are also retired-aware via
+    /// the same guard (spec scenario `add_barcode rejects attaching a new
+    /// barcode to a retired product`).
+    ProductRetiredForBarcode,
     /// Store management business rule: an internal location cannot be
     /// added under a store that has been deactivated.
     InactiveStoreLocation,
@@ -489,6 +509,24 @@ pub fn user_message(kind: UserMessage, locale: Locale) -> String {
         }
         (UserMessage::ProductArchivedForBarcode, L::Es) => {
             "No se puede agregar un código de barras a un producto archivado".to_string()
+        }
+        (UserMessage::ProductRetiredForMutation, L::En) => {
+            "Cannot modify a retired product".to_string()
+        }
+        (UserMessage::ProductRetiredForMutation, L::Es) => {
+            "No se puede modificar un producto retirado".to_string()
+        }
+        (UserMessage::RetireReasonRequired, L::En) => {
+            "Retire requires a non-empty reason".to_string()
+        }
+        (UserMessage::RetireReasonRequired, L::Es) => {
+            "Retirar requiere una razón no vacía".to_string()
+        }
+        (UserMessage::ProductRetiredForBarcode, L::En) => {
+            "Cannot add barcode to a retired product".to_string()
+        }
+        (UserMessage::ProductRetiredForBarcode, L::Es) => {
+            "No se puede agregar un código de barras a un producto retirado".to_string()
         }
         (UserMessage::InactiveStoreLocation, L::En) => {
             "Cannot add location to an inactive store".to_string()
@@ -873,6 +911,18 @@ pub fn parse_user_message_kind(message: &str) -> Option<UserMessage> {
 
     if message == "Cannot add barcode to an archived product" {
         return Some(UserMessage::ProductArchivedForBarcode);
+    }
+
+    if message == "Cannot modify a retired product" {
+        return Some(UserMessage::ProductRetiredForMutation);
+    }
+
+    if message == "Retire requires a non-empty reason" {
+        return Some(UserMessage::RetireReasonRequired);
+    }
+
+    if message == "Cannot add barcode to a retired product" {
+        return Some(UserMessage::ProductRetiredForBarcode);
     }
 
     if message == "Cannot add location to an inactive store" {
@@ -1921,6 +1971,83 @@ mod tests {
             got,
             "No se puede agregar un código de barras a un producto archivado"
         );
+    }
+
+    // Lifecycle variant parity tests (`product-lifecycle-reusable-identifiers` PR 1).
+    #[test]
+    fn product_retired_for_mutation_en() {
+        let got = en(UserMessage::ProductRetiredForMutation);
+        assert_eq!(got, "Cannot modify a retired product");
+    }
+
+    #[test]
+    fn product_retired_for_mutation_es() {
+        let got = es(UserMessage::ProductRetiredForMutation);
+        assert_eq!(got, "No se puede modificar un producto retirado");
+    }
+
+    #[test]
+    fn retire_reason_required_en() {
+        let got = en(UserMessage::RetireReasonRequired);
+        assert_eq!(got, "Retire requires a non-empty reason");
+    }
+
+    #[test]
+    fn retire_reason_required_es() {
+        let got = es(UserMessage::RetireReasonRequired);
+        assert_eq!(got, "Retirar requiere una razón no vacía");
+    }
+
+    #[test]
+    fn product_retired_for_barcode_en() {
+        let got = en(UserMessage::ProductRetiredForBarcode);
+        assert_eq!(got, "Cannot add barcode to a retired product");
+    }
+
+    #[test]
+    fn product_retired_for_barcode_es() {
+        let got = es(UserMessage::ProductRetiredForBarcode);
+        assert_eq!(
+            got,
+            "No se puede agregar un código de barras a un producto retirado"
+        );
+    }
+
+    /// Parser round-trip: each new lifecycle variant must round-trip back
+    /// to its originating variant when `parse_user_message_kind` reads
+    /// the canonical English string. The helper is the post-localization
+    /// round-trip path used by `localize_business_rule` /
+    /// `localize_validation`.
+    #[test]
+    fn parse_user_message_kind_roundtrips_lifecycle_variants() {
+        // `UserMessage` is not `Copy` (the enum carries tuple-shaped
+        // variants like `ResourceNotFound { resource, id }`), so we
+        // clone the variant up-front and reuse it across the format +
+        // post-format assertions.
+        let cases: &[(UserMessage, &str)] = &[
+            (
+                UserMessage::ProductRetiredForMutation,
+                "Cannot modify a retired product",
+            ),
+            (
+                UserMessage::RetireReasonRequired,
+                "Retire requires a non-empty reason",
+            ),
+            (
+                UserMessage::ProductRetiredForBarcode,
+                "Cannot add barcode to a retired product",
+            ),
+        ];
+        for (variant, expected) in cases {
+            let got = user_message(variant.clone(), Locale::En);
+            assert_eq!(got, *expected);
+            let parsed = parse_user_message_kind(expected);
+            assert_eq!(
+                parsed,
+                Some(variant.clone()),
+                "parser must round-trip `{expected}` back to {variant:?}",
+            );
+        }
     }
 
     #[test]

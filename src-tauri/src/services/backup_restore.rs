@@ -36,6 +36,12 @@ const REQUIRED_TABLES: &[&str] = &[
     "lot_resolution_events",
     "notification_log",
     "app_settings",
+    // `product_lifecycle_events` (V19 — product-lifecycle-reusable-identifiers):
+    // the audit table that records every archive / unarchive / retire
+    // transition. The snapshot already includes it because `VACUUM INTO`
+    // copies the whole database, but the explicit entry is what makes
+    // `validate_backup` accept backups that contain the new table.
+    "product_lifecycle_events",
 ];
 
 // ─── Stable check codes ──────────────────────────────────────────────────────
@@ -980,8 +986,8 @@ mod tests {
             .unwrap();
         // V1-V18 total (V5 split into 11 separate migrations; V16, V17, V18 added)
         assert_eq!(
-            applied_count, 18,
-            "expected 18 migrations (V1–V18); all should have applied automatically"
+            applied_count, 19,
+            "expected 19 migrations (V1–V19); all should have applied automatically"
         );
 
         // ── Step 4: assert junction table exists and is populated ──────────
@@ -1184,8 +1190,8 @@ mod tests {
             .unwrap();
         // V1–V18 total
         assert_eq!(
-            applied_count, 18,
-            "expected 18 migrations (V1–V18) after restore; all should have applied automatically"
+            applied_count, 19,
+            "expected 19 migrations (V1–V19) after restore; all should have applied automatically"
         );
 
         // ── Step 4: assert lot_movements table exists with correct schema ─────

@@ -64,6 +64,25 @@ pub enum CsvPreviewRowStatus {
         existing_product_id: String,
         existing_barcode: String,
     },
+    /// SKU matches a row whose `lifecycle` is `retired`. The identifier was
+    /// released by the retired product; the import passes through with a
+    /// non-blocking per-row advisory notice (`csv.releasedSkuNotice` /
+    /// `csv.releasedBarcodeNotice`). `existing_product_id` is the retired
+    /// row's id so the UI can render a "previously associated with product
+    /// X" tooltip. Counts as `valid_rows` so the import commits the new
+    /// product (design §6.6).
+    ReleasedSku {
+        existing_product_id: String,
+        existing_sku: String,
+    },
+    /// Barcode matches a row whose `lifecycle` is `retired`. Same
+    /// pass-through semantics as `ReleasedSku`. The retired row's barcode
+    /// is excluded from the partial unique index by `lifecycle != 'retired'`
+    /// so the new attach succeeds (design §2.1 + §6.6).
+    ReleasedBarcode {
+        existing_product_id: String,
+        existing_barcode: String,
+    },
     /// A required field is missing or empty.
     MissingRequired { field: String },
     /// A value failed validation (e.g. negative alert days, malformed barcode).
@@ -130,6 +149,14 @@ pub struct CsvPreviewResponse {
     pub duplicate_sku_count: usize,
     /// Rows whose barcode collides with an existing barcode.
     pub duplicate_barcode_count: usize,
+    /// Rows whose SKU matches a `retired` row. Counts as `valid_rows`
+    /// because the import commits the new product with `lifecycle = active`.
+    /// See `CsvPreviewRowStatus::ReleasedSku`.
+    pub released_sku_count: usize,
+    /// Rows whose barcode matches a `retired` row. Counts as
+    /// `valid_rows` for the same reason as `released_sku_count`. See
+    /// `CsvPreviewRowStatus::ReleasedBarcode`.
+    pub released_barcode_count: usize,
     /// Rows that are missing a required field (SKU or description).
     pub missing_required_count: usize,
     /// Detailed per-row classification.
