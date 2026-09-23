@@ -1200,11 +1200,6 @@
                 {/if}
               </code>
             </p>
-            <p class="resolved-line">
-              <strong>{$LL.scanner.registration.skuLabel()}:</strong>
-              {activeProduct.sku}
-            </p>
-
             {#if registrationLotFormOpen}
               <LotForm
                 mode="create"
