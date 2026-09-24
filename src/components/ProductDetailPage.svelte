@@ -31,8 +31,10 @@
         type StoreLocationResponse,
     } from "../lib/stores.js";
     import {
+        isSentinelLocationId,
         resolveBatchCodeDisplay,
         resolveLocationDisplay,
+        resolveLotLocationDisplay,
     } from "../lib/lotDisplay.js";
     import { LL } from "../i18n/i18n-svelte.js";
     import { humanizeError } from "../lib/errors.js";
@@ -316,14 +318,16 @@
 
     /**
      * Display label for a lot's location in the product-detail lot list.
-     * Sentinel ids (`loc-sentinel-*`) render the localized "No location"
-     * placeholder; non-sentinel ids fall back to the raw id since the
-     * list view does not carry a location lookup table.
+     * Sentinel ids (`loc-sentinel-*`) and missing `location_id` render the
+     * localized "No location" placeholder; real locations prefer the
+     * backend-projected `location_name` over the raw UUID (per
+     * `odd/tasks/lot-location-name.md`). Falls back to the UUID only if the
+     * lot has a real location but the projection is empty (legacy row).
      */
     function lotLocationLabel(lot: ExpiryLotResponse): string {
-        return resolveLocationDisplay(
+        return resolveLotLocationDisplay(
             lot.location_id,
-            [],
+            lot.location_name,
             $LL.common.noLocation(),
         );
     }
@@ -338,12 +342,27 @@
     }
 
     /** Same as `lotLocationLabel` but for the detail modal, which has a
-     *  store-locations list available for name lookup. */
+     *  store-locations list available as a fallback for any legacy row
+     *  whose projection is missing. `location_name` (when present) still
+     *  wins over the in-memory lookup. */
     function detailLotLocationLabel(
         lot: ExpiryLotResponse,
         locations: StoreLocationResponse[],
     ): string {
-        return resolveLocationDisplay(lot.location_id, locations, $LL.common.noLocation());
+        const noLocation = $LL.common.noLocation();
+        const locationId = lot.location_id;
+
+        // (1) Null/sentinel ids → localized "No location" placeholder.
+        if (!locationId || isSentinelLocationId(locationId)) {
+            return noLocation;
+        }
+        // (2) Backend-projected nonblank name wins over any lookup.
+        const projectedName = lot.location_name?.trim();
+        if (projectedName) return projectedName;
+        // (3) No projection → resolve the raw location_id against the
+        //     in-memory locations list, with (4) the raw id kept as the
+        //     defensive fallback when the row has no matching entry.
+        return resolveLocationDisplay(locationId, locations, noLocation);
     }
 </script>
 

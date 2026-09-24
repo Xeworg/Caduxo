@@ -81,6 +81,17 @@ export interface ExpiryLotResponse {
   product_id: string;
   store_id: string;
   location_id: string | null;
+  /**
+   * Human-readable location name projected from `store_locations.name` via
+   * the backend `LEFT JOIN` (see `odd/tasks/lot-location-name.md`).
+   * `null` when the lot has no `location_id` or the row is missing;
+   * inactive locations are still included so historic lots stay
+   * interpretable. UI display helpers consume this to render the name
+   * instead of the raw `location_id`; treat `location_id` as the
+   * authoritative relationship key and `location_name` as a presentational
+   * projection that may be absent on legacy rows.
+   */
+  location_name: string | null;
   quantity: number;
   unit: string;
   expiry_date: string;
