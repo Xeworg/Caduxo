@@ -20,13 +20,15 @@ pub async fn get_expiry_lot(
 ) -> Result<Option<ExpiryLotResponse>, sqlx::Error> {
     sqlx::query_as::<_, ExpiryLotResponse>(
         r#"
-        SELECT el.id, el.product_id, el.store_id, el.location_id, el.quantity, el.unit,
+        SELECT el.id, el.product_id, el.store_id, el.location_id, sl.name AS location_name,
+               el.quantity, el.unit,
                el.expiry_date, el.alert_days_before, el.batch_code,
                el.status, el.resolution, el.resolved_at, el.notes,
                el.created_at, el.updated_at,
                p.unit_type AS unit_type
         FROM expiry_lots el
         LEFT JOIN products p ON p.id = el.product_id
+        LEFT JOIN store_locations sl ON sl.id = el.location_id
         WHERE el.id = $1
         "#,
     )
@@ -82,13 +84,15 @@ pub async fn list_expiry_lots_by_product(
 ) -> Result<Vec<ExpiryLotResponse>, sqlx::Error> {
     sqlx::query_as::<_, ExpiryLotResponse>(
         r#"
-        SELECT el.id, el.product_id, el.store_id, el.location_id, el.quantity, el.unit,
+        SELECT el.id, el.product_id, el.store_id, el.location_id, sl.name AS location_name,
+               el.quantity, el.unit,
                el.expiry_date, el.alert_days_before, el.batch_code,
                el.status, el.resolution, el.resolved_at, el.notes,
                el.created_at, el.updated_at,
                p.unit_type AS unit_type
         FROM expiry_lots el
         LEFT JOIN products p ON p.id = el.product_id
+        LEFT JOIN store_locations sl ON sl.id = el.location_id
         WHERE el.product_id = $1 AND el.status = 'active'
         ORDER BY el.expiry_date ASC
         "#,
@@ -123,13 +127,15 @@ pub async fn find_active_lot_by_batch_code(
 ) -> Result<Option<ExpiryLotResponse>, sqlx::Error> {
     sqlx::query_as::<_, ExpiryLotResponse>(
         r#"
-        SELECT el.id, el.product_id, el.store_id, el.location_id, el.quantity, el.unit,
+        SELECT el.id, el.product_id, el.store_id, el.location_id, sl.name AS location_name,
+               el.quantity, el.unit,
                el.expiry_date, el.alert_days_before, el.batch_code,
                el.status, el.resolution, el.resolved_at, el.notes,
                el.created_at, el.updated_at,
                p.unit_type AS unit_type
         FROM expiry_lots el
         LEFT JOIN products p ON p.id = el.product_id
+        LEFT JOIN store_locations sl ON sl.id = el.location_id
         WHERE el.store_id = $1
           AND el.batch_code = $2
           AND el.status = 'active'
@@ -164,13 +170,15 @@ pub async fn list_active_lots_for_product_in_store(
 ) -> Result<Vec<ExpiryLotResponse>, sqlx::Error> {
     sqlx::query_as::<_, ExpiryLotResponse>(
         r#"
-        SELECT el.id, el.product_id, el.store_id, el.location_id, el.quantity, el.unit,
+        SELECT el.id, el.product_id, el.store_id, el.location_id, sl.name AS location_name,
+               el.quantity, el.unit,
                el.expiry_date, el.alert_days_before, el.batch_code,
                el.status, el.resolution, el.resolved_at, el.notes,
                el.created_at, el.updated_at,
                p.unit_type AS unit_type
         FROM expiry_lots el
         LEFT JOIN products p ON p.id = el.product_id
+        LEFT JOIN store_locations sl ON sl.id = el.location_id
         WHERE el.product_id = $1
           AND el.store_id = $2
           AND el.status = 'active'
@@ -191,13 +199,15 @@ pub async fn list_expiry_lots_by_store(
 ) -> Result<Vec<ExpiryLotResponse>, sqlx::Error> {
     sqlx::query_as::<_, ExpiryLotResponse>(
         r#"
-        SELECT el.id, el.product_id, el.store_id, el.location_id, el.quantity, el.unit,
+        SELECT el.id, el.product_id, el.store_id, el.location_id, sl.name AS location_name,
+               el.quantity, el.unit,
                el.expiry_date, el.alert_days_before, el.batch_code,
                el.status, el.resolution, el.resolved_at, el.notes,
                el.created_at, el.updated_at,
                p.unit_type AS unit_type
         FROM expiry_lots el
         LEFT JOIN products p ON p.id = el.product_id
+        LEFT JOIN store_locations sl ON sl.id = el.location_id
         WHERE el.store_id = $1 AND el.status = 'active'
         ORDER BY el.expiry_date ASC
         "#,
@@ -214,13 +224,15 @@ pub async fn list_all_active_expiry_lots(
 ) -> Result<Vec<ExpiryLotResponse>, sqlx::Error> {
     sqlx::query_as::<_, ExpiryLotResponse>(
         r#"
-        SELECT el.id, el.product_id, el.store_id, el.location_id, el.quantity, el.unit,
+        SELECT el.id, el.product_id, el.store_id, el.location_id, sl.name AS location_name,
+               el.quantity, el.unit,
                el.expiry_date, el.alert_days_before, el.batch_code,
                el.status, el.resolution, el.resolved_at, el.notes,
                el.created_at, el.updated_at,
                p.unit_type AS unit_type
         FROM expiry_lots el
         LEFT JOIN products p ON p.id = el.product_id
+        LEFT JOIN store_locations sl ON sl.id = el.location_id
         WHERE el.status = 'active'
         ORDER BY el.expiry_date ASC
         "#,
@@ -349,4 +361,213 @@ pub async fn list_resolution_events_by_lot(
     .bind(lot_id)
     .fetch_all(pool)
     .await
+}
+
+// ============================================================
+// Tests — location_name projection
+// ============================================================
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use sqlx::SqlitePool;
+    use uuid::Uuid;
+
+    use crate::db::migrations::fresh_test_pool;
+
+    // NOTE: no `use super::*` — avoids shadowing `fresh_test_pool`.
+    // Call repository functions via `super::` explicitly.
+
+    /// Inserts a store row directly so tests stay at the repository level.
+    async fn seed_store(pool: &SqlitePool, name: &str) -> Result<String, sqlx::Error> {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+        sqlx::query(
+            "INSERT INTO stores (id, name, is_active, created_at, updated_at)
+             VALUES ($1, $2, 1, $3, $4)",
+        )
+        .bind(&id)
+        .bind(name)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await?;
+        Ok(id)
+    }
+
+    /// Inserts a product row directly. `unit_type` is set explicitly to keep
+    /// tests independent of the back-fill migrations.
+    async fn seed_product(
+        pool: &SqlitePool,
+        sku: &str,
+        unit_type: &str,
+    ) -> Result<String, sqlx::Error> {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+        sqlx::query(
+            "INSERT INTO products
+                (id, sku, description, default_unit, default_alert_days_before,
+                 is_active, unit_type, created_at, updated_at)
+             VALUES ($1, $2, 'Test Product', 'kg', 30, 1, $3, $4, $5)",
+        )
+        .bind(&id)
+        .bind(sku)
+        .bind(unit_type)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await?;
+        Ok(id)
+    }
+
+    /// Inserts an active store_location row.
+    async fn seed_location(
+        pool: &SqlitePool,
+        store_id: &str,
+        name: &str,
+        is_active: i32,
+    ) -> Result<String, sqlx::Error> {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+        sqlx::query(
+            "INSERT INTO store_locations
+                (id, store_id, name, is_active, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(&id)
+        .bind(store_id)
+        .bind(name)
+        .bind(is_active)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await?;
+        Ok(id)
+    }
+
+    /// Inserts an active expiry lot with an optional location_id.
+    async fn seed_lot(
+        pool: &SqlitePool,
+        product_id: &str,
+        store_id: &str,
+        location_id: Option<&str>,
+    ) -> Result<String, sqlx::Error> {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+        sqlx::query(
+            "INSERT INTO expiry_lots
+                (id, product_id, store_id, location_id, quantity, unit,
+                 expiry_date, alert_days_before, status, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, 10.0, 'kg', '2099-12-31', 7, 'active', $5, $6)",
+        )
+        .bind(&id)
+        .bind(product_id)
+        .bind(store_id)
+        .bind(location_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await?;
+        Ok(id)
+    }
+
+    /// A lot whose `location_id` points at an active `store_locations` row
+    /// must project that row's `name` into `location_name`. Guards against
+    /// the regression where the backend would expose the UUID to consumers
+    /// instead of the human-readable label.
+    #[tokio::test]
+    async fn get_expiry_lot_projects_real_location_name() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let pool = fresh_test_pool().await?;
+        let store_id = seed_store(&pool, "Test Store").await?;
+        let product_id = seed_product(&pool, "SKU-LOC-1", "decimal").await?;
+        let location_id = seed_location(&pool, &store_id, "Fridge A", 1).await?;
+        let lot_id = seed_lot(&pool, &product_id, &store_id, Some(&location_id)).await?;
+
+        let lot = super::get_expiry_lot(&pool, &lot_id)
+            .await?
+            .expect("lot must exist");
+
+        assert_eq!(lot.location_id.as_deref(), Some(location_id.as_str()));
+        assert_eq!(lot.location_name.as_deref(), Some("Fridge A"));
+        Ok(())
+    }
+
+    /// A lot without a `location_id` must project `location_name = None`. The
+    /// scanner/product-detail sentinel `No location` behavior depends on this
+    /// contract: any non-null `location_name` would suppress the sentinel.
+    #[tokio::test]
+    async fn get_expiry_lot_with_null_location_id_returns_null_location_name(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let store_id = seed_store(&pool, "Test Store").await?;
+        let product_id = seed_product(&pool, "SKU-LOC-2", "decimal").await?;
+        let lot_id = seed_lot(&pool, &product_id, &store_id, None).await?;
+
+        let lot = super::get_expiry_lot(&pool, &lot_id)
+            .await?
+            .expect("lot must exist");
+
+        assert!(lot.location_id.is_none());
+        assert!(
+            lot.location_name.is_none(),
+            "missing location_id must project location_name = None"
+        );
+        Ok(())
+    }
+
+    /// Historic lots that reference a now-inactive location must still expose
+    /// the original name. The decision is "include inactive locations in the
+    /// projection"; an `is_active = 0` filter on the join would silently drop
+    /// the name and force the UI back to a UUID/sentinel.
+    #[tokio::test]
+    async fn get_expiry_lot_projects_inactive_location_name(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let store_id = seed_store(&pool, "Test Store").await?;
+        let product_id = seed_product(&pool, "SKU-LOC-3", "decimal").await?;
+        let location_id = seed_location(&pool, &store_id, "Old Shelf", 0).await?;
+        let lot_id = seed_lot(&pool, &product_id, &store_id, Some(&location_id)).await?;
+
+        let lot = super::get_expiry_lot(&pool, &lot_id)
+            .await?
+            .expect("lot must exist");
+
+        assert_eq!(lot.location_id.as_deref(), Some(location_id.as_str()));
+        assert_eq!(
+            lot.location_name.as_deref(),
+            Some("Old Shelf"),
+            "inactive location rows must remain in the projection"
+        );
+        Ok(())
+    }
+
+    /// `list_expiry_lots_by_product` must propagate `location_name` across
+    /// every row, including lots whose location was deactivated. Mixed rows
+    /// in a single response keep the contract honest.
+    #[tokio::test]
+    async fn list_expiry_lots_by_product_projects_location_names(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let store_id = seed_store(&pool, "Test Store").await?;
+        let product_id = seed_product(&pool, "SKU-LOC-4", "decimal").await?;
+        let active_loc = seed_location(&pool, &store_id, "Active Shelf", 1).await?;
+        let inactive_loc = seed_location(&pool, &store_id, "Old Shelf", 0).await?;
+        seed_lot(&pool, &product_id, &store_id, Some(&active_loc)).await?;
+        seed_lot(&pool, &product_id, &store_id, Some(&inactive_loc)).await?;
+        seed_lot(&pool, &product_id, &store_id, None).await?;
+
+        let lots = super::list_expiry_lots_by_product(&pool, &product_id).await?;
+        assert_eq!(lots.len(), 3);
+
+        let mut names: Vec<Option<&str>> =
+            lots.iter().map(|l| l.location_name.as_deref()).collect();
+        names.sort();
+        assert_eq!(
+            names,
+            vec![None, Some("Active Shelf"), Some("Old Shelf")],
+            "every lot must expose its location name (or None) without dropping inactive rows"
+        );
+        Ok(())
+    }
 }

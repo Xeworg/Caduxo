@@ -54,6 +54,38 @@ export function resolveLocationDisplay<L extends LocationRef>(
 }
 
 /**
+ * Display label for an expiry lot's location when the backend has already
+ * projected the human-readable `location_name` onto the lot row (see
+ * `odd/tasks/lot-location-name.md`). Used by Product Detail and Scanner to
+ * render real names instead of UUIDs without doing a per-render lookup.
+ *
+ * - `null` / `undefined` `locationId` → `noLocationLabel`.
+ * - Sentinel id (`loc-sentinel-*`) → `noLocationLabel`, regardless of
+ *   `locationName`. The sentinel is the backend's "no assigned location"
+ *   marker and must never be rendered as a UUID.
+ * - `locationName` present and non-empty → the projected name.
+ * - Otherwise → the raw `locationId` (legacy row without the projection,
+ *   or empty/whitespace name); the row stays inspectable rather than
+ *   being silently replaced by the placeholder.
+ *
+ * `location_id` remains the option/action value throughout the UI; this
+ * helper only drives the display label.
+ */
+export function resolveLotLocationDisplay(
+    locationId: string | null | undefined,
+    locationName: string | null | undefined,
+    noLocationLabel: string,
+): string {
+    if (!locationId) return noLocationLabel;
+    if (isSentinelLocationId(locationId)) return noLocationLabel;
+    if (locationName !== null && locationName !== undefined) {
+        const trimmed = locationName.trim();
+        if (trimmed !== "") return trimmed;
+    }
+    return locationId;
+}
+
+/**
  * Display label for a batch code.
  *
  * - `null` / `undefined` / empty / whitespace-only → `noBatchCodeLabel`.

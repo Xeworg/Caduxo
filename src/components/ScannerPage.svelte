@@ -59,6 +59,7 @@
     hasStore as hasStoreCommand,
     updateSettings,
     listStores,
+    listStoreLocations,
     type FefoPolicy,
     type SettingsResponse,
     type StoreResponse,
@@ -72,7 +73,7 @@
   import type { ProductResponse } from "../lib/products.js";
   import { listCategories, type CategoryResponse } from "../lib/products.js";
   import type { ExpiryLotResponse } from "../lib/expiry_lots.js";
-  import { resolveLocationDisplay } from "../lib/lotDisplay.js";
+  import { resolveLocationDisplay, type LocationRef } from "../lib/lotDisplay.js";
   import Button from "./ui/Button.svelte";
   import Listbox from "./ui/Listbox.svelte";
   import Input from "./ui/Input.svelte";
@@ -156,6 +157,15 @@
   let storeSelectId = $state("");
   let savingStoreSelection = $state(false);
   let storeSelectError = $state("");
+
+  // Per-store location name lookup for Sale/Stock-out balance labels
+  // (per `odd/tasks/lot-location-name.md`). `LotLocationBalance` does
+  // not yet project `location_name` on the Rust side, so we hydrate
+  // `id → name` from `listStoreLocations` whenever the active store
+  // changes and feed it to `resolveLocationDisplay`. Sentinel balances
+  // and missing ids still render the localized "No location" label
+  // through the helper; `value: location_id` is preserved.
+  let locationNameById = $state<Record<string, string>>({});
 
   // Resolved scan state. Persisted across mode switches so the user can
   // move from Sale to Registration without losing their work.
@@ -290,14 +300,30 @@
     return lotBalances.find((b) => b.location_id === locationId)?.balance ?? 0;
   });
 
+  // Lookup array derived from `locationNameById`. Materialised lazily so
+  // `resolveLocationDisplay` can match real balances against the in-memory
+  // names; rebuilt only when the active store's location list changes.
+  let locationLookup = $derived.by((): LocationRef[] => {
+    const refs: LocationRef[] = [];
+    for (const id of Object.keys(locationNameById)) {
+      const name = locationNameById[id];
+      if (typeof name === "string") refs.push({ id, name });
+    }
+    return refs;
+  });
+
   // Location picker options for Sale and Stock-out. Sentinel balances
   // (loc-sentinel-*) render the localized "No location" label but stay
   // selectable so stock at the sentinel can still be sold / stocked out.
+  // Real balances now resolve to the store location name (loaded via
+  // `listStoreLocations` reactive effect) instead of leaking the raw
+  // UUID; `value: location_id` is preserved for the createLotMovement
+  // payload.
   let locationOptions = $derived([
     { value: "", label: $LL.scanner.stockOut.reasonPlaceholder() },
     ...availableBalances.map((b) => ({
       value: b.location_id,
-      label: `${resolveLocationDisplay(b.location_id, [], $LL.common.noLocation())} (${b.balance})`,
+      label: `${resolveLocationDisplay(b.location_id, locationLookup, $LL.common.noLocation())} (${b.balance})`,
     })),
   ]);
 
@@ -499,6 +525,29 @@
       lotBalances = [];
       locationId = "";
     }
+  });
+
+  // Refresh the per-store location lookup whenever the active store
+  // changes (including the post-switch from `changeActiveStore`).
+  // Failures fall back to an empty map; sentinel balances and the
+  // missing-id path still render correctly through `resolveLocationDisplay`,
+  // and the option `value` is never altered — only the display label.
+  $effect(() => {
+    const storeId = settings?.last_selected_store_id;
+    if (!storeId) {
+      locationNameById = {};
+      return;
+    }
+    untrack(async () => {
+      try {
+        const list = await listStoreLocations(storeId);
+        const next: Record<string, string> = {};
+        for (const l of list) next[l.id] = l.name;
+        locationNameById = next;
+      } catch {
+        locationNameById = {};
+      }
+    });
   });
 
   // Auto-preselect single-balance locations.

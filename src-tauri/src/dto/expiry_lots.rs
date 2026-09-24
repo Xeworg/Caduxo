@@ -97,6 +97,11 @@ pub struct ExpiryLotResponse {
     pub product_id: String,
     pub store_id: String,
     pub location_id: Option<String>,
+    /// Human-readable name of the lot's store location, projected from
+    /// `store_locations.name` via `LEFT JOIN`. `None` when the lot has no
+    /// `location_id` or the referenced location row is missing. Inactive
+    /// locations are included so historic lots remain interpretable.
+    pub location_name: Option<String>,
     pub quantity: f64,
     pub unit: String,
     pub expiry_date: String,
