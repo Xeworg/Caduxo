@@ -72,7 +72,7 @@
   one-shot reset (typed as `string` on `CSSStyleDeclaration`,
   supported on Chromium / WebKit / WebView2 / WebKitGTK — the
   four backends Tauri ships) so any inherited OS-level zoom is
-  cleared before the listeners take over. `onMount`'s returned
+  cleared before the listeners take over. The cleanup returned by `onMount`
   cleanup tears down every listener when the component unmounts,
   so the guard never leaks into HMR or future routing. This is a
   desktop-app layout guard, not an accessibility policy: Caduxo
@@ -134,13 +134,13 @@
   //
   // The guard is installed in `onMount` (returned cleanup tears it
   // down on unmount) so registration is tied to the component
-  // lifecycle and does not depend on Svelte's reactive-tracking
+  // lifecycle and does not depend on Svelte reactive tracking
   // path. Listeners are attached in the capture phase on BOTH
   // `window` and `document`, so the gesture is caught before any
   // inner bubbling handler can call `stopPropagation` and the
   // wheel and gesture handlers are non-passive so `preventDefault`
   // actually suppresses browser zoom on Chromium / WebKit / WebView2 /
-  // WebKitGTK (Tauri's WebKitGTK backend can receive KDE touchpad
+  // WebKitGTK (the Tauri WebKitGTK backend can receive KDE touchpad
   // pinch as WebKit `gesture*` events instead of Ctrl+wheel).
   //
   // The keydown handler checks `event.code` (the physical-key
@@ -381,7 +381,7 @@
           </svg>
         </div>
         <!--
-          DaisyUI's dropdown-content opens via :focus-within on the
+          The DaisyUI dropdown-content opens via :focus-within on the
           trigger, so closing requires removing focus. The
           tabindex="0" trigger above keeps the menu keyboard-
           reachable. We render the same eight tab buttons inside the
@@ -447,11 +447,11 @@
      off-screen with no way to scroll to them. The responsive
      overflow dropdown (see `.app-tabs` / `.app-overflow` /
      `@media (max-width: 1024px)` below) now owns the constrained-
-     width UX, while the native Tauri window's `minWidth: 960`
+     width UX, while the native Tauri window with `minWidth: 960`
      (see `src-tauri/tauri.conf.json`) keeps the OS from
      resizing the window below the app floor in the first place.
-     Individual page components (DashboardPage's grid,
-     ConfigurationPage's two-column row, etc.) carry their own
+     Individual page components (the DashboardPage grid and the
+     ConfigurationPage two-column row, for example) carry their own
      internal `min-width` rules where they need a minimum content
      width and scroll horizontally inside their containers as
      needed. */
@@ -460,7 +460,7 @@
     position: sticky;
     top: 0;
     z-index: 100;
-    /* Subtle elevation; DaisyUI's navbar does not ship a shadow by
+    /* Subtle elevation; the DaisyUI navbar does not ship a shadow by
        default so the legacy visual weight is preserved without
        re-introducing the bespoke .nav styles. */
     box-shadow: 0 1px 3px rgb(0 0 0 / 0.15);
@@ -515,7 +515,7 @@
 
   /* Active tab visual state. Applied via the app-tab-active-btn
      class on the desktop <button> element when activeTab matches.
-     DaisyUI's btn-ghost already provides the hover / focus
+     The DaisyUI btn-ghost class already provides the hover / focus
      background, so we only paint the accent dot + bolder weight for
      the active tab. */
   .app-tab-active-btn {
@@ -563,7 +563,7 @@
 
   /* DaisyUI dropdown menu uses inert-style behaviour; we ensure the
      trigger is keyboard-visible when focused. The tabindex="0"
-     trigger from the markup gets a focus ring via DaisyUI's global
+     trigger from the markup gets a focus ring via the DaisyUI global
      focus-visible contract, but we re-assert it here so reduced-
      motion users still see the ring. */
   .app-overflow :global(.btn:focus-visible) {
