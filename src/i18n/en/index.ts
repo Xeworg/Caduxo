@@ -1163,6 +1163,18 @@ const en: BaseTranslation = {
       loadBalancesFailed: "Could not load lot balances: {msg}",
       loadSettingsFailed: "Could not load scanner settings: {msg}",
     },
+
+    // Lot-context panel — Scanner-native lot detail view (ODD task 5 of
+    // `feat/scanner-first-inventory`). Mounted inline in ScannerPage from a
+    // resolved lot via the "View lot context" affordance.
+    lotContext: {
+      title: "Lot context",
+      ariaLabel: "Lot context panel",
+      openButton: "View lot context",
+      balancesHeading: "Balances by location",
+      actionsLabel: "Lot actions",
+      noBalances: "No location balances found.",
+    },
   },
 
   categoryPicker: {

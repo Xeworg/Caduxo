@@ -1165,6 +1165,18 @@ const es: BaseTranslation = {
       loadBalancesFailed: "No se pudieron cargar los saldos del lote: {msg}",
       loadSettingsFailed: "No se pudieron cargar los ajustes del escáner: {msg}",
     },
+
+    // Panel de contexto de lote — vista nativa del escáner (ODD task 5 de
+    // `feat/scanner-first-inventory`). Se monta en línea en ScannerPage desde
+    // un lote resuelto mediante "Ver contexto de lote".
+    lotContext: {
+      title: "Contexto de lote",
+      ariaLabel: "Panel de contexto de lote",
+      openButton: "Ver contexto de lote",
+      balancesHeading: "Saldos por ubicación",
+      actionsLabel: "Acciones de lote",
+      noBalances: "No se encontraron saldos por ubicación.",
+    },
   },
 
   categoryPicker: {

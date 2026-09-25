@@ -73,6 +73,8 @@
   import type { ProductResponse } from "../lib/products.js";
   import { listCategories, type CategoryResponse } from "../lib/products.js";
   import type { ExpiryLotResponse } from "../lib/expiry_lots.js";
+  import LotContextPanel from "./scanner/LotContextPanel.svelte";
+  import type { UnitKind } from "../lib/products.js";
   import { resolveLocationDisplay, type LocationRef } from "../lib/lotDisplay.js";
   import Button from "./ui/Button.svelte";
   import Listbox from "./ui/Listbox.svelte";
@@ -204,6 +206,24 @@
 
   // LotMatch/ProductMatch registration flow: open the existing LotForm.
   let registrationLotFormOpen = $state(false);
+
+  // All active store locations (all stores). Hydrates the LotContextPanel
+  // `allLocations` prop so MoveStockModal cross-store destinations are
+  // available without a separate fetch. Loaded once on mount.
+  let allStoreLocations = $state<
+    { id: string; name: string; store_id: string; store_name?: string }[]
+  >([]);
+
+  // Pinned lot-context from a resolved sale/stock-out lot. Cleared on
+  // active-store change, on resolving an unknown item, or when the user
+  // explicitly closes the panel. Survives successful mutations so the user
+  // can read back the updated balances after the action.
+  type PinnedContext = {
+    lot: ExpiryLotResponse;
+    product: ProductResponse;
+    unitType: UnitKind | null;
+  };
+  let pinnedContext = $state<PinnedContext | null>(null);
 
   // Always-visible active-store context. Mirrors the persisted
   // `last_selected_store_id` so the user can see which store Scanner
@@ -396,10 +416,86 @@
   // mount, refresh, and post-switch.
   let activeStoreSelectId = $derived(settings?.last_selected_store_id ?? "");
 
+  // ── Lot context ───────────────────────────────────────────────────────────
+
+  /**
+   * Loads locations from every active store so MoveStockModal can offer
+   * cross-store transfer destinations without a separate round-trip.
+   * Called once on mount; the list refreshes only if the user navigates
+   * away and back (onMount re-runs).
+   */
+  async function loadAllStoreLocations(): Promise<void> {
+    try {
+      const stores = await listStores();
+      const activeStores = stores.filter((s) => s.is_active);
+      const results = await Promise.all(
+        activeStores.map((s) => listStoreLocations(s.id)),
+      );
+      const flat: { id: string; name: string; store_id: string; store_name?: string }[] = [];
+      for (let i = 0; i < activeStores.length; i++) {
+        for (const loc of results[i]) {
+          if (loc.is_active) {
+            flat.push({
+              id: loc.id,
+              name: loc.name,
+              store_id: loc.store_id,
+              store_name: activeStores[i].name,
+            });
+          }
+        }
+      }
+      allStoreLocations = flat;
+    } catch {
+      allStoreLocations = [];
+    }
+  }
+
+  /**
+   * Clears the pinned lot context. Called from the LotContextPanel close
+   * button and from the active-store-change effect.
+   */
+  function clearPinnedContext(): void {
+    pinnedContext = null;
+  }
+
+  /**
+   * Pins the current resolved lot for lot-context inspection. The panel
+   * stays open after successful actions so the user can read back the
+   * updated balances; `resetMutationForm` drops the scan state but does
+   * not close the panel (task 5 contract).
+   */
+  function openLotContext(): void {
+    if (!resolvedLot || !activeProduct) return;
+    pinnedContext = {
+      lot: resolvedLot.lot,
+      product: activeProduct,
+      unitType: (activeProduct.unit_type ?? null) as UnitKind | null,
+    };
+  }
+
+  // Clear pinned context when the active store changes — a different store
+  // means the lot context is no longer meaningful.
+  $effect(() => {
+    const storeId = settings?.last_selected_store_id;
+    if (!storeId) return;
+    // untrack so this effect does not re-run on every state change inside
+    // the reactive block; only when the store id actually changes.
+    untrack(() => {
+      if (pinnedContext !== null) {
+        clearPinnedContext();
+      }
+    });
+  });
+
   // ── Init ──────────────────────────────────────────────────────────────────
 
   onMount(async () => {
-    await Promise.all([loadSettings(), loadHasStore(), loadAvailableStores()]);
+    await Promise.all([
+      loadSettings(),
+      loadHasStore(),
+      loadAvailableStores(),
+      loadAllStoreLocations(),
+    ]);
   });
 
   async function loadSettings(): Promise<void> {
@@ -674,7 +770,7 @@
         qty: quantity,
         sku: activeProduct?.sku ?? resolvedLot.lot.batch_code ?? "",
       });
-      resetMutationForm();
+      resetMutationFormWithoutContext();
     } catch (e) {
       mutationError = $LL.scanner.errors.saveFailed({
         msg: humanizeError(e),
@@ -724,7 +820,7 @@
         sku: activeProduct?.sku ?? resolvedLot.lot.batch_code ?? "",
         reason: reasonLabel(exitReason as MovementKind),
       });
-      resetMutationForm();
+      resetMutationFormWithoutContext();
     } catch (e) {
       mutationError = $LL.scanner.errors.saveFailed({
         msg: humanizeError(e),
@@ -750,13 +846,29 @@
     return $LL.scanner.stockOut.invalid.lot();
   }
 
+  function resetMutationFormWithoutContext(): void {
+    // Clears per-confirm state without touching the pinned lot context.
+    // Used after sale/stock-out confirmation so the panel stays open for
+    // immediate readback.
+    resolved = null;
+    selectedLotId = "";
+    quantityStr = "1";
+    locationId = "";
+    exitReason = "";
+    notes = "";
+    lotBalances = [];
+    lastResolvedAt = 0;
+    lastResolvedValue = "";
+  }
+
   function resetMutationForm(): void {
     // Per spec `Sale success resets the form for the next scan` and
-    // `Stock-out success resets the form`. We clear only the per-confirm
-    // state — the resolved scan + lot selection become stale after the
-    // quantity change, so we drop them as well to avoid reusing a
-    // mutated lot for the next confirm. The debounce guard is also
-    // reset so a subsequent identical scan starts a fresh resolution.
+    // `Stock-out success resets the form`. We clear the full scan state
+    // (resolved value, lot selection, quantity, location, reason, notes,
+    // and balance cache) so the next scan starts completely fresh. The
+    // debounce guard is also reset so an identical scan triggers a new
+    // resolution. The pinned lot context is cleared separately — see
+    // `clearPinnedContext` and the active-store-change effect.
     resolved = null;
     selectedLotId = "";
     quantityStr = "1";
@@ -1192,6 +1304,12 @@
               >
                 {submitting ? $LL.scanner.sale.confirming() : $LL.scanner.sale.confirm()}
               </Button>
+              <Button
+                variant="secondary"
+                onclick={openLotContext}
+              >
+                {$LL.scanner.lotContext.openButton()}
+              </Button>
             </div>
           </div>
         {/if}
@@ -1432,11 +1550,30 @@
                   ? $LL.scanner.stockOut.confirming()
                   : $LL.scanner.stockOut.confirm()}
               </Button>
+              <Button
+                variant="secondary"
+                onclick={openLotContext}
+              >
+                {$LL.scanner.lotContext.openButton()}
+              </Button>
             </div>
           </div>
         {/if}
       {/if}
     </div>
+
+    <!-- Lot-context panel. Rendered below the mode panels so the user
+         retains access to the scanner input and mode tabs while the
+         panel is open. Survives successful sale/stock-out confirmation
+         so the updated balances are immediately visible. -->
+    {#if pinnedContext}
+      <LotContextPanel
+        lot={pinnedContext.lot}
+        unitType={pinnedContext.unitType}
+        allLocations={allStoreLocations}
+        onClose={clearPinnedContext}
+      />
+    {/if}
   {/if}
 </div>
 

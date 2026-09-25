@@ -23,7 +23,7 @@ Make Scanner the canonical operational surface for lots and stock movements, whi
 - [x] 2. Add an atomic backend command and DTO for creating one lot with an initial within-store location distribution; cover validation, duplicate locations, quantity totals, integer units, and rollback.
 - [x] 3. Extract reusable lot-creation presentation state from `LotForm` and add an accessible optional distribution editor with quantity-total validation and bilingual copy.
 - [x] 4. Route Scanner Registration and Product Detail Add Lot through the same reusable creation flow, preserving Scanner store locking and existing Product Detail behavior for the simple path.
-- [ ] 5. Add Scanner lot-context view showing current per-location balances, movement history, and canonical actions for same-store and cross-store transfer, exit, and count adjustment.
+- [x] 5. Add Scanner lot-context view showing current per-location balances, movement history, and canonical actions for same-store and cross-store transfer, exit, and count adjustment.
 - [ ] 6. Make Scanner resolution and Dashboard lot views location-balance aware so a receiving store can find and operate a transferred lot without duplicating the lot identity.
 - [ ] 7. Add in-memory Dashboard-to-Scanner navigation that opens the selected lot in Scanner context without duplicating lot mutation UI.
 - [ ] 8. Consolidate shared movement client rules and fix known selector/state drift before using the Scanner lot-context actions broadly.
@@ -129,3 +129,11 @@ This feature is a replacement, not an additive second workflow. Once the Scanner
 - Scanner passes `lockedStoreId` and `lockedStoreName`, retaining the active-store lock. Product Detail omits those props, retaining its free-store, simple creation path; both preserve their existing save/cancel behavior.
 - Independent verification passed: `npm run check` (0 errors, 0 warnings), `npm run build` (including i18n generation), and `git diff --check`.
 - Evidence-record work-unit commit records this verification outcome.
+
+### Task 5 — Scanner lot context (complete)
+
+- Added the inline `scanner/LotContextPanel` with a location-balance view, immutable movement ledger, and active-lot actions that reuse the existing transfer, exit, and count-adjustment modals.
+- Scanner can pin a resolved lot context from Sale or Stock-out, preserves it after a successful movement for readback, and clears it when the active store changes. All active store locations are hydrated so the reused transfer modal supports cross-store destinations.
+- Added bilingual `scanner.lotContext.*` strings and regenerated i18n types.
+- Independent verification passed: `npm run check` (0 errors, 0 warnings), `npm run build`, focused `create_lot_movement` Rust tests (21 passed), and `git diff --check`.
+- Work-unit commit records this implementation and verification evidence.

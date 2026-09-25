@@ -3965,6 +3965,32 @@ type RootTranslation = {
 			 */
 			loadSettingsFailed: RequiredParams<'msg'>
 		}
+		lotContext: {
+			/**
+			 * L​o​t​ ​c​o​n​t​e​x​t
+			 */
+			title: string
+			/**
+			 * L​o​t​ ​c​o​n​t​e​x​t​ ​p​a​n​e​l
+			 */
+			ariaLabel: string
+			/**
+			 * V​i​e​w​ ​l​o​t​ ​c​o​n​t​e​x​t
+			 */
+			openButton: string
+			/**
+			 * B​a​l​a​n​c​e​s​ ​b​y​ ​l​o​c​a​t​i​o​n
+			 */
+			balancesHeading: string
+			/**
+			 * L​o​t​ ​a​c​t​i​o​n​s
+			 */
+			actionsLabel: string
+			/**
+			 * N​o​ ​l​o​c​a​t​i​o​n​ ​b​a​l​a​n​c​e​s​ ​f​o​u​n​d​.
+			 */
+			noBalances: string
+		}
 	}
 	categoryPicker: {
 		/**
@@ -8090,6 +8116,32 @@ export type TranslationFunctions = {
 			 * Could not load scanner settings: {msg}
 			 */
 			loadSettingsFailed: (arg: { msg: unknown }) => LocalizedString
+		}
+		lotContext: {
+			/**
+			 * Lot context
+			 */
+			title: () => LocalizedString
+			/**
+			 * Lot context panel
+			 */
+			ariaLabel: () => LocalizedString
+			/**
+			 * View lot context
+			 */
+			openButton: () => LocalizedString
+			/**
+			 * Balances by location
+			 */
+			balancesHeading: () => LocalizedString
+			/**
+			 * Lot actions
+			 */
+			actionsLabel: () => LocalizedString
+			/**
+			 * No location balances found.
+			 */
+			noBalances: () => LocalizedString
 		}
 	}
 	categoryPicker: {
