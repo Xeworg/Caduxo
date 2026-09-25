@@ -7,7 +7,7 @@
  *
  * The returned shape is a flat array of location records, each carrying the
  * owning store's name. This is the canonical form required by `MoveStockModal`
- * and `LotMovementsPanel` for cross-store transfer destination selection.
+ * for cross-store transfer destination selection.
  */
 
 import { listStores, listStoreLocations } from "./stores.js";
@@ -39,7 +39,7 @@ export interface ActiveStoreLocations {
  * - Hydrate the `allLocations` prop of `MoveStockModal` so cross-store
  *   destinations are available without a separate round-trip.
  * - Build the `locationNameById` lookup that powers `resolveLocationDisplay`
- *   in `LotContextPanel` and `ScannerPage`.
+ *   in `ScannerPage`.
  *
  * Errors fall back to empty arrays so callers that need the data handle the
  * error state rather than propagating the exception.

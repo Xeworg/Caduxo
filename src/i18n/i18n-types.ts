@@ -3618,6 +3618,60 @@ type RootTranslation = {
 			 * S​t​o​c​k​-​o​u​t
 			 */
 			stockOut: string
+			lotContext: {
+				/**
+				 * L​o​t​ ​c​o​n​t​e​x​t
+				 */
+				label: string
+				/**
+				 * L​o​t​ ​c​o​n​t​e​x​t​ ​m​o​d​e
+				 */
+				ariaLabel: string
+				/**
+				 * S​e​l​e​c​t​ ​o​r​ ​r​e​s​o​l​v​e​ ​a​ ​l​o​t​ ​t​o​ ​v​i​e​w​ ​i​t​s​ ​c​o​n​t​e​x​t​.
+				 */
+				disabledExplanation: string
+			}
+			moveStock: {
+				/**
+				 * M​o​v​e​ ​s​t​o​c​k
+				 */
+				label: string
+				/**
+				 * M​o​v​e​ ​s​t​o​c​k​ ​m​o​d​e
+				 */
+				ariaLabel: string
+				/**
+				 * A​ ​c​o​n​c​r​e​t​e​ ​l​o​t​ ​i​s​ ​r​e​q​u​i​r​e​d​ ​t​o​ ​m​o​v​e​ ​s​t​o​c​k​.
+				 */
+				disabledExplanation: string
+			}
+			adjustCount: {
+				/**
+				 * A​d​j​u​s​t​ ​c​o​u​n​t
+				 */
+				label: string
+				/**
+				 * A​d​j​u​s​t​ ​c​o​u​n​t​ ​m​o​d​e
+				 */
+				ariaLabel: string
+				/**
+				 * A​ ​c​o​n​c​r​e​t​e​ ​l​o​t​ ​i​s​ ​r​e​q​u​i​r​e​d​ ​t​o​ ​a​d​j​u​s​t​ ​t​h​e​ ​p​h​y​s​i​c​a​l​ ​c​o​u​n​t​.
+				 */
+				disabledExplanation: string
+			}
+		}
+		scanBar: {
+			/**
+			 * S​e​l​e​c​t​e​d​ ​l​o​t
+			 */
+			lotChipLabel: string
+			/**
+			 * L​o​t​ ​{​b​a​t​c​h​C​o​d​e​}​,​ ​e​x​p​i​r​e​s​ ​{​e​x​p​i​r​y​D​a​t​e​}
+			 * @param {unknown} batchCode
+			 * @param {unknown} expiryDate
+			 */
+			chipAriaTemplate: RequiredParams<'batchCode' | 'expiryDate'>
 		}
 		noStore: {
 			/**
@@ -3968,32 +4022,6 @@ type RootTranslation = {
 			 * @param {unknown} msg
 			 */
 			loadSettingsFailed: RequiredParams<'msg'>
-		}
-		lotContext: {
-			/**
-			 * L​o​t​ ​c​o​n​t​e​x​t
-			 */
-			title: string
-			/**
-			 * L​o​t​ ​c​o​n​t​e​x​t​ ​p​a​n​e​l
-			 */
-			ariaLabel: string
-			/**
-			 * V​i​e​w​ ​l​o​t​ ​c​o​n​t​e​x​t
-			 */
-			openButton: string
-			/**
-			 * B​a​l​a​n​c​e​s​ ​b​y​ ​l​o​c​a​t​i​o​n
-			 */
-			balancesHeading: string
-			/**
-			 * L​o​t​ ​a​c​t​i​o​n​s
-			 */
-			actionsLabel: string
-			/**
-			 * N​o​ ​l​o​c​a​t​i​o​n​ ​b​a​l​a​n​c​e​s​ ​f​o​u​n​d​.
-			 */
-			noBalances: string
 		}
 	}
 	categoryPicker: {
@@ -7792,6 +7820,58 @@ export type TranslationFunctions = {
 			 * Stock-out
 			 */
 			stockOut: () => LocalizedString
+			lotContext: {
+				/**
+				 * Lot context
+				 */
+				label: () => LocalizedString
+				/**
+				 * Lot context mode
+				 */
+				ariaLabel: () => LocalizedString
+				/**
+				 * Select or resolve a lot to view its context.
+				 */
+				disabledExplanation: () => LocalizedString
+			}
+			moveStock: {
+				/**
+				 * Move stock
+				 */
+				label: () => LocalizedString
+				/**
+				 * Move stock mode
+				 */
+				ariaLabel: () => LocalizedString
+				/**
+				 * A concrete lot is required to move stock.
+				 */
+				disabledExplanation: () => LocalizedString
+			}
+			adjustCount: {
+				/**
+				 * Adjust count
+				 */
+				label: () => LocalizedString
+				/**
+				 * Adjust count mode
+				 */
+				ariaLabel: () => LocalizedString
+				/**
+				 * A concrete lot is required to adjust the physical count.
+				 */
+				disabledExplanation: () => LocalizedString
+			}
+		}
+		scanBar: {
+			/**
+			 * Selected lot
+			 */
+			lotChipLabel: () => LocalizedString
+			/**
+			 * Lot {batchCode}, expires {expiryDate}
+			 */
+			chipAriaTemplate: (arg: { batchCode: unknown, expiryDate: unknown }) => LocalizedString
 		}
 		noStore: {
 			/**
@@ -8124,32 +8204,6 @@ export type TranslationFunctions = {
 			 * Could not load scanner settings: {msg}
 			 */
 			loadSettingsFailed: (arg: { msg: unknown }) => LocalizedString
-		}
-		lotContext: {
-			/**
-			 * Lot context
-			 */
-			title: () => LocalizedString
-			/**
-			 * Lot context panel
-			 */
-			ariaLabel: () => LocalizedString
-			/**
-			 * View lot context
-			 */
-			openButton: () => LocalizedString
-			/**
-			 * Balances by location
-			 */
-			balancesHeading: () => LocalizedString
-			/**
-			 * Lot actions
-			 */
-			actionsLabel: () => LocalizedString
-			/**
-			 * No location balances found.
-			 */
-			noBalances: () => LocalizedString
 		}
 	}
 	categoryPicker: {

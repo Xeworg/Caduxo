@@ -1041,10 +1041,32 @@ const en: BaseTranslation = {
     // carries the explanation.
     noLotsAvailable:
       "No active lots are available for this product in the active store.",
+    // Tab mode labels. The first three are the operational modes; the
+    // last three are lot-operation modes surfaced in task 12.
     modes: {
       sale: "Sale",
       registration: "Registration",
       stockOut: "Stock-out",
+      lotContext: {
+        label: "Lot context",
+        ariaLabel: "Lot context mode",
+        disabledExplanation: "Select or resolve a lot to view its context.",
+      },
+      moveStock: {
+        label: "Move stock",
+        ariaLabel: "Move stock mode",
+        disabledExplanation: "A concrete lot is required to move stock.",
+      },
+      adjustCount: {
+        label: "Adjust count",
+        ariaLabel: "Adjust count mode",
+        disabledExplanation: "A concrete lot is required to adjust the physical count.",
+      },
+    },
+    // Lot-chip badge in the scan bar (task 12).
+    scanBar: {
+      lotChipLabel: "Selected lot",
+      chipAriaTemplate: "Lot {batchCode}, expires {expiryDate}",
     },
     noStore: {
       title: "Create a store first",
@@ -1163,18 +1185,6 @@ const en: BaseTranslation = {
       saveFailed: "Could not save: {msg}",
       loadBalancesFailed: "Could not load lot balances: {msg}",
       loadSettingsFailed: "Could not load scanner settings: {msg}",
-    },
-
-    // Lot-context panel — Scanner-native lot detail view (ODD task 5 of
-    // `feat/scanner-first-inventory`). Mounted inline in ScannerPage from a
-    // resolved lot via the "View lot context" affordance.
-    lotContext: {
-      title: "Lot context",
-      ariaLabel: "Lot context panel",
-      openButton: "View lot context",
-      balancesHeading: "Balances by location",
-      actionsLabel: "Lot actions",
-      noBalances: "No location balances found.",
     },
   },
 

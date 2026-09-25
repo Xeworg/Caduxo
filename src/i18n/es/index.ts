@@ -1043,10 +1043,32 @@ const es: BaseTranslation = {
     // explicación.
     noLotsAvailable:
       "No hay lotes activos disponibles para este producto en la tienda activa.",
+    // Etiquetas de los modos de pestaña. Los tres primeros son modos
+    // operativos; los tres últimos son modos de lote (task 12).
     modes: {
       sale: "Venta",
       registration: "Registro",
       stockOut: "Salida",
+      lotContext: {
+        label: "Contexto de lote",
+        ariaLabel: "Modo contexto de lote",
+        disabledExplanation: "Selecciona o resuelve un lote para ver su contexto.",
+      },
+      moveStock: {
+        label: "Mover stock",
+        ariaLabel: "Modo mover stock",
+        disabledExplanation: "Se requiere un lote concreto para mover stock.",
+      },
+      adjustCount: {
+        label: "Ajustar cantidad",
+        ariaLabel: "Modo ajustar cantidad",
+        disabledExplanation: "Se requiere un lote concreto para ajustar el conteo físico.",
+      },
+    },
+    // Chip de lote en la barra de escaneo (task 12).
+    scanBar: {
+      lotChipLabel: "Lote seleccionado",
+      chipAriaTemplate: "Lote {batchCode}, vence {expiryDate}",
     },
     noStore: {
       title: "Crea primero una tienda",
@@ -1165,18 +1187,6 @@ const es: BaseTranslation = {
       saveFailed: "No se pudo guardar: {msg}",
       loadBalancesFailed: "No se pudieron cargar los saldos del lote: {msg}",
       loadSettingsFailed: "No se pudieron cargar los ajustes del escáner: {msg}",
-    },
-
-    // Panel de contexto de lote — vista nativa del escáner (ODD task 5 de
-    // `feat/scanner-first-inventory`). Se monta en línea en ScannerPage desde
-    // un lote resuelto mediante "Ver contexto de lote".
-    lotContext: {
-      title: "Contexto de lote",
-      ariaLabel: "Panel de contexto de lote",
-      openButton: "Ver contexto de lote",
-      balancesHeading: "Saldos por ubicación",
-      actionsLabel: "Acciones de lote",
-      noBalances: "No se encontraron saldos por ubicación.",
     },
   },
 

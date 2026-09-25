@@ -2,7 +2,7 @@
  * Shared movement-client rules for presentation and validation.
  *
  * Factored out of `MoveStockModal`, `RegisterExitModal`, `AdjustCountModal`,
- * `LotMovementsPanel`, `LotContextPanel`, and `ScannerPage` so that duplicated
+ * `LotMovementsPanel`, and `ScannerPage` so that duplicated
  * movement facts (exit-kind labels, note-required exits, integer/decimal unit
  * validation, quantity-input HTML attributes, and movement-kind labels) stay
  * in one place and never drift apart.

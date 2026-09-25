@@ -31,6 +31,8 @@ Make Scanner the canonical operational surface for lots and stock movements, whi
 - [x] 8. Consolidate shared movement client rules and fix known selector/state drift before using the Scanner lot-context actions broadly.
 - [x] 9. Remove superseded Dashboard mutation UI, duplicate Scanner/Modal movement logic, dead navigation state, and obsolete i18n only after their replacements are integrated and covered.
 - [ ] 10. Run focused backend/frontend verification, accessibility review, manual operational scenarios, including cross-store transfer and receipt, and document evidence.
+- [x] 11. Make Scanner lot context an explicit session-bound selected-lot state: keep it through Scanner use, clear it on leaving Scanner, and enable lot-only actions only for an explicit lot match.
+- [ ] 12. Replace the selected-lot banner/panel with first-class Scanner modes for lot context, moving stock, and adjusting quantity; show the lot number in the scan bar and disable those modes without an explicit lot.
 
 ## Supported operational possibilities
 
@@ -178,3 +180,39 @@ This feature is a replacement, not an additive second workflow. Once the Scanner
 - Delegated writer self-verification passed: `npm run check` (0 errors, 0 warnings), `npm run build` (pass), and `git diff --check` (pass). Native assessment was unavailable, so task received independent delegated verification; the first pass caught Dashboard scan routing, which was corrected and independently reverified PASS with the same commands.
 - No i18n keys were removed: the remaining candidates support the preserved read-only Dashboard product-information modal or Scanner's canonical context. No dead navigation state was found; the navigation channel is live and retained.
 - Work-unit commit: `083ede1 refactor(scanner): remove duplicate movement flows`.
+
+### Task 11 — selected-lot Scanner context (planned)
+
+- User-confirmed contract: a Dashboard/Calendar lot handoff pins that lot in Scanner's input-bar context and Scanner uses it until the user leaves Scanner; exiting Scanner clears the pin.
+- Scanning or resolving an explicit lot enables lot-only actions. Resolving a UPC/SKU leaves lot-only actions disabled; it must not silently redirect a lot operation to an ambiguous product match.
+- The lot-context panel becomes a lot-specific surface with Move stock and Adjust count. Register exit remains in Scanner's Sale and Stock-out workflows to avoid duplicate exit paths.
+- Expected surfaces: `ScannerPage.svelte`, `scanner/LotContextPanel.svelte`, Scanner navigation/input state, English/Spanish i18n, and generated types. Existing Dashboard/Calendar navigation writers should preserve their request shape.
+- Route: delegated writer under the multi-file rule; follow with independent verification because native assessment is unavailable.
+- Implementation introduces a typed Scanner exit signal: App sends it only when switching away from Scanner; Scanner clears the selected lot; App explicitly ignores the signal for tab activation, preventing a navigation loop.
+- Concrete lot navigation from Dashboard, Calendar, and Product Detail, plus direct `lot_match` scans, enables Move stock and Adjust count. `product_match` UPC/SKU resolutions keep those actions disabled with bilingual accessible guidance.
+- Removed Register exit from the lot-context panel. Scanner Sale and Stock-out remain the only exit paths. The input area now shows a labelled selected-lot banner with an explicit clear control.
+- Delegated writer checks passed: `npm run check` (0 errors, 0 warnings), `npm run build` (pass), and `git diff --check` (pass). Native assessment was unavailable, so independent verification ran; it found and the correction fixed the exit-signal navigation loop and two lot-action gating errors. Final independent verification passed with the same commands.
+- Work-unit commit: pending explicit user authorization.
+
+### Task 12 — first-class lot operation modes (complete)
+
+- User corrected task 11's presentation: remove the standalone selected-lot banner and persistent context panel. Scanner must instead offer Contexto de lote, Mover stock, and Ajustar cantidad as mode tabs beside Venta, Registro, and Salida.
+- The selected lot's number/code appears within the scan bar so it is always visible while searching. Dashboard/Calendar/Product Detail handoffs pin a concrete lot; explicit lot-code matches do likewise.
+- The three lot modes remain visible but disabled without a concrete lot, including after UPC/SKU product matches. They require a clear accessible explanation.
+- Contexto de lote becomes read-only identity, balance, and movement-history mode. Mover stock and Ajustar cantidad use the pinned lot. The obsolete banner, old panel, action buttons, and redundant in-flow context buttons must be removed after migration.
+- Route: delegated writer under the multi-file rule with independent verification because native assessment is unavailable.
+- First application: implemented six-mode union and four-state-mode tabs but independent verification failed; the entire diff was stashed (`stash@{0}` on this branch) under explicit user direction. Task 11 pieces (`SCANNER_EXIT_SIGNAL` discrimination in `App.svelte` + `src/lib/navigation.ts`) and the prior DaisyUI listbox popover fix in `src/components/ui/Modal.svelte` were recovered from the stash to keep verified work alive.
+- Redo mapping: delegated `gentle-ai-explore` confirmed pattern requirements (manual ARIA tablist, `pageReady` reactive early-out, sentinel identity check, Svelte 4 modals coexistence) and surfaced two ODD doc gaps that became the redo contract. Closed all four ambiguities against the original task 12 design before delegating.
+- Redo implementation: extended `Mode` union to six values, eliminated `openLotContext()` and the persistent `LotContextPanel` mount, added the three new tabpanels (read-only `Contexto de lote`, modal-wrapper `Mover stock`, modal-wrapper `Ajustar cantidad`), introduced the lot chip in the scan bar with `role="status"` + `aria-live="polite"`, kept tabs visible-but-disabled with `aria-disabled` and bilingual `aria-describedby` explanations, and added a defensive mode reset that falls back to the last non-lot mode if `pinnedContext` becomes null while on a lot mode.
+- Sentinel handling: `ScannerPage`'s navigation effect now rejects `null` and `SCANNER_EXIT_SIGNAL` in that order, reads `pageReady` reactively so the consumer re-enters after settings load, and on the sentinel branch calls both `clearPinnedContext()` and `clearScannerNavigation()`. The `===` identity comparison narrows `ScannerNavigationRequest` correctly because the sentinel is `as const`.
+- Cleanup: `src/components/scanner/LotContextPanel.svelte` deleted after repository-wide reference verification (only `import`, render, function calls, and six i18n keys remained at fix time). Six `scanner.lotContext.*` i18n keys removed in both locales. Two stale JSDoc references to `LotContextPanel` corrected in `ScannerPage.svelte` ("Hydrates the LotContextPanel" → "Hydrates the lot-context tabs") and `DashboardPage.svelte` ("populates the canonical LotContextPanel" → "populates the canonical lot-context mode"); the two remaining `inlined from LotContextPanel` comments annotate heritage of the migrated code, not live references.
+- Independent verification after redo: `npm run check` 0 errors / 0 warnings, `npm run build` ✓, `git diff --check` clean. Spot-checks confirmed `SCANNER_EXIT_SIGNAL` discrimination with `===`, six-value `Mode` union, three lot tabs with `aria-disabled` + `aria-describedby`, lot chip with `role="status"` and templated `aria-label`, and absence of `RegisterExitModal` and `openLotContext` from the new `ScannerPage.svelte`.
+- Pre-existing warning noted: the navigation effect awaits lot resolution inside the subscriber; if the user leaves Scanner while a lot fetch is in flight, the sentinel could arrive after the pin has been re-set. This race predates the redo and is out of scope for task 12.
+- Work-unit commit: pending explicit user authorization (message ready: `feat(scanner): promote lot operations to first-class modes`).
+
+### Task 10 — operational verification (in progress)
+
+- Delegated verification passed: `cargo test --lib` (773 passed), `cargo build`, `npm run check` (0 errors, 0 warnings), `npm run build`, and `git diff --check`.
+- Static accessibility review passed for the distribution editor, Scanner lot-context actions, shared movement modals, `Listbox`, and `Modal`: labels, keyboard behavior, focus restoration, validation feedback, and list semantics are present.
+- Rust tests cover distributed creation, movement invariants, cross-store transfer, receiving-store visibility, and balance reconciliation. Static wiring confirms Dashboard, Calendar, and Product Detail handoffs into Scanner plus Dashboard scan handoffs.
+- Remaining evidence: manual Tauri-desktop scenarios and assistive-technology confirmation for distributed receipt, display sale/replenishment, location adjustment, cross-store receipt, context handoffs, and Dashboard scan handoffs.

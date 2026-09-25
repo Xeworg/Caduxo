@@ -436,7 +436,8 @@
   // Writes an in-memory request to the shared navigation channel.
   // App.svelte reacts by switching the shell to Scanner; ScannerPage
   // consumes the request, resolves the lot and product, populates the
-  // canonical LotContextPanel, then clears the request.
+  // canonical lot-context mode (`Contexto de lote` tab), then clears
+  // the request.
   function openInScanner(lot: DashboardLotRow): void {
     scannerNavigation.set({
       lotId: lot.lot_id,
