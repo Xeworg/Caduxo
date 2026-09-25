@@ -74,6 +74,7 @@ pub fn run() {
             commands::expiry_lots::list_expiry_lots_by_product,
             commands::expiry_lots::get_expiry_lot,
             commands::expiry_lots::create_expiry_lot,
+            commands::expiry_lots::create_expiry_lot_distributed,
             commands::expiry_lots::update_expiry_lot,
             commands::expiry_lots::archive_expiry_lot,
             commands::expiry_lots::resolve_expiry_lot,

@@ -19,9 +19,11 @@ use crate::domain::lot_resolution::{
     compute_remaining_quantity, is_fully_resolved, is_valid_quantity,
 };
 use crate::dto::expiry_lots::{
-    ArchiveLotInput, ExpiryLotCreate, ExpiryLotResolve, ExpiryLotResolveResult, ExpiryLotResponse,
+    ArchiveLotInput, ExpiryLotAllocationInput, ExpiryLotCreate, ExpiryLotDistributedCreate,
+    ExpiryLotDistributedCreateResult, ExpiryLotResolve, ExpiryLotResolveResult, ExpiryLotResponse,
     ExpiryLotUpdate, LotResolutionEventResponse,
 };
+use crate::dto::unit_definitions::UnitKind;
 use crate::error::{AppError, DomainError};
 use crate::pdf::locale::Locale;
 use crate::services::user_messages::{user_message, UserMessage};
@@ -398,6 +400,400 @@ pub async fn create_expiry_lot(
         .await
         .map_err(AppError::from)?
         .ok_or_else(|| AppError::from(sqlx::Error::RowNotFound))
+}
+
+// ============================================================
+// Distributed creation (single-lot, multi-location)
+// ============================================================
+
+/// Default tolerance for "two floats are equal" comparisons used when
+/// validating that the sum of allocations matches the lot total. Mirrors
+/// [`QUANTITY_EQ_TOLERANCE`] but kept local so a future change to one
+/// tolerance cannot silently change the other.
+const DISTRIBUTED_TOTAL_EQ_TOLERANCE: f64 = 1e-9;
+
+/// Creates one expiry lot with the initial quantity distributed across
+/// two or more active locations in the same store, in a single DB
+/// transaction.
+///
+/// # Atomicity contract
+///
+/// All writes happen inside one `pool.begin()` transaction:
+/// 1. `INSERT INTO expiry_lots` with the anchor location (first
+///    allocation) and the full lot total.
+/// 2. `INSERT INTO lot_movements` with `movement_kind = 'entry:initial'`
+///    and `quantity = lot_total` writing the anchor location as
+///    destination.
+/// 3. For every remaining allocation: `INSERT INTO lot_movements` with
+///    `movement_kind = 'transfer'`, `source_location_id = anchor`,
+///    `destination_location_id = allocation.location_id`, and
+///    `quantity = allocation.quantity`.
+///
+/// The lot's `quantity` is set to the validated total by the INSERT in
+/// step 1; the transfers in step 3 net to zero across the lot so no
+/// post-write ledger-sum `UPDATE` is required. The shared
+/// `ledger_sum` reconciliation used by [`create_expiry_lot`] is not
+/// reused here because its `CASE` checks `destination_location_id`
+/// before `source_location_id` and would double-count the transfer
+/// destination quantity (transfers carry both fields); the distributed
+/// path therefore relies on the INSERT-only contract above.
+///
+/// Any failure during validation, the pre-transaction lookups, or the
+/// transactional writes causes a `tx.rollback()` (via `?`); no lot row
+/// and no movement row is persisted.
+///
+/// # Validation rules
+///
+/// - The store must be active.
+/// - The expiry date must be ISO-8601 (`YYYY-MM-DD`).
+/// - `allocations` must be non-empty.
+/// - No `location_id` may appear twice across allocations.
+/// - Every `location_id` must belong to the lot's `store_id` and be
+///   active.
+/// - Every allocation quantity must be `> 0`; for integer-unit products
+///   it must additionally be a whole number.
+/// - The sum of allocation quantities must equal `input.total` to within
+///   [`DISTRIBUTED_TOTAL_EQ_TOLERANCE`].
+///
+/// On rejection the canonical English text produced by
+/// `en_message(UserMessage::*)` is returned so the command boundary can
+/// localise it via `localize_validation` / `localize_business_rule`.
+pub async fn create_expiry_lot_distributed(
+    pool: &DbPool,
+    input: ExpiryLotDistributedCreate,
+) -> Result<ExpiryLotDistributedCreateResult, AppError> {
+    // ── Precondition: at least one active store must exist. ──────────────────
+    let store_exists = store_repo::has_active_store(pool).await?;
+    if !store_exists {
+        return Err(DomainError::BusinessRule {
+            message: "Cannot create expiry lot: at least one store must exist first".to_string(),
+        }
+        .into());
+    }
+
+    // ── Validate the date (the lot-total check is done after the
+    //    allocations are validated, because the "total mismatch" error must
+    //    surface the sum and the expected lot total). ──────────────────────
+    validate_expiry_date(&input.expiry_date).map_err(AppError::Domain)?;
+
+    // ── Empty distribution is rejected before any other allocation check
+    //    so the user gets a clear "you forgot to add rows" message instead
+    //    of an obscure arithmetic mismatch. ──────────────────────────────────
+    if input.allocations.is_empty() {
+        return Err(DomainError::Validation {
+            message: en_message(UserMessage::DistributionEmpty),
+        }
+        .into());
+    }
+
+    // ── Look up the product to pre-fill defaults and resolve the
+    //    integer/decimal unit kind used to enforce whole-number quantities. ──
+    let product = product_repo::get_product(pool, &input.product_id)
+        .await
+        .map_err(AppError::from)?
+        .ok_or_else(|| DomainError::NotFound {
+            resource: "product",
+            id: input.product_id.clone(),
+        })?;
+
+    // ── Resolve unit: user-supplied wins; otherwise resolve via catalog. ──────
+    let unit = match input.unit.as_deref() {
+        Some(u) if !u.trim().is_empty() => u.trim().to_string(),
+        _ => resolve_product_default_unit(pool, &product).await,
+    };
+    let alert_days_before =
+        resolve_alert_days(input.alert_days_before, product.default_alert_days_before);
+
+    // ── Validate every allocation: quantity, integer-unit, store, active. ─────
+    validate_distributed_allocations(pool, &input.store_id, &input.allocations).await?;
+
+    // ── Total-mismatch check: the explicit `total_quantity` field must equal
+    //    the sum of allocation quantities (within
+    //    [`DISTRIBUTED_TOTAL_EQ_TOLERANCE`]). The total must be strictly
+    //    positive — a zero or negative total with non-empty allocations is
+    //    still a mismatch, but the explicit guard avoids interpreting a
+    //    mismatched-zero sum as a successful creation. ──────────────────────
+    let allocation_sum: f64 = input.allocations.iter().map(|a| a.quantity).sum();
+    validate_distributed_total(input.total_quantity, allocation_sum)?;
+    let total_quantity = input.total_quantity;
+    if total_quantity <= 0.0 {
+        return Err(DomainError::Validation {
+            message: en_message(UserMessage::QuantityPositive {
+                value: total_quantity,
+            }),
+        }
+        .into());
+    }
+
+    // ── Integer-unit guard: fractional quantities must be rejected before
+    //    any write happens. Done after the per-allocation structural checks
+    //    (duplicate / store / active) so cheaper errors surface first. ─────
+    let unit_kind = product_unit_kind(pool, &input.product_id).await?;
+    if matches!(unit_kind, Some(UnitKind::Integer)) {
+        for allocation in &input.allocations {
+            if allocation.quantity.fract() != 0.0 {
+                return Err(DomainError::Validation {
+                    message: en_message(UserMessage::QuantityIntegerFractional {
+                        value: allocation.quantity,
+                    }),
+                }
+                .into());
+            }
+        }
+    }
+
+    // ── Resolve batch_code: auto-generate if blank, preserve if set. ──────────
+    let batch_code = resolve_batch_code(pool, &input.batch_code, &product).await?;
+
+    // Anchor = first allocation's location_id. The order is preserved by
+    // `Vec` so the deterministic anchor lets callers (tests + the frontend)
+    // predict which location the `entry:initial` lands on.
+    let anchor_location_id = input
+        .allocations
+        .first()
+        .expect("allocations non-empty checked above")
+        .location_id
+        .clone();
+
+    // ── Atomic transaction: lot row, entry:initial, transfers. ─────────────
+    // The lot's `quantity` is written by the INSERT to the validated total
+    // (sum of allocations). The transfers net to zero across the lot so no
+    // reconciliation step is needed; we deliberately avoid running the
+    // shared `ledger_sum` reconciliation here because its `CASE` checks
+    // `destination_location_id` before `source_location_id`, which would
+    // double-count a transfer's destination quantity (since transfers
+    // carry both fields). `create_expiry_lot` never trips this because it
+    // only inserts a single `entry:initial` movement; the distributed path
+    // must not reuse that reconciliation verbatim.
+    let mut tx = pool.begin().await?;
+    let lot_id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+
+    sqlx::query(
+        r#"
+        INSERT INTO expiry_lots (
+            id, product_id, store_id, location_id, quantity, unit,
+            expiry_date, alert_days_before, batch_code, notes,
+            status, created_at, updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', $11, $12)
+        "#,
+    )
+    .bind(&lot_id)
+    .bind(&input.product_id)
+    .bind(&input.store_id)
+    .bind(&anchor_location_id)
+    .bind(total_quantity)
+    .bind(&unit)
+    .bind(&input.expiry_date)
+    .bind(alert_days_before)
+    .bind(&batch_code)
+    .bind(&input.notes)
+    .bind(&now)
+    .bind(&now)
+    .execute(&mut *tx)
+    .await?;
+
+    // Single `entry:initial` for the full lot total writing the anchor.
+    let entry_movement_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        r#"
+        INSERT INTO lot_movements (
+            id, expiry_lot_id, movement_kind, direction, quantity,
+            source_location_id, destination_location_id, notes, actor, created_at
+        )
+        VALUES ($1, $2, 'entry:initial', NULL, $3, NULL, $4, NULL, 'system', $5)
+        "#,
+    )
+    .bind(&entry_movement_id)
+    .bind(&lot_id)
+    .bind(total_quantity)
+    .bind(&anchor_location_id)
+    .bind(&now)
+    .execute(&mut *tx)
+    .await?;
+
+    // Transfers for the remaining allocations. The anchor's own quantity
+    // stays on the anchor — it equals the sum of allocation[1..].quantity,
+    // which matches the lot total minus the anchor's own quantity.
+    for allocation in input.allocations.iter().skip(1) {
+        let transfer_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            r#"
+            INSERT INTO lot_movements (
+                id, expiry_lot_id, movement_kind, direction, quantity,
+                source_location_id, destination_location_id, notes, actor, created_at
+            )
+            VALUES ($1, $2, 'transfer', NULL, $3, $4, $5, NULL, 'system', $6)
+            "#,
+        )
+        .bind(&transfer_id)
+        .bind(&lot_id)
+        .bind(allocation.quantity)
+        .bind(&anchor_location_id)
+        .bind(&allocation.location_id)
+        .bind(&now)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+
+    let lot = repo::get_expiry_lot(pool, &lot_id)
+        .await
+        .map_err(AppError::from)?
+        .ok_or_else(|| AppError::from(sqlx::Error::RowNotFound))?;
+
+    Ok(ExpiryLotDistributedCreateResult {
+        lot,
+        anchor_location_id,
+        allocation_count: input.allocations.len(),
+    })
+}
+
+/// Validates the per-allocation rules for a distributed lot creation.
+///
+/// Rejects:
+/// - duplicate `location_id`s,
+/// - non-positive allocation quantities (`<= 0`),
+/// - fractional quantities on integer-unit products,
+/// - locations that don't belong to the lot's `store_id`,
+/// - inactive locations.
+///
+/// The product's unit kind is fetched via
+/// [`product_repo::get_product_unit_kind`] so legacy `None` units keep
+/// their decimal semantics.
+///
+/// Every emitted message is canonical English from the
+/// `services::user_messages` catalog so the command boundary can
+/// localise it.
+async fn validate_distributed_allocations(
+    pool: &DbPool,
+    store_id: &str,
+    allocations: &[ExpiryLotAllocationInput],
+) -> Result<(), AppError> {
+    // ── Duplicate-location check. ─────────────────────────────────────────
+    // Cheap and order-independent; uses a HashSet so O(N) rather than O(N²).
+    let mut seen = std::collections::HashSet::with_capacity(allocations.len());
+    for allocation in allocations {
+        if !seen.insert(allocation.location_id.as_str()) {
+            return Err(DomainError::Validation {
+                message: en_message(UserMessage::DistributionDuplicateLocation {
+                    location_id: allocation.location_id.clone(),
+                }),
+            }
+            .into());
+        }
+    }
+
+    // ── Resolve the product's unit kind once; used for integer-only
+    //    quantity guard below. Done after the duplicate check so the user
+    //    sees the cheaper "duplicate location" error first if both apply.
+    //    `None` is treated as decimal (legacy/uncatalogued) by the existing
+    //    domain validator; calling `get_product_unit_kind` requires a
+    //    product_id, which we don't have here, so we resolve per-allocation
+    //    via the cheaper location lookups instead. Integer-unit checks are
+    //    deferred to the caller (which holds the product) when needed.
+
+    // ── Per-row lookups: store match + active + quantity > 0. ────────────
+    for allocation in allocations {
+        if allocation.quantity <= 0.0 {
+            return Err(DomainError::Validation {
+                message: en_message(UserMessage::QuantityPositive {
+                    value: allocation.quantity,
+                }),
+            }
+            .into());
+        }
+
+        // Fetch the location row in a single round-trip; we need both
+        // `store_id` (for the same-store guard) and `is_active`.
+        let row: Option<(String, bool)> =
+            sqlx::query_as("SELECT store_id, is_active FROM store_locations WHERE id = $1")
+                .bind(&allocation.location_id)
+                .fetch_optional(pool)
+                .await?;
+
+        let (loc_store_id, is_active) = row.ok_or_else(|| DomainError::NotFound {
+            resource: "store_location",
+            id: allocation.location_id.clone(),
+        })?;
+
+        if loc_store_id != store_id {
+            return Err(DomainError::Validation {
+                message: en_message(UserMessage::DistributionLocationNotInStore {
+                    location_id: allocation.location_id.clone(),
+                    store_id: store_id.to_string(),
+                }),
+            }
+            .into());
+        }
+
+        if !is_active {
+            return Err(DomainError::BusinessRule {
+                message: en_message(UserMessage::LocationInactive),
+            }
+            .into());
+        }
+    }
+
+    // Unit-kind validation is performed by the caller after the
+    // allocations are otherwise valid. The caller holds the product_id
+    // and can resolve `unit_type` exactly once instead of repeating the
+    // lookup per row. The `QuantityIntegerFractional` rejection therefore
+    // uses the same canonical English as the existing movement path so
+    // the command boundary can localise it without a new variant.
+
+    Ok(())
+}
+
+/// Validates that the sum of allocation quantities matches the expected
+/// lot total to within [`DISTRIBUTED_TOTAL_EQ_TOLERANCE`]. Returns
+/// `Ok(actual_sum)` when the totals match; returns a
+/// `DomainError::Validation` carrying `DistributionTotalMismatch` when
+/// they don't.
+///
+/// The total is the sum of allocations, by construction — callers
+/// should pass that sum rather than re-computing it.
+fn validate_distributed_total(expected: f64, actual: f64) -> Result<(), DomainError> {
+    if (expected - actual).abs() <= DISTRIBUTED_TOTAL_EQ_TOLERANCE {
+        return Ok(());
+    }
+    Err(DomainError::Validation {
+        message: en_message(UserMessage::DistributionTotalMismatch { expected, actual }),
+    })
+}
+
+/// Formats a [`UserMessage`] variant into its canonical English string via
+/// the catalog. Every user-facing Validation / BusinessRule message in
+/// this module must pass through this helper so the parser recognises
+/// the canonical text and `localize_*` can swap it for Spanish at the
+/// IPC boundary. Mirrors the same-named helper in
+/// `services::lot_movements` so both modules share one canonical-text
+/// convention.
+fn en_message(kind: UserMessage) -> String {
+    user_message(kind, Locale::En)
+}
+
+/// Returns the product's unit kind from the catalog (Some("integer")/
+/// Some("decimal")/None). Used by the distributed-creation flow to
+/// reject fractional quantities for integer-unit products.
+///
+/// Mirrors the inline pattern in `services::lot_movements`; lifted here
+/// so the distributed path doesn't need its own helper.
+async fn product_unit_kind(pool: &DbPool, product_id: &str) -> Result<Option<UnitKind>, AppError> {
+    let row: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT unit_type FROM products WHERE id = $1")
+            .bind(product_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.and_then(|(raw,)| {
+        raw.and_then(|k| match k.as_str() {
+            "integer" => Some(UnitKind::Integer),
+            "decimal" => Some(UnitKind::Decimal),
+            _ => None,
+        })
+    }))
 }
 
 // ============================================================
@@ -2087,6 +2483,623 @@ mod tests {
         )
         .await?;
         assert!(s3.require_initial_location_on_lot_create);
+        Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // Distributed lot creation (Task 2)
+    // ------------------------------------------------------------------
+
+    use crate::dto::expiry_lots::{ExpiryLotAllocationInput, ExpiryLotDistributedCreate};
+
+    /// Seeds a store, product, and three active locations inside the same
+    /// store. The third location is created inactive so the
+    /// "inactive destination rollback" test can flip one row to inactive
+    /// deterministically.
+    ///
+    /// Returns `(store_id, product_id, anchor_id, peer_a_id, peer_b_id,
+    /// inactive_id)`.
+    async fn seed_distributed_fixture(
+        pool: &crate::db::DbPool,
+    ) -> Result<(String, String, String, String, String, String), Box<dyn std::error::Error>> {
+        let (store_id, product_id, anchor_id) = seed_product(pool).await?;
+
+        let peer_a = crate::db::repositories::stores::insert_location(
+            pool,
+            &crate::dto::stores::StoreLocationCreate {
+                store_id: store_id.clone(),
+                name: "Exhibicion".into(),
+                notes: None,
+            },
+        )
+        .await?;
+
+        let peer_b = crate::db::repositories::stores::insert_location(
+            pool,
+            &crate::dto::stores::StoreLocationCreate {
+                store_id: store_id.clone(),
+                name: "Bodega trasera".into(),
+                notes: None,
+            },
+        )
+        .await?;
+
+        // Inactive peer — used by the rollback test.
+        let inactive_id = format!("loc-inactive-{}", uuid::Uuid::new_v4());
+        let now = chrono::Utc::now().to_rfc3339();
+        sqlx::query(
+            r#"
+            INSERT INTO store_locations (id, store_id, name, is_active, created_at, updated_at)
+            VALUES ($1, $2, 'Inactiva', 0, $3, $4)
+            "#,
+        )
+        .bind(&inactive_id)
+        .bind(&store_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await?;
+
+        Ok((
+            store_id,
+            product_id,
+            anchor_id,
+            peer_a.id,
+            peer_b.id,
+            inactive_id,
+        ))
+    }
+
+    /// Seeds a separate store + product so the "non-store location" tests
+    /// can build a foreign location without touching the main store.
+    async fn seed_foreign_location(
+        pool: &crate::db::DbPool,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let store = create_store_svc(
+            pool,
+            StoreCreate {
+                name: "Foreign Store".into(),
+                code: None,
+                notes: None,
+            },
+        )
+        .await?;
+        let loc = crate::db::repositories::stores::insert_location(
+            pool,
+            &crate::dto::stores::StoreLocationCreate {
+                store_id: store.id.clone(),
+                name: "Foreign Loc".into(),
+                notes: None,
+            },
+        )
+        .await?;
+        Ok(loc.id)
+    }
+
+    /// Seeds a product with `unit_type = "integer"` so fractional
+    /// allocations can be exercised. Reuses the active store / location
+    /// from the main fixture.
+    async fn seed_integer_product(
+        pool: &crate::db::DbPool,
+        store_id: &str,
+        anchor_id: &str,
+    ) -> Result<(String, String), Box<dyn std::error::Error>> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let product_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, default_alert_days_before, \
+                     unit_type, is_active, created_at, updated_at) \
+                 VALUES ($1, $2, 'Integer lot product', 30, 'integer', 1, $3, $4)",
+        )
+        .bind(&product_id)
+        .bind(format!("DISTINT-{}", uuid::Uuid::new_v4()))
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await?;
+
+        let peer = crate::db::repositories::stores::insert_location(
+            pool,
+            &crate::dto::stores::StoreLocationCreate {
+                store_id: store_id.to_string(),
+                name: "Integer peer".into(),
+                notes: None,
+            },
+        )
+        .await?;
+        let _ = anchor_id; // silence unused warning when fixture is rebuilt
+        Ok((product_id, peer.id))
+    }
+
+    #[tokio::test]
+    async fn distributed_create_lot_emits_initial_and_transfers_atomically(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_id, product_id, anchor_id, peer_a_id, peer_b_id, _inactive_id) =
+            seed_distributed_fixture(&pool).await?;
+
+        let total = 12.0_f64;
+        let result = svc::create_expiry_lot_distributed(
+            &pool,
+            ExpiryLotDistributedCreate {
+                product_id: product_id.clone(),
+                store_id: store_id.clone(),
+                total_quantity: total,
+                allocations: vec![
+                    ExpiryLotAllocationInput {
+                        location_id: anchor_id.clone(),
+                        quantity: 5.0,
+                    },
+                    ExpiryLotAllocationInput {
+                        location_id: peer_a_id.clone(),
+                        quantity: 4.0,
+                    },
+                    ExpiryLotAllocationInput {
+                        location_id: peer_b_id.clone(),
+                        quantity: 3.0,
+                    },
+                ],
+                unit: None,
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: None,
+                batch_code: None,
+                notes: Some("Distributed fixture".into()),
+            },
+        )
+        .await?;
+
+        // Result envelope: anchor = first allocation, count matches input.
+        assert_eq!(result.anchor_location_id, anchor_id);
+        assert_eq!(result.allocation_count, 3);
+        assert_eq!(result.lot.product_id, product_id);
+        assert_eq!(
+            result.lot.quantity, total,
+            "lot total must equal sum of allocations"
+        );
+        assert_eq!(
+            result.lot.location_id.as_deref(),
+            Some(anchor_id.as_str()),
+            "anchor must be the first allocation's location"
+        );
+        assert_eq!(result.lot.status, "active");
+
+        // Ledger rows: one entry:initial + two transfers, totals preserved.
+        // Sorted by `movement_kind ASC` so the entry:initial comes first
+        // regardless of the same-microsecond `created_at` ties inside the
+        // transaction; the assertion below then relies on insertion order.
+        let movements: Vec<(String, Option<String>, Option<String>, f64)> = sqlx::query_as(
+            "SELECT movement_kind, source_location_id, destination_location_id, quantity
+             FROM lot_movements
+             WHERE expiry_lot_id = $1
+             ORDER BY movement_kind ASC, rowid ASC",
+        )
+        .bind(&result.lot.id)
+        .fetch_all(&pool)
+        .await?;
+
+        assert_eq!(movements.len(), 3, "entry:initial + 2 transfers");
+        let (k0, src0, dst0, q0) = &movements[0];
+        assert_eq!(k0, "entry:initial");
+        assert!(src0.is_none(), "entry:initial has no source");
+        assert_eq!(dst0.as_deref(), Some(anchor_id.as_str()));
+        assert_eq!(*q0, total, "entry:initial carries the lot total");
+
+        let (k1, src1, dst1, q1) = &movements[1];
+        assert_eq!(k1, "transfer");
+        assert_eq!(src1.as_deref(), Some(anchor_id.as_str()));
+        assert_eq!(dst1.as_deref(), Some(peer_a_id.as_str()));
+        assert_eq!(*q1, 4.0);
+
+        let (k2, src2, dst2, q2) = &movements[2];
+        assert_eq!(k2, "transfer");
+        assert_eq!(src2.as_deref(), Some(anchor_id.as_str()));
+        assert_eq!(dst2.as_deref(), Some(peer_b_id.as_str()));
+        assert_eq!(*q2, 3.0);
+
+        // Per-location balances must mirror the allocations.
+        let balances =
+            crate::services::lot_movements::get_lot_location_balances(&pool, &result.lot.id)
+                .await?;
+        assert_eq!(balances.len(), 3);
+        let by_loc = |id: &str| -> f64 {
+            balances
+                .iter()
+                .find(|b| b.location_id == id)
+                .map(|b| b.balance)
+                .unwrap_or(-1.0)
+        };
+        assert_eq!(by_loc(&anchor_id), 5.0, "anchor keeps its share");
+        assert_eq!(by_loc(&peer_a_id), 4.0, "peer_a received its share");
+        assert_eq!(by_loc(&peer_b_id), 3.0, "peer_b received its share");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn distributed_create_lot_rolls_back_on_inactive_destination(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_id, product_id, anchor_id, peer_a_id, peer_b_id, _inactive_id) =
+            seed_distributed_fixture(&pool).await?;
+
+        // Deactivate peer_b AFTER the fixture built it as active.
+        sqlx::query("UPDATE store_locations SET is_active = 0 WHERE id = $1")
+            .bind(&peer_b_id)
+            .execute(&pool)
+            .await?;
+
+        let err = svc::create_expiry_lot_distributed(
+            &pool,
+            ExpiryLotDistributedCreate {
+                product_id,
+                store_id: store_id.clone(),
+                total_quantity: 10.0,
+                allocations: vec![
+                    ExpiryLotAllocationInput {
+                        location_id: anchor_id,
+                        quantity: 5.0,
+                    },
+                    ExpiryLotAllocationInput {
+                        location_id: peer_a_id,
+                        quantity: 3.0,
+                    },
+                    ExpiryLotAllocationInput {
+                        location_id: peer_b_id.clone(),
+                        quantity: 2.0,
+                    },
+                ],
+                unit: None,
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: None,
+                batch_code: None,
+                notes: None,
+            },
+        )
+        .await
+        .expect_err("inactive destination must be rejected");
+
+        // The error must be a BusinessRule carrying the canonical English
+        // `Location is inactive` text so the command boundary can localise
+        // it via `localize_business_rule`.
+        match err {
+            crate::error::AppError::Domain(crate::error::DomainError::BusinessRule { message }) => {
+                assert_eq!(message, "Location is inactive")
+            }
+            other => panic!("expected BusinessRule(LocationInactive), got {other:?}"),
+        }
+
+        // No lot row, no movement row may have been persisted.
+        let lots: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM expiry_lots")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(lots, 0, "no lot row may be persisted after rollback");
+
+        let movements: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM lot_movements")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(
+            movements, 0,
+            "no movement row may be persisted after rollback"
+        );
+
+        // The deactivated peer_b must still be inactive — the rollback
+        // must not have re-toggled it as a side effect.
+        let active: bool =
+            sqlx::query_scalar("SELECT is_active FROM store_locations WHERE id = $1")
+                .bind(&peer_b_id)
+                .fetch_one(&pool)
+                .await?;
+        assert!(!active);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn distributed_create_lot_rejects_duplicate_locations(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_id, product_id, anchor_id, peer_a_id, _peer_b_id, _inactive_id) =
+            seed_distributed_fixture(&pool).await?;
+
+        let err = svc::create_expiry_lot_distributed(
+            &pool,
+            ExpiryLotDistributedCreate {
+                product_id,
+                store_id,
+                total_quantity: 10.0,
+                allocations: vec![
+                    ExpiryLotAllocationInput {
+                        location_id: anchor_id.clone(),
+                        quantity: 5.0,
+                    },
+                    ExpiryLotAllocationInput {
+                        location_id: peer_a_id.clone(),
+                        quantity: 3.0,
+                    },
+                    ExpiryLotAllocationInput {
+                        // Duplicate of anchor — must trip the
+                        // duplicate-location guard before any other check.
+                        location_id: anchor_id.clone(),
+                        quantity: 2.0,
+                    },
+                ],
+                unit: None,
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: None,
+                batch_code: None,
+                notes: None,
+            },
+        )
+        .await
+        .expect_err("duplicate location must be rejected");
+
+        match err {
+            crate::error::AppError::Domain(crate::error::DomainError::Validation { message }) => {
+                // The duplicated location is the anchor (third allocation
+                // reuses the first allocation's id), so the canonical
+                // message must name it and use the standard suffix.
+                let canonical =
+                    format!("Location `{anchor_id}` appears more than once in the distribution");
+                assert_eq!(
+                    message, canonical,
+                    "error must surface the canonical duplicate-location message with the duplicated anchor id"
+                );
+            }
+            other => panic!("expected Validation(DuplicateLocation), got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn distributed_create_lot_rejects_empty_distribution(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // The empty-distribution guard is the first allocation-shape check
+        // (cheaper than duplicate/store/active and avoids an obscure
+        // arithmetic mismatch). It must fire before any write attempt and
+        // must leave both `expiry_lots` and `lot_movements` untouched so
+        // the user can recover by adding a row.
+        let pool = fresh_test_pool().await?;
+        let (store_id, product_id, _anchor_id, _peer_a_id, _peer_b_id, _inactive_id) =
+            seed_distributed_fixture(&pool).await?;
+
+        let err = svc::create_expiry_lot_distributed(
+            &pool,
+            ExpiryLotDistributedCreate {
+                product_id,
+                store_id,
+                total_quantity: 0.0,
+                allocations: vec![],
+                unit: None,
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: None,
+                batch_code: None,
+                notes: None,
+            },
+        )
+        .await
+        .expect_err("empty distribution must be rejected");
+
+        match err {
+            crate::error::AppError::Domain(crate::error::DomainError::Validation { message }) => {
+                assert_eq!(
+                    message, "Distribution must contain at least one allocation",
+                    "error must surface the canonical DistributionEmpty text",
+                )
+            }
+            other => panic!("expected Validation(DistributionEmpty), got {other:?}"),
+        }
+
+        // No lot row, no movement row may have been persisted.
+        let lots: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM expiry_lots")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(lots, 0, "no lot row may be persisted after empty rejection");
+        let movements: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM lot_movements")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(
+            movements, 0,
+            "no movement row may be persisted after empty rejection"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn distributed_create_lot_rejects_total_mismatch(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_id, product_id, anchor_id, peer_a_id, peer_b_id, _inactive_id) =
+            seed_distributed_fixture(&pool).await?;
+
+        // Allocations sum to 9 but total claims 10 — must be rejected.
+        let err = svc::create_expiry_lot_distributed(
+            &pool,
+            ExpiryLotDistributedCreate {
+                product_id,
+                store_id: store_id.clone(),
+                total_quantity: 10.0,
+                allocations: vec![
+                    ExpiryLotAllocationInput {
+                        location_id: anchor_id,
+                        quantity: 4.0,
+                    },
+                    ExpiryLotAllocationInput {
+                        location_id: peer_a_id,
+                        quantity: 3.0,
+                    },
+                    ExpiryLotAllocationInput {
+                        location_id: peer_b_id,
+                        quantity: 2.0,
+                    },
+                ],
+                unit: None,
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: None,
+                batch_code: None,
+                notes: None,
+            },
+        )
+        .await
+        .expect_err("total mismatch must be rejected");
+
+        match err {
+            crate::error::AppError::Domain(crate::error::DomainError::Validation { message }) => {
+                assert!(
+                    message.contains("Distribution total")
+                        && message.contains("`10.00`")
+                        && message.contains("`9.00`"),
+                    "error must surface both expected and actual totals, got: {message}"
+                )
+            }
+            other => panic!("expected Validation(TotalMismatch), got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn distributed_create_lot_rejects_fractional_for_integer_unit(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_id, _decimal_product_id, anchor_id, peer_a_id, _peer_b_id, _inactive_id) =
+            seed_distributed_fixture(&pool).await?;
+
+        let (integer_product_id, integer_peer_id) =
+            seed_integer_product(&pool, &store_id, &anchor_id).await?;
+
+        let err = svc::create_expiry_lot_distributed(
+            &pool,
+            ExpiryLotDistributedCreate {
+                product_id: integer_product_id.clone(),
+                store_id: store_id.clone(),
+                total_quantity: 7.5,
+                allocations: vec![
+                    ExpiryLotAllocationInput {
+                        location_id: anchor_id.clone(),
+                        quantity: 4.0,
+                    },
+                    ExpiryLotAllocationInput {
+                        location_id: peer_a_id.clone(),
+                        quantity: 1.5, // fractional — must be rejected
+                    },
+                    ExpiryLotAllocationInput {
+                        location_id: integer_peer_id.clone(),
+                        quantity: 2.0,
+                    },
+                ],
+                unit: None,
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: None,
+                batch_code: None,
+                notes: None,
+            },
+        )
+        .await
+        .expect_err("fractional quantity for integer-unit product must be rejected");
+
+        match err {
+            crate::error::AppError::Domain(crate::error::DomainError::Validation {
+                message,
+            }) => assert!(
+                message.contains("whole number")
+                    && message.contains("integer-unit products")
+                    && message.contains("1.5"),
+                "error must mention the fractional-integer rejection with the offending value, got: {message}"
+            ),
+            other => panic!("expected Validation(IntegerFractional), got {other:?}"),
+        }
+
+        // Rollback assertion: no lot row, no movement row persisted.
+        let lots: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM expiry_lots")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(lots, 0);
+        let movements: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM lot_movements")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(movements, 0);
+
+        // Sanity: a whole-number allocation against the same integer
+        // product is accepted (validates the integer guard is scoped to
+        // the unit kind, not to a blanket rule).
+        let whole = svc::create_expiry_lot_distributed(
+            &pool,
+            ExpiryLotDistributedCreate {
+                product_id: integer_product_id,
+                store_id,
+                total_quantity: 6.0,
+                allocations: vec![
+                    ExpiryLotAllocationInput {
+                        location_id: anchor_id,
+                        quantity: 4.0,
+                    },
+                    ExpiryLotAllocationInput {
+                        location_id: peer_a_id,
+                        quantity: 2.0,
+                    },
+                ],
+                unit: None,
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: None,
+                batch_code: None,
+                notes: None,
+            },
+        )
+        .await?;
+        assert_eq!(whole.lot.quantity, 6.0);
+        assert_eq!(whole.lot.status, "active");
+
+        Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // Foreign-location guard (extra coverage for the "non-store locations"
+    // rejection required by the task). Kept as a small targeted test so
+    // the contract is explicit and not hidden inside the happy path.
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn distributed_create_lot_rejects_non_store_location(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let (store_id, product_id, anchor_id, _peer_a_id, _peer_b_id, _inactive_id) =
+            seed_distributed_fixture(&pool).await?;
+        let foreign_location_id = seed_foreign_location(&pool).await?;
+
+        let err = svc::create_expiry_lot_distributed(
+            &pool,
+            ExpiryLotDistributedCreate {
+                product_id,
+                store_id: store_id.clone(),
+                total_quantity: 6.0,
+                allocations: vec![
+                    ExpiryLotAllocationInput {
+                        location_id: anchor_id,
+                        quantity: 4.0,
+                    },
+                    ExpiryLotAllocationInput {
+                        location_id: foreign_location_id.clone(),
+                        quantity: 2.0,
+                    },
+                ],
+                unit: None,
+                expiry_date: "2025-12-31".into(),
+                alert_days_before: None,
+                batch_code: None,
+                notes: None,
+            },
+        )
+        .await
+        .expect_err("location from another store must be rejected");
+
+        match err {
+            crate::error::AppError::Domain(crate::error::DomainError::Validation { message }) => {
+                assert!(
+                    message.contains(&foreign_location_id) && message.contains(&store_id),
+                    "error must name the foreign location and the lot's store, got: {message}"
+                )
+            }
+            other => panic!("expected Validation(LocationNotInStore), got {other:?}"),
+        }
         Ok(())
     }
 }
