@@ -29,16 +29,36 @@ export type ScannerNavigationRequest = {
   scannedValue?: string;
 };
 
+/**
+ * Sentinel value that signals ScannerPage to clear its pinned lot context
+ * when the user leaves the Scanner tab (ODD task 11).
+ * App.svelte sets this when `previousTab === "scanner" && currentTab !== "scanner"`;
+ * ScannerPage.svelte watches for it and clears `pinnedContext`.
+ */
+export const SCANNER_EXIT_SIGNAL = "__scanner_exit__" as const;
+export type ScannerExitSignal = typeof SCANNER_EXIT_SIGNAL;
+export type ScannerNavigationValue =
+  | ScannerNavigationRequest
+  | ScannerExitSignal
+  | null;
+
 export type ScannerNavigationStore = {
-  request: ScannerNavigationRequest | null;
+  request: ScannerNavigationValue;
 };
 
-/** Shared writable store — written by Dashboard, consumed by App + Scanner. */
-export const scannerNavigation = writable<ScannerNavigationRequest | null>(null);
+/**
+ * Shared writable store.
+ * - Written by Dashboard with a `ScannerNavigationRequest` to open Scanner.
+ * - Written by App.svelte with `SCANNER_EXIT_SIGNAL` when the user leaves Scanner.
+ * - Consumed by App.svelte (triggers tab switch) and ScannerPage.svelte
+ *   (resolves lot context or clears pinned state).
+ */
+export const scannerNavigation =
+  writable<ScannerNavigationValue>(null);
 
 /**
  * Clears the pending navigation request after Scanner has consumed it.
- * Called from ScannerPage.svelte.
+ * Called from ScannerPage.svelte after resolving a Dashboard-initiated request.
  */
 export function clearScannerNavigation(): void {
   scannerNavigation.set(null);
