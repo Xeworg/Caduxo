@@ -29,7 +29,7 @@ Make Scanner the canonical operational surface for lots and stock movements, whi
 - [x] 6. Make Scanner resolution and Dashboard lot views location-balance aware so a receiving store can find and operate a transferred lot without duplicating the lot identity.
 - [x] 7. Add in-memory Dashboard-to-Scanner navigation that opens the selected lot in Scanner context without duplicating lot mutation UI.
 - [x] 8. Consolidate shared movement client rules and fix known selector/state drift before using the Scanner lot-context actions broadly.
-- [ ] 9. Remove superseded Dashboard mutation UI, duplicate Scanner/Modal movement logic, dead navigation state, and obsolete i18n only after their replacements are integrated and covered.
+- [x] 9. Remove superseded Dashboard mutation UI, duplicate Scanner/Modal movement logic, dead navigation state, and obsolete i18n only after their replacements are integrated and covered.
 - [ ] 10. Run focused backend/frontend verification, accessibility review, manual operational scenarios, including cross-store transfer and receipt, and document evidence.
 
 ## Supported operational possibilities
@@ -163,3 +163,18 @@ This feature is a replacement, not an additive second workflow. Once the Scanner
 - Independent verification caught a runtime-only label regression for `exit:inventory_adjustment`; the correction replaced computed i18n-key lookup with an exhaustive typed mapping to `inventoryAdjustmentExit`.
 - Final independent verification passed: all eight exit kinds map to valid EN/ES labels; `npm run check` (0 errors, 0 warnings), `npm run build`, and `git diff --check` passed.
 - Work-unit commit: `222d727 refactor(movements): share client movement rules`.
+
+### Task 9 — cleanup mapping (complete; implementation decisions pending)
+
+- Read-only mapping confirmed that Dashboard's lot-detail and product-detail overlays duplicate the canonical Scanner lot-context mutation workflow. The Dashboard-to-Scanner navigation channel is live and must remain.
+- An unblocked first slice can remove Dashboard's lot-detail overlay and its mutation entry point. The remaining Dashboard scan/quick-create routing and whether Calendar/Product Detail also move their movement overlays into Scanner require explicit product decisions before implementation.
+- Shared `movementRules.ts`, `locations.ts`, and the three movement modals remain live dependencies. `LotMovementsPanel` can be deleted only if all non-Scanner consumers migrate.
+- Proposed review slices: 9a Dashboard lot-detail removal; 9b Dashboard product-detail/scan routing; 9c Calendar and Product Detail migration; 9d obsolete i18n cleanup; 9e optional `LotMovementsPanel` deletion and exit-reason-label consolidation.
+- Mapping route: delegated `gentle-ai-explore` under the 4-file rule. No source changes or checks were run.
+- User-approved cleanup decisions: Dashboard routes unknown scans to Scanner product creation and known scans with lots to Scanner lot context; Calendar and Product Detail also route lot movement access to Scanner; delete `LotMovementsPanel` once unused; consolidate the duplicated exit-reason label mapping.
+- Implementation removed the Dashboard, Calendar, and Product Detail movement overlays and their state/helpers, then deleted `LotMovementsPanel` after repository-wide reference verification. Calendar and Product Detail now request Scanner lot context; Product Detail archive/resolve lifecycle dialogs remain.
+- Dashboard known scans with lots open Scanner lot context. Known scans without lots and unknown scans open Scanner's existing product-creation dialog using a typed optional `scannedValue` navigation field. The remaining Dashboard product-information modal is read-only with a Scanner handoff; filters, cards, table, export, and other read-only behavior remain.
+- Replaced duplicated eight-case exit-label switches with shared `getExitKindLabel`; `EXIT_KINDS` remains the canonical union and Scanner derives stock-out kinds from it.
+- Delegated writer self-verification passed: `npm run check` (0 errors, 0 warnings), `npm run build` (pass), and `git diff --check` (pass). Native assessment was unavailable, so task received independent delegated verification; the first pass caught Dashboard scan routing, which was corrected and independently reverified PASS with the same commands.
+- No i18n keys were removed: the remaining candidates support the preserved read-only Dashboard product-information modal or Scanner's canonical context. No dead navigation state was found; the navigation channel is live and retained.
+- Work-unit commit: pending explicit user authorization.

@@ -14,6 +14,7 @@
 import {
   EXIT_KINDS,
   exitRequiresNotes,
+  getExitKindLabel,
   isFractionalForIntegerUnit,
   qtyAttrs,
   type ExitKind,
@@ -65,38 +66,9 @@ import {
   $: isIntegerUnit = unitType === "integer";
   $: _qtyAttrs = qtyAttrs(isIntegerUnit);
 
-  /**
-   * Motivo options for the themed `<Listbox>` primitive. The value
-   * is the exit-reason code; the label is the i18n string for that
-   * reason (verbatim from the original shell). The empty
-   * placeholder is folded in as a disabled `value: ""` row — the
-   * themed Listbox has no `<option>` slot for an external
-   * placeholder row, so the previous `<Select>` `leading` snippet
-   * moved into the options array.
-   */
-  /**
-   * Resolves an exit-kind to its i18n display label.
-   * Exhaustive switch — mirrors `ScannerPage.svelte` and avoids the
-   * runtime key-computation bug where
-   * `"exit:inventory_adjustment"` would resolve to the nonexistent
-   * `inventoryAdjustment` instead of `inventoryAdjustmentExit`.
-   */
-  function exitReasonLabel(kind: ExitKind): string {
-    switch (kind) {
-      case "exit:sale":                return $LL.lotMovements.exitReasons.sale();
-      case "exit:waste":               return $LL.lotMovements.exitReasons.waste();
-      case "exit:expired":             return $LL.lotMovements.exitReasons.expired();
-      case "exit:damaged":             return $LL.lotMovements.exitReasons.damaged();
-      case "exit:internal_consumption": return $LL.lotMovements.exitReasons.internalConsumption();
-      case "exit:return_to_supplier":  return $LL.lotMovements.exitReasons.returnToSupplier();
-      case "exit:inventory_adjustment": return $LL.lotMovements.exitReasons.inventoryAdjustmentExit();
-      case "exit:other":              return $LL.lotMovements.exitReasons.other();
-    }
-  }
-
   $: exitReasonOptions = [
     { value: "", label: $LL.lotMovements.modal.selectExitReason(), disabled: true },
-    ...EXIT_KINDS.map((kind) => ({ value: kind, label: exitReasonLabel(kind) })),
+    ...EXIT_KINDS.map((kind) => ({ value: kind, label: getExitKindLabel(kind, $LL) })),
   ];
 
   /**

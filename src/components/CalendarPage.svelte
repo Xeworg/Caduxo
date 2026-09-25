@@ -1,27 +1,24 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { LL } from "../i18n/i18n-svelte.js";
-  import CalendarMonth from "./CalendarMonth.svelte";
   import CalendarYearGrid from "./CalendarYearGrid.svelte";
   import {
     listDashboardLots,
     type DashboardFilters,
     type DashboardLotRow,
   } from "../lib/dashboard.js";
-  import {
-    getExpiryLot,
-    type ExpiryLotResponse,
-  } from "../lib/expiry_lots.js";
-  import { listStores, listStoreLocations, type StoreLocationResponse } from "../lib/stores.js";
-  import { loadAllActiveStoreLocations, type EnrichedLocation } from "../lib/locations.js";
-  import { resolveLocationDisplay } from "../lib/lotDisplay.js";
-  import LotMovementsPanel from "./LotMovementsPanel.svelte";
+  import { scannerNavigation } from "../lib/navigation.js";
+  import type { UnitKind } from "../lib/products.js";
+
+
+
+
   import { humanizeError } from "../lib/errors.js";
   import Table from "./ui/Table.svelte";
   import Badge from "./ui/Badge.svelte";
   import Button from "./ui/Button.svelte";
-  import Modal from "./ui/Modal.svelte";
-  import Tabs from "./ui/Tabs.svelte";
+
+
   import Tooltip from "./ui/Tooltip.svelte";
   import Icon from "./ui/Icon.svelte";
 
@@ -44,13 +41,6 @@
   }
 
   /** Days remaining until expiry_date (negative = expired). */
-  function daysRemaining(expiryDate: string): number {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const exp = new Date(expiryDate + "T00:00:00");
-    return Math.round((exp.getTime() - today.getTime()) / 86_400_000);
-  }
-
   /** Status label for a lot row. */
   function urgencyLabel(row: DashboardLotRow): string {
     switch (row.urgency) {
@@ -148,29 +138,13 @@
       const todayDate: string = todayIso();
   let selectedDate: string = todayIso();
   let viewYear: number;
-  let viewMonth: number;
-
   {
     const now = new Date();
     viewYear = now.getFullYear();
-    viewMonth = now.getMonth() + 1;
   }
 
   // Day-detail panel
-  let showLotDetail = false;
-  let detailLot: ExpiryLotResponse | null = null;
-  /**
-   * Row context captured when `openLot(row)` is called. Provides
-   * human-readable display values for the lot detail panel
-   * (`description`, `sku`, `store_name`, `location_name`) without an
-   * extra IPC round-trip — the row data already carries them from the
-   * `listDashboardLots` fetch. Cleared alongside `detailLot` when the
-   * modal closes.
-   */
-  let detailRow: DashboardLotRow | null = null;
-  let detailLoading = false;
-  let lotDetailTab: "detail" | "history" = "detail";
-  let lotDetailLocations: EnrichedLocation[] = [];
+
 
   // ── Derived ─────────────────────────────────────────────────────────────────
 
@@ -315,19 +289,6 @@ const watchdog = window.setTimeout(() => {
 
   // ── Navigation ──────────────────────────────────────────────────────────────
 
-  function onMonthChange(e: CustomEvent<{ year: number; month: number }>) {
-    viewYear = e.detail.year;
-    viewMonth = e.detail.month;
-  }
-
-  function onViewYearChange(e: CustomEvent<number>) {
-    viewYear = e.detail;
-  }
-
-  function onDaySelect(e: CustomEvent<string>) {
-    selectedDate = e.detail;
-  }
-
   // ── Year navigation (annual view) ───────────────────────────────────────────
 
   function prevYear() {
@@ -394,43 +355,7 @@ const watchdog = window.setTimeout(() => {
 
   // ── Lot detail ───────────────────────────────────────────────────────────────
 
-  async function loadAllStoreLocations(): Promise<EnrichedLocation[]> {
-    try {
-      const result = await loadAllActiveStoreLocations();
-      return result.allLocations;
-    } catch {
-      return [];
-    }
-  }
 
-  async function openLot(row: DashboardLotRow) {
-    detailLoading = true;
-    showLotDetail = true;
-    lotDetailTab = "history";
-    detailLot = null;
-    // Capture the row context so the detail panel can show
-    // description / SKU / store name / location name without an
-    // extra IPC round-trip.
-    detailRow = row;
-    lotDetailLocations = [];
-    try {
-      [detailLot, lotDetailLocations] = await Promise.all([
-    getExpiryLot(row.lot_id),
-    loadAllStoreLocations(),
-      ]);
-    } catch (e) {
-      errorMsg = humanizeError(e);
-      showLotDetail = false;
-    } finally {
-      detailLoading = false;
-    }
-  }
-
-function onLotCancel() {
-    showLotDetail = false;
-    detailLot = null;
-    detailRow = null;
-  }
 
 </script>
 
@@ -610,7 +535,7 @@ function onLotCancel() {
                     <button
                       type="button"
                       class="lot-link"
-                      onclick={() => openLot(row)}
+                      onclick={() => scannerNavigation.set({ lotId: row.lot_id, productId: row.product_id, unitType: (row.unit_type ?? null) as UnitKind | null })}
                     >
                       {row.description || row.sku || row.product_id}
                     </button>
@@ -636,116 +561,6 @@ function onLotCancel() {
     </div>
   {/if}
 </div>
-
-<!-- Lot edit overlay — reused Modal + Tabs primitives (PR 13 cleanup) -->
-<Modal
-  bind:open={showLotDetail}
-  size="wide"
-  showClose
-  closeLabel={$LL.lotMovements.modal.close()}
-  aria-label={$LL.dashboard.lotDetail()}
-  oncancel={() => (showLotDetail = false)}
-  onclose={onLotCancel}
->
-  {#snippet children()}
-    <header class="dialog-header">
-      <h3>{$LL.dashboard.lotDetail()}</h3>
-    </header>
-
-    {#if detailLoading}
-      <p class="modal-loading">{$LL.lotsDetail.loading()}</p>
-    {:else if detailLot}
-      <Tabs
-        items={[
-          {
-            id: "detail",
-            label: $LL.lotsDetail.detail(),
-            panel: lotDetailTabPanel,
-          },
-          {
-            id: "history",
-            label: $LL.lotsDetail.history(),
-            panel: lotHistoryTabPanel,
-          },
-        ]}
-        bind:activeId={lotDetailTab}
-        style="bordered"
-        aria-label={$LL.dashboard.lotDetail()}
-      />
-    {/if}
-  {/snippet}
-</Modal>
-
-{#snippet lotDetailTabPanel()}
-  {#if detailLot}
-    <dl class="detail-grid">
-      <dt>{$LL.dashboard.product()}</dt>
-      <dd>
-        {#if detailRow?.description}
-          {detailRow.description}
-          <small class="detail-muted"> · {detailRow.sku}</small>
-        {:else}
-          {detailLot.product_id}
-        {/if}
-      </dd>
-      <dt>{$LL.dashboard.store()}</dt>
-      <dd>
-        {#if detailRow?.store_name}
-          {detailRow.store_name}
-        {:else}
-          {detailLot.store_id}
-        {/if}
-      </dd>
-      <dt>{$LL.dashboard.location()}</dt>
-      <dd>
-        {#if detailLot.location_id}
-          {resolveLocationDisplay(detailLot.location_id, lotDetailLocations, $LL.common.noLocation())}
-        {:else}
-          —
-        {/if}
-      </dd>
-      <dt>{$LL.lotsDetail.quantity()}</dt>
-      <dd>{detailLot.quantity}</dd>
-      <dt>{$LL.dashboard.expiryDate()}</dt>
-      <dd>{detailLot.expiry_date}</dd>
-      <dt>{$LL.dashboard.alertDaysBefore()}</dt>
-      <dd>{detailLot.alert_days_before}</dd>
-      {#if detailLot.batch_code}
-        <dt>{$LL.lotsDetail.batch()}</dt>
-        <dd>{detailLot.batch_code}</dd>
-      {/if}
-    </dl>
-    <div class="modal-actions">
-      <Button variant="ghost" onclick={onLotCancel}>
-        {$LL.common.close()}
-      </Button>
-      <Button variant="primary" onclick={() => (lotDetailTab = "history")}>
-        {$LL.lotMovements.panelTitle()}
-      </Button>
-    </div>
-  {/if}
-{/snippet}
-
-{#snippet lotHistoryTabPanel()}
-  {#if detailLot}
-    <div class="tab-content">
-      <LotMovementsPanel
-        lotId={detailLot.id}
-        lotQuantity={detailLot.quantity}
-        lotUnit={detailLot.unit}
-        lotStatus={detailLot.status}
-        locations={lotDetailLocations}
-        allLocations={lotDetailLocations}
-        unitType={detailLot.unit_type}
-        onMovementCreated={async () => {
-          // Reload modal and calendar data after a movement.
-          detailLot = await getExpiryLot(detailLot!.id);
-          await loadLots();
-        }}
-      />
-    </div>
-  {/if}
-{/snippet}
 
     <style>
   .cal-page {
@@ -958,61 +773,6 @@ function onLotCancel() {
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       }
 
-  /* ── Modal (PR 13: modal shell from `<Modal>` primitive; only inner
-     panel styles remain) ────────────────────────────────────────────────── */
 
-  .dialog-header {
-    display: flex;
-    align-items: center;
-    margin-bottom: 16px;
-  }
-
-  .dialog-header h3 {
-    margin: 0;
-    font-size: 1rem;
-    color: var(--color-base-content);
-  }
-
-  .modal-loading {
-    text-align: center;
-    padding: 20px;
-    color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
-  }
-
-  .tab-content {
-    min-height: 200px;
-  }
-
-  .detail-grid {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 6px 16px;
-    font-size: 0.9rem;
-    margin-bottom: 16px;
-  }
-
-  .detail-grid dt {
-    color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
-    font-weight: 500;
-  }
-
-  .detail-grid dd {
-    color: var(--color-base-content);
-    margin: 0;
-  }
-
-  /* SKU suffix shown after the description in the product cell so
-     the description stays the primary text without losing the SKU
-     context. */
-  .detail-muted {
-    color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
-    font-size: 0.82rem;
-  }
-
-  .modal-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-  }
 
 </style>

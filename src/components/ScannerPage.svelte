@@ -70,6 +70,8 @@
   } from "../lib/locations.js";
   import {
     NOTE_REQUIRED_EXITS,
+    getExitKindLabel,
+    EXIT_KINDS,
     type ExitKind,
   } from "../lib/movementRules.js";
   import {
@@ -98,34 +100,10 @@
 
   // Non-sale exit reasons for Stock-out mode. `exit:sale` is intentionally
   // absent — Stock-out cannot record a sale (per spec scenario).
-  // Sourced from the shared movementRules module.
-  const STOCK_OUT_KINDS: readonly MovementKind[] = [
-    "exit:waste",
-    "exit:expired",
-    "exit:damaged",
-    "exit:internal_consumption",
-    "exit:return_to_supplier",
-    "exit:inventory_adjustment",
-    "exit:other",
-  ];
-
-  /**
-   * Resolves an exit-kind to its i18n display label.
-   * Factored out so both the option labels and the success notice can
-   * call the same resolver without duplicating the switch.
-   */
-  function reasonLabel(kind: MovementKind): string {
-    switch (kind) {
-      case "exit:waste":        return $LL.lotMovements.exitReasons.waste();
-      case "exit:expired":      return $LL.lotMovements.exitReasons.expired();
-      case "exit:damaged":      return $LL.lotMovements.exitReasons.damaged();
-      case "exit:internal_consumption": return $LL.lotMovements.exitReasons.internalConsumption();
-      case "exit:return_to_supplier":  return $LL.lotMovements.exitReasons.returnToSupplier();
-      case "exit:inventory_adjustment": return $LL.lotMovements.exitReasons.inventoryAdjustmentExit();
-      case "exit:other":        return $LL.lotMovements.exitReasons.other();
-      default:                  return kind;
-    }
-  }
+  // Derived from the shared EXIT_KINDS; `getExitKindLabel` provides labels.
+  const STOCK_OUT_KINDS: readonly ExitKind[] = EXIT_KINDS.filter(
+    (k) => k !== "exit:sale",
+  );
 
   // ── State ─────────────────────────────────────────────────────────────────
 
@@ -273,7 +251,7 @@
   let stockOutReasonOptions = $derived(
     STOCK_OUT_KINDS.map((r) => ({
       value: r,
-      label: reasonLabel(r),
+      label: getExitKindLabel(r, $LL),
     })),
   );
 
@@ -429,19 +407,32 @@
       // The page-ready guard is a derived; use untrack to avoid false
       // reactive dependencies on every intermediate settings change.
       if (!pageReady) return;
-      try {
-        const [lot, productDetail] = await Promise.all([
-          getExpiryLot(req.lotId),
-          getProduct(req.productId),
-        ]);
-        pinnedContext = {
-          lot,
-          product: productDetail.product,
-          unitType: (productDetail.product.unit_type ?? null) as UnitKind | null,
-        };
-      } catch {
-        // Resolution failures are surfaced silently; the pinned context
-        // remains null and the user stays on Scanner to retry.
+
+      if (req.lotId) {
+        // Lot context: fetch lot + product and pin for LotContextPanel.
+        try {
+          const [lot, productDetail] = await Promise.all([
+            getExpiryLot(req.lotId),
+            getProduct(req.productId),
+          ]);
+          pinnedContext = {
+            lot,
+            product: productDetail.product,
+            unitType: (productDetail.product.unit_type ?? null) as UnitKind | null,
+          };
+        } catch {
+          // Resolution failures are surfaced silently; the pinned context
+          // remains null and the user stays on Scanner to retry.
+        }
+      } else {
+        // Product-only or unknown scan: open Scanner's canonical
+        // product-creation flow (quick-create) directly.
+        // The scanned value seeds the UPC field so the user does not
+        // need to re-type it.
+        untrack(() => {
+          quickCreateOpen = true;
+          quickCreateScannedValue = req.scannedValue ?? "";
+        });
       }
       clearScannerNavigation();
     });
@@ -832,7 +823,7 @@
       successNotice = $LL.scanner.stockOut.success({
         qty: quantity,
         sku: activeProduct?.sku ?? resolvedLot.lot.batch_code ?? "",
-        reason: reasonLabel(exitReason as MovementKind),
+        reason: getExitKindLabel(exitReason as ExitKind, $LL),
       });
       resetMutationFormWithoutContext();
     } catch (e) {

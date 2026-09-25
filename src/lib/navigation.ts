@@ -15,9 +15,18 @@ import { writable } from "svelte/store";
 import type { UnitKind } from "./products.js";
 
 export type ScannerNavigationRequest = {
+  /** Lot to open in Scanner lot context. Set for known products with lots. */
   lotId: string;
+  /** Product context for lot-context or product-only navigation. */
   productId: string;
+  /** Unit type from the lot or product. */
   unitType: UnitKind | null;
+  /**
+   * Scanned value to seed the product form when opening quick-create.
+   * Used for product-only navigation (no lot) and unknown scans.
+   * Omit when navigating with a lot context (quick-create is not opened).
+   */
+  scannedValue?: string;
 };
 
 export type ScannerNavigationStore = {

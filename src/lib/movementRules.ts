@@ -135,22 +135,45 @@ export function locationDisplayLabel(loc: LocationWithStore): string {
   return loc.store_name ? `${loc.store_name} / ${loc.name}` : loc.name;
 }
 
+// ── Exit-kind labels ────────────────────────────────────────────────────────────
+
+/**
+ * Resolves an exit-kind to its i18n display label using the shared
+ * `MovementKindLabelRecord`. Exhaustive switch — avoids the runtime
+ * key-computation bug where `"exit:inventory_adjustment"` would resolve
+ * to the nonexistent `inventoryAdjustment` instead of
+ * `inventoryAdjustmentExit`.
+ *
+ * Factored out so both `RegisterExitModal` and `ScannerPage` use the
+ * same canonical resolver without duplicating the eight-case switch.
+ */
+export function getExitKindLabel(
+  kind: ExitKind,
+  LL: TranslationFunctions,
+): string {
+  switch (kind) {
+    case "exit:sale":                return LL.lotMovements.exitReasons.sale();
+    case "exit:waste":               return LL.lotMovements.exitReasons.waste();
+    case "exit:expired":             return LL.lotMovements.exitReasons.expired();
+    case "exit:damaged":             return LL.lotMovements.exitReasons.damaged();
+    case "exit:internal_consumption": return LL.lotMovements.exitReasons.internalConsumption();
+    case "exit:return_to_supplier":  return LL.lotMovements.exitReasons.returnToSupplier();
+    case "exit:inventory_adjustment": return LL.lotMovements.exitReasons.inventoryAdjustmentExit();
+    case "exit:other":               return LL.lotMovements.exitReasons.other();
+  }
+}
+
 // ── Movement kind labels ─────────────────────────────────────────────────────
 
 /**
  * Record mapping movement-kind strings to their display-label factories.
  * Each value is a zero-arg i18n function so the caller provides the active
  * `$LL` scope without coupling this module to the i18n system.
- *
- * Consumed by `LotMovementsPanel.getMovementKindLabel` and
- * `LotContextPanel.getMovementKindLabel`.
  */
 export type MovementKindLabelRecord = Record<
   string,
   (() => string) | string | undefined
 >;
-
-
 
 /**
  * Builds a `MovementKindLabelRecord` from an i18n scope.

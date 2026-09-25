@@ -26,7 +26,6 @@
     type ProductResponse,
   } from "../lib/products.js";
   import {
-    getExpiryLot,
     listExpiryLotsByProduct,
     type ExpiryLotResponse,
   } from "../lib/expiry_lots.js";
@@ -40,7 +39,7 @@
   import ProductForm from "./ProductForm.svelte";
   import UnitReviewBanner from "./UnitReviewBanner.svelte";
   import UnitReviewPage from "./UnitReviewPage.svelte";
-  import LotMovementsPanel from "./LotMovementsPanel.svelte";
+
   // PR 6 — shared UI primitives from caduxo-daisyui-redesign.
 
   import Badge, {
@@ -48,7 +47,7 @@
     type BadgeSemantic,
   } from "./ui/Badge.svelte";
   import Table from "./ui/Table.svelte";
-  import Tabs from "./ui/Tabs.svelte";
+
   import Alert from "./ui/Alert.svelte";
   import Button from "./ui/Button.svelte";
   import Icon from "./ui/Icon.svelte";
@@ -122,14 +121,8 @@
   /** Locations across every store that holds at least one of this product's lots. */
   let detailAllLocations: EnrichedLocation[] = [];
 
-  // CSV export state (Slice 10a)
+  // CSV export state
   let exporting = false;
-
-  let showLotDetail = false;
-  let detailLot: ExpiryLotResponse | null = null;
-  let detailLotLoading = false;
-  let lotDetailTab: "detail" | "history" = "detail";
-  let lotDetailLocations: EnrichedLocation[] = [];
 
   // ─── Quick-create modal ─────────────────────────────────────────────────────
 
@@ -263,19 +256,34 @@
   // ─── Scan handler ──────────────────────────────────────────────────────────
 
   function handleScanFound(productId: string, hasLots: boolean) {
-    if (hasLots) {
-      const row = lots.find((l) => l.product_id === productId);
-      if (row) {
-        viewProduct(row, row.lot_id);
+    // Approved contract (ODD task 9): Dashboard scan routing is read-only.
+    // Known scans with lots open Scanner's canonical lot context;
+    // known scans without lots open Scanner's product-creation flow.
+    const row = lots.find((l) => l.product_id === productId);
+    if (row) {
+      if (hasLots) {
+        openInScanner(row);
+      } else {
+        // Open Scanner's product-creation flow seeded with the SKU.
+        scannerNavigation.set({
+          lotId: "",
+          productId: row.product_id,
+          unitType: (row.unit_type ?? null) as UnitKind | null,
+          scannedValue: row.sku,
+        });
       }
-    } else {
-      viewProduct({ lot_id: "", product_id: productId } as DashboardLotRow);
     }
   }
 
   function handleScanNotFound(scannedValue: string) {
-    quickCreateScannedValue = scannedValue;
-    showQuickCreate = true;
+    // Approved contract (ODD task 9): unknown scans open Scanner's
+    // existing product-creation flow directly.
+    scannerNavigation.set({
+      lotId: "",
+      productId: "",
+      unitType: null,
+      scannedValue,
+    });
   }
 
   async function onQuickCreateSaved(product: ProductResponse) {
@@ -339,15 +347,21 @@
     detailAllLocations = [];
   }
 
-  async function refreshSelectedLot() {
-    if (!detailSelectedLotId) return;
-    try {
-      const fresh = await getExpiryLot(detailSelectedLotId);
-      detailLots = detailLots.map((l) => (l.id === fresh.id ? fresh : l));
-    } catch (e) {
-      errorMsg = humanizeError(e);
-    }
+  /**
+   * Opens the currently selected lot in Scanner lot context from the
+   * product-detail modal. Routes movement access to the canonical Scanner
+   * surface (task 9 design decision).
+   */
+  function openSelectedLotInScanner(): void {
+    if (!detailSelectedLot || !detailProduct) return;
+    scannerNavigation.set({
+      lotId: detailSelectedLot.id,
+      productId: detailProduct.product.id,
+      unitType: (detailSelectedLot.unit_type ?? null) as UnitKind | null,
+    });
   }
+
+
 
   $: detailSelectedLot =
     detailLots.find((l) => l.id === detailSelectedLotId) ?? null;
@@ -383,24 +397,7 @@
     selectedLocationId = value === "" ? null : value;
   }
 
-  async function editLot(lot: DashboardLotRow) {
-    detailLotLoading = true;
-    showLotDetail = true;
-    lotDetailTab = "detail";
-    detailLot = null;
-    lotDetailLocations = [];
-    try {
-      [detailLot, lotDetailLocations] = await Promise.all([
-        getExpiryLot(lot.lot_id),
-        loadAllStoreLocations(),
-      ]);
-    } catch (e) {
-      errorMsg = humanizeError(e);
-      showLotDetail = false;
-    } finally {
-      detailLotLoading = false;
-    }
-  }
+
 
   // ─── Urgency / status helpers ───────────────────────────────────────────────
 
@@ -489,42 +486,6 @@
   scope so the `items={[…]}` array can reference them by name; Svelte 5
   hoists `{#snippet}` declarations to the top of the component, which
   makes this forward-reference safe.
--->
-{#snippet lotDetailPanel()}
-  {#if detailLot}
-    <dl class="detail-grid">
-      <dt>{$LL.dashboard.lotId()}</dt><dd class="cell-sku">{detailLot.id.slice(0, 8)}…</dd>
-      <dt>{$LL.dashboard.qty()}</dt><dd>{detailLot.quantity} {detailLot.unit}</dd>
-      <dt>{$LL.dashboard.expiryDate()}</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
-      <dt>{$LL.dashboard.alertDaysBefore()}</dt><dd>{detailLot.alert_days_before}</dd>
-      <dt>{$LL.dashboard.batch()}</dt><dd>{detailLot.batch_code ?? "—"}</dd>
-      <dt>{$LL.dashboard.status()}</dt><dd>{detailLot.status}</dd>
-      {#if detailLot.resolution}
-        <dt>{$LL.lotMovements.resolution.resolveQuantity()}</dt><dd>{detailLot.resolution}</dd>
-      {/if}
-      {#if detailLot.notes}
-        <dt>{$LL.lotForm.notes()}</dt><dd>{detailLot.notes}</dd>
-      {/if}
-    </dl>
-  {/if}
-{/snippet}
-
-{#snippet lotHistoryPanel()}
-  {#if detailLot}
-    <LotMovementsPanel
-      lotId={detailLot.id}
-      lotQuantity={detailLot.quantity}
-      lotUnit={detailLot.unit}
-      lotStatus={detailLot.status}
-      locations={lotDetailLocations}
-      allLocations={lotDetailLocations}
-      unitType={detailLot.unit_type}
-      onMovementCreated={async () => {
-        detailLot = await getExpiryLot(detailLot!.id);
-      }}
-    />
-  {/if}
-{/snippet}
 
 <!-- Dashboard layout -->
 <div class="dashboard">
@@ -746,18 +707,6 @@
             </td>
             <td class="cell-batch">{lot.batch_code ?? "—"}</td>
             <td class="cell-actions">
-              <Tooltip text={$LL.common.edit()}>
-                <Button
-                  variant="icon"
-                  size="sm"
-                  onclick={() => editLot(lot)}
-                  aria-label={$LL.common.edit()}
-                >
-                  {#snippet iconStart()}
-                    <Icon name="pencil" size="sm" />
-                  {/snippet}
-                </Button>
-              </Tooltip>
               <Tooltip text={$LL.dashboard.viewProductAndMovements()}>
                 <Button
                   variant="primary"
@@ -890,18 +839,16 @@
 
           {#if detailSelectedLot}
             <div class="lot-panel-wrap">
-              <LotMovementsPanel
-                lotId={detailSelectedLot.id}
-                lotQuantity={detailSelectedLot.quantity}
-                lotUnit={detailSelectedLot.unit}
-                lotStatus={detailSelectedLot.status}
-                locations={detailAllLocations.filter(
-                  (l) => l.store_id === detailSelectedLot!.store_id,
-                )}
-                allLocations={detailAllLocations}
-                unitType={detailSelectedLot.unit_type}
-                onMovementCreated={refreshSelectedLot}
-              />
+              <Button
+                variant="secondary"
+                size="sm"
+                onclick={openSelectedLotInScanner}
+              >
+                {#snippet iconStart()}
+                  <Icon name="arrow-right-on-rectangle" size="sm" />
+                {/snippet}
+                {$LL.dashboard.openInScanner()}
+              </Button>
             </div>
           {/if}
         </section>
@@ -910,38 +857,7 @@
   {/snippet}
 </Modal>
 
-<!-- ── Lot detail modal ─────────────────────────────────────────────────── -->
-<Modal
-  bind:open={showLotDetail}
-  size="wide"
-  showClose
-  closeLabel={$LL.lotMovements.modal.close()}
-  aria-label={$LL.dashboard.aria.lotDetail()}
-  oncancel={() => (showLotDetail = false)}
-  onclose={() => (showLotDetail = false)}
->
-  {#snippet children()}
-    <header class="dialog-header">
-      <h3>{$LL.dashboard.lotDetail()}</h3>
-    </header>
 
-    <div class="dialog-body">
-      {#if detailLotLoading}
-        <LoadingState variant="text" label={$LL.dashboard.loading()} />
-      {:else if detailLot}
-        <Tabs
-          items={[
-            { id: "detail", label: $LL.dashboard.detail(), panel: lotDetailPanel },
-            { id: "history", label: $LL.lotMovements.history(), panel: lotHistoryPanel },
-          ]}
-          bind:activeId={lotDetailTab}
-          style="bordered"
-          aria-label={$LL.dashboard.lotDetail()}
-        />
-      {/if}
-    </div>
-  {/snippet}
-</Modal>
 
 <!-- ── Quick-create product modal ────────────────────────────────────────── -->
 <Modal
