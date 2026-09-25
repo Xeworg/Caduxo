@@ -93,6 +93,7 @@
   import ScannerPage from "./components/ScannerPage.svelte";
   import { startPeriodicNotificationCheck } from "./lib/notifications.js";
   import { LL } from "./i18n/i18n-svelte.js";
+  import { scannerNavigation } from "./lib/navigation.js";
 
   type Tab = "dashboard" | "stores" | "products" | "calendar" | "reports" | "scanner" | "import" | "backup" | "settings";
 
@@ -115,7 +116,7 @@
     { id: "settings", label: () => $LL.nav.settings() },
   ];
 
-  let activeTab: Tab = "stores";
+  let activeTab: Tab = $state("stores");
 
   // Slice 7b: start notification permission check and periodic polling.
   // The cleanup function is stable and safe to call from onDestroy.
@@ -283,6 +284,18 @@
   function setTab(next: Tab) {
     activeTab = next;
   }
+
+  // React to in-memory Dashboard → Scanner navigation requests.
+  // When Dashboard writes a lot/product request into `scannerNavigation`,
+  // the shell switches to the Scanner tab so ScannerPage can consume it.
+  $effect(() => {
+    const unsub = scannerNavigation.subscribe((req) => {
+      if (req !== null) {
+        activeTab = "scanner";
+      }
+    });
+    return unsub;
+  });
 </script>
 
 <!--

@@ -27,7 +27,7 @@ Make Scanner the canonical operational surface for lots and stock movements, whi
 - [x] 4. Route Scanner Registration and Product Detail Add Lot through the same reusable creation flow, preserving Scanner store locking and existing Product Detail behavior for the simple path.
 - [x] 5. Add Scanner lot-context view showing current per-location balances, movement history, and canonical actions for same-store and cross-store transfer, exit, and count adjustment.
 - [x] 6. Make Scanner resolution and Dashboard lot views location-balance aware so a receiving store can find and operate a transferred lot without duplicating the lot identity.
-- [ ] 7. Add in-memory Dashboard-to-Scanner navigation that opens the selected lot in Scanner context without duplicating lot mutation UI.
+- [x] 7. Add in-memory Dashboard-to-Scanner navigation that opens the selected lot in Scanner context without duplicating lot mutation UI.
 - [ ] 8. Consolidate shared movement client rules and fix known selector/state drift before using the Scanner lot-context actions broadly.
 - [ ] 9. Remove superseded Dashboard mutation UI, duplicate Scanner/Modal movement logic, dead navigation state, and obsolete i18n only after their replacements are integrated and covered.
 - [ ] 10. Run focused backend/frontend verification, accessibility review, manual operational scenarios, including cross-store transfer and receipt, and document evidence.
@@ -147,3 +147,11 @@ This feature is a replacement, not an additive second workflow. Once the Scanner
 - Added nine cross-store regression tests covering receiving-store inclusion, no-balance/drained exclusions, Scanner product matches, and Dashboard uniqueness.
 - Independent verification passed: full Rust library suite (773 passed), `cargo build`, `npm run check` (0 errors, 0 warnings), `npm run build`, and `git diff --check`.
 - Work-unit commit records this implementation and verification evidence.
+
+### Task 7 — Dashboard-to-Scanner navigation (complete)
+
+- Added a shared, in-memory Scanner navigation request. Dashboard writes the selected lot, product, and unit type; the application shell switches to Scanner, which resolves and pins the existing canonical `LotContextPanel` then clears the request.
+- Added an accessible Dashboard action with English and Spanish labels. No router, backend state, persistence, or new mutation UI was introduced; Dashboard's existing modal flows remain for task 9 cleanup.
+- Independent verification initially found a task-caused Svelte 5 non-reactive `activeTab` warning. The correction migrated `activeTab` to `$state`, preserving its initial value and tab behavior.
+- Final independent verification passed: `npm run check` (0 errors, 0 warnings), `npm run build`, and `git diff --check`.
+- Work-unit commit: `3ff3459 feat(scanner): open dashboard lots in scanner`.

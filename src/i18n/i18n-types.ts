@@ -505,6 +505,10 @@ type RootTranslation = {
 		 */
 		viewProductAndMovements: string
 		/**
+		 * O​p​e​n​ ​l​o​t​ ​i​n​ ​S​c​a​n​n​e​r
+		 */
+		openInScanner: string
+		/**
 		 * E​x​p​i​r​y​ ​l​o​t​s
 		 */
 		expiryLots: string
@@ -4761,6 +4765,10 @@ export type TranslationFunctions = {
 		 * View product and lot movements
 		 */
 		viewProductAndMovements: () => LocalizedString
+		/**
+		 * Open lot in Scanner
+		 */
+		openInScanner: () => LocalizedString
 		/**
 		 * Expiry lots
 		 */

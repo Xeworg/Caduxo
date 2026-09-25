@@ -70,9 +70,9 @@
     type LotLocationBalance,
     type MovementKind,
   } from "../lib/lot_movements.js";
-  import type { ProductResponse } from "../lib/products.js";
-  import { listCategories, type CategoryResponse } from "../lib/products.js";
-  import type { ExpiryLotResponse } from "../lib/expiry_lots.js";
+  import { getProduct, listCategories, type CategoryResponse, type ProductResponse } from "../lib/products.js";
+  import { getExpiryLot, type ExpiryLotResponse } from "../lib/expiry_lots.js";
+  import { scannerNavigation, clearScannerNavigation } from "../lib/navigation.js";
   import LotContextPanel from "./scanner/LotContextPanel.svelte";
   import type { UnitKind } from "../lib/products.js";
   import { resolveLocationDisplay, type LocationRef } from "../lib/lotDisplay.js";
@@ -417,6 +417,38 @@
   let activeStoreSelectId = $derived(settings?.last_selected_store_id ?? "");
 
   // ── Lot context ───────────────────────────────────────────────────────────
+
+  // ── Dashboard → Scanner navigation (ODD task 7) ─────────────────────────
+  // Consumes in-memory `scannerNavigation` requests written by Dashboard.
+  // Resolves the lot + product, populates `pinnedContext` (the canonical
+  // LotContextPanel state), then clears the request so it is not re-served
+  // on future visits to the Scanner tab. Preserves existing active-store
+  // clearing behaviour (the active-store-change effect handles that separately).
+  $effect(() => {
+    const unsub = scannerNavigation.subscribe(async (req) => {
+      if (req === null) return;
+      // Must wait for the Scanner to be ready before populating state.
+      // The page-ready guard is a derived; use untrack to avoid false
+      // reactive dependencies on every intermediate settings change.
+      if (!pageReady) return;
+      try {
+        const [lot, productDetail] = await Promise.all([
+          getExpiryLot(req.lotId),
+          getProduct(req.productId),
+        ]);
+        pinnedContext = {
+          lot,
+          product: productDetail.product,
+          unitType: (productDetail.product.unit_type ?? null) as UnitKind | null,
+        };
+      } catch {
+        // Resolution failures are surfaced silently; the pinned context
+        // remains null and the user stays on Scanner to retry.
+      }
+      clearScannerNavigation();
+    });
+    return unsub;
+  });
 
   /**
    * Loads locations from every active store so MoveStockModal can offer

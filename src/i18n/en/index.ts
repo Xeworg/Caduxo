@@ -162,6 +162,7 @@ const en: BaseTranslation = {
     },
     lotId: "Lot ID",
     viewProductAndMovements: "View product and lot movements",
+    openInScanner: "Open lot in Scanner",
     expiryLots: "Expiry lots",
     loading: "Loading…",
     urgencyCard: {

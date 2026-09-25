@@ -163,6 +163,7 @@ const es: BaseTranslation = {
     },
     lotId: "ID de lote",
     viewProductAndMovements: "Ver producto y movimientos de lote",
+    openInScanner: "Abrir lote en Escáner",
     expiryLots: "Lotes de caducidad",
     loading: "Cargando…",
     urgencyCard: {

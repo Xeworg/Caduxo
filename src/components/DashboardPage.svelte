@@ -8,6 +8,8 @@
     type UrgencyCounts,
     type DashboardResponse,
   } from "../lib/dashboard.js";
+  import { scannerNavigation } from "../lib/navigation.js";
+  import type { UnitKind } from "../lib/products.js";
   import {
     listStores,
     listStoreLocations,
@@ -437,6 +439,19 @@
     }
   }
 
+  // ── Dashboard → Scanner navigation (ODD task 7) ─────────────────────────
+  // Writes an in-memory request to the shared navigation channel.
+  // App.svelte reacts by switching the shell to Scanner; ScannerPage
+  // consumes the request, resolves the lot and product, populates the
+  // canonical LotContextPanel, then clears the request.
+  function openInScanner(lot: DashboardLotRow): void {
+    scannerNavigation.set({
+      lotId: lot.lot_id,
+      productId: lot.product_id,
+      unitType: (lot.unit_type ?? null) as UnitKind | null,
+    });
+  }
+
   function lotStatusLabel(status: string): string {
     switch (status) {
       case "active": return $LL.dashboard.active();
@@ -756,6 +771,18 @@
                 >
                   {#snippet iconStart()}
                     <Icon name="arrow-down-tray" size="sm" />
+                  {/snippet}
+                </Button>
+              </Tooltip>
+              <Tooltip text={$LL.dashboard.openInScanner()}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onclick={() => openInScanner(lot)}
+                  aria-label={$LL.dashboard.openInScanner()}
+                >
+                  {#snippet iconStart()}
+                    <Icon name="arrow-right-on-rectangle" size="sm" />
                   {/snippet}
                 </Button>
               </Tooltip>
