@@ -121,4 +121,4 @@ This feature is a replacement, not an additive second workflow. Once the Scanner
 - Added an opt-in, create-only `DistributionEditor` that preserves the existing simple and edit paths in `LotForm`.
 - The editor maintains ordered anchor allocations, blocks invalid totals/rows/duplicates/fractional integer quantities, and dispatches the distributed backend wrapper only when enabled.
 - English/Spanish copy and generated i18n types are in parity. Independent frontend verification passed: `npm run check`, `npm run build`, and `git diff --check`.
-- Work-unit commit: pending this verified work-unit commit.
+- Work-unit commit: `204c59c feat(lots): add initial distribution editor`.
