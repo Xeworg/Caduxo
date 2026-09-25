@@ -177,4 +177,4 @@ This feature is a replacement, not an additive second workflow. Once the Scanner
 - Replaced duplicated eight-case exit-label switches with shared `getExitKindLabel`; `EXIT_KINDS` remains the canonical union and Scanner derives stock-out kinds from it.
 - Delegated writer self-verification passed: `npm run check` (0 errors, 0 warnings), `npm run build` (pass), and `git diff --check` (pass). Native assessment was unavailable, so task received independent delegated verification; the first pass caught Dashboard scan routing, which was corrected and independently reverified PASS with the same commands.
 - No i18n keys were removed: the remaining candidates support the preserved read-only Dashboard product-information modal or Scanner's canonical context. No dead navigation state was found; the navigation channel is live and retained.
-- Work-unit commit: pending explicit user authorization.
+- Work-unit commit: `083ede1 refactor(scanner): remove duplicate movement flows`.
