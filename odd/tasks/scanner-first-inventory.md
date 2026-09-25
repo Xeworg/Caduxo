@@ -114,4 +114,4 @@ This feature is a replacement, not an additive second workflow. Once the Scanner
 - The service rejects empty or duplicate allocations, total mismatches, inactive/non-store locations, non-positive quantities, and fractional quantities for integer-unit products.
 - Focused verification passed after the final formatter pass: 7 distributed-creation tests, 6 distribution-message tests, and `git diff --check`.
 - Full independent verification passed earlier: 757 Rust library tests, frontend type checks, and release build. `cargo clippy` retains one unrelated pre-existing error and nine warnings in `src/domain/lot_movements.rs`.
-- Commit: pending this verified work-unit commit.
+- Work-unit commit: `d0e35ca feat(lots): support distributed initial stock`.
