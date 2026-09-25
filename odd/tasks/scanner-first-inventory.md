@@ -2,7 +2,7 @@
 
 Branch: `feat/scanner-first-inventory`
 
-Delivery strategy: `exception-ok` for work-unit commit `c5e63dd` (user-approved review-size exception); reassess before the next oversized work unit.
+Delivery strategy: `exception-ok` for work-unit commits `c5e63dd` and `783f3ac` (user-approved review-size exceptions); reassess before the next oversized work unit.
 
 ## Goal
 
