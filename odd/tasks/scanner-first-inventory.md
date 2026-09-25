@@ -2,6 +2,8 @@
 
 Branch: `feat/scanner-first-inventory`
 
+Delivery strategy: `exception-ok` for work-unit commit `c5e63dd` (user-approved review-size exception); reassess before the next oversized work unit.
+
 ## Goal
 
 Make Scanner the canonical operational surface for lots and stock movements, while keeping Product Detail as a reusable entry point for creating lots. Dashboard becomes a read-oriented surface that opens the relevant lot in Scanner.
