@@ -162,4 +162,4 @@ This feature is a replacement, not an additive second workflow. Once the Scanner
 - Fixed Scanner Sale and Stock-out quantity inputs to cap at the selected positive balance. `RegisterExitModal` now resolves source location names from the active-location set instead of exposing raw IDs.
 - Independent verification caught a runtime-only label regression for `exit:inventory_adjustment`; the correction replaced computed i18n-key lookup with an exhaustive typed mapping to `inventoryAdjustmentExit`.
 - Final independent verification passed: all eight exit kinds map to valid EN/ES labels; `npm run check` (0 errors, 0 warnings), `npm run build`, and `git diff --check` passed.
-- Work-unit commit records this implementation and verification evidence.
+- Work-unit commit: `222d727 refactor(movements): share client movement rules`.
