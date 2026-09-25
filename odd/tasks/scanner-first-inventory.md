@@ -22,7 +22,7 @@ Make Scanner the canonical operational surface for lots and stock movements, whi
 - [x] 1. Map and test the existing lot and movement invariants needed by the new flow, including initial-entry semantics, transfer balances, store ownership, and atomic rollback behavior.
 - [x] 2. Add an atomic backend command and DTO for creating one lot with an initial within-store location distribution; cover validation, duplicate locations, quantity totals, integer units, and rollback.
 - [x] 3. Extract reusable lot-creation presentation state from `LotForm` and add an accessible optional distribution editor with quantity-total validation and bilingual copy.
-- [ ] 4. Route Scanner Registration and Product Detail Add Lot through the same reusable creation flow, preserving Scanner store locking and existing Product Detail behavior for the simple path.
+- [x] 4. Route Scanner Registration and Product Detail Add Lot through the same reusable creation flow, preserving Scanner store locking and existing Product Detail behavior for the simple path.
 - [ ] 5. Add Scanner lot-context view showing current per-location balances, movement history, and canonical actions for same-store and cross-store transfer, exit, and count adjustment.
 - [ ] 6. Make Scanner resolution and Dashboard lot views location-balance aware so a receiving store can find and operate a transferred lot without duplicating the lot identity.
 - [ ] 7. Add in-memory Dashboard-to-Scanner navigation that opens the selected lot in Scanner context without duplicating lot mutation UI.
@@ -122,3 +122,10 @@ This feature is a replacement, not an additive second workflow. Once the Scanner
 - The editor maintains ordered anchor allocations, blocks invalid totals/rows/duplicates/fractional integer quantities, and dispatches the distributed backend wrapper only when enabled.
 - English/Spanish copy and generated i18n types are in parity. Independent frontend verification passed: `npm run check`, `npm run build`, and `git diff --check`.
 - Work-unit commit: `204c59c feat(lots): add initial distribution editor`.
+
+### Task 4 — shared creation-flow integration (complete)
+
+- Both Scanner Registration and Product Detail Add Lot already mount the same reusable `LotForm`, which owns the create-only `DistributionEditor` introduced in task 3; no duplicate creation state or refactor is needed.
+- Scanner passes `lockedStoreId` and `lockedStoreName`, retaining the active-store lock. Product Detail omits those props, retaining its free-store, simple creation path; both preserve their existing save/cancel behavior.
+- Independent verification passed: `npm run check` (0 errors, 0 warnings), `npm run build` (including i18n generation), and `git diff --check`.
+- Evidence-record work-unit commit records this verification outcome.
