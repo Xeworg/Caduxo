@@ -26,7 +26,7 @@ Make Scanner the canonical operational surface for lots and stock movements, whi
 - [x] 3. Extract reusable lot-creation presentation state from `LotForm` and add an accessible optional distribution editor with quantity-total validation and bilingual copy.
 - [x] 4. Route Scanner Registration and Product Detail Add Lot through the same reusable creation flow, preserving Scanner store locking and existing Product Detail behavior for the simple path.
 - [x] 5. Add Scanner lot-context view showing current per-location balances, movement history, and canonical actions for same-store and cross-store transfer, exit, and count adjustment.
-- [ ] 6. Make Scanner resolution and Dashboard lot views location-balance aware so a receiving store can find and operate a transferred lot without duplicating the lot identity.
+- [x] 6. Make Scanner resolution and Dashboard lot views location-balance aware so a receiving store can find and operate a transferred lot without duplicating the lot identity.
 - [ ] 7. Add in-memory Dashboard-to-Scanner navigation that opens the selected lot in Scanner context without duplicating lot mutation UI.
 - [ ] 8. Consolidate shared movement client rules and fix known selector/state drift before using the Scanner lot-context actions broadly.
 - [ ] 9. Remove superseded Dashboard mutation UI, duplicate Scanner/Modal movement logic, dead navigation state, and obsolete i18n only after their replacements are integrated and covered.
@@ -138,4 +138,12 @@ This feature is a replacement, not an additive second workflow. Once the Scanner
 - Scanner can pin a resolved lot context from Sale or Stock-out, preserves it after a successful movement for readback, and clears it when the active store changes. All active store locations are hydrated so the reused transfer modal supports cross-store destinations.
 - Added bilingual `scanner.lotContext.*` strings and regenerated i18n types.
 - Independent verification passed: `npm run check` (0 errors, 0 warnings), `npm run build`, focused `create_lot_movement` Rust tests (21 passed), and `git diff --check`.
+- Work-unit commit records this implementation and verification evidence.
+
+### Task 6 — derived receiving-store visibility (complete)
+
+- Scanner lot-code and product resolution, plus Dashboard's selected-store filter, now derive store visibility from positive balances per location in the immutable movement ledger. The lot anchor remains unchanged; lots without any ledger rows retain legacy anchor-store visibility.
+- Bound SQL parameters protect the visibility predicates. Dashboard's unfiltered view remains one row per lot, while filtered views include receiving-store balances and exclude third-store or drained-balance lots.
+- Added nine cross-store regression tests covering receiving-store inclusion, no-balance/drained exclusions, Scanner product matches, and Dashboard uniqueness.
+- Independent verification passed: full Rust library suite (773 passed), `cargo build`, `npm run check` (0 errors, 0 warnings), `npm run build`, and `git diff --check`.
 - Work-unit commit records this implementation and verification evidence.
