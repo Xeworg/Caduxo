@@ -16,6 +16,7 @@
     type StoreResponse,
     type StoreLocationResponse,
   } from "../lib/stores.js";
+  import { loadAllActiveStoreLocations, type EnrichedLocation } from "../lib/locations.js";
   import {
     getProduct,
     listCategories,
@@ -119,7 +120,7 @@
   let detailLotsLoading = false;
   let detailSelectedLotId: string | null = null;
   /** Locations across every store that holds at least one of this product's lots. */
-  let detailAllLocations: StoreLocationResponse[] = [];
+  let detailAllLocations: EnrichedLocation[] = [];
 
   // CSV export state (Slice 10a)
   let exporting = false;
@@ -128,7 +129,7 @@
   let detailLot: ExpiryLotResponse | null = null;
   let detailLotLoading = false;
   let lotDetailTab: "detail" | "history" = "detail";
-  let lotDetailLocations: StoreLocationResponse[] = [];
+  let lotDetailLocations: EnrichedLocation[] = [];
 
   // ─── Quick-create modal ─────────────────────────────────────────────────────
 
@@ -303,18 +304,13 @@
     }
   }
 
-  async function loadAllStoreLocations(): Promise<StoreLocationResponse[]> {
-    const activeStores = stores.length > 0
-      ? stores.filter((store) => store.is_active)
-      : (await listStores()).filter((store) => store.is_active);
-    const locationLists = await Promise.all(
-      activeStores.map((store) =>
-        listStoreLocations(store.id)
-          .then((locations) => locations.map((location) => ({ ...location, store_name: store.name })))
-          .catch(() => [] as StoreLocationResponse[]),
-      ),
-    );
-    return locationLists.flat();
+  async function loadAllStoreLocations(): Promise<EnrichedLocation[]> {
+    try {
+      const result = await loadAllActiveStoreLocations();
+      return result.allLocations;
+    } catch {
+      return [];
+    }
   }
 
   async function loadProductDetailLots(productId: string) {

@@ -65,6 +65,14 @@
     type StoreResponse,
   } from "../lib/stores.js";
   import {
+    loadAllActiveStoreLocations,
+    type EnrichedLocation,
+  } from "../lib/locations.js";
+  import {
+    NOTE_REQUIRED_EXITS,
+    type ExitKind,
+  } from "../lib/movementRules.js";
+  import {
     createLotMovement,
     getLotLocationBalances,
     type LotLocationBalance,
@@ -88,9 +96,10 @@
   // ── Mode union ────────────────────────────────────────────────────────────
   type Mode = "sale" | "registration" | "stock_out";
 
-  // Non-sale exit reasons for Stock-out mode (mirrors the spec scenario
-  // `Stock-out cannot reference the Sale reason`).
-  const STOCK_OUT_REASONS: ReadonlyArray<MovementKind> = [
+  // Non-sale exit reasons for Stock-out mode. `exit:sale` is intentionally
+  // absent — Stock-out cannot record a sale (per spec scenario).
+  // Sourced from the shared movementRules module.
+  const STOCK_OUT_KINDS: readonly MovementKind[] = [
     "exit:waste",
     "exit:expired",
     "exit:damaged",
@@ -100,30 +109,21 @@
     "exit:other",
   ];
 
-  // Reasons that require notes (mirrors RegisterExitModal's REQUIRES_NOTES).
-  const REQUIRES_NOTES: ReadonlyArray<MovementKind> = [
-    "exit:inventory_adjustment",
-    "exit:other",
-  ];
-
+  /**
+   * Resolves an exit-kind to its i18n display label.
+   * Factored out so both the option labels and the success notice can
+   * call the same resolver without duplicating the switch.
+   */
   function reasonLabel(kind: MovementKind): string {
     switch (kind) {
-      case "exit:waste":
-        return $LL.lotMovements.exitReasons.waste();
-      case "exit:expired":
-        return $LL.lotMovements.exitReasons.expired();
-      case "exit:damaged":
-        return $LL.lotMovements.exitReasons.damaged();
-      case "exit:internal_consumption":
-        return $LL.lotMovements.exitReasons.internalConsumption();
-      case "exit:return_to_supplier":
-        return $LL.lotMovements.exitReasons.returnToSupplier();
-      case "exit:inventory_adjustment":
-        return $LL.lotMovements.exitReasons.inventoryAdjustmentExit();
-      case "exit:other":
-        return $LL.lotMovements.exitReasons.other();
-      default:
-        return kind;
+      case "exit:waste":        return $LL.lotMovements.exitReasons.waste();
+      case "exit:expired":      return $LL.lotMovements.exitReasons.expired();
+      case "exit:damaged":      return $LL.lotMovements.exitReasons.damaged();
+      case "exit:internal_consumption": return $LL.lotMovements.exitReasons.internalConsumption();
+      case "exit:return_to_supplier":  return $LL.lotMovements.exitReasons.returnToSupplier();
+      case "exit:inventory_adjustment": return $LL.lotMovements.exitReasons.inventoryAdjustmentExit();
+      case "exit:other":        return $LL.lotMovements.exitReasons.other();
+      default:                  return kind;
     }
   }
 
@@ -210,9 +210,7 @@
   // All active store locations (all stores). Hydrates the LotContextPanel
   // `allLocations` prop so MoveStockModal cross-store destinations are
   // available without a separate fetch. Loaded once on mount.
-  let allStoreLocations = $state<
-    { id: string; name: string; store_id: string; store_name?: string }[]
-  >([]);
+  let allStoreLocations = $state<EnrichedLocation[]>([]);
 
   // Pinned lot-context from a resolved sale/stock-out lot. Cleared on
   // active-store change, on resolving an unknown item, or when the user
@@ -273,7 +271,7 @@
 
   // Reason picker options for Stock-out (excludes `exit:sale`).
   let stockOutReasonOptions = $derived(
-    STOCK_OUT_REASONS.map((r) => ({
+    STOCK_OUT_KINDS.map((r) => ({
       value: r,
       label: reasonLabel(r),
     })),
@@ -362,12 +360,12 @@
     if (quantity <= 0) return false;
     if (!locationId) return false;
     if (quantity > selectedBalance) return false;
-    if (REQUIRES_NOTES.includes(exitReason as MovementKind) && !notes.trim()) return false;
+    if (NOTE_REQUIRED_EXITS.includes(exitReason as ExitKind) && !notes.trim()) return false;
     return true;
   });
 
   let requiresNotes = $derived(
-    REQUIRES_NOTES.includes(exitReason as MovementKind),
+    NOTE_REQUIRED_EXITS.includes(exitReason as ExitKind),
   );
 
   // Scanner-tab availability: the page is interactive only when settings
@@ -453,30 +451,14 @@
   /**
    * Loads locations from every active store so MoveStockModal can offer
    * cross-store transfer destinations without a separate round-trip.
-   * Called once on mount; the list refreshes only if the user navigates
-   * away and back (onMount re-runs).
+   * Delegates to the shared `loadAllActiveStoreLocations` loader from
+   * `locations.ts`. Called once on mount; the list refreshes only if
+   * the user navigates away and back (onMount re-runs).
    */
   async function loadAllStoreLocations(): Promise<void> {
     try {
-      const stores = await listStores();
-      const activeStores = stores.filter((s) => s.is_active);
-      const results = await Promise.all(
-        activeStores.map((s) => listStoreLocations(s.id)),
-      );
-      const flat: { id: string; name: string; store_id: string; store_name?: string }[] = [];
-      for (let i = 0; i < activeStores.length; i++) {
-        for (const loc of results[i]) {
-          if (loc.is_active) {
-            flat.push({
-              id: loc.id,
-              name: loc.name,
-              store_id: loc.store_id,
-              store_name: activeStores[i].name,
-            });
-          }
-        }
-      }
-      allStoreLocations = flat;
+      const result = await loadAllActiveStoreLocations();
+      allStoreLocations = result.allLocations;
     } catch {
       allStoreLocations = [];
     }
@@ -872,7 +854,7 @@
         available: selectedBalance,
       });
     }
-    if (REQUIRES_NOTES.includes(exitReason as MovementKind) && !notes.trim()) {
+    if (NOTE_REQUIRED_EXITS.includes(exitReason as ExitKind) && !notes.trim()) {
       return $LL.scanner.stockOut.invalid.notes();
     }
     return $LL.scanner.stockOut.invalid.lot();
@@ -1312,6 +1294,7 @@
                 type="number"
                 class="input input-md motion-reduce:transition-none w-full"
                 min="0"
+                max={selectedBalance}
                 step="0.01"
                 inputmode="decimal"
                 value={quantityStr}
@@ -1537,6 +1520,7 @@
                 type="number"
                 class="input input-md motion-reduce:transition-none w-full"
                 min="0"
+                max={selectedBalance}
                 step="0.01"
                 inputmode="decimal"
                 value={quantityStr}

@@ -28,7 +28,7 @@ Make Scanner the canonical operational surface for lots and stock movements, whi
 - [x] 5. Add Scanner lot-context view showing current per-location balances, movement history, and canonical actions for same-store and cross-store transfer, exit, and count adjustment.
 - [x] 6. Make Scanner resolution and Dashboard lot views location-balance aware so a receiving store can find and operate a transferred lot without duplicating the lot identity.
 - [x] 7. Add in-memory Dashboard-to-Scanner navigation that opens the selected lot in Scanner context without duplicating lot mutation UI.
-- [ ] 8. Consolidate shared movement client rules and fix known selector/state drift before using the Scanner lot-context actions broadly.
+- [x] 8. Consolidate shared movement client rules and fix known selector/state drift before using the Scanner lot-context actions broadly.
 - [ ] 9. Remove superseded Dashboard mutation UI, duplicate Scanner/Modal movement logic, dead navigation state, and obsolete i18n only after their replacements are integrated and covered.
 - [ ] 10. Run focused backend/frontend verification, accessibility review, manual operational scenarios, including cross-store transfer and receipt, and document evidence.
 
@@ -154,4 +154,12 @@ This feature is a replacement, not an additive second workflow. Once the Scanner
 - Added an accessible Dashboard action with English and Spanish labels. No router, backend state, persistence, or new mutation UI was introduced; Dashboard's existing modal flows remain for task 9 cleanup.
 - Independent verification initially found a task-caused Svelte 5 non-reactive `activeTab` warning. The correction migrated `activeTab` to `$state`, preserving its initial value and tab behavior.
 - Final independent verification passed: `npm run check` (0 errors, 0 warnings), `npm run build`, and `git diff --check`.
-- Work-unit commit: `3ff3459 feat(scanner): open dashboard lots in scanner`.
+- Work-unit commit: `8924f01 feat(scanner): open dashboard lots in scanner`.
+
+### Task 8 — shared movement rules and selector/state drift (complete)
+
+- Added shared movement-rule and active-location loader modules. Reused them across Scanner, Dashboard, Calendar, the movement modals, and both movement-history panels without removing Dashboard mutation UI (task 9 boundary preserved).
+- Fixed Scanner Sale and Stock-out quantity inputs to cap at the selected positive balance. `RegisterExitModal` now resolves source location names from the active-location set instead of exposing raw IDs.
+- Independent verification caught a runtime-only label regression for `exit:inventory_adjustment`; the correction replaced computed i18n-key lookup with an exhaustive typed mapping to `inventoryAdjustmentExit`.
+- Final independent verification passed: all eight exit kinds map to valid EN/ES labels; `npm run check` (0 errors, 0 warnings), `npm run build`, and `git diff --check` passed.
+- Work-unit commit records this implementation and verification evidence.

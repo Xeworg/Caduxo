@@ -13,6 +13,7 @@
     type ExpiryLotResponse,
   } from "../lib/expiry_lots.js";
   import { listStores, listStoreLocations, type StoreLocationResponse } from "../lib/stores.js";
+  import { loadAllActiveStoreLocations, type EnrichedLocation } from "../lib/locations.js";
   import { resolveLocationDisplay } from "../lib/lotDisplay.js";
   import LotMovementsPanel from "./LotMovementsPanel.svelte";
   import { humanizeError } from "../lib/errors.js";
@@ -169,7 +170,7 @@
   let detailRow: DashboardLotRow | null = null;
   let detailLoading = false;
   let lotDetailTab: "detail" | "history" = "detail";
-  let lotDetailLocations: StoreLocationResponse[] = [];
+  let lotDetailLocations: EnrichedLocation[] = [];
 
   // ── Derived ─────────────────────────────────────────────────────────────────
 
@@ -393,16 +394,13 @@ const watchdog = window.setTimeout(() => {
 
   // ── Lot detail ───────────────────────────────────────────────────────────────
 
-  async function loadAllStoreLocations(): Promise<StoreLocationResponse[]> {
-    const activeStores = (await listStores()).filter((store) => store.is_active);
-    const locationLists = await Promise.all(
-      activeStores.map((store) =>
-        listStoreLocations(store.id).then((locations) =>
-          locations.map((location) => ({ ...location, store_name: store.name })),
-        ),
-      ),
-    );
-    return locationLists.flat();
+  async function loadAllStoreLocations(): Promise<EnrichedLocation[]> {
+    try {
+      const result = await loadAllActiveStoreLocations();
+      return result.allLocations;
+    } catch {
+      return [];
+    }
   }
 
   async function openLot(row: DashboardLotRow) {

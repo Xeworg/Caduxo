@@ -26,6 +26,7 @@
   import { LL } from "../../i18n/i18n-svelte.js";
   import { locale } from "../../i18n/locale.svelte.js";
   import { humanizeError } from "../../lib/errors.js";
+  import { buildMovementKindLabelRecord, getMovementKindLabel } from "../../lib/movementRules.js";
   import {
     listLotMovements,
     getLotLocationBalances,
@@ -122,26 +123,17 @@
     return $LL.lotMovements.resolution.eventDateTime({ value: dateStr });
   }
 
-  function getMovementKindLabel(kind: string, direction?: string | null): string {
+  // Build the movement-kind label record once per i18n scope so the
+  // per-row call to _movementKindLabel is a pure lookup.
+  let _kindLabels = $derived(buildMovementKindLabelRecord($LL));
+
+  function _movementKindLabel(kind: string, direction?: string | null): string {
     if (kind === "inventory_adjustment" && direction) {
       return direction === "increase"
         ? $LL.lotMovements.movementKinds.inventoryAdjustmentIncrease()
         : $LL.lotMovements.movementKinds.inventoryAdjustmentDecrease();
     }
-    const labels: Record<string, () => string> = {
-      "entry:initial": $LL.lotMovements.movementKinds.initialEntry,
-      transfer: $LL.lotMovements.movementKinds.transfer,
-      "exit:sale": $LL.lotMovements.exitReasons.sale,
-      "exit:waste": $LL.lotMovements.exitReasons.waste,
-      "exit:expired": $LL.lotMovements.exitReasons.expired,
-      "exit:damaged": $LL.lotMovements.exitReasons.damaged,
-      "exit:internal_consumption": $LL.lotMovements.exitReasons.internalConsumption,
-      "exit:return_to_supplier": $LL.lotMovements.exitReasons.returnToSupplier,
-      "exit:inventory_adjustment": $LL.lotMovements.exitReasons.inventoryAdjustmentExit,
-      "exit:other": $LL.lotMovements.exitReasons.other,
-      inventory_adjustment: $LL.lotMovements.movementKinds.inventoryAdjustment,
-    };
-    return labels[kind]?.() ?? kind;
+    return getMovementKindLabel(kind, direction, _kindLabels);
   }
 
   function resolveLocationName(id: string | null): string {
@@ -302,7 +294,7 @@
           )}
           <div class="movement-row" role="listitem">
             <div class="movement-kind">
-              {getMovementKindLabel(movement.movement_kind, movement.direction)}
+              {_movementKindLabel(movement.movement_kind, movement.direction)}
             </div>
             <div class="movement-locations">
               <span class="movement-loc">{resolveLocationName(movement.source_location_id)}</span>
@@ -339,6 +331,7 @@
   <RegisterExitModal
     lotId={lot.id}
     currentBalances={balances}
+    {allLocations}
     {unitType}
     onClose={() => (showRegisterExit = false)}
     onCreated={handleMovementCreated}
