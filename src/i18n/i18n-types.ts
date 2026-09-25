@@ -1858,6 +1858,115 @@ type RootTranslation = {
 		 * @param {unknown} key
 		 */
 		keyAlreadyExistsGeneric: RequiredParams<'key'>
+		distribution: {
+			/**
+			 * D​i​s​t​r​i​b​u​t​e​ ​a​c​r​o​s​s​ ​l​o​c​a​t​i​o​n​s
+			 */
+			toggleLabel: string
+			/**
+			 * S​p​l​i​t​ ​t​h​i​s​ ​l​o​t​ ​b​e​t​w​e​e​n​ ​t​w​o​ ​o​r​ ​m​o​r​e​ ​l​o​c​a​t​i​o​n​s​ ​i​n​ ​t​h​e​ ​s​a​m​e​ ​s​t​o​r​e​.
+			 */
+			toggleHint: string
+			/**
+			 * I​n​i​t​i​a​l​ ​d​i​s​t​r​i​b​u​t​i​o​n
+			 */
+			sectionHeading: string
+			/**
+			 * A​n​c​h​o​r​ ​l​o​c​a​t​i​o​n​ ​(​i​n​i​t​i​a​l​ ​e​n​t​r​y​)
+			 */
+			anchorLabel: string
+			/**
+			 * A​d​d​i​t​i​o​n​a​l​ ​l​o​c​a​t​i​o​n​ ​{​i​n​d​e​x​}
+			 * @param {unknown} index
+			 */
+			additionalLocationLabel: RequiredParams<'index'>
+			/**
+			 * Q​u​a​n​t​i​t​y​ ​a​t​ ​t​h​i​s​ ​l​o​c​a​t​i​o​n
+			 */
+			quantityLabel: string
+			/**
+			 * Q​u​a​n​t​i​t​y​ ​a​t​ ​t​h​e​ ​a​n​c​h​o​r​ ​l​o​c​a​t​i​o​n​ ​*
+			 */
+			anchorQuantityLabel: string
+			/**
+			 * A​d​d​ ​a​n​o​t​h​e​r​ ​l​o​c​a​t​i​o​n
+			 */
+			addRow: string
+			/**
+			 * N​o​ ​m​o​r​e​ ​a​c​t​i​v​e​ ​l​o​c​a​t​i​o​n​s​ ​a​v​a​i​l​a​b​l​e
+			 */
+			addRowDisabledNoMoreLocations: string
+			/**
+			 * R​e​m​o​v​e​ ​a​l​l​o​c​a​t​i​o​n​ ​{​i​n​d​e​x​}
+			 * @param {unknown} index
+			 */
+			removeRow: RequiredParams<'index'>
+			/**
+			 * T​h​e​ ​a​n​c​h​o​r​ ​r​o​w​ ​c​a​n​n​o​t​ ​b​e​ ​r​e​m​o​v​e​d
+			 */
+			removeRowDisabledAnchor: string
+			/**
+			 * T​h​e​ ​a​n​c​h​o​r​ ​r​e​c​e​i​v​e​s​ ​t​h​e​ ​i​n​i​t​i​a​l​ ​e​n​t​r​y​.​ ​E​v​e​r​y​ ​o​t​h​e​r​ ​r​o​w​ ​c​r​e​a​t​e​s​ ​a​n​ ​a​u​t​o​m​a​t​i​c​ ​s​a​m​e​-​s​t​o​r​e​ ​t​r​a​n​s​f​e​r​.
+			 */
+			anchorHint: string
+			/**
+			 * A​l​l​o​c​a​t​e​d​ ​t​o​t​a​l
+			 */
+			totalLabel: string
+			/**
+			 * A​l​l​o​c​a​t​e​d​ ​t​o​t​a​l​ ​m​a​t​c​h​e​s​ ​t​h​e​ ​l​o​t​ ​q​u​a​n​t​i​t​y​ ​(​{​t​o​t​a​l​}​)​.
+			 * @param {unknown} total
+			 */
+			totalMatch: RequiredParams<'total'>
+			/**
+			 * A​l​l​o​c​a​t​e​d​ ​t​o​t​a​l​ ​(​{​a​l​l​o​c​a​t​e​d​}​)​ ​d​o​e​s​ ​n​o​t​ ​m​a​t​c​h​ ​t​h​e​ ​l​o​t​ ​q​u​a​n​t​i​t​y​ ​(​{​t​o​t​a​l​}​)​.
+			 * @param {unknown} allocated
+			 * @param {unknown} total
+			 */
+			totalMismatch: RequiredParams<'allocated' | 'total'>
+			/**
+			 * {​r​e​m​a​i​n​i​n​g​}​ ​s​t​i​l​l​ ​n​e​e​d​s​ ​t​o​ ​b​e​ ​a​l​l​o​c​a​t​e​d​ ​a​c​r​o​s​s​ ​l​o​c​a​t​i​o​n​s​.
+			 * @param {unknown} remaining
+			 */
+			totalShort: RequiredParams<'remaining'>
+			/**
+			 * A​l​l​o​c​a​t​e​d​ ​t​o​t​a​l​ ​e​x​c​e​e​d​s​ ​t​h​e​ ​l​o​t​ ​q​u​a​n​t​i​t​y​ ​b​y​ ​{​o​v​e​r​f​l​o​w​}​.
+			 * @param {unknown} overflow
+			 */
+			totalOver: RequiredParams<'overflow'>
+			/**
+			 * P​i​c​k​ ​a​ ​l​o​c​a​t​i​o​n​ ​f​o​r​ ​t​h​i​s​ ​r​o​w​.
+			 */
+			rowLocationRequired: string
+			/**
+			 * T​h​i​s​ ​l​o​c​a​t​i​o​n​ ​i​s​ ​a​l​r​e​a​d​y​ ​u​s​e​d​ ​i​n​ ​a​n​o​t​h​e​r​ ​r​o​w​.
+			 */
+			rowDuplicateLocation: string
+			/**
+			 * T​h​i​s​ ​l​o​c​a​t​i​o​n​ ​i​s​ ​n​o​ ​l​o​n​g​e​r​ ​a​v​a​i​l​a​b​l​e​.
+			 */
+			rowLocationUnavailable: string
+			/**
+			 * E​n​t​e​r​ ​a​ ​q​u​a​n​t​i​t​y​ ​g​r​e​a​t​e​r​ ​t​h​a​n​ ​z​e​r​o​.
+			 */
+			rowQuantityRequired: string
+			/**
+			 * Q​u​a​n​t​i​t​y​ ​m​u​s​t​ ​b​e​ ​g​r​e​a​t​e​r​ ​t​h​a​n​ ​z​e​r​o​.
+			 */
+			rowQuantityNonPositive: string
+			/**
+			 * T​h​i​s​ ​p​r​o​d​u​c​t​ ​u​s​e​s​ ​i​n​t​e​g​e​r​ ​u​n​i​t​s​;​ ​f​r​a​c​t​i​o​n​a​l​ ​q​u​a​n​t​i​t​i​e​s​ ​a​r​e​ ​n​o​t​ ​a​l​l​o​w​e​d​.
+			 */
+			rowQuantityFractional: string
+			/**
+			 * T​h​e​r​e​ ​a​r​e​ ​n​o​ ​a​c​t​i​v​e​ ​l​o​c​a​t​i​o​n​s​ ​i​n​ ​t​h​i​s​ ​s​t​o​r​e​.​ ​A​d​d​ ​a​ ​l​o​c​a​t​i​o​n​ ​b​e​f​o​r​e​ ​d​i​s​t​r​i​b​u​t​i​n​g​ ​a​ ​l​o​t​.
+			 */
+			noLocationsAvailable: string
+			/**
+			 * D​i​s​t​r​i​b​u​t​i​o​n​ ​i​s​ ​o​n​l​y​ ​a​v​a​i​l​a​b​l​e​ ​w​h​e​n​ ​c​r​e​a​t​i​n​g​ ​a​ ​l​o​t​.​ ​S​w​i​t​c​h​ ​t​o​ ​t​h​e​ ​n​e​w​-​l​o​t​ ​s​c​r​e​e​n​ ​t​o​ ​d​i​s​t​r​i​b​u​t​e​ ​s​t​o​c​k​.
+			 */
+			distributionDisabled: string
+		}
 	}
 	lotsDetail: {
 		/**
@@ -5960,6 +6069,108 @@ export type TranslationFunctions = {
 		 * Key "{key}" already exists. Please choose a different key.
 		 */
 		keyAlreadyExistsGeneric: (arg: { key: unknown }) => LocalizedString
+		distribution: {
+			/**
+			 * Distribute across locations
+			 */
+			toggleLabel: () => LocalizedString
+			/**
+			 * Split this lot between two or more locations in the same store.
+			 */
+			toggleHint: () => LocalizedString
+			/**
+			 * Initial distribution
+			 */
+			sectionHeading: () => LocalizedString
+			/**
+			 * Anchor location (initial entry)
+			 */
+			anchorLabel: () => LocalizedString
+			/**
+			 * Additional location {index}
+			 */
+			additionalLocationLabel: (arg: { index: unknown }) => LocalizedString
+			/**
+			 * Quantity at this location
+			 */
+			quantityLabel: () => LocalizedString
+			/**
+			 * Quantity at the anchor location *
+			 */
+			anchorQuantityLabel: () => LocalizedString
+			/**
+			 * Add another location
+			 */
+			addRow: () => LocalizedString
+			/**
+			 * No more active locations available
+			 */
+			addRowDisabledNoMoreLocations: () => LocalizedString
+			/**
+			 * Remove allocation {index}
+			 */
+			removeRow: (arg: { index: unknown }) => LocalizedString
+			/**
+			 * The anchor row cannot be removed
+			 */
+			removeRowDisabledAnchor: () => LocalizedString
+			/**
+			 * The anchor receives the initial entry. Every other row creates an automatic same-store transfer.
+			 */
+			anchorHint: () => LocalizedString
+			/**
+			 * Allocated total
+			 */
+			totalLabel: () => LocalizedString
+			/**
+			 * Allocated total matches the lot quantity ({total}).
+			 */
+			totalMatch: (arg: { total: unknown }) => LocalizedString
+			/**
+			 * Allocated total ({allocated}) does not match the lot quantity ({total}).
+			 */
+			totalMismatch: (arg: { allocated: unknown, total: unknown }) => LocalizedString
+			/**
+			 * {remaining} still needs to be allocated across locations.
+			 */
+			totalShort: (arg: { remaining: unknown }) => LocalizedString
+			/**
+			 * Allocated total exceeds the lot quantity by {overflow}.
+			 */
+			totalOver: (arg: { overflow: unknown }) => LocalizedString
+			/**
+			 * Pick a location for this row.
+			 */
+			rowLocationRequired: () => LocalizedString
+			/**
+			 * This location is already used in another row.
+			 */
+			rowDuplicateLocation: () => LocalizedString
+			/**
+			 * This location is no longer available.
+			 */
+			rowLocationUnavailable: () => LocalizedString
+			/**
+			 * Enter a quantity greater than zero.
+			 */
+			rowQuantityRequired: () => LocalizedString
+			/**
+			 * Quantity must be greater than zero.
+			 */
+			rowQuantityNonPositive: () => LocalizedString
+			/**
+			 * This product uses integer units; fractional quantities are not allowed.
+			 */
+			rowQuantityFractional: () => LocalizedString
+			/**
+			 * There are no active locations in this store. Add a location before distributing a lot.
+			 */
+			noLocationsAvailable: () => LocalizedString
+			/**
+			 * Distribution is only available when creating a lot. Switch to the new-lot screen to distribute stock.
+			 */
+			distributionDisabled: () => LocalizedString
+		}
 	}
 	lotsDetail: {
 		/**

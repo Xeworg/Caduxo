@@ -546,6 +546,37 @@ const en: BaseTranslation = {
     keyPattern: "Key must be 1-16 lowercase letters, digits, hyphens or underscores",
     keyAlreadyExists: 'Key "{key}" already exists as "{existing}". Select it from the list instead.',
     keyAlreadyExistsGeneric: 'Key "{key}" already exists. Please choose a different key.',
+    // Optional initial-distribution editor (PR `scanner-first-inventory`,
+    // ODD task 3). Hidden in edit mode and opt-in inside LotForm's
+    // create mode. The first allocation row is the anchor (initial
+    // entry); subsequent rows become same-store transfers.
+    distribution: {
+      toggleLabel: "Distribute across locations",
+      toggleHint: "Split this lot between two or more locations in the same store.",
+      sectionHeading: "Initial distribution",
+      anchorLabel: "Anchor location (initial entry)",
+      additionalLocationLabel: "Additional location {index}",
+      quantityLabel: "Quantity at this location",
+      anchorQuantityLabel: "Quantity at the anchor location *",
+      addRow: "Add another location",
+      addRowDisabledNoMoreLocations: "No more active locations available",
+      removeRow: "Remove allocation {index}",
+      removeRowDisabledAnchor: "The anchor row cannot be removed",
+      anchorHint: "The anchor receives the initial entry. Every other row creates an automatic same-store transfer.",
+      totalLabel: "Allocated total",
+      totalMatch: "Allocated total matches the lot quantity ({total}).",
+      totalMismatch: "Allocated total ({allocated}) does not match the lot quantity ({total}).",
+      totalShort: "{remaining} still needs to be allocated across locations.",
+      totalOver: "Allocated total exceeds the lot quantity by {overflow}.",
+      rowLocationRequired: "Pick a location for this row.",
+      rowDuplicateLocation: "This location is already used in another row.",
+      rowLocationUnavailable: "This location is no longer available.",
+      rowQuantityRequired: "Enter a quantity greater than zero.",
+      rowQuantityNonPositive: "Quantity must be greater than zero.",
+      rowQuantityFractional: "This product uses integer units; fractional quantities are not allowed.",
+      noLocationsAvailable: "There are no active locations in this store. Add a location before distributing a lot.",
+      distributionDisabled: "Distribution is only available when creating a lot. Switch to the new-lot screen to distribute stock.",
+    },
   },
 
   lotsDetail: {

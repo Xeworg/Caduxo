@@ -545,6 +545,38 @@ const es: BaseTranslation = {
     keyPattern: "La clave debe tener de 1 a 16 letras minúsculas, dígitos, guiones o guiones bajos",
     keyAlreadyExists: 'La clave "{key}" ya existe como "{existing}". Selecciónala de la lista en su lugar.',
     keyAlreadyExistsGeneric: 'La clave "{key}" ya existe. Elige una clave diferente.',
+    // Editor opcional de distribución inicial (PR
+    // `scanner-first-inventory`, tarea ODD 3). Oculto en modo edición
+    // y opt-in dentro del modo creación de LotForm. La primera fila es
+    // el ancla (entrada inicial); las filas adicionales generan
+    // transferencias automáticas dentro de la misma tienda.
+    distribution: {
+      toggleLabel: "Distribuir entre ubicaciones",
+      toggleHint: "Reparte este lote entre dos o más ubicaciones de la misma tienda.",
+      sectionHeading: "Distribución inicial",
+      anchorLabel: "Ubicación ancla (entrada inicial)",
+      additionalLocationLabel: "Ubicación adicional {index}",
+      quantityLabel: "Cantidad en esta ubicación",
+      anchorQuantityLabel: "Cantidad en la ubicación ancla *",
+      addRow: "Añadir otra ubicación",
+      addRowDisabledNoMoreLocations: "No quedan ubicaciones activas disponibles",
+      removeRow: "Quitar asignación {index}",
+      removeRowDisabledAnchor: "La fila ancla no se puede quitar",
+      anchorHint: "El ancla recibe la entrada inicial. Cada fila adicional genera una transferencia automática dentro de la misma tienda.",
+      totalLabel: "Total asignado",
+      totalMatch: "El total asignado coincide con la cantidad del lote ({total}).",
+      totalMismatch: "El total asignado ({allocated}) no coincide con la cantidad del lote ({total}).",
+      totalShort: "Aún quedan {remaining} por asignar entre las ubicaciones.",
+      totalOver: "El total asignado supera la cantidad del lote en {overflow}.",
+      rowLocationRequired: "Elige una ubicación para esta fila.",
+      rowDuplicateLocation: "Esta ubicación ya se está usando en otra fila.",
+      rowLocationUnavailable: "Esta ubicación ya no está disponible.",
+      rowQuantityRequired: "Introduce una cantidad mayor que cero.",
+      rowQuantityNonPositive: "La cantidad debe ser mayor que cero.",
+      rowQuantityFractional: "Este producto usa unidades enteras; no se permiten cantidades fraccionarias.",
+      noLocationsAvailable: "No hay ubicaciones activas en esta tienda. Añade una ubicación antes de distribuir un lote.",
+      distributionDisabled: "La distribución solo está disponible al crear un lote. Abre la pantalla de nuevo lote para distribuir stock.",
+    },
   },
 
   lotsDetail: {

@@ -24,10 +24,15 @@
     import Listbox from "./ui/Listbox.svelte";
     import Button from "./ui/Button.svelte";
     import Alert from "./ui/Alert.svelte";
+    import DistributionEditor, {
+        type DistributionAllocationRow,
+    } from "./lot-creation/DistributionEditor.svelte";
     import {
         createExpiryLot,
+        createExpiryLotDistributed,
         updateExpiryLot,
         type ExpiryLotCreate,
+        type ExpiryLotDistributedCreate,
         type ExpiryLotUpdate,
         type ExpiryLotResponse,
     } from "../lib/expiry_lots.js";
@@ -128,6 +133,36 @@
     /** Echoes the generated batch code after a successful create when manual input was blank. */
     let batchEcho: string | null = null;
 
+    /**
+     * Optional initial-distribution state (ODD task 3 of
+     * `scanner-first-inventory`). Only meaningful in create mode; the
+     * editor is rendered when:
+     *   - `mode === "create"`, AND
+     *   - a store is selected, AND
+     *   - at least one active same-store location exists.
+     * In edit mode the toggle is hidden and `distributionEnabled`
+     * stays `false`, so `createExpiryLot` is always used (the existing
+     * metadata-only contract). PR `scanner-first-inventory`.
+     */
+    let distributionEnabled = false;
+    /**
+     * Editor-owned allocation rows. The editor mutates this array via
+     * two-way binding; LotForm reads it at submit time to build the
+     * `ExpiryLotDistributedCreate` payload. Seeded from the existing
+     * single-location selection whenever the user toggles distribution
+     * ON so the anchor location carries through; cleared when the
+     * user toggles OFF so the simple picker resumes ownership.
+     */
+    let distributionAllocations: DistributionAllocationRow[] = [];
+    /**
+     * Editor-validity signal. Mirrors the editor's `onValidityChange`
+     * callback so LotForm can disable the submit button + surface a
+     * human-readable summary while the user is editing rows. Re-checked
+     * at submit time as a defensive belt-and-suspenders.
+     */
+    let distributionValid = false;
+    let distributionSummary: string | null = null;
+
     // ── Init ───────────────────────────────────────────────────────────────────
 
     async function init() {
@@ -194,6 +229,97 @@
         }
     }
 
+    // ── Distribution editor helpers ──────────────────────────────────────
+    //
+    // The toggle is create-only (edit mode hides it) and only enables
+    // when at least two active same-store locations are available — a
+    // single-location distribution has no semantic difference from the
+    // simple path, so the toggle stays disabled and the editor never
+    // appears in that case.
+    $: activeLocations = locations.filter((loc) => loc.is_active);
+    $: canDistribute = mode === "create" && activeLocations.length >= 2;
+    // When the active locations change (store switch / refetch), reset
+    // distribution state so a stale anchor / allocations never survive
+    // a store switch. Same pattern as `selectedLocationId` reset.
+    $: if (activeLocations) {
+        // Defer reset to a microtask so the reactive expression does
+        // not cascade with the `loadLocations` assignment above.
+        queueMicrotask(resetDistributionState);
+    }
+
+    function resetDistributionState() {
+        if (!canDistribute && distributionEnabled) {
+            distributionEnabled = false;
+        }
+        // Drop allocations referencing locations the new store does
+        // not own — anchors become stale and the backend would reject
+        // them with `DistributionLocationNotInStore`. The simpler
+        // reset is to clear the whole array; the user re-toggles to
+        // seed the editor again.
+        const available = new Set(activeLocations.map((l) => l.id));
+        const filtered = distributionAllocations.filter((row) =>
+            available.has(row.locationId),
+        );
+        if (filtered.length !== distributionAllocations.length) {
+            distributionAllocations = filtered;
+        }
+        if (distributionAllocations.length === 0) {
+            distributionValid = false;
+            distributionSummary = null;
+        }
+    }
+
+    /**
+     * Toggle the distribution editor on / off while preserving the
+     * anchor location so the user does not lose their selection
+     * across toggles. Mirrors the same pattern as the Scanner's
+     * locked-store hint: the anchor location is shared state between
+     * the simple picker and the editor.
+     */
+    function toggleDistribution() {
+        if (!canDistribute) return;
+        distributionEnabled = !distributionEnabled;
+        if (distributionEnabled) {
+            // Seed the editor with the current simple-picker state
+            // when there is one, otherwise the first active location.
+            // Anchor quantity defaults to the full lot total so the
+            // common "all stock at one location" case is one click.
+            const anchorLocationId =
+                selectedLocationId || activeLocations[0]?.id || "";
+            if (anchorLocationId) {
+                distributionAllocations = [
+                    {
+                        id: `alloc-${Date.now()}`,
+                        locationId: anchorLocationId,
+                        quantityStr: String(quantity || ""),
+                    },
+                ];
+            } else {
+                distributionAllocations = [];
+            }
+        } else {
+            // Toggling OFF: push the editor's anchor back into the
+            // simple picker so the existing `selectedLocationId`
+            // contract resumes ownership. Discard any additional
+            // allocations — the user opted back into the simple path.
+            const anchor = distributionAllocations[0];
+            if (anchor && anchor.locationId) {
+                selectedLocationId = anchor.locationId;
+            }
+            distributionAllocations = [];
+            distributionValid = false;
+            distributionSummary = null;
+        }
+    }
+
+    function handleDistributionValidityChange(
+        valid: boolean,
+        summary: string | null,
+    ): void {
+        distributionValid = valid;
+        distributionSummary = summary;
+    }
+
     // ── Listbox option derivations ──────────────────────────────────────────────
 
     // Store options always start with the disabled placeholder row so the
@@ -225,16 +351,43 @@
             errorMsg = $LL.lotForm.storeRequired();
             return;
         }
-        if (requireInitialLocation && !selectedLocationId) {
-            errorMsg = $LL.lotForm.selectLocationRequired();
-            return;
-        }
         if (!expiryDate) {
             errorMsg = $LL.lotForm.expiryDateRequired();
             return;
         }
         if (mode === "create" && quantity <= 0) {
             errorMsg = $LL.lotForm.quantityGreaterThanZero();
+            return;
+        }
+        // Distribution validation lives in the editor; re-check here as
+        // a defensive belt-and-suspenders so the submit button is the
+        // only path that can produce a misleading state.
+        if (distributionEnabled) {
+            if (!canDistribute) {
+                errorMsg = $LL.lotForm.distribution.distributionDisabled();
+                return;
+            }
+            if (!distributionValid) {
+                // The editor emits a stable error key in
+                // `distributionSummary`; surface it verbatim when we
+                // can resolve it, otherwise fall back to the
+                // canonical "quantity must match" message.
+                errorMsg = resolveDistributionSummary();
+                if (!errorMsg) {
+                    errorMsg = $LL.lotForm.distribution.totalMismatch({
+                        allocated: distributionAllocations
+                            .map((row) =>
+                                Number.parseFloat(row.quantityStr) || 0,
+                            )
+                            .reduce((s, q) => s + q, 0)
+                            .toString(),
+                        total: String(quantity),
+                    });
+                }
+                return;
+            }
+        } else if (requireInitialLocation && !selectedLocationId) {
+            errorMsg = $LL.lotForm.selectLocationRequired();
             return;
         }
         submitting = true;
@@ -256,6 +409,36 @@
                 };
                 const saved = await updateExpiryLot(payload);
                 onSaved(saved);
+            } else if (distributionEnabled) {
+                // Distributed create: one lot, one entry:initial,
+                // transfers for the additional rows. The editor owns
+                // allocation ordering; the backend takes the first row
+                // as the anchor.
+                const allocationsPayload = distributionAllocations.map(
+                    (row) => ({
+                        location_id: row.locationId,
+                        quantity:
+                            Number.parseFloat(row.quantityStr) || 0,
+                    }),
+                );
+                const payload: ExpiryLotDistributedCreate = {
+                    product_id: productId,
+                    store_id: selectedStoreId,
+                    total_quantity: quantity,
+                    allocations: allocationsPayload,
+                    unit: unit.trim() || null,
+                    expiry_date: expiryDate,
+                    alert_days_before: alertDaysBefore,
+                    batch_code: userProvidedBatch || null,
+                    notes: notes.trim() || null,
+                };
+                const result = await createExpiryLotDistributed(payload);
+                // Batch echo chip mirrors the simple-create path so the
+                // UX stays consistent across both code paths.
+                if (!userProvidedBatch && result.lot.batch_code) {
+                    batchEcho = result.lot.batch_code;
+                }
+                onSaved(result.lot);
             } else {
                 const payload: ExpiryLotCreate = {
                     product_id: productId,
@@ -282,9 +465,58 @@
             submitting = false;
         }
     }
+
+    /**
+     * Resolve the editor's `distributionSummary` key into a localised
+     * string for the form-level alert. Returns the empty string when
+     * the key does not map to a known distribution error so the caller
+     * can fall back to its own canonical message.
+     */
+    function resolveDistributionSummary(): string {
+        const key = distributionSummary;
+        if (!key) return "";
+        switch (key) {
+            case "rowLocationRequired":
+                return $LL.lotForm.distribution.rowLocationRequired();
+            case "rowDuplicateLocation":
+                return $LL.lotForm.distribution.rowDuplicateLocation();
+            case "rowLocationUnavailable":
+                return $LL.lotForm.distribution.rowLocationUnavailable();
+            case "rowQuantityRequired":
+                return $LL.lotForm.distribution.rowQuantityRequired();
+            case "rowQuantityNonPositive":
+                return $LL.lotForm.distribution.rowQuantityNonPositive();
+            case "rowQuantityFractional":
+                return $LL.lotForm.distribution.rowQuantityFractional();
+            case "lotForm.distribution.totalShort":
+                return $LL.lotForm.distribution.totalShort({
+                    remaining: String(
+                        Math.max(0, quantity - distributionAllocations.reduce(
+                            (s, row) =>
+                                s + (Number.parseFloat(row.quantityStr) || 0),
+                            0,
+                        )),
+                    ),
+                });
+            case "lotForm.distribution.totalOver":
+                return $LL.lotForm.distribution.totalOver({
+                    overflow: String(
+                        Math.max(0, distributionAllocations.reduce(
+                            (s, row) =>
+                                s + (Number.parseFloat(row.quantityStr) || 0),
+                            0,
+                        ) - quantity),
+                    ),
+                });
+            case "lotForm.quantityGreaterThanZero":
+                return $LL.lotForm.quantityGreaterThanZero();
+            default:
+                return "";
+        }
+    }
 </script>
 
-<form class="lot-form" on:submit|preventDefault={submit}>
+<form class="lot-form" onsubmit={(e) => { e.preventDefault(); void submit(); }}>
     <h3 class="form-title">
         {mode === "edit"
             ? $LL.lotForm.editTitle()
@@ -353,8 +585,14 @@
             </p>
         {/if}
 
-        <!-- Location picker — shown when the store has locations -->
-        {#if selectedStoreId && locations.length > 0}
+        <!-- Location picker — shown when the store has locations AND
+             the user has not opted into multi-location distribution.
+             The DistributionEditor (below) owns the location selection
+             when `distributionEnabled` is true, so the simple picker
+             is hidden in that case to avoid two conflicting location
+             controls on the same screen. PR `scanner-first-inventory`,
+             ODD task 3. -->
+        {#if selectedStoreId && locations.length > 0 && !distributionEnabled}
             <Listbox
                 bind:value={selectedLocationId}
                 options={locationOptions}
@@ -367,6 +605,61 @@
             {:else}
                 <p class="hint-optional">{$LL.lotForm.locationOptional()}</p>
             {/if}
+        {/if}
+
+        <!--
+          Optional initial-distribution toggle (create-only). Hidden
+          in edit mode; disabled when the active store has fewer than
+          two active locations (a single-location distribution has no
+          semantic difference from the simple path, so the toggle is
+          never surfaced). The toggle uses a native checkbox so it
+          inherits the platform's keyboard + screen-reader contract
+          without an extra primitive.
+        -->
+        {#if mode === "create"}
+            <div class="distribution-toggle-row">
+                <label class="distribution-toggle-label">
+                    <input
+                        type="checkbox"
+                        class="checkbox checkbox-sm motion-reduce:transition-none"
+                        checked={distributionEnabled}
+                        disabled={!canDistribute}
+                        onchange={toggleDistribution}
+                        aria-describedby="distribution-toggle-hint"
+                    />
+                    <span class="distribution-toggle-text">
+                        {$LL.lotForm.distribution.toggleLabel()}
+                    </span>
+                </label>
+                <p
+                    class="distribution-toggle-hint"
+                    id="distribution-toggle-hint"
+                >
+                    {#if !canDistribute}
+                        {$LL.lotForm.distribution.noLocationsAvailable()}
+                    {:else}
+                        {$LL.lotForm.distribution.toggleHint()}
+                    {/if}
+                </p>
+            </div>
+        {/if}
+
+        <!--
+          Distribution editor. Rendered when the toggle is on AND the
+          active store has at least two active locations. The editor
+          owns the anchor + additional rows and reports its validity
+          via the `onValidityChange` callback; LotForm re-checks at
+          submit time as a defensive belt-and-suspenders.
+        -->
+        {#if distributionEnabled && canDistribute}
+            <DistributionEditor
+                locations={activeLocations}
+                totalQuantity={quantity}
+                unitKind={productUnitKind}
+                disabled={submitting}
+                bind:allocations={distributionAllocations}
+                onValidityChange={handleDistributionValidityChange}
+            />
         {/if}
 
         <div class="grid-2">
@@ -456,6 +749,7 @@
                 type="submit"
                 variant="primary"
                 loading={submitting}
+                disabled={submitting || (distributionEnabled && !distributionValid)}
             >
                 {submitting
                     ? $LL.lotForm.saving()
@@ -670,5 +964,48 @@
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
+    }
+
+    /*
+      Distribution toggle (PR `scanner-first-inventory`, ODD task 3).
+      Native checkbox + label so the platform's keyboard / focus /
+      screen-reader contract applies without an extra primitive. The
+      hint paragraph mirrors the locked-store hint pattern: a short
+      contextual sentence under the control.
+    */
+    .distribution-toggle-row {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px 12px;
+        border: 1px solid color-mix(in oklch, var(--color-info) 35%, transparent);
+        background: color-mix(in oklch, var(--color-info) 6%, transparent);
+        border-radius: 6px;
+    }
+
+    .distribution-toggle-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.88rem;
+        color: var(--color-base-content);
+        cursor: pointer;
+    }
+
+    .distribution-toggle-label:has(input:disabled) {
+        cursor: not-allowed;
+        opacity: 0.7;
+    }
+
+    .distribution-toggle-text {
+        font-weight: 500;
+    }
+
+    .distribution-toggle-hint {
+        margin: 0;
+        padding: 0 4px;
+        font-size: 0.76rem;
+        color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
+        line-height: 1.35;
     }
 </style>

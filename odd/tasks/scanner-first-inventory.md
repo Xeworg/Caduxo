@@ -21,7 +21,7 @@ Make Scanner the canonical operational surface for lots and stock movements, whi
 
 - [x] 1. Map and test the existing lot and movement invariants needed by the new flow, including initial-entry semantics, transfer balances, store ownership, and atomic rollback behavior.
 - [x] 2. Add an atomic backend command and DTO for creating one lot with an initial within-store location distribution; cover validation, duplicate locations, quantity totals, integer units, and rollback.
-- [ ] 3. Extract reusable lot-creation presentation state from `LotForm` and add an accessible optional distribution editor with quantity-total validation and bilingual copy.
+- [x] 3. Extract reusable lot-creation presentation state from `LotForm` and add an accessible optional distribution editor with quantity-total validation and bilingual copy.
 - [ ] 4. Route Scanner Registration and Product Detail Add Lot through the same reusable creation flow, preserving Scanner store locking and existing Product Detail behavior for the simple path.
 - [ ] 5. Add Scanner lot-context view showing current per-location balances, movement history, and canonical actions for same-store and cross-store transfer, exit, and count adjustment.
 - [ ] 6. Make Scanner resolution and Dashboard lot views location-balance aware so a receiving store can find and operate a transferred lot without duplicating the lot identity.
@@ -115,3 +115,10 @@ This feature is a replacement, not an additive second workflow. Once the Scanner
 - Focused verification passed after the final formatter pass: 7 distributed-creation tests, 6 distribution-message tests, and `git diff --check`.
 - Full independent verification passed earlier: 757 Rust library tests, frontend type checks, and release build. `cargo clippy` retains one unrelated pre-existing error and nine warnings in `src/domain/lot_movements.rs`.
 - Work-unit commit: `d0e35ca feat(lots): support distributed initial stock`.
+
+### Task 3 — reusable distribution editor (complete)
+
+- Added an opt-in, create-only `DistributionEditor` that preserves the existing simple and edit paths in `LotForm`.
+- The editor maintains ordered anchor allocations, blocks invalid totals/rows/duplicates/fractional integer quantities, and dispatches the distributed backend wrapper only when enabled.
+- English/Spanish copy and generated i18n types are in parity. Independent frontend verification passed: `npm run check`, `npm run build`, and `git diff --check`.
+- Work-unit commit: pending this verified work-unit commit.
