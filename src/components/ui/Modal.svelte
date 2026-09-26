@@ -352,6 +352,17 @@
   and our blur supplements it on capable platforms.
 -->
 <style>
+  /*
+   * DaisyUI applies `scale` and `translate` to `.modal-box`. Even their
+   * open-state values create a containing block for fixed-position popovers,
+   * so Listbox menus positioned from viewport coordinates render off-screen
+   * inside a dialog.
+   */
+  dialog.modal .modal-box {
+    scale: none;
+    translate: none;
+  }
+
   dialog.modal::backdrop {
     background-color: color-mix(in oklch, black 40%, transparent);
   }

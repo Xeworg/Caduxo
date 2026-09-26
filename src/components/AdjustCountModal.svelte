@@ -9,6 +9,7 @@
 -->
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
+import { isFractionalForIntegerUnit } from "../lib/movementRules.js";
   import { LL } from "../i18n/i18n-svelte.js";
   import { locale } from "../i18n/locale.svelte.js";
   import type { UnitKind } from "../lib/products.js";
@@ -65,19 +66,7 @@
   $: isDecrease = delta < 0;
   $: isNoOp = delta === 0;
 
-  // ── Unit-aware quantity validation ───────────────────────────────────────
   $: isIntegerUnit = unitType === "integer";
-
-  /**
-   * Local validation for integer-unit products: catches fractional input
-   * before submit so the user gets immediate feedback. Backend enforces the
-   * same invariant, but this avoids a round-trip for the common case.
-   */
-  function isFractionalForIntegerUnit(qty: number): boolean {
-    if (!isIntegerUnit) return false;
-    if (qty < 0) return false;
-    return !Number.isInteger(qty);
-  }
 
   /**
    * Location options for the themed `<Listbox>` primitive. The
@@ -109,7 +98,7 @@
       errorMsg = $LL.lotMovements.modal.quantityNonNegativeError();
       return;
     }
-    if (isFractionalForIntegerUnit(realQuantity)) {
+    if (isFractionalForIntegerUnit(realQuantity, isIntegerUnit)) {
       errorMsg = $LL.lotMovements.modal.integerQuantityError({ quantity: realQuantity });
       return;
     }

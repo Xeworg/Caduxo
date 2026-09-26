@@ -65,14 +65,29 @@
     type StoreResponse,
   } from "../lib/stores.js";
   import {
+    loadAllActiveStoreLocations,
+    type EnrichedLocation,
+  } from "../lib/locations.js";
+  import {
+    NOTE_REQUIRED_EXITS,
+    getExitKindLabel,
+    EXIT_KINDS,
+    type ExitKind,
+    buildMovementKindLabelRecord,
+    getMovementKindLabel,
+  } from "../lib/movementRules.js";
+  import {
     createLotMovement,
     getLotLocationBalances,
+    listLotMovements,
+    formatMovementQuantity,
     type LotLocationBalance,
     type MovementKind,
   } from "../lib/lot_movements.js";
-  import type { ProductResponse } from "../lib/products.js";
-  import { listCategories, type CategoryResponse } from "../lib/products.js";
-  import type { ExpiryLotResponse } from "../lib/expiry_lots.js";
+  import { getProduct, listCategories, type CategoryResponse, type ProductResponse } from "../lib/products.js";
+  import { getExpiryLot, type ExpiryLotResponse } from "../lib/expiry_lots.js";
+  import { scannerNavigation, clearScannerNavigation, SCANNER_EXIT_SIGNAL } from "../lib/navigation.js";
+  import type { UnitKind } from "../lib/products.js";
   import { resolveLocationDisplay, type LocationRef } from "../lib/lotDisplay.js";
   import Button from "./ui/Button.svelte";
   import Listbox from "./ui/Listbox.svelte";
@@ -82,48 +97,18 @@
   import EmptyState from "./ui/EmptyState.svelte";
   import LotForm from "./LotForm.svelte";
   import ProductForm from "./ProductForm.svelte";
+  import MoveStockModal from "./MoveStockModal.svelte";
+  import AdjustCountModal from "./AdjustCountModal.svelte";
 
   // ── Mode union ────────────────────────────────────────────────────────────
-  type Mode = "sale" | "registration" | "stock_out";
+  type Mode = "sale" | "registration" | "stock_out" | "lot_context" | "move_stock" | "adjust_count";
 
-  // Non-sale exit reasons for Stock-out mode (mirrors the spec scenario
-  // `Stock-out cannot reference the Sale reason`).
-  const STOCK_OUT_REASONS: ReadonlyArray<MovementKind> = [
-    "exit:waste",
-    "exit:expired",
-    "exit:damaged",
-    "exit:internal_consumption",
-    "exit:return_to_supplier",
-    "exit:inventory_adjustment",
-    "exit:other",
-  ];
-
-  // Reasons that require notes (mirrors RegisterExitModal's REQUIRES_NOTES).
-  const REQUIRES_NOTES: ReadonlyArray<MovementKind> = [
-    "exit:inventory_adjustment",
-    "exit:other",
-  ];
-
-  function reasonLabel(kind: MovementKind): string {
-    switch (kind) {
-      case "exit:waste":
-        return $LL.lotMovements.exitReasons.waste();
-      case "exit:expired":
-        return $LL.lotMovements.exitReasons.expired();
-      case "exit:damaged":
-        return $LL.lotMovements.exitReasons.damaged();
-      case "exit:internal_consumption":
-        return $LL.lotMovements.exitReasons.internalConsumption();
-      case "exit:return_to_supplier":
-        return $LL.lotMovements.exitReasons.returnToSupplier();
-      case "exit:inventory_adjustment":
-        return $LL.lotMovements.exitReasons.inventoryAdjustmentExit();
-      case "exit:other":
-        return $LL.lotMovements.exitReasons.other();
-      default:
-        return kind;
-    }
-  }
+  // Non-sale exit reasons for Stock-out mode. `exit:sale` is intentionally
+  // absent — Stock-out cannot record a sale (per spec scenario).
+  // Derived from the shared EXIT_KINDS; `getExitKindLabel` provides labels.
+  const STOCK_OUT_KINDS: readonly ExitKind[] = EXIT_KINDS.filter(
+    (k) => k !== "exit:sale",
+  );
 
   // ── State ─────────────────────────────────────────────────────────────────
 
@@ -205,6 +190,22 @@
   // LotMatch/ProductMatch registration flow: open the existing LotForm.
   let registrationLotFormOpen = $state(false);
 
+  // All active store locations (all stores). Hydrates `allLocations` shared
+  // by the lot-context tabs and `MoveStockModal` cross-store destinations
+  // so no separate fetch is required. Loaded once on mount.
+  let allStoreLocations = $state<EnrichedLocation[]>([]);
+
+  // Pinned lot-context from a resolved sale/stock-out lot. Cleared on
+  // active-store change, on resolving an unknown item, or when the user
+  // explicitly closes the panel. Survives successful mutations so the user
+  // can read back the updated balances after the action.
+  type PinnedContext = {
+    lot: ExpiryLotResponse;
+    product: ProductResponse;
+    unitType: UnitKind | null;
+  };
+  let pinnedContext = $state<PinnedContext | null>(null);
+
   // Always-visible active-store context. Mirrors the persisted
   // `last_selected_store_id` so the user can see which store Scanner
   // operations apply to and switch it without leaving the tab. PR
@@ -253,9 +254,9 @@
 
   // Reason picker options for Stock-out (excludes `exit:sale`).
   let stockOutReasonOptions = $derived(
-    STOCK_OUT_REASONS.map((r) => ({
+    STOCK_OUT_KINDS.map((r) => ({
       value: r,
-      label: reasonLabel(r),
+      label: getExitKindLabel(r, $LL),
     })),
   );
 
@@ -342,12 +343,12 @@
     if (quantity <= 0) return false;
     if (!locationId) return false;
     if (quantity > selectedBalance) return false;
-    if (REQUIRES_NOTES.includes(exitReason as MovementKind) && !notes.trim()) return false;
+    if (NOTE_REQUIRED_EXITS.includes(exitReason as ExitKind) && !notes.trim()) return false;
     return true;
   });
 
   let requiresNotes = $derived(
-    REQUIRES_NOTES.includes(exitReason as MovementKind),
+    NOTE_REQUIRED_EXITS.includes(exitReason as ExitKind),
   );
 
   // Scanner-tab availability: the page is interactive only when settings
@@ -396,10 +397,212 @@
   // mount, refresh, and post-switch.
   let activeStoreSelectId = $derived(settings?.last_selected_store_id ?? "");
 
+  // ── Lot context ───────────────────────────────────────────────────────────
+
+  // ── Dashboard → Scanner navigation (ODD task 7) ─────────────────────────
+  // Consumes in-memory `scannerNavigation` requests written by Dashboard.
+  // Resolves the lot + product, populates `pinnedContext` (the canonical
+  // lot-context state), then clears the request so it is not re-served
+  // on future visits to the Scanner tab. Preserves existing active-store
+  // clearing behaviour (the active-store-change effect handles that separately).
+  $effect(() => {
+    const unsub = scannerNavigation.subscribe(async (req) => {
+      if (req === null) return;
+      // Must wait for the Scanner to be ready before populating state.
+      // pageReady is a derived; reading it inside the subscriber creates
+      // a reactive dependency so the effect re-enters correctly after
+      // settings finish loading.
+      if (!pageReady) return;
+
+      // Sentinel: user left the Scanner tab (ODD task 11). Clear pinned
+      // context and the navigation request, then exit.
+      if (req === SCANNER_EXIT_SIGNAL) {
+        clearPinnedContext();
+        clearScannerNavigation();
+        return;
+      }
+
+      if (req.lotId) {
+        // Lot context: fetch lot + product and pin for lot-context panels.
+        try {
+          const [lot, productDetail] = await Promise.all([
+            getExpiryLot(req.lotId),
+            getProduct(req.productId),
+          ]);
+          // Use applyResolveResult as the single source of truth for Scanner
+          // state when a concrete lot becomes active — it populates resolved,
+          // selectedLotId, locationId, and pinnedContext identically to a manual
+          // lot_match scan, so Venta/Salida/Registro can operate on the
+          // pinned lot without an extra scan step.
+          applyResolveResult({
+            match_type: "lot_match",
+            lot,
+            product: productDetail.product,
+          });
+          // Land on the lot-context tab so the user sees the panel they
+          // came for without an extra click. We do this after applyResolveResult
+          // so that if the user later switches to Venta/Salida/Registro, those
+          // panels already have valid state.
+          mode = "lot_context";
+        } catch {
+          // Resolution failures are surfaced silently; the pinned context
+          // remains null and the user stays on Scanner to retry.
+        }
+      } else {
+        // Product-only or unknown scan: open Scanner's canonical
+        // product-creation flow (quick-create) directly.
+        // The scanned value seeds the UPC field so the user does not
+        // need to re-type it.
+        untrack(() => {
+          quickCreateOpen = true;
+          quickCreateScannedValue = req.scannedValue ?? "";
+        });
+      }
+      clearScannerNavigation();
+    });
+    return unsub;
+  });
+
+  /**
+   * Loads locations from every active store so MoveStockModal can offer
+   * cross-store transfer destinations without a separate round-trip.
+   * Delegates to the shared `loadAllActiveStoreLocations` loader from
+   * `locations.ts`. Called once on mount; the list refreshes only if
+   * the user navigates away and back (onMount re-runs).
+   */
+  async function loadAllStoreLocations(): Promise<void> {
+    try {
+      const result = await loadAllActiveStoreLocations();
+      allStoreLocations = result.allLocations;
+    } catch {
+      allStoreLocations = [];
+    }
+  }
+
+  /**
+   * Clears the pinned lot context. Called from the lot-context panels
+   * and from the active-store-change effect.
+   */
+  function clearPinnedContext(): void {
+    pinnedContext = null;
+    lotContextMovements = [];
+    lotContextBalances = [];
+    lotContextLoadError = "";
+  }
+
+  // ── Lot-context state (inlined from LotContextPanel) ──────────────────────
+
+  let lotContextMovements = $state<import("../lib/lot_movements.js").LotMovementResponse[]>([]);
+  let lotContextBalances = $state<LotLocationBalance[]>([]);
+  let lotContextLoading = $state(false);
+  let lotContextLoadError = $state("");
+
+  // Load movements + balances whenever pinnedContext changes.
+  $effect(() => {
+    const lot = pinnedContext?.lot;
+    if (!lot) return;
+    untrack(async () => {
+      lotContextLoading = true;
+      lotContextLoadError = "";
+      try {
+        [lotContextMovements, lotContextBalances] = await Promise.all([
+          listLotMovements(lot.id),
+          getLotLocationBalances(lot.id),
+        ]);
+      } catch (e) {
+        lotContextLoadError = $LL.scanner.errors.loadBalancesFailed({
+          msg: humanizeError(e),
+        });
+      } finally {
+        lotContextLoading = false;
+      }
+    });
+  });
+
+  // Helpers for lot-context panel rendering.
+  function formatLotContextDate(dateStr: string): string {
+    return $LL.lotMovements.resolution.eventDateTime({ value: dateStr });
+  }
+
+  let _lotContextKindLabels = $derived(buildMovementKindLabelRecord($LL));
+
+  function lotContextMovementLabel(kind: string, direction?: string | null): string {
+    if (kind === "inventory_adjustment" && direction) {
+      return direction === "increase"
+        ? $LL.lotMovements.movementKinds.inventoryAdjustmentIncrease()
+        : $LL.lotMovements.movementKinds.inventoryAdjustmentDecrease();
+    }
+    return getMovementKindLabel(kind, direction, _lotContextKindLabels);
+  }
+
+  function lotContextLocationName(id: string | null): string {
+    if (!id) return "—";
+    return resolveLocationDisplay(id, locationLookup, $LL.common.noLocation());
+  }
+
+  let lotContextTotalBalance = $derived(
+    lotContextBalances.reduce((sum, b) => sum + b.balance, 0),
+  );
+
+  // Reset to "sale" if the user switches to a lot mode while pinnedContext
+  // is null (e.g. after a store change that cleared the context).
+  $effect(() => {
+    const ctx = pinnedContext;
+    const m = mode;
+    if (
+      ctx === null &&
+      (m === "lot_context" || m === "move_stock" || m === "adjust_count")
+    ) {
+      mode = "sale";
+    }
+  });
+
+  // Modal visibility for lot-context panels
+  let showMoveStock = $state(false);
+  let showAdjustCount = $state(false);
+
+  function handleLotMovementCreated(): void {
+    showMoveStock = false;
+    showAdjustCount = false;
+    // Reload balances + movements for immediate readback.
+    const lotId = pinnedContext?.lot?.id;
+    if (!lotId) return;
+    untrack(async () => {
+      lotContextLoading = true;
+      try {
+        [lotContextMovements, lotContextBalances] = await Promise.all([
+          listLotMovements(lotId),
+          getLotLocationBalances(lotId),
+        ]);
+      } finally {
+        lotContextLoading = false;
+      }
+    });
+  }
+
+  // Clear pinned context when the active store changes — a different store
+  // means the lot context is no longer meaningful.
+  $effect(() => {
+    const storeId = settings?.last_selected_store_id;
+    if (!storeId) return;
+    // untrack so this effect does not re-run on every state change inside
+    // the reactive block; only when the store id actually changes.
+    untrack(() => {
+      if (pinnedContext !== null) {
+        clearPinnedContext();
+      }
+    });
+  });
+
   // ── Init ──────────────────────────────────────────────────────────────────
 
   onMount(async () => {
-    await Promise.all([loadSettings(), loadHasStore(), loadAvailableStores()]);
+    await Promise.all([
+      loadSettings(),
+      loadHasStore(),
+      loadAvailableStores(),
+      loadAllStoreLocations(),
+    ]);
   });
 
   async function loadSettings(): Promise<void> {
@@ -615,6 +818,17 @@
       // FEFO is bypassed for direct lot scans.
       selectedLotId = result.lot.id;
       locationId = "";
+      // Pin the lot for the lot-context tabs (Contexto de lote, Mover
+      // stock, Ajustar cantidad) using the same shape the Dashboard
+      // navigation handoff produces. The resolve result already carries
+      // lot and product so no extra fetch is needed; this keeps both
+      // entry points (Dashboard handoff and manual lot scan) on the
+      // canonical pinnedContext contract.
+      pinnedContext = {
+        lot: result.lot,
+        product: result.product,
+        unitType: (result.product.unit_type ?? null) as UnitKind | null,
+      };
     } else {
       // Unknown — clear the lot/location for the previous resolve and
       // open the canonical ProductForm for quick-create. The form is
@@ -674,7 +888,7 @@
         qty: quantity,
         sku: activeProduct?.sku ?? resolvedLot.lot.batch_code ?? "",
       });
-      resetMutationForm();
+      resetMutationFormWithoutContext();
     } catch (e) {
       mutationError = $LL.scanner.errors.saveFailed({
         msg: humanizeError(e),
@@ -722,9 +936,9 @@
       successNotice = $LL.scanner.stockOut.success({
         qty: quantity,
         sku: activeProduct?.sku ?? resolvedLot.lot.batch_code ?? "",
-        reason: reasonLabel(exitReason as MovementKind),
+        reason: getExitKindLabel(exitReason as ExitKind, $LL),
       });
-      resetMutationForm();
+      resetMutationFormWithoutContext();
     } catch (e) {
       mutationError = $LL.scanner.errors.saveFailed({
         msg: humanizeError(e),
@@ -744,19 +958,35 @@
         available: selectedBalance,
       });
     }
-    if (REQUIRES_NOTES.includes(exitReason as MovementKind) && !notes.trim()) {
+    if (NOTE_REQUIRED_EXITS.includes(exitReason as ExitKind) && !notes.trim()) {
       return $LL.scanner.stockOut.invalid.notes();
     }
     return $LL.scanner.stockOut.invalid.lot();
   }
 
+  function resetMutationFormWithoutContext(): void {
+    // Clears per-confirm state without touching the pinned lot context.
+    // Used after sale/stock-out confirmation so the panel stays open for
+    // immediate readback.
+    resolved = null;
+    selectedLotId = "";
+    quantityStr = "1";
+    locationId = "";
+    exitReason = "";
+    notes = "";
+    lotBalances = [];
+    lastResolvedAt = 0;
+    lastResolvedValue = "";
+  }
+
   function resetMutationForm(): void {
     // Per spec `Sale success resets the form for the next scan` and
-    // `Stock-out success resets the form`. We clear only the per-confirm
-    // state — the resolved scan + lot selection become stale after the
-    // quantity change, so we drop them as well to avoid reusing a
-    // mutated lot for the next confirm. The debounce guard is also
-    // reset so a subsequent identical scan starts a fresh resolution.
+    // `Stock-out success resets the form`. We clear the full scan state
+    // (resolved value, lot selection, quantity, location, reason, notes,
+    // and balance cache) so the next scan starts completely fresh. The
+    // debounce guard is also reset so an identical scan triggers a new
+    // resolution. The pinned lot context is cleared separately — see
+    // `clearPinnedContext` and the active-store-change effect.
     resolved = null;
     selectedLotId = "";
     quantityStr = "1";
@@ -970,10 +1200,11 @@
       {/if}
     </section>
 
-    <!-- Mode tabs (Sale / Registration / Stock-out). Inline DaisyUI
-         tabs with manual ARIA wiring because the Tabs primitive
-         expects a Snippet per item and our panels depend on per-mode
-         derived state. -->
+    <!-- Mode tabs (Sale / Registration / Stock-out / Lot context / Move stock / Adjust count).
+         Inline DaisyUI tabs with manual ARIA wiring because the Tabs
+         primitive expects a Snippet per item and our panels depend on
+         per-mode derived state. The three lot tabs are disabled when
+         no lot is pinned (pinnedContext === null). -->
     <div
       role="tablist"
       class="tabs tabs-border mode-tabs"
@@ -1022,7 +1253,68 @@
       >
         {$LL.scanner.modes.stockOut()}
       </button>
+      <button
+        type="button"
+        role="tab"
+        id="mode-lot-context-tab"
+        data-mode-tab="lot_context"
+        class="tab"
+        class:tab-active={mode === "lot_context"}
+        aria-selected={mode === "lot_context"}
+        aria-controls="mode-lot-context-panel"
+        tabindex={mode === "lot_context" ? 0 : -1}
+        aria-disabled={pinnedContext === null ? true : undefined}
+        aria-describedby={pinnedContext === null ? "lot-context-disabled-explanation" : undefined}
+        disabled={pinnedContext === null}
+        onclick={() => pinnedContext !== null && setMode("lot_context")}
+      >
+        {$LL.scanner.modes.lotContext.label()}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        id="mode-move-stock-tab"
+        data-mode-tab="move_stock"
+        class="tab"
+        class:tab-active={mode === "move_stock"}
+        aria-selected={mode === "move_stock"}
+        aria-controls="mode-move-stock-panel"
+        tabindex={mode === "move_stock" ? 0 : -1}
+        aria-disabled={pinnedContext === null ? true : undefined}
+        aria-describedby={pinnedContext === null ? "move-stock-disabled-explanation" : undefined}
+        disabled={pinnedContext === null}
+        onclick={() => pinnedContext !== null && setMode("move_stock")}
+      >
+        {$LL.scanner.modes.moveStock.label()}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        id="mode-adjust-count-tab"
+        data-mode-tab="adjust_count"
+        class="tab"
+        class:tab-active={mode === "adjust_count"}
+        aria-selected={mode === "adjust_count"}
+        aria-controls="mode-adjust-count-panel"
+        tabindex={mode === "adjust_count" ? 0 : -1}
+        aria-disabled={pinnedContext === null ? true : undefined}
+        aria-describedby={pinnedContext === null ? "adjust-count-disabled-explanation" : undefined}
+        disabled={pinnedContext === null}
+        onclick={() => pinnedContext !== null && setMode("adjust_count")}
+      >
+        {$LL.scanner.modes.adjustCount.label()}
+      </button>
     </div>
+    <!-- Screen-reader-only explanations for disabled lot tabs -->
+    <p id="lot-context-disabled-explanation" class="sr-only">
+      {$LL.scanner.modes.lotContext.disabledExplanation()}
+    </p>
+    <p id="move-stock-disabled-explanation" class="sr-only">
+      {$LL.scanner.modes.moveStock.disabledExplanation()}
+    </p>
+    <p id="adjust-count-disabled-explanation" class="sr-only">
+      {$LL.scanner.modes.adjustCount.disabledExplanation()}
+    </p>
 
     <!-- Scanner input. Single primary input across all three modes;
          the active mode decides the post-resolution flow. -->
@@ -1049,6 +1341,23 @@
       >
         {scanBusy ? $LL.scanner.input.looking() : $LL.scanner.input.lookupLabel()}
       </Button>
+      {#if pinnedContext}
+        <span
+          class="lot-chip"
+          role="status"
+          aria-live="polite"
+          aria-label={$LL.scanner.scanBar.chipAriaTemplate({
+            batchCode: pinnedContext.lot.batch_code ?? "",
+            expiryDate: pinnedContext.lot.expiry_date,
+          })}
+        >
+          <span class="lot-chip-label">{$LL.scanner.scanBar.lotChipLabel()}</span>
+          <code class="lot-chip-code">{pinnedContext.lot.batch_code ?? "—"}</code>
+          {#if pinnedContext.lot.expiry_date}
+            <span class="lot-chip-expiry">{pinnedContext.lot.expiry_date}</span>
+          {/if}
+        </span>
+      {/if}
     </div>
 
     {#if scanBusy}
@@ -1168,6 +1477,7 @@
                 type="number"
                 class="input input-md motion-reduce:transition-none w-full"
                 min="0"
+                max={selectedBalance}
                 step="0.01"
                 inputmode="decimal"
                 value={quantityStr}
@@ -1387,6 +1697,7 @@
                 type="number"
                 class="input input-md motion-reduce:transition-none w-full"
                 min="0"
+                max={selectedBalance}
                 step="0.01"
                 inputmode="decimal"
                 value={quantityStr}
@@ -1437,8 +1748,191 @@
         {/if}
       {/if}
     </div>
+
+    <!-- Lot-context panel (read-only) -->
+    <div
+      role="tabpanel"
+      id="mode-lot-context-panel"
+      aria-labelledby="mode-lot-context-tab"
+      hidden={mode !== "lot_context"}
+      tabindex={mode === "lot_context" ? 0 : -1}
+    >
+      {#if mode === "lot_context" && pinnedContext}
+        {@const lot = pinnedContext.lot}
+        <div class="lot-context-panel">
+          <!-- Lot identity -->
+          <div class="lot-identity">
+            <p class="lot-line">
+              <span class="lot-label">{$LL.dashboard.batch()}:</span>
+              <span class="lot-value">{lot.batch_code ?? "—"}</span>
+            </p>
+            <p class="lot-line">
+              <span class="lot-label">{$LL.dashboard.expiryDate()}:</span>
+              <span class="lot-value">{lot.expiry_date}</span>
+            </p>
+            {#if lot.status && lot.status !== "active"}
+              <p class="lot-line">
+                <span class="lot-label">{$LL.dashboard.status()}:</span>
+                <span class="lot-value status-badge">{lot.status}</span>
+              </p>
+            {/if}
+            <p class="lot-line">
+              <span class="lot-label">{$LL.lotMovements.total()}:</span>
+              <span class="lot-value">
+                {lotContextTotalBalance}
+                {#if lot.unit}
+                  <span class="lot-unit">{lot.unit}</span>
+                {/if}
+              </span>
+            </p>
+          </div>
+
+          <!-- Balance table -->
+          <section aria-labelledby="lot-context-balances-heading">
+            <h4 class="section-heading" id="lot-context-balances-heading">
+              {$LL.lotMovements.history()}
+            </h4>
+            {#if lotContextLoading}
+              <LoadingState variant="text" label={$LL.common.loading()} />
+            {:else if lotContextLoadError}
+              <Alert variant="error">{lotContextLoadError}</Alert>
+            {:else if lotContextBalances.length === 0}
+              <p class="empty-text">{$LL.lotMovements.noMovements()}</p>
+            {:else}
+              <div class="balance-list" role="list">
+                {#each lotContextBalances as balance}
+                  {@const name = lotContextLocationName(balance.location_id)}
+                  <div class="balance-row" role="listitem">
+                    <span class="balance-location">{name}</span>
+                    <span class="balance-qty" class:balance-zero={balance.balance === 0}>
+                      {balance.balance}
+                      {#if lot.unit}
+                        <span class="lot-unit">{lot.unit}</span>
+                      {/if}
+                    </span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </section>
+
+          <!-- Movement ledger -->
+          <section aria-labelledby="lot-context-history-heading">
+            <h4 class="section-heading" id="lot-context-history-heading">
+              {$LL.lotMovements.history()}
+            </h4>
+            {#if lotContextLoading}
+              <LoadingState variant="text" label={$LL.common.loading()} />
+            {:else if lotContextMovements.length === 0}
+              <EmptyState
+                icon="info"
+                title={$LL.lotMovements.noMovements()}
+                body=""
+              />
+            {:else}
+              <div class="movement-log" role="list">
+                {#each lotContextMovements as movement}
+                  {@const qtyStr = formatMovementQuantity(
+                    movement.quantity,
+                    movement.movement_kind,
+                    movement.direction,
+                  )}
+                  <div class="movement-row" role="listitem">
+                    <div class="movement-kind">
+                      {lotContextMovementLabel(movement.movement_kind, movement.direction)}
+                    </div>
+                    <div class="movement-locations">
+                      <span class="movement-loc">{lotContextLocationName(movement.source_location_id)}</span>
+                      {#if movement.destination_location_id}
+                        <span class="movement-arrow">→</span>
+                        <span class="movement-loc">{lotContextLocationName(movement.destination_location_id)}</span>
+                      {/if}
+                    </div>
+                    <div class="movement-qty" class:qty-positive={movement.direction === "increase"} class:qty-negative={movement.direction === "decrease"}>
+                      {qtyStr}
+                    </div>
+                    <div class="movement-time">{formatLotContextDate(movement.created_at)}</div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </section>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Move stock panel -->
+    <div
+      role="tabpanel"
+      id="mode-move-stock-panel"
+      aria-labelledby="mode-move-stock-tab"
+      hidden={mode !== "move_stock"}
+      tabindex={mode === "move_stock" ? 0 : -1}
+    >
+      {#if mode === "move_stock" && pinnedContext}
+        <div class="lot-context-panel">
+          <p class="section-body">
+            {$LL.lotMovements.moveStock()} — {pinnedContext.lot.batch_code ?? "—"}
+          </p>
+          <Button
+            variant="primary"
+            onclick={() => (showMoveStock = true)}
+          >
+            {$LL.lotMovements.moveStock()}
+          </Button>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Adjust count panel -->
+    <div
+      role="tabpanel"
+      id="mode-adjust-count-panel"
+      aria-labelledby="mode-adjust-count-tab"
+      hidden={mode !== "adjust_count"}
+      tabindex={mode === "adjust_count" ? 0 : -1}
+    >
+      {#if mode === "adjust_count" && pinnedContext}
+        <div class="lot-context-panel">
+          <p class="section-body">
+            {$LL.lotMovements.adjustCount()} — {pinnedContext.lot.batch_code ?? "—"}
+          </p>
+          <Button
+            variant="primary"
+            onclick={() => (showAdjustCount = true)}
+          >
+            {$LL.lotMovements.adjustCount()}
+          </Button>
+        </div>
+      {/if}
+    </div>
   {/if}
 </div>
+
+<!-- MoveStockModal and AdjustCountModal for lot-context modes -->
+{#if showMoveStock && pinnedContext}
+  <MoveStockModal
+    lotId={pinnedContext.lot.id}
+    locations={allStoreLocations}
+    allLocations={allStoreLocations}
+    currentBalances={lotContextBalances}
+    unitType={pinnedContext.unitType}
+    onClose={() => (showMoveStock = false)}
+    onCreated={handleLotMovementCreated}
+  />
+{/if}
+
+{#if showAdjustCount && pinnedContext}
+  <AdjustCountModal
+    lotId={pinnedContext.lot.id}
+    lotQuantity={pinnedContext.lot.quantity}
+    lotUnit={pinnedContext.lot.unit ?? ""}
+    currentBalances={lotContextBalances}
+    unitType={pinnedContext.unitType}
+    onClose={() => (showAdjustCount = false)}
+    onCreated={handleLotMovementCreated}
+  />
+{/if}
 
 <style>
   .scanner-page {
@@ -1623,5 +2117,216 @@
     margin: 0;
     font-size: 0.95rem;
     color: var(--color-base-content);
+  }
+
+  /* ── Lot-context panel (inlined from LotContextPanel) ─────────────── */
+  .lot-context-panel {
+    border: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
+    border-radius: 10px;
+    background: color-mix(in oklch, var(--color-base-100) 80%, transparent);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .lot-identity {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    background: color-mix(in oklch, var(--color-base-200) 60%, transparent);
+    border-radius: 6px;
+  }
+
+  .lot-line {
+    margin: 0;
+    font-size: 0.86rem;
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+  }
+
+  .lot-label {
+    font-weight: 500;
+    color: var(--color-base-content);
+    opacity: 0.7;
+    min-width: 70px;
+    flex-shrink: 0;
+  }
+
+  .lot-value {
+    color: var(--color-base-content);
+    font-weight: 500;
+  }
+
+  .lot-unit {
+    font-size: 0.8em;
+    opacity: 0.75;
+    margin-left: 2px;
+  }
+
+  .status-badge {
+    font-size: 0.8rem;
+    text-transform: capitalize;
+    background: color-mix(in oklch, var(--color-base-300) 60%, transparent);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  .balance-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .balance-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 5px 10px;
+    border-radius: 5px;
+    background: color-mix(in oklch, var(--color-base-200) 50%, transparent);
+    font-size: 0.86rem;
+  }
+
+  .balance-location {
+    color: var(--color-base-content);
+  }
+
+  .balance-qty {
+    font-weight: 600;
+    color: var(--color-base-content);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .balance-zero {
+    opacity: 0.45;
+  }
+
+  .movement-log {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 280px;
+    overflow-y: auto;
+  }
+
+  .movement-row {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr auto auto;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    background: color-mix(in oklch, var(--color-base-200) 35%, transparent);
+  }
+
+  .movement-kind {
+    color: var(--color-base-content);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .movement-locations {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--color-base-content);
+    opacity: 0.75;
+    font-size: 0.8rem;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .movement-loc {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .movement-arrow {
+    flex-shrink: 0;
+    opacity: 0.6;
+  }
+
+  .movement-qty {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--color-base-content);
+  }
+
+  .qty-positive {
+    color: var(--color-success);
+  }
+
+  .qty-negative {
+    color: var(--color-error);
+  }
+
+  .movement-time {
+    font-size: 0.78rem;
+    color: var(--color-base-content);
+    opacity: 0.55;
+    white-space: nowrap;
+    text-align: right;
+  }
+
+  .empty-text {
+    margin: 0;
+    font-size: 0.86rem;
+    color: var(--color-base-content);
+    opacity: 0.55;
+  }
+
+  /* ── Lot chip in scan bar ─────────────────────────────────────────── */
+  .lot-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: color-mix(in oklch, var(--color-base-200) 60%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-base-300) 60%, transparent);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+
+  .lot-chip-label {
+    font-weight: 600;
+    color: var(--color-base-content);
+    opacity: 0.6;
+    font-size: 0.75em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .lot-chip-code {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.9em;
+    color: var(--color-base-content);
+    font-weight: 600;
+  }
+
+  .lot-chip-expiry {
+    color: var(--color-base-content);
+    opacity: 0.65;
+    font-size: 0.85em;
+    margin-left: 2px;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
   }
 </style>

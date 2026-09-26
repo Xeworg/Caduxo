@@ -76,6 +76,54 @@ export interface ArchiveLotInput {
   notes: string;
 }
 
+/**
+ * One (location_id, quantity) pair within a distributed lot creation.
+ *
+ * Allocations are applied atomically by `createExpiryLotDistributed`.
+ * The backend rejects empty arrays, duplicate `location_id`s,
+ * quantities `<= 0`, fractional quantities for integer-unit products,
+ * and locations that don't belong to the lot's `store_id` or are
+ * inactive. The frontend should mirror these rules in the form layer
+ * so the user gets inline feedback before the IPC round-trip.
+ */
+export interface ExpiryLotAllocationInput {
+  location_id: string;
+  quantity: number;
+}
+
+/**
+ * Input for creating one expiry lot distributed across multiple active
+ * locations in the same store. Mirrors
+ * `dto::expiry_lots::ExpiryLotDistributedCreate` in the Rust service.
+ *
+ * `total_quantity` is the explicit lot total and must equal the sum of
+ * allocation quantities (within a tiny float tolerance); a mismatch is
+ * rejected at the IPC boundary with `DistributionTotalMismatch`.
+ */
+export interface ExpiryLotDistributedCreate {
+  product_id: string;
+  store_id: string;
+  total_quantity: number;
+  allocations: ExpiryLotAllocationInput[];
+  unit?: string | null;
+  expiry_date: string;
+  alert_days_before?: number | null;
+  batch_code?: string | null;
+  notes?: string | null;
+}
+
+/**
+ * Result of a distributed lot creation. `lot` is the persisted expiry
+ * lot; `anchor_location_id` is the location that received the single
+ * `entry:initial` movement (i.e. the first allocation); the per-location
+ * ledger can be re-read through `getLotLocationBalances`.
+ */
+export interface ExpiryLotDistributedCreateResult {
+  lot: ExpiryLotResponse;
+  anchor_location_id: string;
+  allocation_count: number;
+}
+
 export interface ExpiryLotResponse {
   id: string;
   product_id: string;
@@ -185,6 +233,32 @@ export async function createExpiryLot(
   locale?: SupportedLocale,
 ): Promise<ExpiryLotResponse> {
   return invoke<ExpiryLotResponse>("create_expiry_lot", {
+    input,
+    locale: resolveLocale(locale),
+  });
+}
+
+/**
+ * Creates one expiry lot with the initial quantity distributed across
+ * multiple active locations in the same store, atomically.
+ *
+ * The backend writes one `entry:initial` movement for the full lot total
+ * to the first allocation's location, then one `transfer` per remaining
+ * allocation, all in a single DB transaction. Either every write
+ * commits or every write rolls back — there is no partial commit path.
+ *
+ * `locale` is forwarded to the Rust command so the backend can localise
+ * the new distributed-creation Validation / BusinessRule messages
+ * (empty distribution, duplicate location, total mismatch, non-store or
+ * inactive location, fractional-quantity rejection for integer-unit
+ * products) before they reach the UI. When omitted, the wrapper uses
+ * the active UI locale.
+ */
+export async function createExpiryLotDistributed(
+  input: ExpiryLotDistributedCreate,
+  locale?: SupportedLocale,
+): Promise<ExpiryLotDistributedCreateResult> {
+  return invoke<ExpiryLotDistributedCreateResult>("create_expiry_lot_distributed", {
     input,
     locale: resolveLocale(locale),
   });

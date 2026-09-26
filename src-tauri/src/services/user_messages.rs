@@ -328,6 +328,31 @@ pub enum UserMessage {
     /// Lot movement business rule: the source or destination location is
     /// inactive. Constant text.
     LocationInactive,
+    /// Distributed lot creation validation: the caller submitted an empty
+    /// distribution (no allocations). Constant text.
+    DistributionEmpty,
+    /// Distributed lot creation validation: the same `location_id` appears
+    /// more than once across the supplied allocations. Carries the offending
+    /// location id so the parser can round-trip and the localised message
+    /// can name it.
+    DistributionDuplicateLocation {
+        location_id: String,
+    },
+    /// Distributed lot creation validation: an allocation's `location_id`
+    /// does not belong to the lot's `store_id`. Carries the offending pair
+    /// so the parser can round-trip and the localised message can name it.
+    DistributionLocationNotInStore {
+        location_id: String,
+        store_id: String,
+    },
+    /// Distributed lot creation validation: the sum of allocation quantities
+    /// does not match the lot's total quantity. Both `expected` (lot total)
+    /// and `actual` (sum of allocations) are carried so the parser can
+    /// round-trip and the localised message can name them.
+    DistributionTotalMismatch {
+        expected: f64,
+        actual: f64,
+    },
     /// Backend boundary error: a resource lookup failed at the command
     /// boundary. The carried `{resource, id}` pair (snake_case identifier
     /// plus the original lookup id) matches the canonical English string
@@ -749,6 +774,64 @@ pub fn user_message(kind: UserMessage, locale: Locale) -> String {
         }
         (UserMessage::LocationInactive, L::En) => "Location is inactive".to_string(),
         (UserMessage::LocationInactive, L::Es) => "La ubicación está inactiva".to_string(),
+        (UserMessage::DistributionEmpty, L::En) => {
+            "Distribution must contain at least one allocation".to_string()
+        }
+        (UserMessage::DistributionEmpty, L::Es) => {
+            "La distribución debe contener al menos una asignación".to_string()
+        }
+        (
+            UserMessage::DistributionDuplicateLocation { location_id },
+            L::En,
+        ) => {
+            format!("Location `{location_id}` appears more than once in the distribution")
+        }
+        (
+            UserMessage::DistributionDuplicateLocation { location_id },
+            L::Es,
+        ) => {
+            format!(
+                "La ubicación `{location_id}` aparece más de una vez en la distribución"
+            )
+        }
+        (
+            UserMessage::DistributionLocationNotInStore {
+                location_id,
+                store_id,
+            },
+            L::En,
+        ) => {
+            format!(
+                "Location `{location_id}` does not belong to store `{store_id}`"
+            )
+        }
+        (
+            UserMessage::DistributionLocationNotInStore {
+                location_id,
+                store_id,
+            },
+            L::Es,
+        ) => {
+            format!(
+                "La ubicación `{location_id}` no pertenece a la tienda `{store_id}`"
+            )
+        }
+        (
+            UserMessage::DistributionTotalMismatch { expected, actual },
+            L::En,
+        ) => {
+            format!(
+                "Distribution total `{actual:.2}` does not match expected total `{expected:.2}`"
+            )
+        }
+        (
+            UserMessage::DistributionTotalMismatch { expected, actual },
+            L::Es,
+        ) => {
+            format!(
+                "El total de la distribución `{actual:.2}` no coincide con el total esperado `{expected:.2}`"
+            )
+        }
         (UserMessage::ResourceNotFound { resource, id }, L::En) => {
             format!("{resource} `{id}` not found")
         }
@@ -1051,6 +1134,31 @@ pub fn parse_user_message_kind(message: &str) -> Option<UserMessage> {
         return Some(UserMessage::LocationInactive);
     }
 
+    // ─── Distributed lot creation ──────────────────────────────────────────
+    //
+    // Order matters: the constant-text match must come before the dynamic
+    // backticked-suffix parsers so the constant match isn't greedily
+    // swallowed by a longer prefix.
+
+    if message == "Distribution must contain at least one allocation" {
+        return Some(UserMessage::DistributionEmpty);
+    }
+
+    if let Some(location_id) = parse_distribution_duplicate_location(message) {
+        return Some(UserMessage::DistributionDuplicateLocation { location_id });
+    }
+
+    if let Some((location_id, store_id)) = parse_distribution_location_not_in_store(message) {
+        return Some(UserMessage::DistributionLocationNotInStore {
+            location_id,
+            store_id,
+        });
+    }
+
+    if let Some((expected, actual)) = parse_distribution_total_mismatch(message) {
+        return Some(UserMessage::DistributionTotalMismatch { expected, actual });
+    }
+
     // ─── Command-boundary boundary error shapes ─────────────────────────────
     //
     // The three arms below recognise the canonical English strings the
@@ -1250,6 +1358,62 @@ fn parse_insufficient_balance(message: &str) -> Option<(f64, f64)> {
     let available = avail_str.parse::<f64>().ok()?;
     let requested = req_str.parse::<f64>().ok()?;
     Some((available, requested))
+}
+
+/// Parses a `Location \`<id>\` does not belong to store \`<store>\``
+/// message back into the captured `(location_id, store_id)` pair. Returns
+/// `None` for malformed input. Mirrors [`parse_resource_not_found`] but
+/// for the distributed-lot-creation `DistributionLocationNotInStore`
+/// variant.
+/// Parses a `Location \`<id>\` appears more than once in the distribution`
+/// message back into the captured `location_id`. Returns `None` for
+/// malformed input. The shared `Location \`` prefix with
+/// `DistributionLocationNotInStore` is disambiguated by the constant
+/// suffix so neither variant can swallow the other.
+fn parse_distribution_duplicate_location(message: &str) -> Option<String> {
+    const PREFIX: &str = "Location `";
+    const SUFFIX: &str = "` appears more than once in the distribution";
+    if !message.starts_with(PREFIX) || !message.ends_with(SUFFIX) {
+        return None;
+    }
+    let inner = message.strip_prefix(PREFIX)?.strip_suffix(SUFFIX)?;
+    if inner.is_empty() || inner.contains('`') {
+        return None;
+    }
+    Some(inner.to_string())
+}
+
+fn parse_distribution_location_not_in_store(message: &str) -> Option<(String, String)> {
+    const PREFIX: &str = "Location `";
+    const MIDDLE: &str = "` does not belong to store `";
+    const SUFFIX: &str = "`";
+    if !message.starts_with(PREFIX) || !message.contains(MIDDLE) || !message.ends_with(SUFFIX) {
+        return None;
+    }
+    let inner = message.strip_prefix(PREFIX)?.strip_suffix(SUFFIX)?;
+    let (loc, store) = inner.split_once(MIDDLE)?;
+    if loc.is_empty() || store.is_empty() || loc.contains('`') || store.contains('`') {
+        return None;
+    }
+    Some((loc.to_string(), store.to_string()))
+}
+
+/// Parses a `Distribution total \`<actual:.2>\` does not match expected
+/// total \`<expected:.2>\`` message back into the captured
+/// `(expected, actual)` pair. Returns `None` for malformed input.
+/// Mirrors [`parse_insufficient_balance`].
+fn parse_distribution_total_mismatch(message: &str) -> Option<(f64, f64)> {
+    const PREFIX: &str = "Distribution total `";
+    const MIDDLE: &str = "` does not match expected total `";
+    const SUFFIX: &str = "`";
+    if !message.starts_with(PREFIX) || !message.contains(MIDDLE) || !message.ends_with(SUFFIX) {
+        return None;
+    }
+    let inner = message.strip_prefix(PREFIX)?.strip_suffix(SUFFIX)?;
+    let (actual_str, expected_str) = inner.split_once(MIDDLE)?;
+    let actual = actual_str.parse::<f64>().ok()?;
+    let expected = expected_str.parse::<f64>().ok()?;
+    Some((expected, actual))
 }
 
 /// Parses a `<resource> \`<id>\` not found` message back into the captured
@@ -3207,6 +3371,122 @@ mod tests {
         ));
         let parsed = parse_user_message_kind(&en_msg).unwrap();
         assert_eq!(en_msg, en(parsed));
+    }
+
+    // ─── Parser roundtrips for distributed lot creation (Task 2) ─────────
+
+    #[test]
+    fn distribution_empty_en_roundtrips() {
+        let en_msg = en(UserMessage::DistributionEmpty);
+        assert_eq!(
+            en_msg, "Distribution must contain at least one allocation",
+            "English message must match the canonical DistributionEmpty text",
+        );
+        assert!(matches!(
+            parse_user_message_kind(&en_msg),
+            Some(UserMessage::DistributionEmpty)
+        ));
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn distribution_empty_es_keeps_canonical_translation() {
+        // The Spanish variant is also pinned here so a regression in the
+        // translator cannot silently drop the empty-distribution message
+        // from the localised catalog.
+        let es_msg = es(UserMessage::DistributionEmpty);
+        assert_eq!(
+            es_msg, "La distribución debe contener al menos una asignación",
+            "Spanish message must match the canonical DistributionEmpty text",
+        );
+    }
+
+    #[test]
+    fn parse_distribution_duplicate_location_roundtrips() {
+        let en_msg = en(UserMessage::DistributionDuplicateLocation {
+            location_id: "loc-anchor".into(),
+        });
+        assert_eq!(
+            en_msg, "Location `loc-anchor` appears more than once in the distribution",
+            "English message must follow the canonical DistributionDuplicateLocation template",
+        );
+        match parse_user_message_kind(&en_msg) {
+            Some(UserMessage::DistributionDuplicateLocation { location_id }) => {
+                assert_eq!(location_id, "loc-anchor");
+            }
+            other => panic!("expected DistributionDuplicateLocation, got {other:?}"),
+        }
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_distribution_location_not_in_store_roundtrips() {
+        let en_msg = en(UserMessage::DistributionLocationNotInStore {
+            location_id: "loc-foreign".into(),
+            store_id: "store-main".into(),
+        });
+        assert_eq!(
+            en_msg, "Location `loc-foreign` does not belong to store `store-main`",
+            "English message must follow the canonical DistributionLocationNotInStore template",
+        );
+        match parse_user_message_kind(&en_msg) {
+            Some(UserMessage::DistributionLocationNotInStore {
+                location_id,
+                store_id,
+            }) => {
+                assert_eq!(location_id, "loc-foreign");
+                assert_eq!(store_id, "store-main");
+            }
+            other => panic!("expected DistributionLocationNotInStore, got {other:?}"),
+        }
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_distribution_total_mismatch_roundtrips() {
+        let en_msg = en(UserMessage::DistributionTotalMismatch {
+            expected: 10.0,
+            actual: 9.0,
+        });
+        assert_eq!(
+            en_msg, "Distribution total `9.00` does not match expected total `10.00`",
+            "English message must follow the canonical DistributionTotalMismatch template",
+        );
+        match parse_user_message_kind(&en_msg) {
+            Some(UserMessage::DistributionTotalMismatch { expected, actual }) => {
+                assert_eq!(expected, 10.0);
+                assert_eq!(actual, 9.0);
+            }
+            other => panic!("expected DistributionTotalMismatch, got {other:?}"),
+        }
+        let parsed = parse_user_message_kind(&en_msg).unwrap();
+        assert_eq!(en_msg, en(parsed));
+    }
+
+    #[test]
+    fn parse_distribution_duplicate_and_not_in_store_do_not_collide() {
+        // `DistributionDuplicateLocation` and
+        // `DistributionLocationNotInStore` share the `Location \`` prefix;
+        // the constant suffixes must keep them apart so neither variant
+        // can swallow the other.
+        let dup_msg = en(UserMessage::DistributionDuplicateLocation {
+            location_id: "loc-anchor".into(),
+        });
+        let not_in_store_msg = en(UserMessage::DistributionLocationNotInStore {
+            location_id: "loc-foreign".into(),
+            store_id: "store-main".into(),
+        });
+        assert!(matches!(
+            parse_user_message_kind(&dup_msg),
+            Some(UserMessage::DistributionDuplicateLocation { .. })
+        ));
+        assert!(matches!(
+            parse_user_message_kind(&not_in_store_msg),
+            Some(UserMessage::DistributionLocationNotInStore { .. })
+        ));
     }
 
     // ─── Parser prefix disambiguation guards ─────────────────────────────

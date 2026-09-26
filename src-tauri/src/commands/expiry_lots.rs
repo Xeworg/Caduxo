@@ -4,8 +4,9 @@
 use tauri::State;
 
 use crate::dto::expiry_lots::{
-    ArchiveLotInput, ExpiryLotCreate, ExpiryLotResolve, ExpiryLotResolveResult, ExpiryLotResponse,
-    ExpiryLotUpdate, LotResolutionEventResponse,
+    ArchiveLotInput, ExpiryLotCreate, ExpiryLotDistributedCreate, ExpiryLotDistributedCreateResult,
+    ExpiryLotResolve, ExpiryLotResolveResult, ExpiryLotResponse, ExpiryLotUpdate,
+    LotResolutionEventResponse,
 };
 use crate::error::{AppError, CommandError};
 use crate::pdf::locale::Locale;
@@ -122,6 +123,38 @@ pub async fn update_expiry_lot(
     let pool = state.pool().await;
     let loc = resolve_locale(locale);
     service::update_expiry_lot(&pool, input)
+        .await
+        .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
+        .map_err(AppError::into)
+}
+
+/// Creates one expiry lot whose initial quantity is distributed across
+/// multiple active locations in the same store, atomically.
+///
+/// The backend emits one `entry:initial` movement for the full lot
+/// total to the first allocation's location, then one `transfer` per
+/// remaining allocation, all in a single DB transaction. Either every
+/// write commits or every write rolls back.
+///
+/// `locale` (BCP-47 tag, optional) is forwarded through the same
+/// `localize_*` chain as `create_expiry_lot` so every user-visible
+/// Validation / BusinessRule message (empty distribution, duplicate
+/// location, total mismatch, non-store or inactive location,
+/// fractional-quantity rejection for integer-unit products) reaches
+/// the UI in the active locale. Omitting the argument keeps English.
+#[tauri::command]
+pub async fn create_expiry_lot_distributed(
+    state: State<'_, AppState>,
+    input: ExpiryLotDistributedCreate,
+    locale: Option<String>,
+) -> Result<ExpiryLotDistributedCreateResult, CommandError> {
+    let pool = state.pool().await;
+    let loc = resolve_locale(locale);
+    service::create_expiry_lot_distributed(&pool, input)
         .await
         .map_err(|e| localize_validation(e, loc))
         .map_err(|e| localize_business_rule(e, loc))

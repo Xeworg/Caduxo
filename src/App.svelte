@@ -93,6 +93,11 @@
   import ScannerPage from "./components/ScannerPage.svelte";
   import { startPeriodicNotificationCheck } from "./lib/notifications.js";
   import { LL } from "./i18n/i18n-svelte.js";
+  import {
+    scannerNavigation,
+    SCANNER_EXIT_SIGNAL,
+    type ScannerNavigationValue,
+  } from "./lib/navigation.js";
 
   type Tab = "dashboard" | "stores" | "products" | "calendar" | "reports" | "scanner" | "import" | "backup" | "settings";
 
@@ -115,7 +120,7 @@
     { id: "settings", label: () => $LL.nav.settings() },
   ];
 
-  let activeTab: Tab = "stores";
+  let activeTab: Tab = $state("stores");
 
   // Slice 7b: start notification permission check and periodic polling.
   // The cleanup function is stable and safe to call from onDestroy.
@@ -283,6 +288,35 @@
   function setTab(next: Tab) {
     activeTab = next;
   }
+
+  // React to in-memory Dashboard → Scanner navigation requests.
+  // When Dashboard writes a lot/product request into `scannerNavigation`,
+  // the shell switches to the Scanner tab so ScannerPage can consume it.
+  // SCANNER_EXIT_SIGNAL is explicitly excluded: it is written by this
+  // component when the user leaves the Scanner tab and must not
+  // re-activate the Scanner tab (ODD task 11 defect 1).
+  $effect(() => {
+    const unsub = scannerNavigation.subscribe((req) => {
+      if (req !== null && req !== SCANNER_EXIT_SIGNAL) {
+        activeTab = "scanner";
+      }
+    });
+    return unsub;
+  });
+
+  // Track the previous tab so ScannerPage can clear its pinned lot context
+  // when the user leaves the Scanner tab (ODD task 11).
+  let previousTab: Tab | null = null;
+
+  $effect(() => {
+    const currentTab = activeTab;
+    // When leaving Scanner, signal to clear the pinned context.
+    // The sentinel is consumed by ScannerPage's effect below.
+    if (previousTab === "scanner" && currentTab !== "scanner") {
+      scannerNavigation.set(SCANNER_EXIT_SIGNAL);
+    }
+    previousTab = currentTab;
+  });
 </script>
 
 <!--

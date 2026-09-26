@@ -11,6 +11,12 @@
 -->
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
+import {
+  isFractionalForIntegerUnit,
+  qtyAttrs,
+  locationDisplayLabel,
+  type LocationWithStore,
+} from "../lib/movementRules.js";
   import { LL } from "../i18n/i18n-svelte.js";
   import { locale } from "../i18n/locale.svelte.js";
   import type { UnitKind } from "../lib/products.js";
@@ -47,16 +53,8 @@
   let submitting = false;
   let errorMsg = "";
 
-  // ── Unit-aware quantity input rules ───────────────────────────────────────
-  // Integer products (e.g. Unidad) reject fractional quantities at the backend;
-  // we apply matching min/step/inputmode here so the browser input UX matches
-  // the server invariant. Decimal and legacy (null) units accept any positive.
   $: isIntegerUnit = unitType === "integer";
-  $: qtyMin = isIntegerUnit ? 1 : 0.01;
-  $: qtyStep = isIntegerUnit ? 1 : 0.01;
-  $: qtyInputMode = (isIntegerUnit ? "numeric" : "decimal") as
-    | "numeric"
-    | "decimal";
+  $: _qtyAttrs = qtyAttrs(isIntegerUnit);
 
   // Initialize source to highest-balance location
   $: if (!sourceLocationId && currentBalances.length > 0) {
@@ -84,20 +82,7 @@
     destinationLocationId = "";
   }
 
-  function locationLabel(loc: { name: string; store_name?: string }): string {
-    return loc.store_name ? `${loc.store_name} / ${loc.name}` : loc.name;
-  }
 
-  /**
-   * Local validation for integer-unit products: catches fractional input
-   * before submit so the user gets immediate feedback. Backend enforces the
-   * same invariant, but this avoids a round-trip for the common case.
-   */
-  function isFractionalForIntegerUnit(qty: number): boolean {
-    if (!isIntegerUnit) return false;
-    if (qty <= 0) return false;
-    return !Number.isInteger(qty);
-  }
 
   // ── Submit ────────────────────────────────────────────────────────────────
 
@@ -116,7 +101,7 @@
       errorMsg = $LL.lotMovements.modal.quantityPositiveError();
       return;
     }
-    if (isFractionalForIntegerUnit(quantity)) {
+    if (isFractionalForIntegerUnit(quantity, isIntegerUnit)) {
       errorMsg = $LL.lotMovements.modal.integerQuantityError({ quantity });
       return;
     }
@@ -158,7 +143,7 @@
       const bal = currentBalances.find((b) => b.location_id === loc.id)?.balance ?? 0;
       return {
         value: loc.id,
-        label: `${locationLabel(loc)} (${$LL.lotMovements.modal.availableOption({ balance: bal })})`,
+        label: `${locationDisplayLabel(loc as LocationWithStore)} (${$LL.lotMovements.modal.availableOption({ balance: bal })})`,
       };
     }),
   ];
@@ -173,7 +158,7 @@
     { value: "", label: $LL.lotMovements.modal.selectLocation(), disabled: true },
     ...filteredDestinations.map((loc) => ({
       value: loc.id,
-      label: locationLabel(loc),
+      label: locationDisplayLabel(loc as LocationWithStore),
     })),
   ];
 
@@ -255,9 +240,9 @@
             id="move-qty"
             type="number"
             class="input input-md w-full motion-reduce:transition-none"
-            min={qtyMin}
-            step={qtyStep}
-            inputmode={qtyInputMode}
+            min={_qtyAttrs.min}
+            step={_qtyAttrs.step}
+            inputmode={_qtyAttrs.inputmode}
             max={availableQuantity}
             bind:value={quantity}
             disabled={submitting}

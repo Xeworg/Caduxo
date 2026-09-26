@@ -18,32 +18,23 @@
         listExpiryLotsByProduct,
         type ExpiryLotResponse,
     } from "../lib/expiry_lots.js";
-    import LotForm from "./LotForm.svelte";
-    import ResolveQuantityDialog from "./ResolveQuantityDialog.svelte";
-    import ArchiveLotDialog from "./ArchiveLotDialog.svelte";
-    import LotMovementsPanel from "./LotMovementsPanel.svelte";
-    import Combobox from "./ui/Combobox.svelte";
+    import { scannerNavigation } from "../lib/navigation.js";
     import {
-        getExpiryLot,
-    } from "../lib/expiry_lots.js";
-    import {
-        listStoreLocations,
-        type StoreLocationResponse,
-    } from "../lib/stores.js";
-    import {
-        isSentinelLocationId,
         resolveBatchCodeDisplay,
-        resolveLocationDisplay,
         resolveLotLocationDisplay,
     } from "../lib/lotDisplay.js";
+    import { type UnitKind } from "../lib/products.js";
     import { LL } from "../i18n/i18n-svelte.js";
     import { humanizeError } from "../lib/errors.js";
     import Modal from "./ui/Modal.svelte";
-    import Tabs from "./ui/Tabs.svelte";
     import Button from "./ui/Button.svelte";
     import Alert from "./ui/Alert.svelte";
     import Badge from "./ui/Badge.svelte";
     import Icon from "./ui/Icon.svelte";
+    import Combobox from "./ui/Combobox.svelte";
+    import LotForm from "./LotForm.svelte";
+    import ResolveQuantityDialog from "./ResolveQuantityDialog.svelte";
+    import ArchiveLotDialog from "./ArchiveLotDialog.svelte";
 
     /** Static barcode-type suggestion list shared by the ProductForm
      *  Combobox (PR 8a.1) and this ProductDetailPage Combobox (PR
@@ -100,13 +91,6 @@
     let resolvingLot: ExpiryLotResponse | null = null;
     let archivingLot: ExpiryLotResponse | null = null;
     let lotError = "";
-
-    // Lot detail modal (Historial tab)
-    let showLotDetail = false;
-    let detailLot: ExpiryLotResponse | null = null;
-    let detailLotLoading = false;
-    let lotDetailTab: "detail" | "history" = "detail";
-    let detailLotLocations: StoreLocationResponse[] = [];
 
     // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -245,36 +229,6 @@
         await load();
     }
 
-    // ── Lot detail modal / Historial ───────────────────────────────────────────
-
-    async function openLotDetail(lot: ExpiryLotResponse) {
-        showLotDetail = true;
-        detailLotLoading = true;
-        lotDetailTab = "detail";
-        detailLot = null;
-        detailLotLocations = [];
-        try {
-            detailLot = await getExpiryLot(lot.id);
-            // Load all locations for this lot's store for the movements panel.
-            if (detailLot) {
-                detailLotLocations = await listStoreLocations(detailLot.store_id);
-            }
-        } catch (e: unknown) {
-            lotError = humanizeError(e);
-        } finally {
-            detailLotLoading = false;
-        }
-    }
-
-    async function refreshDetailLot() {
-        if (!detailLot) return;
-        try {
-            detailLot = await getExpiryLot(detailLot.id);
-        } catch {
-            // Silently ignore refresh failures — modal stays open with stale data.
-        }
-    }
-
     function formatDate(dateStr: string): string {
         try {
             return new Date(dateStr + "T00:00:00").toLocaleDateString();
@@ -341,28 +295,16 @@
         return resolveBatchCodeDisplay(lot.batch_code, $LL.lotsDetail.noBatchCode());
     }
 
-    /** Same as `lotLocationLabel` but for the detail modal, which has a
-     *  store-locations list available as a fallback for any legacy row
-     *  whose projection is missing. `location_name` (when present) still
-     *  wins over the in-memory lookup. */
-    function detailLotLocationLabel(
-        lot: ExpiryLotResponse,
-        locations: StoreLocationResponse[],
-    ): string {
-        const noLocation = $LL.common.noLocation();
-        const locationId = lot.location_id;
-
-        // (1) Null/sentinel ids → localized "No location" placeholder.
-        if (!locationId || isSentinelLocationId(locationId)) {
-            return noLocation;
-        }
-        // (2) Backend-projected nonblank name wins over any lookup.
-        const projectedName = lot.location_name?.trim();
-        if (projectedName) return projectedName;
-        // (3) No projection → resolve the raw location_id against the
-        //     in-memory locations list, with (4) the raw id kept as the
-        //     defensive fallback when the row has no matching entry.
-        return resolveLocationDisplay(locationId, locations, noLocation);
+    /**
+     * Opens the selected lot in the Scanner view, preserving the
+     * product context so the Scanner can display the product header.
+     */
+    function openSelectedLotInScanner(lot: ExpiryLotResponse): void {
+        scannerNavigation.set({
+            lotId: lot.id,
+            productId: productId,
+            unitType: (lot.unit_type ?? null) as UnitKind | null,
+        });
     }
 </script>
 
@@ -736,7 +678,7 @@ on:click={() => onEdit(product)}
                                         variant="icon"
                                         size="sm"
                                         aria-label={$LL.products.detail.lot.movementHistory()}
-                                        onclick={() => openLotDetail(lot)}
+                                        onclick={() => openSelectedLotInScanner(lot)}
                                     >
                                         {#snippet iconStart()}
                                             <Icon name="clipboard-document-list" size="sm" />
@@ -857,85 +799,6 @@ on:click={() => onEdit(product)}
         onClose={() => (archivingLot = null)}
     />
 {/if}
-
-<!-- ── Lot detail modal ─────────────────────────────────────────────────────── -->
-<Modal
-    bind:open={showLotDetail}
-    size="wide"
-    showClose
-    closeLabel={$LL.lotMovements.modal.close()}
-    aria-label={$LL.dashboard.lotDetail()}
-    oncancel={() => (showLotDetail = false)}
-    onclose={() => (showLotDetail = false)}
->
-    {#snippet children()}
-        <header class="dialog-header">
-            <h3>{$LL.lotsDetail.title()}</h3>
-        </header>
-
-        {#if detailLotLoading}
-            <p class="modal-loading">{$LL.lotsDetail.loading()}</p>
-        {:else if detailLot}
-            <Tabs
-                items={[
-                    { id: "detail", label: $LL.lotsDetail.detail(), panel: lotDetailPanel },
-                    { id: "history", label: $LL.lotsDetail.history(), panel: lotHistoryPanel },
-                ]}
-                bind:activeId={lotDetailTab}
-                style="bordered"
-                aria-label={$LL.dashboard.lotDetail()}
-            />
-        {/if}
-    {/snippet}
-</Modal>
-
-{#snippet lotDetailPanel()}
-    {#if detailLot}
-        <dl class="detail-grid">
-            <dt>{$LL.lotsDetail.lotId()}</dt><dd class="cell-sku">{detailLot.id.slice(0, 8)}…</dd>
-            <dt>{$LL.lotsDetail.quantity()}</dt><dd>{lotQtyUnit(detailLot)}</dd>
-            <dt>{$LL.lotsDetail.expiry()}</dt><dd>{formatDate(detailLot.expiry_date)}</dd>
-            <dt>{$LL.lotsDetail.alertDays()}</dt><dd>{detailLot.alert_days_before}</dd>
-            <dt>{$LL.lotsDetail.batch()}</dt><dd>{lotBatchCodeLabel(detailLot)}</dd>
-            <dt>{$LL.lotsDetail.status()}</dt><dd>{detailLot.status}</dd>
-            {#if detailLot.location_id}
-                <dt>{$LL.lotsDetail.location()}</dt><dd>{detailLotLocationLabel(detailLot, detailLotLocations)}</dd>
-            {/if}
-            {#if detailLot.resolution}
-                <dt>{$LL.lotsDetail.resolution()}</dt><dd>{detailLot.resolution}</dd>
-            {/if}
-            {#if detailLot.notes}
-                <dt>{$LL.lotsDetail.notes()}</dt><dd>{detailLot.notes}</dd>
-            {/if}
-        </dl>
-        <div class="modal-actions">
-            <Button variant="ghost" onclick={() => (showLotDetail = false)}>
-                {$LL.lotsDetail.close()}
-            </Button>
-        </div>
-    {/if}
-{/snippet}
-
-{#snippet lotHistoryPanel()}
-    {#if detailLot}
-        <div class="tab-content">
-            <LotMovementsPanel
-                lotId={detailLot.id}
-                lotQuantity={detailLot.quantity}
-                lotUnit={detailLot.unit || ""}
-                lotStatus={detailLot.status}
-                locations={detailLotLocations.filter(
-                    (l) => l.store_id === detailLot!.store_id,
-                )}
-                allLocations={detailLotLocations}
-                unitType={detailLot.unit_type}
-                onMovementCreated={async () => {
-                    await refreshDetailLot();
-                }}
-            />
-        </div>
-    {/if}
-{/snippet}
 
 <style>
     /* ── Page chrome ─────────────────────────────────────────────────────────── */
@@ -1391,59 +1254,6 @@ on:click={() => onEdit(product)}
         align-items: center;
         gap: 2px;
         flex-shrink: 0;
-    }
-
-    /* ── Lot-detail modal inner shell (outer shell from `<Modal>`) ────────── */
-    .dialog-header {
-        display: flex;
-        align-items: center;
-        margin-bottom: 12px;
-    }
-
-    .dialog-header h3 {
-        margin: 0;
-        font-size: 1.05rem;
-        color: var(--color-base-content);
-    }
-
-    .modal-loading {
-        text-align: center;
-        padding: 20px;
-        color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
-    }
-
-    .tab-content {
-        min-height: 200px;
-    }
-
-    .detail-grid {
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: 6px 16px;
-        font-size: 0.9rem;
-        margin-bottom: 16px;
-    }
-
-    .detail-grid dt {
-        color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
-        font-weight: 500;
-    }
-
-    .detail-grid dd {
-        color: var(--color-base-content);
-        margin: 0;
-    }
-
-    .cell-sku {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        font-size: 0.85rem;
-        color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
-    }
-
-    .modal-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
     }
 
     /* ── Lifecycle banners ─────────────────────────────────────────────────── */

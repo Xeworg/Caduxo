@@ -11,6 +11,14 @@
 -->
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
+import {
+  EXIT_KINDS,
+  exitRequiresNotes,
+  getExitKindLabel,
+  isFractionalForIntegerUnit,
+  qtyAttrs,
+  type ExitKind,
+} from "../lib/movementRules.js";
   import { LL } from "../i18n/i18n-svelte.js";
   import { locale } from "../i18n/locale.svelte.js";
   import type { UnitKind } from "../lib/products.js";
@@ -23,6 +31,11 @@
 
   export let lotId: string;
   export let currentBalances: LotLocationBalance[];
+  /**
+   * All active store locations (all stores) — resolved to human-readable names
+   * in the source-location picker instead of raw location IDs.
+   */
+  export let allLocations: { id: string; name: string; store_id: string; store_name?: string }[] = [];
   /**
    * Unit kind resolved from the lot's product catalog link.
    * `null` for legacy/uncatalogued products — treated as decimal.
@@ -45,78 +58,42 @@
   let submitting = false;
   let errorMsg = "";
 
-  // Exit reasons (the eight kinds from the spec)
-  const EXIT_REASONS = [
-    { value: "exit:sale", label: () => $LL.lotMovements.exitReasons.sale() },
-    { value: "exit:waste", label: () => $LL.lotMovements.exitReasons.waste() },
-    { value: "exit:expired", label: () => $LL.lotMovements.exitReasons.expired() },
-    { value: "exit:damaged", label: () => $LL.lotMovements.exitReasons.damaged() },
-    { value: "exit:internal_consumption", label: () => $LL.lotMovements.exitReasons.internalConsumption() },
-    { value: "exit:return_to_supplier", label: () => $LL.lotMovements.exitReasons.returnToSupplier() },
-    { value: "exit:inventory_adjustment", label: () => $LL.lotMovements.exitReasons.inventoryAdjustmentExit() },
-    { value: "exit:other", label: () => $LL.lotMovements.exitReasons.other() },
-  ];
-
-  // Reasons that require notes
-  const REQUIRES_NOTES = ["exit:inventory_adjustment", "exit:other"];
-
-  $: requiresNotes = REQUIRES_NOTES.includes(exitReason);
+  $: requiresNotes = exitRequiresNotes(exitReason);
   $: availableQuantity = sourceLocationId
     ? currentBalances.find((b) => b.location_id === sourceLocationId)?.balance ?? 0
     : 0;
 
-  // ── Unit-aware quantity input rules ───────────────────────────────────────
   $: isIntegerUnit = unitType === "integer";
-  $: qtyMin = isIntegerUnit ? 1 : 0.01;
-  $: qtyStep = isIntegerUnit ? 1 : 0.01;
-  $: qtyInputMode = (isIntegerUnit ? "numeric" : "decimal") as
-    | "numeric"
-    | "decimal";
+  $: _qtyAttrs = qtyAttrs(isIntegerUnit);
 
-  /**
-   * Motivo options for the themed `<Listbox>` primitive. The value
-   * is the exit-reason code; the label is the i18n string for that
-   * reason (verbatim from the original shell). The empty
-   * placeholder is folded in as a disabled `value: ""` row — the
-   * themed Listbox has no `<option>` slot for an external
-   * placeholder row, so the previous `<Select>` `leading` snippet
-   * moved into the options array.
-   */
   $: exitReasonOptions = [
     { value: "", label: $LL.lotMovements.modal.selectExitReason(), disabled: true },
-    ...EXIT_REASONS.map((reason) => ({
-      value: reason.value,
-      label: reason.label(),
-    })),
+    ...EXIT_KINDS.map((kind) => ({ value: kind, label: getExitKindLabel(kind, $LL) })),
   ];
 
   /**
    * Source-location options for the `<Listbox>` primitive. Filters
    * balances to those with stock available and labels each entry
-   * with the existing location id and the available-balance badge.
-   * The empty placeholder is surfaced via a leading `value === ""`
-   * option so the user can clear the selection.
+   * with the resolved location name (from `allLocations`) and the
+   * available-balance badge. When a location id is not found in
+   * `allLocations` the raw id is used as a fallback so the row
+   * stays inspectable rather than disappearing silently.
    */
   $: sourceLocationOptions = [
-    { value: "", label: $LL.lotMovements.modal.selectLocation() },
+    { value: "", label: $LL.lotMovements.modal.selectLocation(), disabled: true },
     ...currentBalances
       .filter((bal) => bal.balance > 0)
-      .map((bal) => ({
-        value: bal.location_id,
-        label: `${bal.location_id} (${$LL.lotMovements.modal.availableOption({ balance: bal.balance })})`,
-      })),
+      .map((bal) => {
+        const resolved = allLocations.find((l) => l.id === bal.location_id);
+        const displayName = resolved?.name ?? bal.location_id;
+        return {
+          value: bal.location_id,
+          label: `${displayName} (${$LL.lotMovements.modal.availableOption({ balance: bal.balance })})`,
+        };
+      }),
   ];
 
-  /**
-   * Local validation for integer-unit products: catches fractional input
-   * before submit so the user gets immediate feedback. Backend enforces the
-   * same invariant, but this avoids a round-trip for the common case.
-   */
-  function isFractionalForIntegerUnit(qty: number): boolean {
-    if (!isIntegerUnit) return false;
-    if (qty <= 0) return false;
-    return !Number.isInteger(qty);
-  }
+
 
   // ── Submit ────────────────────────────────────────────────────────────────
 
@@ -135,7 +112,7 @@
       errorMsg = $LL.lotMovements.modal.quantityPositiveError();
       return;
     }
-    if (isFractionalForIntegerUnit(quantity)) {
+    if (isFractionalForIntegerUnit(quantity, isIntegerUnit)) {
       errorMsg = $LL.lotMovements.modal.integerQuantityError({ quantity });
       return;
     }
@@ -226,9 +203,9 @@
           id="exit-qty"
           type="number"
           class="input input-md w-full motion-reduce:transition-none"
-          min={qtyMin}
-          step={qtyStep}
-          inputmode={qtyInputMode}
+          min={_qtyAttrs.min}
+          step={_qtyAttrs.step}
+          inputmode={_qtyAttrs.inputmode}
           max={availableQuantity}
           bind:value={quantity}
           disabled={submitting}
