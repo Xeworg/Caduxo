@@ -810,9 +810,17 @@
       // Apply the FEFO policy at the resolution boundary so mode-specific
       // derived gates see the right state. For `suggest_fefo` /
       // `require_fefo` the FEFO lot is at index 0; for `manual_lot_choice`
-      // we leave `selectedLotId` empty until the user picks one.
-      selectedLotId =
-        fefoPolicy === "manual_lot_choice" ? "" : result.lots[0]?.id ?? "";
+      // we leave `selectedLotId` empty until the user picks one — EXCEPT
+      // when there is exactly one lot, where auto-selecting the only
+      // available choice is the least surprising safe behaviour and avoids
+      // permanently disabled confirm (no real choice exists to make).
+      if (fefoPolicy === "manual_lot_choice" && result.lots.length === 1) {
+        selectedLotId = result.lots[0].id;
+      } else if (fefoPolicy === "manual_lot_choice") {
+        selectedLotId = "";
+      } else {
+        selectedLotId = result.lots[0]?.id ?? "";
+      }
       locationId = "";
     } else if (result.match_type === "lot_match") {
       // FEFO is bypassed for direct lot scans.
@@ -1395,10 +1403,10 @@
             {resolved.scanned_value}
           </Alert>
         {:else if resolved?.match_type === "lot_match" && activeProduct}
-          <!-- Direct lot scan: FEFO bypassed, but the user still needs
-               to see which product was matched. Render a compact
-               resolved-summary so the lot row is not the only
-               affordance. -->
+          <!-- Direct lot scan: FEFO bypassed. Render the full operational
+               form — lot is already chosen, so no lot picker is needed.
+               Per spec `Sale mode flow`, steps 1–6: location picker (when
+               multiple balances exist), quantity, and confirm. -->
           <div class="resolved-summary">
             <p class="resolved-line">
               <strong>{$LL.scanner.sale.selectedProduct()}:</strong>
@@ -1412,7 +1420,55 @@
                 · {resolvedLot.lot.batch_code}
               {/if}
             </p>
-            <p class="hint-required">{$LL.scanner.sale.selectedLotHint()}</p>
+
+            {#if loadingBalances}
+              <LoadingState variant="text" label={$LL.common.loading()} />
+            {:else if availableBalances.length === 0}
+              <Alert variant="warning">{$LL.scanner.sale.invalid.quantity()}</Alert>
+            {:else}
+              <Listbox
+                value={locationId}
+                options={locationOptions}
+                aria-label={$LL.scanner.sale.locationLabel()}
+                disabled={availableBalances.length === 1}
+                onchange={(v: string) => (locationId = v)}
+              />
+            {/if}
+
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">
+                {$LL.scanner.sale.quantityLabel()}
+              </legend>
+              <input
+                type="number"
+                class="input input-md motion-reduce:transition-none w-full"
+                min="0"
+                max={selectedBalance}
+                step="0.01"
+                inputmode="decimal"
+                value={quantityStr}
+                oninput={(e: Event) => {
+                  const target = e.currentTarget as HTMLInputElement;
+                  quantityStr = target.value;
+                }}
+              />
+              {#if selectedBalance > 0}
+                <p class="label">
+                  {$LL.lotMovements.available({ available: selectedBalance })}
+                </p>
+              {/if}
+            </fieldset>
+
+            <div class="confirm-row">
+              <Button
+                variant="primary"
+                disabled={!canConfirmSale || submitting}
+                loading={submitting}
+                onclick={() => void confirmSale()}
+              >
+                {submitting ? $LL.scanner.sale.confirming() : $LL.scanner.sale.confirm()}
+              </Button>
+            </div>
           </div>
         {:else if resolved?.match_type === "product_match" && activeProduct && resolved.lots.length === 0}
           <!-- Product resolved but no active lots in the active store.
@@ -1427,7 +1483,7 @@
             </p>
             <Alert variant="info">{$LL.scanner.noLotsAvailable()}</Alert>
           </div>
-        {:else if resolved && activeProduct && resolvedLot}
+        {:else if resolved && activeProduct && (resolvedLot || (resolved.match_type === "product_match" && resolved.lots.length > 0))}
           <div class="resolved-summary">
             <p class="resolved-line">
               <strong>{$LL.scanner.sale.selectedProduct()}:</strong>
@@ -1445,7 +1501,7 @@
               {#if fefoPolicy === "require_fefo"}
                 <p class="hint-required">{$LL.scanner.sale.fefoRequiredNotice()}</p>
               {/if}
-            {:else}
+            {:else if resolvedLot}
               <p class="resolved-line">
                 <strong>{$LL.scanner.sale.selectedLot()}:</strong>
                 {resolvedLot.lot.expiry_date}
@@ -1606,10 +1662,11 @@
             {resolved.scanned_value}
           </Alert>
         {:else if resolved?.match_type === "lot_match" && activeProduct}
-          <!-- Direct lot scan: render the product + lot so the user
-               has the same context the multi-lot picker would have
-               given them. Stock-out is also FEFO-bypassed for
-               direct lot scans, so the lot picker is not shown. -->
+          <!-- Direct lot scan: FEFO bypassed. Render the full operational
+               form — lot is already chosen, so no lot picker is needed.
+               Per spec `Stock-out mode`, steps 1–7: reason picker, location
+               picker (when multiple balances exist), quantity, optional notes,
+               and confirm. -->
           <div class="resolved-summary">
             <p class="resolved-line">
               <strong>{$LL.scanner.stockOut.selectedProduct()}:</strong>
@@ -1623,6 +1680,87 @@
                 · {resolvedLot.lot.batch_code}
               {/if}
             </p>
+
+            <Listbox
+              value={exitReason}
+              options={[
+                { value: "", label: $LL.scanner.stockOut.reasonPlaceholder(), disabled: true },
+                ...stockOutReasonOptions,
+              ]}
+              aria-label={$LL.scanner.stockOut.reasonLabel()}
+              required
+              onchange={(v: string) => (exitReason = v)}
+            />
+
+            {#if loadingBalances}
+              <LoadingState variant="text" label={$LL.common.loading()} />
+            {:else if availableBalances.length === 0}
+              <Alert variant="warning">{$LL.scanner.stockOut.invalid.quantity()}</Alert>
+            {:else}
+              <Listbox
+                value={locationId}
+                options={locationOptions}
+                aria-label={$LL.scanner.stockOut.locationLabel()}
+                disabled={availableBalances.length === 1}
+                onchange={(v: string) => (locationId = v)}
+              />
+            {/if}
+
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">
+                {$LL.scanner.stockOut.quantityLabel()}
+              </legend>
+              <input
+                type="number"
+                class="input input-md motion-reduce:transition-none w-full"
+                min="0"
+                max={selectedBalance}
+                step="0.01"
+                inputmode="decimal"
+                value={quantityStr}
+                oninput={(e: Event) => {
+                  const target = e.currentTarget as HTMLInputElement;
+                  quantityStr = target.value;
+                }}
+              />
+              {#if selectedBalance > 0}
+                <p class="label">
+                  {$LL.lotMovements.available({ available: selectedBalance })}
+                </p>
+              {/if}
+            </fieldset>
+
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">
+                {requiresNotes
+                  ? $LL.scanner.stockOut.notesLabel()
+                  : $LL.scanner.stockOut.notesOptionalLabel()}
+              </legend>
+              <textarea
+                class="textarea textarea-md w-full motion-reduce:transition-none"
+                rows="3"
+                bind:value={notes}
+                placeholder={requiresNotes
+                  ? $LL.scanner.stockOut.notesRequiredHint()
+                  : ""}
+              ></textarea>
+              {#if requiresNotes && !notes.trim()}
+                <p class="hint-required">{$LL.scanner.stockOut.notesRequiredHint()}</p>
+              {/if}
+            </fieldset>
+
+            <div class="confirm-row">
+              <Button
+                variant="primary"
+                disabled={!canConfirmStockOut || submitting}
+                loading={submitting}
+                onclick={() => void confirmStockOut()}
+              >
+                {submitting
+                  ? $LL.scanner.stockOut.confirming()
+                  : $LL.scanner.stockOut.confirm()}
+              </Button>
+            </div>
           </div>
         {:else if resolved?.match_type === "product_match" && activeProduct && resolved.lots.length === 0}
           <!-- Product resolved but no active lots in the active store.
@@ -1636,7 +1774,7 @@
             </p>
             <Alert variant="info">{$LL.scanner.noLotsAvailable()}</Alert>
           </div>
-        {:else if resolved && activeProduct && resolvedLot}
+        {:else if resolved && activeProduct && (resolvedLot || (resolved.match_type === "product_match" && resolved.lots.length > 0))}
           <div class="resolved-summary">
             <p class="resolved-line">
               <strong>{$LL.scanner.stockOut.selectedProduct()}:</strong>
@@ -1654,7 +1792,7 @@
               {#if fefoPolicy === "require_fefo"}
                 <p class="hint-required">{$LL.scanner.stockOut.fefoRequiredNotice()}</p>
               {/if}
-            {:else}
+            {:else if resolvedLot}
               <p class="resolved-line">
                 <strong>{$LL.scanner.stockOut.selectedLot()}:</strong>
                 {resolvedLot.lot.expiry_date}
