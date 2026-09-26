@@ -429,11 +429,21 @@
             getExpiryLot(req.lotId),
             getProduct(req.productId),
           ]);
-          pinnedContext = {
+          // Use applyResolveResult as the single source of truth for Scanner
+          // state when a concrete lot becomes active — it populates resolved,
+          // selectedLotId, locationId, and pinnedContext identically to a manual
+          // lot_match scan, so Venta/Salida/Registro can operate on the
+          // pinned lot without an extra scan step.
+          applyResolveResult({
+            match_type: "lot_match",
             lot,
             product: productDetail.product,
-            unitType: (productDetail.product.unit_type ?? null) as UnitKind | null,
-          };
+          });
+          // Land on the lot-context tab so the user sees the panel they
+          // came for without an extra click. We do this after applyResolveResult
+          // so that if the user later switches to Venta/Salida/Registro, those
+          // panels already have valid state.
+          mode = "lot_context";
         } catch {
           // Resolution failures are surfaced silently; the pinned context
           // remains null and the user stays on Scanner to retry.
@@ -486,18 +496,6 @@
   let lotContextBalances = $state<LotLocationBalance[]>([]);
   let lotContextLoading = $state(false);
   let lotContextLoadError = $state("");
-
-  // Location name lookup for lot-context panel rendering.
-  let lotContextLocationById = $state<Record<string, string>>({});
-
-  // Build the location lookup from allStoreLocations.
-  $effect(() => {
-    const next: Record<string, string> = {};
-    for (const loc of allStoreLocations) {
-      next[loc.id] = loc.name;
-    }
-    lotContextLocationById = next;
-  });
 
   // Load movements + balances whenever pinnedContext changes.
   $effect(() => {
@@ -820,6 +818,17 @@
       // FEFO is bypassed for direct lot scans.
       selectedLotId = result.lot.id;
       locationId = "";
+      // Pin the lot for the lot-context tabs (Contexto de lote, Mover
+      // stock, Ajustar cantidad) using the same shape the Dashboard
+      // navigation handoff produces. The resolve result already carries
+      // lot and product so no extra fetch is needed; this keeps both
+      // entry points (Dashboard handoff and manual lot scan) on the
+      // canonical pinnedContext contract.
+      pinnedContext = {
+        lot: result.lot,
+        product: result.product,
+        unitType: (result.product.unit_type ?? null) as UnitKind | null,
+      };
     } else {
       // Unknown — clear the lot/location for the previous resolve and
       // open the canonical ProductForm for quick-create. The form is
