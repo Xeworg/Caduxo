@@ -1295,21 +1295,20 @@
                                     />
                                 </div>
                                 <div class="unit-create-field">
-                                    <label
-                                        class="fieldset-label"
-                                        for="create-unit-kind"
-                                    >
+                                    <span class="fieldset-label">
                                         {$LL.unitCatalog.kindLabel()}
-                                    </label>
-                                    <select
-                                        id="create-unit-kind"
-                                        class="select select-sm w-full"
-                                        bind:value={createKind}
+                                    </span>
+                                    <Listbox
+                                        value={createKind}
+                                        options={[
+                                            { value: 'integer', label: $LL.unitCatalog.kind.integer() },
+                                            { value: 'decimal', label: $LL.unitCatalog.kind.decimal() },
+                                        ]}
+                                        size="sm"
+                                        aria-label={$LL.unitCatalog.kindLabel()}
                                         disabled={creatingUnit}
-                                    >
-                                        <option value="integer">{$LL.unitCatalog.kind.integer()}</option>
-                                        <option value="decimal">{$LL.unitCatalog.kind.decimal()}</option>
-                                    </select>
+                                        onchange={(v: string) => (createKind = v as UnitKind)}
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -1632,30 +1631,26 @@
                                     />
                                 </div>
                                 <div class="unit-create-field">
-                                    <label
-                                        class="fieldset-label"
-                                        for="create-reason-kind"
-                                    >
+                                    <span class="fieldset-label">
                                         {$LL.stockOutReasons.movementKindLabel()}
-                                    </label>
-                                    <select
-                                        id="create-reason-kind"
-                                        class="select select-sm w-full"
-                                        bind:value={createReasonMovementKind}
+                                    </span>
+                                    <Listbox
+                                        value={createReasonMovementKind}
+                                        options={AVAILABLE_MOVEMENT_KINDS.map((kind) => ({
+                                            value: kind,
+                                            label: (() => {
+                                                const kinds = $LL.stockOutReasons.kinds as unknown as Record<
+                                                    ExitReasonMovementKind,
+                                                    () => string
+                                                >;
+                                                return kinds[kind]?.() ?? kind;
+                                            })(),
+                                        }))}
+                                        size="sm"
+                                        aria-label={$LL.stockOutReasons.movementKindLabel()}
                                         disabled={creatingReason}
-                                    >
-                                        {#each AVAILABLE_MOVEMENT_KINDS as kind}
-                                            <option value={kind}>
-                                                {(() => {
-                                                    const kinds = $LL.stockOutReasons.kinds as unknown as Record<
-                                                        ExitReasonMovementKind,
-                                                        () => string
-                                                    >;
-                                                    return kinds[kind]?.() ?? kind;
-                                                })()}
-                                            </option>
-                                        {/each}
-                                    </select>
+                                        onchange={(v: string) => (createReasonMovementKind = v as ExitReasonMovementKind)}
+                                    />
                                 </div>
                             </div>
                         </div>

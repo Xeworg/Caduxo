@@ -4,7 +4,7 @@
 **Task File:** `odd/tasks/scanner-ux-improvements.md`
 **Baseline:** `main @ 0c84f93`
 **Branch:** `feat/scanner-ux-improvements`
-**Status:** In progress — Tasks 2.1–2.7d implemented; Task 2.7e in progress; Task 2.8 pending
+**Status:** Complete — Tasks 2.1–2.8 implemented and independently verified
 **Created:** 2026-09-26
 **Last Updated:** 2026-09-26
 
@@ -47,9 +47,9 @@ The following decisions were made based on approved user experience requirements
 ## Implementation Checklist
 
 ### Task 2.1: FEFO Contextual Help
-- [ ] Add translated tooltip explaining FEFO (First Expired, First Out), accessible by pointer and keyboard.
-- [ ] Add one concise dynamic explanation for the currently selected policy (user chose dynamic help).
-- [ ] Keep the existing general section explanation; selected-policy text adds specific behavior without replacing it.
+- [x] Add translated tooltip explaining FEFO (First Expired, First Out), accessible by pointer and keyboard.
+- [x] Add one concise dynamic explanation for the currently selected policy (user chose dynamic help).
+- [x] Keep the existing general section explanation; selected-policy text adds specific behavior without replacing it.
 
 **Status: complete — independently verified.** FEFO tooltip is pointer/keyboard accessible; selected-policy description updates dynamically and preserves the general description. Independent `npm run check`, Svelte warning-threshold check, i18n generation, build, and `git diff --check` passed. Work-unit commit: `5d87d5c` (combined with Task 2.6b due to the shared ConfigurationPage surface).
 
@@ -229,15 +229,19 @@ Seed one catalog entry per existing stock-out `movement_kind` with clear, user-f
 - [x] Archive/unarchive with confirmation; archived reasons remain excluded from stock-out registration dropdowns.
 - [x] Add a dedicated localized `stockOutReasons` namespace in EN/ES for management UI and the seven closed kinds; do not label the catalog through `lotMovements` UI namespace.
 - [x] Omit a “preset” badge: the current DTO does not distinguish seeded from custom entries.
-- [ ] Keep Rust formatting changes and other pre-existing dirty files outside this work unit.
+- [x] Keep Rust formatting changes and other pre-existing dirty files outside this work unit.
 
 **Status: complete — independently verified.** Independent verification caught and the implementation corrected two runtime defects: `loadReasonsCatalog()` was missing from `onMount`, and localized movement-kind dictionary keys used underscores instead of the backend `exit:` wire values. Final verification passed: `npm run check` (0 errors/warnings), `npx svelte-check --tsconfig ./tsconfig.json --threshold warning` (0/0), `npm run i18n:generate` (up to date, no mutation), `npm run build`, and `git diff --check`. No browser/E2E harness. Work-unit commit: `099e580`.
 
 ### Task 2.8: Shared Catalog UX
-- [ ] Reuse consistent archive confirmation and active/archived presentation where it fits both catalogs.
-- [ ] Use `archived_at` as lifecycle state; do not add redundant `is_active`.
-- [ ] Verify historical views show preserved snapshot text and archived references clearly.
-- [ ] Avoid premature generic catalog infrastructure unless implementation demonstrates meaningful duplication.
+- [x] Keep both catalog creation selectors consistent with the page's themed `Listbox` controls.
+- [x] Preserve the common active/archived presentation and archive/restore confirmation pattern; do not introduce generic catalog infrastructure for only two catalogs.
+- [x] Use `archived_at` as lifecycle state; do not add redundant `is_active`.
+- [x] Make historical movement snapshots clearly identify when their linked reason is currently archived.
+- [x] Verify historical views preserve the immutable snapshot text and archived reason selection remains visible but disabled.
+- [x] Avoid premature generic catalog infrastructure; catalog-specific fields/sorting remain distinct.
+
+**Status: complete — independently verified.** Both catalog kind selectors use the themed `Listbox`; shared active/archived and confirmation presentation remains consistent without a generic abstraction. Scanner history preserves the immutable reason snapshot and adds a localized archived marker only when the linked `exit_reason_id` is known archived. Metadata loading is parallel, non-blocking, and failure-safe. Verified with `npm run check` (0 errors/warnings), `npx svelte-check --tsconfig ./tsconfig.json --threshold warning` (0/0), `npm run i18n:generate` (up to date), `npm run build`, and `git diff --check`. No browser/E2E harness; no Rust/schema changes.
 
 ## Acceptance Criteria
 

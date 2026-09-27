@@ -75,6 +75,7 @@
   } from "../lib/movementRules.js";
   import {
     listStockOutReasons,
+    listAllStockOutReasons,
     type StockOutReason,
   } from "../lib/stock_out_reasons.js";
   import {
@@ -264,6 +265,24 @@
       label: r.display_name,
     })),
   );
+
+  // Set of archived reason IDs, populated from `listAllStockOutReasons`.
+  // Used to annotate historical movement rows with an "archived" badge when
+  // `movement.exit_reason_id` refers to a reason that has since been archived.
+  // Loads non-blocking; a failure leaves the set empty (safe default — no badge).
+  let archivedReasonIds = $state<Set<string>>(new Set());
+
+  async function loadArchivedReasonIds(): Promise<void> {
+    try {
+      const all = await listAllStockOutReasons();
+      archivedReasonIds = new Set(
+        all.filter((r) => r.archived_at !== null).map((r) => r.id),
+      );
+    } catch {
+      // Failure-safe: leave the set empty so no rows are incorrectly marked.
+      archivedReasonIds = new Set();
+    }
+  }
 
   // Looks up the movement_kind for the currently selected catalog reason.
   // Used to gate the notes requirement before submission.
@@ -633,6 +652,7 @@
       loadHasStore(),
       loadAvailableStores(),
       loadAllStoreLocations(),
+      loadArchivedReasonIds(),
     ]);
   });
 
@@ -2079,6 +2099,9 @@
                     movement.movement_kind,
                     movement.direction,
                   )}
+                  {@const reasonArchived = movement.exit_reason_id
+                    ? archivedReasonIds.has(movement.exit_reason_id)
+                    : false}
                   <div class="movement-row" role="listitem">
                     <div class="movement-kind">
                       <span class="movement-kind-label">
@@ -2087,6 +2110,14 @@
                       {#if movement.reason}
                         <span class="movement-reason-snapshot">
                           {movement.reason}
+                          {#if reasonArchived}
+                            <span
+                              class="archived-reason-badge"
+                              title={$LL.lotMovements.errors.archived()}
+                            >
+                              {$LL.lotMovements.errors.archived()}
+                            </span>
+                          {/if}
                         </span>
                       {/if}
                     </div>
@@ -2532,6 +2563,24 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .archived-reason-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-warning);
+    background: color-mix(in oklch, var(--color-warning) 12%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-warning) 35%, transparent);
+    border-radius: 999px;
+    padding: 1px 5px;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .movement-locations {
