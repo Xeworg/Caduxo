@@ -6,7 +6,7 @@
 **Branch:** `feat/scanner-ux-improvements`
 **Status:** Complete — Tasks 2.1–2.8 implemented and independently verified
 **Created:** 2026-09-26
-**Last Updated:** 2026-09-26
+**Last Updated:** 2026-09-27
 
 ## Problem Statement
 
@@ -241,7 +241,7 @@ Seed one catalog entry per existing stock-out `movement_kind` with clear, user-f
 - [x] Verify historical views preserve the immutable snapshot text and archived reason selection remains visible but disabled.
 - [x] Avoid premature generic catalog infrastructure; catalog-specific fields/sorting remain distinct.
 
-**Status: complete — independently verified.** Both catalog kind selectors use the themed `Listbox`; shared active/archived and confirmation presentation remains consistent without a generic abstraction. Scanner history preserves the immutable reason snapshot and adds a localized archived marker only when the linked `exit_reason_id` is known archived. Metadata loading is parallel, non-blocking, and failure-safe. Verified with `npm run check` (0 errors/warnings), `npx svelte-check --tsconfig ./tsconfig.json --threshold warning` (0/0), `npm run i18n:generate` (up to date), `npm run build`, and `git diff --check`. No browser/E2E harness; no Rust/schema changes.
+**Status: complete — independently verified.** Both catalog kind selectors use the themed `Listbox`; shared active/archived and confirmation presentation remains consistent without a generic abstraction. Scanner history preserves the immutable reason snapshot and adds a localized archived marker only when the linked `exit_reason_id` is known archived. Metadata loading is parallel, non-blocking, and failure-safe. Verified with `npm run check` (0 errors/warnings), `npx svelte-check --tsconfig ./tsconfig.json --threshold warning` (0/0), `npm run i18n:generate` (up to date), `npm run build`, and `git diff --check`. No browser/E2E harness; no Rust/schema changes. Work-unit commit: `363ab7a`.
 
 ## Acceptance Criteria
 
@@ -278,6 +278,6 @@ Seed one catalog entry per existing stock-out `movement_kind` with clear, user-f
    - 2.7c movement DTO/service snapshot + validations — **complete**, commit `30fcd58` (independent verification: full Rust library suite 829 passed; `cargo check` and `cargo fmt -- --check` passed)
    - 2.7d replace stock-out selector + history display — **complete**; commits `68253ab` (client API foundation) and `b37bef3` (selector, history, retry UI)
    - 2.7e catalog management UI — **complete**, commit `099e580`. Includes active/archived catalog management, create with closed kind selection, rename label only, and archive/restore confirmation. Corrections verified against backend wire kinds; frontend checks/build/i18n generation passed. No browser/E2E harness.
-8. Task 2.8 shared catalog UX — pending.
+8. Task 2.8 shared catalog UX — **complete**, commit `363ab7a` (themed kind pickers, shared presentation consistency, and explicit archived marker in movement history; frontend checks/build/i18n passed).
 
 Each task must be completed with proportionate tests and evidence before closure. Create a separate Conventional Commit for each verified work unit on this feature branch. Do not publish without explicit user authorization.
