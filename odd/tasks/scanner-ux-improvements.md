@@ -269,7 +269,7 @@ Seed one catalog entry per existing stock-out `movement_kind` with clear, user-f
    - 2.7a migration + schema + seed + backfill — **complete** (V20 tests 13 passed, migration suite 74 passed; TEXT stable IDs, seven seeded stock-out categories excluding sale, nullable exit_reason_id FK, reason snapshot unchanged, limited legacy backfill snapshot-only; worker + independent verifier confirmed; no code edits/commit)
    - 2.7b catalog repository/service/command CRUD — **complete** (independent verification: full Rust library suite 823 passed; stale migration-count assertions fixed)
    - 2.7c movement DTO/service snapshot + validations — **complete**, commit `30fcd58` (independent verification: full Rust library suite 829 passed; `cargo check` and `cargo fmt -- --check` passed)
-   - 2.7d replace stock-out selector + history display — **complete**; client API foundation commit `68253ab`, with implementation/work-unit commit to be recorded after closure
+   - 2.7d replace stock-out selector + history display — **complete**; commits `68253ab` (client API foundation) and `b37bef3` (selector, history, retry UI)
    - 2.7e catalog management UI — pending
 8. Task 2.8 shared catalog UX — pending.
 
