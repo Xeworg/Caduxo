@@ -52,6 +52,7 @@ jobs:
             libatk1.0-dev \
             libglib2.0-dev \
             libayatana-appindicator3-dev \
+            libappindicator3-dev \
             patchelf
 
       - name: Linux — install linuxdeploy (AppImage bundler)
