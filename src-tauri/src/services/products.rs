@@ -376,10 +376,7 @@ pub async fn apply_lifecycle_transition(
 ) -> Result<(), AppError> {
     // Retire precondition: non-blank reason after trim.
     if target == ProductLifecycle::Retired {
-        let trimmed_blank = reason
-            .as_deref()
-            .map(str::trim)
-            .map_or(true, str::is_empty);
+        let trimmed_blank = reason.as_deref().map(str::trim).map_or(true, str::is_empty);
         if trimmed_blank {
             return Err(DomainError::Validation {
                 message: user_message(UserMessage::RetireReasonRequired, Locale::En),
@@ -417,9 +414,7 @@ pub async fn apply_lifecycle_transition(
         if current != expected {
             // Drop the transaction without committing.
             return Err(DomainError::BusinessRule {
-                message: format!(
-                    "product lifecycle is {current:?}, expected {expected:?}",
-                ),
+                message: format!("product lifecycle is {current:?}, expected {expected:?}",),
             }
             .into());
         }
@@ -441,15 +436,13 @@ pub async fn apply_lifecycle_transition(
         ProductLifecycle::Retired => None,
     };
     if let Some(flag) = legacy_is_active {
-        sqlx::query(
-            "UPDATE products SET is_active = $1, updated_at = $2 WHERE id = $3",
-        )
-        .bind(if flag { 1i64 } else { 0i64 })
-        .bind(&now)
-        .bind(product_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(AppError::from)?;
+        sqlx::query("UPDATE products SET is_active = $1, updated_at = $2 WHERE id = $3")
+            .bind(if flag { 1i64 } else { 0i64 })
+            .bind(&now)
+            .bind(product_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::from)?;
     }
 
     // 5. Mirror the lifecycle change onto every `product_barcodes` row
@@ -690,9 +683,9 @@ mod tests {
     };
     use crate::error::AppError;
     use crate::services::products::{
-        add_barcode, archive_product, create_category, create_product, get_product,
-        list_barcodes, list_categories, remove_barcode, retire_product,
-        search_products, suggested_alert_days, unarchive_product, update_category, update_product,
+        add_barcode, archive_product, create_category, create_product, get_product, list_barcodes,
+        list_categories, remove_barcode, retire_product, search_products, suggested_alert_days,
+        unarchive_product, update_category, update_product,
     };
 
     // ------------------------------------------------------------------
@@ -1804,7 +1797,9 @@ mod tests {
     #[tokio::test]
     async fn lifecycle_archive_unarchive_round_trip() {
         let pool = fresh_test_pool().await.unwrap();
-        let p = create_product(&pool, basic_product("SKU-LA")).await.unwrap();
+        let p = create_product(&pool, basic_product("SKU-LA"))
+            .await
+            .unwrap();
         archive_product(&pool, p.id.clone()).await.unwrap();
         let detail = get_product(&pool, p.id.clone()).await.unwrap();
         assert_eq!(
@@ -1818,9 +1813,18 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0].event_type, crate::dto::products::ProductLifecycleEventType::Archived);
-        assert_eq!(events[0].from_state, crate::dto::products::ProductLifecycle::Active);
-        assert_eq!(events[0].to_state, crate::dto::products::ProductLifecycle::Archived);
+        assert_eq!(
+            events[0].event_type,
+            crate::dto::products::ProductLifecycleEventType::Archived
+        );
+        assert_eq!(
+            events[0].from_state,
+            crate::dto::products::ProductLifecycle::Active
+        );
+        assert_eq!(
+            events[0].to_state,
+            crate::dto::products::ProductLifecycle::Archived
+        );
         assert!(events[0].reason.is_none());
 
         unarchive_product(&pool, p.id.clone()).await.unwrap();
@@ -1836,7 +1840,9 @@ mod tests {
     async fn lifecycle_retire_round_trip_and_rejects_second_retire() {
         use crate::dto::products::RetireProductInput;
         let pool = fresh_test_pool().await.unwrap();
-        let p = create_product(&pool, basic_product("SKU-LR")).await.unwrap();
+        let p = create_product(&pool, basic_product("SKU-LR"))
+            .await
+            .unwrap();
         retire_product(
             &pool,
             RetireProductInput {
@@ -1874,7 +1880,9 @@ mod tests {
     async fn lifecycle_retire_rejects_blank_reason() {
         use crate::dto::products::RetireProductInput;
         let pool = fresh_test_pool().await.unwrap();
-        let p = create_product(&pool, basic_product("SKU-LB")).await.unwrap();
+        let p = create_product(&pool, basic_product("SKU-LB"))
+            .await
+            .unwrap();
         for bad in ["", "   ", "\t\n"] {
             let err = retire_product(
                 &pool,
@@ -1897,15 +1905,22 @@ mod tests {
         let events = super::list_lifecycle_events(&pool, p.id.clone())
             .await
             .unwrap();
-        assert!(events.is_empty(), "blank retire must not write an audit row");
+        assert!(
+            events.is_empty(),
+            "blank retire must not write an audit row"
+        );
     }
 
     #[tokio::test]
     async fn lifecycle_retire_propagates_to_barcode_and_releases_value() {
         use crate::dto::products::{ProductBarcodeCreate, RetireProductInput};
         let pool = fresh_test_pool().await.unwrap();
-        let p1 = create_product(&pool, basic_product("SKU-LBP")).await.unwrap();
-        let p2 = create_product(&pool, basic_product("SKU-LBP2")).await.unwrap();
+        let p1 = create_product(&pool, basic_product("SKU-LBP"))
+            .await
+            .unwrap();
+        let p2 = create_product(&pool, basic_product("SKU-LBP2"))
+            .await
+            .unwrap();
         // Attach the same barcode to p1.
         add_barcode(
             &pool,
@@ -1947,7 +1962,9 @@ mod tests {
     async fn lifecycle_atomicity_audit_failure_rolls_back_lifecycle_and_mirror() {
         use crate::dto::products::ProductLifecycle;
         let pool = fresh_test_pool().await.unwrap();
-        let p = create_product(&pool, basic_product("SKU-LAT")).await.unwrap();
+        let p = create_product(&pool, basic_product("SKU-LAT"))
+            .await
+            .unwrap();
         // Attempt a forced audit failure by inserting a row directly into
         // the audit table with an invalid `to_state`. The DB constraint
         // rejects the insert; the surrounding transaction rolls back.

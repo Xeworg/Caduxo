@@ -700,10 +700,10 @@ mod tests {
     /// the active helper filters on `lifecycle = 'active'`.
     #[tokio::test]
     async fn scanner_retired_product_barcode_does_not_resolve() {
+        use crate::db::repositories::settings as settings_repo;
+        use crate::dto::products::ProductCreate;
         use crate::dto::products::{ProductBarcodeCreate, RetireProductInput};
         use crate::services::products::create_product;
-        use crate::dto::products::ProductCreate;
-        use crate::db::repositories::settings as settings_repo;
         let pool = fresh_test_pool().await.unwrap();
         let (store_id, _lot_product_id, _batch_code, _lot_id) = seed_lot(&pool).await.unwrap();
         // Persist the active store so the scanner resolver accepts the lookup.
@@ -755,9 +755,9 @@ mod tests {
     /// Symmetric check for SKU lookup.
     #[tokio::test]
     async fn scanner_retired_product_sku_does_not_resolve() {
+        use crate::db::repositories::settings as settings_repo;
         use crate::dto::products::{ProductCreate, RetireProductInput};
         use crate::services::products::create_product;
-        use crate::db::repositories::settings as settings_repo;
         let pool = fresh_test_pool().await.unwrap();
         let (store_id, _lot_product_id, _batch_code, _lot_id) = seed_lot(&pool).await.unwrap();
         settings_repo::set_last_selected_store_id(&pool, Some(&store_id))
@@ -800,8 +800,8 @@ mod tests {
     /// lifecycle`).
     #[tokio::test]
     async fn scanner_lot_under_retired_parent_resolves() {
-        use crate::dto::products::RetireProductInput;
         use crate::db::repositories::settings as settings_repo;
+        use crate::dto::products::RetireProductInput;
         let pool = fresh_test_pool().await.unwrap();
         let (store_id, lot_product_id, batch_code, _lot_id) = seed_lot(&pool).await.unwrap();
         settings_repo::set_last_selected_store_id(&pool, Some(&store_id))
