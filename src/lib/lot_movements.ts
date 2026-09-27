@@ -28,7 +28,9 @@ export type MovementKind =
 /** Input for creating a new lot movement. */
 export interface LotMovementCreate {
  lot_id: string;
- /** Movement kind (e.g., "transfer", "exit:sale", "inventory_adjustment"). */
+ /** Movement kind (e.g., "transfer", "exit:sale", "inventory_adjustment").
+  * When exit_reason_id is supplied this field is ignored; the kind is
+  * derived from the catalog reason's movement_kind. */
  kind: string;
  /** Optional direction for `inventory_adjustment` kind. */
  direction?: MovementDirection | null;
@@ -40,6 +42,10 @@ export interface LotMovementCreate {
  destination_location_id?: string | null;
  /** Optional notes (required for some kinds). */
  notes?: string | null;
+ /** Optional stock-out reason ID. When supplied the movement kind is
+  * derived from the catalog reason and a snapshot of the reason's
+  * display_name is stored. Only valid for non-sale stock-out kinds. */
+ exit_reason_id?: string | null;
 }
 
 /** Full movement response row. */
@@ -52,6 +58,7 @@ export interface LotMovementResponse {
  source_location_id: string | null;
  destination_location_id: string | null;
  reason: string | null;
+ exit_reason_id: string | null;
  notes: string | null;
  actor: string;
  created_at: string;

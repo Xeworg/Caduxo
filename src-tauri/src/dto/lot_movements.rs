@@ -25,6 +25,8 @@ pub struct LotMovementCreate {
     /// The lot to record the movement against.
     pub lot_id: String,
     /// Movement kind (e.g., "transfer", "exit:sale", "inventory_adjustment").
+    /// When `exit_reason_id` is supplied this field is ignored; the kind is
+    /// derived from the catalog reason's `movement_kind`.
     pub kind: String,
     /// Optional direction for `inventory_adjustment` kind.
     #[serde(default)]
@@ -40,6 +42,12 @@ pub struct LotMovementCreate {
     /// Optional notes (required for some kinds).
     #[serde(default)]
     pub notes: Option<String>,
+    /// Optional stock-out reason ID. When supplied the movement kind is
+    /// derived from the catalog reason and a snapshot of the reason's
+    /// display_name is stored in `reason`. Only valid for non-sale stock-out
+    /// kinds.
+    #[serde(default)]
+    pub exit_reason_id: Option<String>,
 }
 
 // ============================================================
@@ -57,6 +65,7 @@ pub struct LotMovementResponse {
     pub source_location_id: Option<String>,
     pub destination_location_id: Option<String>,
     pub reason: Option<String>,
+    pub exit_reason_id: Option<String>,
     pub notes: Option<String>,
     pub actor: String,
     pub created_at: String,
