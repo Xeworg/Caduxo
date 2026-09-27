@@ -3,8 +3,13 @@ name: Build
 on:
   push:
     branches: [main]
+    tags:
+      - "v*"
   pull_request:
     branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -102,3 +107,24 @@ jobs:
           path: ${{ matrix.tarball }}
           retention-days: 14
           if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: release-assets
+          pattern: caduxo-bundles-*
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release-assets/*

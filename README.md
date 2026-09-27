@@ -242,6 +242,8 @@ Each job installs Node, Rust, platform-specific build dependencies, runs `npm ci
 
 Cross-compilation from Linux to Windows is not used as a substitute for Windows validation. Windows packaging is only considered verified after `npm run tauri build` passes on a native Windows runner.
 
+On pushes to `main`, the workflow validates the builds. When a version tag such as `v0.2.0` is pushed, the generated Linux and Windows bundles are published automatically as assets in a GitHub Release.
+
 See [`.github/workflows/build.yml`](.github/workflows/build.yml) for the full workflow definition.
 
 ---
@@ -473,6 +475,8 @@ Caduxo utiliza GitHub Actions para compilar y verificar tipos en cada push. El w
 Cada job instala Node, Rust, las dependencias de compilación necesarias para la plataforma, ejecuta `npm ci`, ejecuta `npm run check`, y luego ejecuta `npm run tauri build`. Los artefactos (instaladores y binarios) se suben para ambas plataformas.
 
 La compilación cruzada desde Linux a Windows no se utiliza como sustituto de la validación en Windows. El empaquetado para Windows solo se considera verificado después de que `npm run tauri build` pase en un runner nativo de Windows.
+
+En los pushes a `main`, el workflow valida las compilaciones. Cuando se publica un tag de versión como `v0.2.0`, los bundles generados para Linux y Windows se publican automáticamente como assets de un GitHub Release.
 
 Ver [`.github/workflows/build.yml`](.github/workflows/build.yml) para la definición completa del workflow.
 
