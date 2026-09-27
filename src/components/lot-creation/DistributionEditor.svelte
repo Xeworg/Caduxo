@@ -546,6 +546,8 @@
                             aria-describedby={`distribution-row-${rowKey}-hint`}
                             oninput={(v) => updateRowQuantity(idx, v)}
                             placeholder={isIntegerUnit ? "0" : "0.00"}
+                            min={isIntegerUnit ? 1 : 0.01}
+                            step={isIntegerUnit ? 1 : 0.01}
                         />
                         <Button
                             type="button"
