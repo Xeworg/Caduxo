@@ -382,6 +382,37 @@ pub enum UserMessage {
     /// `InfrastructureError` detail stays in tracing/logs at the call
     /// site and is **never** surfaced to the UI.
     InternalError,
+    /// Stock-out reason validation: display name is blank.
+    StockOutReasonDisplayNameEmpty,
+    /// Stock-out reason validation: display name exceeds maximum length.
+    StockOutReasonDisplayNameTooLong {
+        max: usize,
+    },
+    /// Stock-out reason validation: movement kind is not one of the seven V20
+    /// stock-out kinds.
+    UnknownStockOutMovementKind {
+        kind: String,
+    },
+    /// Lot movement validation: an `exit_reason_id` was supplied but the
+    /// reason does not exist in the catalog. Missing ID uses `ResourceNotFound`
+    /// instead; this variant is reserved for future structured lookup.
+    ExitReasonNotFound {
+        id: String,
+    },
+    /// Lot movement validation: the referenced `exit_reason_id` is archived and
+    /// cannot be used for new movements.
+    ExitReasonArchived {
+        id: String,
+    },
+    /// Lot movement validation: an `exit_reason_id` was supplied for a
+    /// non-stock-out movement kind. Reasons only apply to the seven exit kinds
+    /// (exit:waste, exit:expired, exit:damaged, etc.). Sale exits do not use
+    /// the catalog.
+    ExitReasonNotApplicableToKind {
+        reason_id: String,
+        reason_kind: String,
+        movement_kind: String,
+    },
 }
 
 /// Returns the user-visible message string for the given kind in the given locale.
@@ -850,6 +881,43 @@ pub fn user_message(kind: UserMessage, locale: Locale) -> String {
         (UserMessage::InternalError, L::Es) => {
             "Ocurrió un error interno. Por favor, inténtalo de nuevo.".to_string()
         }
+        // ─── Stock-out reasons ────────────────────────────────────────────────
+        (UserMessage::StockOutReasonDisplayNameEmpty, L::En) => {
+            "Display name cannot be empty".to_string()
+        }
+        (UserMessage::StockOutReasonDisplayNameEmpty, L::Es) => {
+            "El nombre no puede estar vacío".to_string()
+        }
+        (UserMessage::StockOutReasonDisplayNameTooLong { max }, L::En) => {
+            format!("Display name exceeds maximum length of {max} characters")
+        }
+        (UserMessage::StockOutReasonDisplayNameTooLong { max }, L::Es) => {
+            format!("El nombre excede la longitud máxima de {max} caracteres")
+        }
+        (UserMessage::UnknownStockOutMovementKind { kind }, L::En) => {
+            format!("Unknown stock-out movement kind: `{kind}`")
+        }
+        (UserMessage::UnknownStockOutMovementKind { kind }, L::Es) => {
+            format!("Tipo de movimiento de salida desconocido: `{kind}`")
+        }
+        (UserMessage::ExitReasonNotFound { id }, L::En) => {
+            format!("Stock-out reason `{id}` not found")
+        }
+        (UserMessage::ExitReasonNotFound { id }, L::Es) => {
+            format!("Razón de salida `{id}` no encontrada")
+        }
+        (UserMessage::ExitReasonArchived { id }, L::En) => {
+            format!("Stock-out reason `{id}` is archived and cannot be used")
+        }
+        (UserMessage::ExitReasonArchived { id }, L::Es) => {
+            format!("La razón de salida `{id}` está archivada y no puede ser usada")
+        }
+        (UserMessage::ExitReasonNotApplicableToKind { reason_id, reason_kind, movement_kind }, L::En) => {
+            format!("exit_reason_id `{reason_id}` (kind `{reason_kind}`) is not valid for movement kind `{movement_kind}`")
+        }
+        (UserMessage::ExitReasonNotApplicableToKind { reason_id, reason_kind, movement_kind }, L::Es) => {
+            format!("exit_reason_id `{reason_id}` (tipo `{reason_kind}`) no es válido para el tipo de movimiento `{movement_kind}`")
+        }
     }
 }
 
@@ -1178,6 +1246,54 @@ pub fn parse_user_message_kind(message: &str) -> Option<UserMessage> {
 
     if message == "An internal error occurred. Please try again." {
         return Some(UserMessage::InternalError);
+    }
+
+    // ─── Stock-out reasons ─────────────────────────────────────────────────
+    if message == "Display name cannot be empty" {
+        return Some(UserMessage::StockOutReasonDisplayNameEmpty);
+    }
+
+    if let Some(max) = parse_too_long_suffix(message, "Display name exceeds maximum length of ") {
+        return Some(UserMessage::StockOutReasonDisplayNameTooLong { max });
+    }
+
+    if let Some(kind) = parse_backticked_suffix(message, "Unknown stock-out movement kind: `") {
+        return Some(UserMessage::UnknownStockOutMovementKind { kind });
+    }
+
+    if let Some(id) = parse_backticked_suffix(message, "Stock-out reason `") {
+        if message.ends_with(" not found") {
+            return Some(UserMessage::ExitReasonNotFound { id });
+        }
+        if message.ends_with(" is archived and cannot be used") {
+            return Some(UserMessage::ExitReasonArchived { id });
+        }
+    }
+
+    // exit_reason_id `{reason_id}` (kind `{reason_kind}`) is not valid for movement kind `{movement_kind}`
+    if message.starts_with("exit_reason_id `") {
+        if let Some(rest) = message.strip_prefix("exit_reason_id `") {
+            if let Some(backtick_pos) = rest.find("` (kind `") {
+                let reason_id = rest[..backtick_pos].to_string();
+                if let Some(kind_rest) = rest.strip_prefix(&format!("` (kind `{}`)", reason_id)) {
+                    if let Some(not_valid_pos) =
+                        kind_rest.find(") is not valid for movement kind `")
+                    {
+                        let reason_kind = kind_rest[1..not_valid_pos].to_string();
+                        if let Some(movement_kind_end) = kind_rest[not_valid_pos..]
+                            .strip_prefix(") is not valid for movement kind `")
+                        {
+                            let movement_kind = movement_kind_end.trim_end_matches('`');
+                            return Some(UserMessage::ExitReasonNotApplicableToKind {
+                                reason_id,
+                                reason_kind,
+                                movement_kind: movement_kind.to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
     }
 
     None
