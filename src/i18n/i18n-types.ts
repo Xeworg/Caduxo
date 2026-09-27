@@ -114,6 +114,10 @@ type RootTranslation = {
 		 */
 		dismiss: string
 		/**
+		 * R​e​t​r​y
+		 */
+		retry: string
+		/**
 		 * Y​e​s
 		 */
 		yes: string
@@ -284,6 +288,24 @@ type RootTranslation = {
 			 * C​o​n​t​r​o​l​s​ ​h​o​w​ ​t​h​e​ ​S​c​a​n​n​e​r​ ​t​a​b​ ​p​i​c​k​s​ ​a​ ​l​o​t​ ​w​h​e​n​ ​a​ ​s​c​a​n​ ​r​e​s​o​l​v​e​s​ ​t​o​ ​a​ ​p​r​o​d​u​c​t​ ​w​i​t​h​ ​m​u​l​t​i​p​l​e​ ​l​o​t​s​.​ ​D​i​r​e​c​t​ ​l​o​t​-​c​o​d​e​ ​s​c​a​n​s​ ​a​l​w​a​y​s​ ​b​y​p​a​s​s​ ​t​h​i​s​ ​p​o​l​i​c​y​ ​a​n​d​ ​u​s​e​ ​t​h​e​ ​s​c​a​n​n​e​d​ ​l​o​t​.
 			 */
 			description: string
+			/**
+			 * F​i​r​s​t​ ​E​x​p​i​r​e​d​,​ ​F​i​r​s​t​ ​O​u​t
+			 */
+			tooltip: string
+			selectedDescription: {
+				/**
+				 * S​u​g​g​e​s​t​s​ ​t​h​e​ ​l​o​t​ ​n​e​a​r​e​s​t​ ​e​x​p​i​r​y​.​ ​Y​o​u​ ​c​a​n​ ​p​i​c​k​ ​a​ ​d​i​f​f​e​r​e​n​t​ ​o​n​e​.
+				 */
+				suggest_fefo: string
+				/**
+				 * L​o​c​k​s​ ​t​o​ ​t​h​e​ ​l​o​t​ ​n​e​a​r​e​s​t​ ​e​x​p​i​r​y​.​ ​Y​o​u​ ​m​u​s​t​ ​u​s​e​ ​i​t​.
+				 */
+				require_fefo: string
+				/**
+				 * N​o​ ​s​u​g​g​e​s​t​i​o​n​.​ ​Y​o​u​ ​c​h​o​o​s​e​ ​w​h​i​c​h​ ​l​o​t​ ​t​o​ ​u​s​e​ ​e​v​e​r​y​ ​t​i​m​e​.
+				 */
+				manual_lot_choice: string
+			}
 			names: {
 				/**
 				 * S​u​g​g​e​s​t​ ​F​E​F​O​ ​(​a​l​l​o​w​ ​o​v​e​r​r​i​d​e​)
@@ -1151,6 +1173,10 @@ type RootTranslation = {
 		 * A​l​e​r​t​ ​d​a​y​s​ ​b​e​f​o​r​e​ ​e​x​p​i​r​y
 		 */
 		productAlertDays: string
+		/**
+		 * E​n​t​e​r​ ​a​ ​w​h​o​l​e​ ​n​u​m​b​e​r​ ​f​r​o​m​ ​0​ ​t​o​ ​3​6​5​0​.
+		 */
+		alertDaysRangeError: string
 		/**
 		 * N​o​t​e​s
 		 */
@@ -2585,6 +2611,25 @@ type RootTranslation = {
 				other: string
 			}
 		}
+		errors: {
+			/**
+			 * C​o​u​l​d​ ​n​o​t​ ​l​o​a​d​ ​s​t​o​c​k​-​o​u​t​ ​r​e​a​s​o​n​s​:​ ​{​m​s​g​}
+			 * @param {unknown} msg
+			 */
+			loadStockOutReasonsFailed: RequiredParams<'msg'>
+			/**
+			 * S​t​o​c​k​-​o​u​t​ ​r​e​a​s​o​n
+			 */
+			stockOutReason: string
+			/**
+			 * M​o​v​e​m​e​n​t​ ​k​i​n​d
+			 */
+			movementKind: string
+			/**
+			 * A​r​c​h​i​v​e​d
+			 */
+			archived: string
+		}
 	}
 	calendar: {
 		/**
@@ -3824,6 +3869,10 @@ type RootTranslation = {
 			 */
 			unknownBody: string
 			/**
+			 * P​r​o​d​u​c​t​ ​S​K​U
+			 */
+			scannedSkuLabel: string
+			/**
 			 * S​c​a​n​n​e​d​ ​v​a​l​u​e
 			 */
 			scannedValueLabel: string
@@ -4294,6 +4343,181 @@ type RootTranslation = {
 			fallback: string
 		}
 	}
+	unitCatalog: {
+		/**
+		 * U​n​i​t​ ​c​a​t​a​l​o​g
+		 */
+		sectionTitle: string
+		/**
+		 * M​a​n​a​g​e​ ​t​h​e​ ​u​n​i​t​ ​d​e​f​i​n​i​t​i​o​n​s​ ​a​v​a​i​l​a​b​l​e​ ​w​h​e​n​ ​c​r​e​a​t​i​n​g​ ​p​r​o​d​u​c​t​s​.​ ​P​r​e​s​e​t​ ​u​n​i​t​s​ ​c​a​n​ ​b​e​ ​r​e​n​a​m​e​d​ ​o​r​ ​a​r​c​h​i​v​e​d​ ​(​a​r​c​h​i​v​i​n​g​ ​s​u​c​c​e​e​d​s​ ​o​n​l​y​ ​w​h​e​n​ ​t​h​e​ ​u​n​i​t​ ​i​s​ ​n​o​t​ ​i​n​ ​u​s​e​)​;​ ​c​u​s​t​o​m​ ​u​n​i​t​s​ ​c​a​n​ ​b​e​ ​r​e​n​a​m​e​d​ ​o​r​ ​a​r​c​h​i​v​e​d​.​ ​A​r​c​h​i​v​i​n​g​ ​i​s​ ​b​l​o​c​k​e​d​ ​w​h​e​n​ ​a​ ​u​n​i​t​ ​i​s​ ​s​t​i​l​l​ ​i​n​ ​u​s​e​.
+		 */
+		description: string
+		/**
+		 * A​c​t​i​v​e​ ​u​n​i​t​s
+		 */
+		activeLabel: string
+		/**
+		 * N​o​ ​a​c​t​i​v​e​ ​u​n​i​t​s​.
+		 */
+		noActiveUnits: string
+		kind: {
+			/**
+			 * I​n​t​e​g​e​r
+			 */
+			integer: string
+			/**
+			 * D​e​c​i​m​a​l
+			 */
+			decimal: string
+		}
+		/**
+		 * R​e​n​a​m​e
+		 */
+		editDisplayName: string
+		/**
+		 * A​r​c​h​i​v​e
+		 */
+		archive: string
+		/**
+		 * R​e​s​t​o​r​e
+		 */
+		restore: string
+		/**
+		 * P​r​e​s​e​t
+		 */
+		preset: string
+		/**
+		 * N​e​w​ ​u​n​i​t
+		 */
+		createCustom: string
+		/**
+		 * D​i​s​p​l​a​y​ ​n​a​m​e
+		 */
+		displayNameLabel: string
+		/**
+		 * e​.​g​.​ ​M​y​ ​C​u​s​t​o​m​ ​U​n​i​t
+		 */
+		displayNamePlaceholder: string
+		/**
+		 * S​a​v​e
+		 */
+		saveRename: string
+		/**
+		 * C​a​n​c​e​l
+		 */
+		cancelRename: string
+		/**
+		 * N​e​w​ ​c​u​s​t​o​m​ ​u​n​i​t
+		 */
+		createUnitTitle: string
+		/**
+		 * C​u​s​t​o​m​ ​u​n​i​t​s​ ​c​a​n​ ​b​e​ ​r​e​n​a​m​e​d​ ​o​r​ ​a​r​c​h​i​v​e​d​ ​l​a​t​e​r​.
+		 */
+		createUnitDesc: string
+		/**
+		 * K​e​y
+		 */
+		keyLabel: string
+		/**
+		 * e​.​g​.​ ​m​y​-​u​n​i​t
+		 */
+		keyPlaceholder: string
+		/**
+		 * e​.​g​.​ ​M​y​ ​U​n​i​t
+		 */
+		displayNameNewPlaceholder: string
+		/**
+		 * K​i​n​d
+		 */
+		kindLabel: string
+		/**
+		 * A​d​d​ ​u​n​i​t
+		 */
+		addUnit: string
+		/**
+		 * A​d​d​i​n​g​…
+		 */
+		creating: string
+		/**
+		 * K​e​y​ ​i​s​ ​r​e​q​u​i​r​e​d
+		 */
+		keyRequired: string
+		/**
+		 * D​i​s​p​l​a​y​ ​n​a​m​e​ ​i​s​ ​r​e​q​u​i​r​e​d
+		 */
+		displayNameRequired: string
+		/**
+		 * K​e​y​ ​m​u​s​t​ ​b​e​ ​1​–​1​6​ ​l​o​w​e​r​c​a​s​e​ ​l​e​t​t​e​r​s​,​ ​d​i​g​i​t​s​,​ ​h​y​p​h​e​n​s​ ​o​r​ ​u​n​d​e​r​s​c​o​r​e​s
+		 */
+		keyPattern: string
+		/**
+		 * A​r​c​h​i​v​e​d​ ​u​n​i​t​s
+		 */
+		archivedLabel: string
+		/**
+		 * N​o​ ​a​r​c​h​i​v​e​d​ ​u​n​i​t​s​.
+		 */
+		noArchivedUnits: string
+		/**
+		 * S​h​o​w​ ​a​r​c​h​i​v​e​d
+		 */
+		showArchived: string
+		/**
+		 * H​i​d​e​ ​a​r​c​h​i​v​e​d
+		 */
+		hideArchived: string
+		/**
+		 * C​o​u​l​d​ ​n​o​t​ ​a​r​c​h​i​v​e​ ​u​n​i​t​:​ ​{​m​s​g​}
+		 * @param {unknown} msg
+		 */
+		archiveError: RequiredParams<'msg'>
+		/**
+		 * C​o​u​l​d​ ​n​o​t​ ​r​e​n​a​m​e​ ​u​n​i​t​:​ ​{​m​s​g​}
+		 * @param {unknown} msg
+		 */
+		renameError: RequiredParams<'msg'>
+		/**
+		 * C​o​u​l​d​ ​n​o​t​ ​c​r​e​a​t​e​ ​u​n​i​t​:​ ​{​m​s​g​}
+		 * @param {unknown} msg
+		 */
+		createError: RequiredParams<'msg'>
+		/**
+		 * C​o​u​l​d​ ​n​o​t​ ​r​e​s​t​o​r​e​ ​u​n​i​t​:​ ​{​m​s​g​}
+		 * @param {unknown} msg
+		 */
+		restoreError: RequiredParams<'msg'>
+		/**
+		 * C​o​u​l​d​ ​n​o​t​ ​l​o​a​d​ ​u​n​i​t​s​:​ ​{​m​s​g​}
+		 * @param {unknown} msg
+		 */
+		loadError: RequiredParams<'msg'>
+		/**
+		 * A​r​c​h​i​v​e​ ​"​{​n​a​m​e​}​"​?
+		 * @param {unknown} name
+		 */
+		confirmArchive: RequiredParams<'name'>
+		/**
+		 * T​h​e​ ​u​n​i​t​ ​w​i​l​l​ ​b​e​ ​h​i​d​d​e​n​ ​f​r​o​m​ ​t​h​e​ ​p​r​o​d​u​c​t​ ​p​i​c​k​e​r​.​ ​A​r​c​h​i​v​i​n​g​ ​i​s​ ​b​l​o​c​k​e​d​ ​w​h​i​l​e​ ​a​n​y​ ​p​r​o​d​u​c​t​ ​s​t​i​l​l​ ​u​s​e​s​ ​t​h​i​s​ ​u​n​i​t​.
+		 */
+		confirmArchiveBody: string
+		/**
+		 * R​e​s​t​o​r​e​ ​"​{​n​a​m​e​}​"​?
+		 * @param {unknown} name
+		 */
+		confirmRestore: RequiredParams<'name'>
+		/**
+		 * T​h​e​ ​u​n​i​t​ ​w​i​l​l​ ​b​e​ ​a​v​a​i​l​a​b​l​e​ ​a​g​a​i​n​ ​i​n​ ​t​h​e​ ​p​r​o​d​u​c​t​ ​p​i​c​k​e​r​.
+		 */
+		confirmRestoreBody: string
+		/**
+		 * A​r​c​h​i​v​e
+		 */
+		confirmArchiveYes: string
+		/**
+		 * R​e​s​t​o​r​e
+		 */
+		confirmRestoreYes: string
+	}
 	settings: {
 		theme: {
 			/**
@@ -4413,6 +4637,10 @@ export type TranslationFunctions = {
 		 * Dismiss
 		 */
 		dismiss: () => LocalizedString
+		/**
+		 * Retry
+		 */
+		retry: () => LocalizedString
 		/**
 		 * Yes
 		 */
@@ -4580,6 +4808,24 @@ export type TranslationFunctions = {
 			 * Controls how the Scanner tab picks a lot when a scan resolves to a product with multiple lots. Direct lot-code scans always bypass this policy and use the scanned lot.
 			 */
 			description: () => LocalizedString
+			/**
+			 * First Expired, First Out
+			 */
+			tooltip: () => LocalizedString
+			selectedDescription: {
+				/**
+				 * Suggests the lot nearest expiry. You can pick a different one.
+				 */
+				suggest_fefo: () => LocalizedString
+				/**
+				 * Locks to the lot nearest expiry. You must use it.
+				 */
+				require_fefo: () => LocalizedString
+				/**
+				 * No suggestion. You choose which lot to use every time.
+				 */
+				manual_lot_choice: () => LocalizedString
+			}
 			names: {
 				/**
 				 * Suggest FEFO (allow override)
@@ -5433,6 +5679,10 @@ export type TranslationFunctions = {
 		 * Alert days before expiry
 		 */
 		productAlertDays: () => LocalizedString
+		/**
+		 * Enter a whole number from 0 to 3650.
+		 */
+		alertDaysRangeError: () => LocalizedString
 		/**
 		 * Notes
 		 */
@@ -6827,6 +7077,24 @@ export type TranslationFunctions = {
 				other: () => LocalizedString
 			}
 		}
+		errors: {
+			/**
+			 * Could not load stock-out reasons: {msg}
+			 */
+			loadStockOutReasonsFailed: (arg: { msg: unknown }) => LocalizedString
+			/**
+			 * Stock-out reason
+			 */
+			stockOutReason: () => LocalizedString
+			/**
+			 * Movement kind
+			 */
+			movementKind: () => LocalizedString
+			/**
+			 * Archived
+			 */
+			archived: () => LocalizedString
+		}
 	}
 	calendar: {
 		/**
@@ -8017,6 +8285,10 @@ export type TranslationFunctions = {
 			 */
 			unknownBody: () => LocalizedString
 			/**
+			 * Product SKU
+			 */
+			scannedSkuLabel: () => LocalizedString
+			/**
 			 * Scanned value
 			 */
 			scannedValueLabel: () => LocalizedString
@@ -8463,6 +8735,174 @@ export type TranslationFunctions = {
 			 */
 			fallback: () => LocalizedString
 		}
+	}
+	unitCatalog: {
+		/**
+		 * Unit catalog
+		 */
+		sectionTitle: () => LocalizedString
+		/**
+		 * Manage the unit definitions available when creating products. Preset units can be renamed or archived (archiving succeeds only when the unit is not in use); custom units can be renamed or archived. Archiving is blocked when a unit is still in use.
+		 */
+		description: () => LocalizedString
+		/**
+		 * Active units
+		 */
+		activeLabel: () => LocalizedString
+		/**
+		 * No active units.
+		 */
+		noActiveUnits: () => LocalizedString
+		kind: {
+			/**
+			 * Integer
+			 */
+			integer: () => LocalizedString
+			/**
+			 * Decimal
+			 */
+			decimal: () => LocalizedString
+		}
+		/**
+		 * Rename
+		 */
+		editDisplayName: () => LocalizedString
+		/**
+		 * Archive
+		 */
+		archive: () => LocalizedString
+		/**
+		 * Restore
+		 */
+		restore: () => LocalizedString
+		/**
+		 * Preset
+		 */
+		preset: () => LocalizedString
+		/**
+		 * New unit
+		 */
+		createCustom: () => LocalizedString
+		/**
+		 * Display name
+		 */
+		displayNameLabel: () => LocalizedString
+		/**
+		 * e.g. My Custom Unit
+		 */
+		displayNamePlaceholder: () => LocalizedString
+		/**
+		 * Save
+		 */
+		saveRename: () => LocalizedString
+		/**
+		 * Cancel
+		 */
+		cancelRename: () => LocalizedString
+		/**
+		 * New custom unit
+		 */
+		createUnitTitle: () => LocalizedString
+		/**
+		 * Custom units can be renamed or archived later.
+		 */
+		createUnitDesc: () => LocalizedString
+		/**
+		 * Key
+		 */
+		keyLabel: () => LocalizedString
+		/**
+		 * e.g. my-unit
+		 */
+		keyPlaceholder: () => LocalizedString
+		/**
+		 * e.g. My Unit
+		 */
+		displayNameNewPlaceholder: () => LocalizedString
+		/**
+		 * Kind
+		 */
+		kindLabel: () => LocalizedString
+		/**
+		 * Add unit
+		 */
+		addUnit: () => LocalizedString
+		/**
+		 * Adding…
+		 */
+		creating: () => LocalizedString
+		/**
+		 * Key is required
+		 */
+		keyRequired: () => LocalizedString
+		/**
+		 * Display name is required
+		 */
+		displayNameRequired: () => LocalizedString
+		/**
+		 * Key must be 1–16 lowercase letters, digits, hyphens or underscores
+		 */
+		keyPattern: () => LocalizedString
+		/**
+		 * Archived units
+		 */
+		archivedLabel: () => LocalizedString
+		/**
+		 * No archived units.
+		 */
+		noArchivedUnits: () => LocalizedString
+		/**
+		 * Show archived
+		 */
+		showArchived: () => LocalizedString
+		/**
+		 * Hide archived
+		 */
+		hideArchived: () => LocalizedString
+		/**
+		 * Could not archive unit: {msg}
+		 */
+		archiveError: (arg: { msg: unknown }) => LocalizedString
+		/**
+		 * Could not rename unit: {msg}
+		 */
+		renameError: (arg: { msg: unknown }) => LocalizedString
+		/**
+		 * Could not create unit: {msg}
+		 */
+		createError: (arg: { msg: unknown }) => LocalizedString
+		/**
+		 * Could not restore unit: {msg}
+		 */
+		restoreError: (arg: { msg: unknown }) => LocalizedString
+		/**
+		 * Could not load units: {msg}
+		 */
+		loadError: (arg: { msg: unknown }) => LocalizedString
+		/**
+		 * Archive "{name}"?
+		 */
+		confirmArchive: (arg: { name: unknown }) => LocalizedString
+		/**
+		 * The unit will be hidden from the product picker. Archiving is blocked while any product still uses this unit.
+		 */
+		confirmArchiveBody: () => LocalizedString
+		/**
+		 * Restore "{name}"?
+		 */
+		confirmRestore: (arg: { name: unknown }) => LocalizedString
+		/**
+		 * The unit will be available again in the product picker.
+		 */
+		confirmRestoreBody: () => LocalizedString
+		/**
+		 * Archive
+		 */
+		confirmArchiveYes: () => LocalizedString
+		/**
+		 * Restore
+		 */
+		confirmRestoreYes: () => LocalizedString
 	}
 	settings: {
 		theme: {

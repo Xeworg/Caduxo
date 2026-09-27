@@ -29,6 +29,7 @@ const en: BaseTranslation = {
     back: "Back",
     confirm: "Confirm",
     dismiss: "Dismiss",
+    retry: "Retry",
     yes: "Yes",
     no: "No",
     error: "Error",
@@ -755,6 +756,13 @@ const en: BaseTranslation = {
         administrative: "Administrative cleanup",
         other: "Other",
       },
+    },
+    // Error messages for movement-related operations
+    errors: {
+      loadStockOutReasonsFailed: "Could not load stock-out reasons: {msg}",
+      stockOutReason: "Stock-out reason",
+      movementKind: "Movement kind",
+      archived: "Archived",
     },
   },
 

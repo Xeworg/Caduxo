@@ -8,17 +8,25 @@
   number spinners are out of scope for the themed primitives).
   Business state, validation, submit handlers, and visible copy
   preserved verbatim.
+
+  Task 2.7d: Stock-out reasons are now fetched from the catalog API
+  and submitted as `exit_reason_id`. The backend derives the movement
+  kind. Notes requirement is driven by the selected reason's
+  `movement_kind`. Movement history shows immutable snapshot `reason`
+  plus `movement_kind`; archived reasons render as plain disabled text.
 -->
 <script lang="ts">
   import { createLotMovement, type LotLocationBalance } from "../lib/lot_movements.js";
 import {
-  EXIT_KINDS,
-  exitRequiresNotes,
-  getExitKindLabel,
   isFractionalForIntegerUnit,
+  notesRequiredByMovementKind,
   qtyAttrs,
-  type ExitKind,
 } from "../lib/movementRules.js";
+import {
+  listStockOutReasons,
+  isReasonActive,
+  type StockOutReason,
+} from "../lib/stock_out_reasons.js";
   import { LL } from "../i18n/i18n-svelte.js";
   import { locale } from "../i18n/locale.svelte.js";
   import type { UnitKind } from "../lib/products.js";
@@ -29,47 +37,102 @@ import {
 
   // ── Props ──────────────────────────────────────────────────────────────────
 
-  export let lotId: string;
-  export let currentBalances: LotLocationBalance[];
-  /**
-   * All active store locations (all stores) — resolved to human-readable names
-   * in the source-location picker instead of raw location IDs.
-   */
-  export let allLocations: { id: string; name: string; store_id: string; store_name?: string }[] = [];
-  /**
-   * Unit kind resolved from the lot's product catalog link.
-   * `null` for legacy/uncatalogued products — treated as decimal.
-   */
-  export let unitType: UnitKind | null = null;
-  export let onClose: () => void;
-  export let onCreated: () => void;
+  interface Props {
+    lotId: string;
+    currentBalances: LotLocationBalance[];
+    /** All active store locations — resolved to human-readable names. */
+    allLocations: { id: string; name: string; store_id: string; store_name?: string }[];
+    /** Unit kind from the lot's product catalog link. `null` for legacy products. */
+    unitType: UnitKind | null;
+    onClose: () => void;
+    onCreated: () => void;
+  }
+
+  const {
+    lotId,
+    currentBalances,
+    allLocations,
+    unitType,
+    onClose,
+    onCreated,
+  }: Props = $props();
 
   // ── State ──────────────────────────────────────────────────────────────────
 
   /** Backs the `<Modal>` primitive via two-way binding. */
-  let visible = true;
+  let visible = $state(true);
   /** Element to receive focus when the modal closes (the trigger row). */
-  let returnFocusTo: HTMLElement | null = null;
+  let returnFocusTo: HTMLElement | null = $state(null);
 
-  let sourceLocationId = "";
-  let exitReason = "";
-  let quantity = 0;
-  let notes = "";
-  let submitting = false;
-  let errorMsg = "";
+  let sourceLocationId = $state("");
+  /** ID of the selected stock-out reason from the catalog. */
+  let selectedReasonId = $state("");
+  /** The resolved reason object for notes-requirement and archived-display logic. */
+  let selectedReason: StockOutReason | null = $state(null);
+  let quantity = $state(0);
+  let notes = $state("");
+  let submitting = $state(false);
+  let errorMsg = $state("");
+  let loadingReasons = $state(false);
+  let reasonsLoadError = $state("");
+  /** All stock-out reasons fetched from the catalog. */
+  let allReasons: StockOutReason[] = $state([]);
 
-  $: requiresNotes = exitRequiresNotes(exitReason);
-  $: availableQuantity = sourceLocationId
-    ? currentBalances.find((b) => b.location_id === sourceLocationId)?.balance ?? 0
-    : 0;
+  /** True when the reason picker and submit should be disabled due to load failure. */
+  let reasonsUnavailable = $derived(loadingReasons || !!reasonsLoadError);
 
-  $: isIntegerUnit = unitType === "integer";
-  $: _qtyAttrs = qtyAttrs(isIntegerUnit);
+  // ── Reactive derived state ─────────────────────────────────────────────────
 
-  $: exitReasonOptions = [
+  /** Notes are required when the selected reason's movement_kind demands them. */
+  let requiresNotes = $derived.by(() => {
+    if (!selectedReason) return false;
+    return notesRequiredByMovementKind(selectedReason.movement_kind);
+  });
+
+  /**
+   * Active reasons available for selection in the dropdown.
+   * Filtered using `archived_at === null` (NOT `is_active`).
+   * The backend uses `archived_at` to track soft-delete state.
+   */
+  let activeReasons = $derived(allReasons.filter(isReasonActive));
+
+  let availableQuantity = $derived(
+    sourceLocationId
+      ? currentBalances.find((b) => b.location_id === sourceLocationId)?.balance ?? 0
+      : 0,
+  );
+
+  let isIntegerUnit = $derived(unitType === "integer");
+  let _qtyAttrs = $derived(qtyAttrs(isIntegerUnit));
+
+  /**
+   * Options for the stock-out reason Listbox.
+   * Includes an empty placeholder and active reasons only — archived
+   * reasons are never selectable.
+   */
+  let exitReasonOptions = $derived([
     { value: "", label: $LL.lotMovements.modal.selectExitReason(), disabled: true },
-    ...EXIT_KINDS.map((kind) => ({ value: kind, label: getExitKindLabel(kind, $LL) })),
-  ];
+    ...activeReasons.map((r) => ({
+      value: r.id,
+      label: r.display_name,
+    })),
+  ]);
+
+  /**
+   * When the selected reason is archived (archived_at !== null), append a
+   * disabled plain-text option so the historical snapshot remains legible
+   * in the dropdown but cannot be re-selected.
+   */
+  let archivedSelectedOption = $derived.by(() => {
+    if (!selectedReason || isReasonActive(selectedReason)) return [];
+    return [{ value: selectedReason.id, label: selectedReason.display_name, disabled: true }];
+  });
+
+  /**
+   * Combined reason options: active reasons first, then the archived
+   * selected reason (if any) as a disabled trailing entry.
+   */
+  let allReasonOptions = $derived([...exitReasonOptions, ...archivedSelectedOption]);
 
   /**
    * Source-location options for the `<Listbox>` primitive. Filters
@@ -79,7 +142,7 @@ import {
    * `allLocations` the raw id is used as a fallback so the row
    * stays inspectable rather than disappearing silently.
    */
-  $: sourceLocationOptions = [
+  let sourceLocationOptions = $derived([
     { value: "", label: $LL.lotMovements.modal.selectLocation(), disabled: true },
     ...currentBalances
       .filter((bal) => bal.balance > 0)
@@ -91,9 +154,47 @@ import {
           label: `${displayName} (${$LL.lotMovements.modal.availableOption({ balance: bal.balance })})`,
         };
       }),
-  ];
+  ]);
 
+  // ── Load reasons on mount ─────────────────────────────────────────────────
 
+  import { onMount } from "svelte";
+
+  onMount(async () => {
+    await loadReasons();
+  });
+
+  async function loadReasons(): Promise<void> {
+    loadingReasons = true;
+    reasonsLoadError = "";
+    try {
+      allReasons = await listStockOutReasons();
+    } catch (e) {
+      reasonsLoadError = $LL.lotMovements.errors.loadStockOutReasonsFailed({
+        msg: humanizeError(e),
+      });
+    } finally {
+      loadingReasons = false;
+    }
+  }
+
+  function retryReasons(): void {
+    void loadReasons();
+  }
+
+  /**
+   * Handles reason Listbox changes. When the user selects an active
+   * reason, resolves the full reason object for notes-requirement logic.
+   * When the user clears the selection (empty string), resets the reason.
+   */
+  function handleReasonChange(reasonId: string) {
+    selectedReasonId = reasonId;
+    if (!reasonId) {
+      selectedReason = null;
+      return;
+    }
+    selectedReason = allReasons.find((r) => r.id === reasonId) ?? null;
+  }
 
   // ── Submit ────────────────────────────────────────────────────────────────
 
@@ -104,7 +205,7 @@ import {
       errorMsg = $LL.lotMovements.modal.selectSourceLocationError();
       return;
     }
-    if (!exitReason) {
+    if (!selectedReasonId) {
       errorMsg = $LL.lotMovements.modal.selectExitReasonError();
       return;
     }
@@ -127,15 +228,22 @@ import {
 
     submitting = true;
     try {
-      await createLotMovement({
-        lot_id: lotId,
-        kind: exitReason,
-        direction: null,
-        quantity,
-        source_location_id: sourceLocationId,
-        destination_location_id: null,
-        notes: notes.trim() || null,
-      }, locale.current);
+      // Submit `exit_reason_id`; the backend derives the movement kind.
+      // `kind` is left empty because it is ignored when `exit_reason_id`
+      // is present.
+      await createLotMovement(
+        {
+          lot_id: lotId,
+          kind: "",
+          direction: null,
+          quantity,
+          source_location_id: sourceLocationId,
+          destination_location_id: null,
+          notes: notes.trim() || null,
+          exit_reason_id: selectedReasonId,
+        },
+        locale.current,
+      );
       onCreated();
     } catch (e) {
       errorMsg = humanizeError(e);
@@ -174,13 +282,27 @@ import {
     </header>
 
     <div class="dialog-body">
+      {#if loadingReasons}
+        <p class="loading-hint">{$LL.common.loading()}</p>
+      {:else if reasonsLoadError}
+        <p class="reasons-error">{reasonsLoadError}</p>
+        <Button
+          variant="outline"
+          size="sm"
+          onclick={retryReasons}
+          disabled={loadingReasons}
+        >
+          {$LL.common.retry()}
+        </Button>
+      {/if}
+
       <div class="form-group">
         <label for="exit-source">{$LL.lotMovements.modal.sourceLocation()}</label>
         <Listbox
           id="exit-source"
           value={sourceLocationId}
           options={sourceLocationOptions}
-          disabled={submitting}
+          disabled={submitting || reasonsUnavailable}
           aria-label={$LL.lotMovements.modal.sourceLocation()}
           onchange={(v) => (sourceLocationId = v)}
         />
@@ -190,10 +312,11 @@ import {
         <label for="exit-reason">{$LL.lotMovements.modal.exitReason()}</label>
         <Listbox
           id="exit-reason"
-          bind:value={exitReason}
-          options={exitReasonOptions}
-          disabled={submitting}
+          value={selectedReasonId}
+          options={allReasonOptions}
+          disabled={submitting || reasonsUnavailable}
           aria-label={$LL.lotMovements.modal.exitReason()}
+          onchange={(v) => handleReasonChange(v)}
         />
       </div>
 
@@ -208,7 +331,7 @@ import {
           inputmode={_qtyAttrs.inputmode}
           max={availableQuantity}
           bind:value={quantity}
-          disabled={submitting}
+          disabled={submitting || reasonsUnavailable}
           aria-label={$LL.lotMovements.modal.quantity()}
         />
         <span class="hint">{$LL.lotMovements.available({ available: availableQuantity })}{isIntegerUnit ? $LL.lotMovements.integerNote() : ""}</span>
@@ -223,7 +346,7 @@ import {
           class="textarea w-full motion-reduce:transition-none"
           rows="3"
           bind:value={notes}
-          disabled={submitting}
+          disabled={submitting || reasonsUnavailable}
           placeholder={requiresNotes ? $LL.lotMovements.modal.notesRequiredPlaceholder() : $LL.lotMovements.modal.notesOptionalPlaceholder()}
         ></textarea>
       </div>
@@ -245,7 +368,7 @@ import {
     <Button
       variant="primary"
       onclick={submit}
-      disabled={submitting}
+      disabled={submitting || reasonsUnavailable || !selectedReasonId}
       loading={submitting}
     >
       {submitting ? $LL.lotMovements.modal.saving() : $LL.lotMovements.modal.registerExitSubmit()}
@@ -301,5 +424,18 @@ import {
     padding: 8px 12px;
     font-size: 0.85rem;
     margin-bottom: 12px;
+  }
+
+  .loading-hint {
+    font-size: 0.85rem;
+    color: var(--color-base-content);
+    opacity: 0.6;
+    margin: 0 0 8px;
+  }
+
+  .reasons-error {
+    font-size: 0.82rem;
+    color: var(--color-error);
+    margin: 0 0 8px;
   }
 </style>

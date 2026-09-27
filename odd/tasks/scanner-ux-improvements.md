@@ -211,11 +211,16 @@ Seed one catalog entry per existing stock-out `movement_kind` with clear, user-f
 **Verification evidence:** `cargo check --lib`, `cargo check --bin caduxo`, `cargo check --all-targets`, `cargo fmt -- --check`, and full `cargo test --lib` passed (829 tests). Six focused 2.7c integration tests passed. Existing unrelated compiler warnings remain.
 
 ##### Task 2.7d: Replace Stock-Out Selector + History Display
-- [ ] Replace closed enum selector in stock-out registration UI with dynamic catalog dropdown (active reasons only).
-- [ ] Display selected reason label during registration confirmation.
-- [ ] Update movement history display to show reason label (from catalog when available, snapshot fallback otherwise).
-- [ ] Archived reasons render as plain label text in history (no selection affordance).
-- [ ] Preserve `movement_kind` display in history (accounting context); reason is descriptive metadata.
+- [x] Replace closed enum selectors in both Scanner stock-out mode and RegisterExitModal with dynamic active catalog reasons.
+- [x] Display the selected reason in stock-out confirmation; submit `exit_reason_id` and let backend derive `movement_kind`.
+- [x] Movement history shows the accounting `movement_kind` and immutable reason snapshot separately.
+- [x] Archived reasons remain plain snapshot text in history and are unavailable in new selection.
+- [x] Preserve sale and non-stockout flows; notes requirements follow the selected reason's movement kind.
+- [x] Show loading/errors and provide retry for catalog-load failures.
+
+**Status: complete — independently verified.**
+
+**Verification evidence:** `npm run check` (0 errors/warnings), `npx svelte-check --tsconfig ./tsconfig.json --threshold warning` (0/0), `npm run i18n:generate`, `npm run build`, and `git diff --check` passed. Independent review confirmed both stock-out surfaces submit `exit_reason_id`, sale remains unchanged, notes rules match backend, and movement history renders `movement_kind` plus snapshot. Rust full library suite passed 829/829; focused stock-out reason tests passed 34 and exit-reason tests passed 4. No browser/E2E harness.
 
 ##### Task 2.7e: Catalog Management UI
 - [ ] Build reason catalog management page (list active, list archived).
@@ -263,8 +268,8 @@ Seed one catalog entry per existing stock-out `movement_kind` with clear, user-f
 7. Task 2.7 reason catalog — **architecture resolved**; subtasks:
    - 2.7a migration + schema + seed + backfill — **complete** (V20 tests 13 passed, migration suite 74 passed; TEXT stable IDs, seven seeded stock-out categories excluding sale, nullable exit_reason_id FK, reason snapshot unchanged, limited legacy backfill snapshot-only; worker + independent verifier confirmed; no code edits/commit)
    - 2.7b catalog repository/service/command CRUD — **complete** (independent verification: full Rust library suite 823 passed; stale migration-count assertions fixed)
-   - 2.7c movement DTO/service snapshot + validations — **complete** (independent verification: full Rust library suite 829 passed; `cargo check` and `cargo fmt -- --check` passed)
-   - 2.7d replace stock-out selector + history display — pending
+   - 2.7c movement DTO/service snapshot + validations — **complete**, commit `30fcd58` (independent verification: full Rust library suite 829 passed; `cargo check` and `cargo fmt -- --check` passed)
+   - 2.7d replace stock-out selector + history display — **complete**; client API foundation commit `68253ab`, with implementation/work-unit commit to be recorded after closure
    - 2.7e catalog management UI — pending
 8. Task 2.8 shared catalog UX — pending.
 

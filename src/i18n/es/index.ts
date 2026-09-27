@@ -29,6 +29,7 @@ const es: BaseTranslation = {
     back: "Atrás",
     confirm: "Confirmar",
     dismiss: "Descartar",
+    retry: "Reintentar",
     yes: "Sí",
     no: "No",
     error: "Error",
@@ -757,6 +758,13 @@ const es: BaseTranslation = {
         administrative: "Limpieza administrativa",
         other: "Otro",
       },
+    },
+    // Mensajes de error y claves de visualización del historial de movimientos
+    errors: {
+      loadStockOutReasonsFailed: "No se pudieron cargar los motivos de salida: {msg}",
+      stockOutReason: "Motivo de salida",
+      movementKind: "Tipo de movimiento",
+      archived: "Archivado",
     },
   },
 
