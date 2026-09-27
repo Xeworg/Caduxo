@@ -1366,6 +1366,72 @@ const es: BaseTranslation = {
     confirmRestoreYes: "Restaurar",
   },
 
+  // Catálogo de motivos de salida en Configuración (tarea ODD 2.7e).
+  // El catálogo es global; cada entrada se mapea a un tipo de movimiento cerrado.
+  // El tipo de movimiento es inmutable tras la creación; solo el nombre es editable.
+  // Sin etiqueta predefinida: el DTO no distingue valores sembrados de personalizados.
+  stockOutReasons: {
+    sectionTitle: "Motivos de salida",
+    description:
+      "Gestiona los motivos de salida disponibles al registrar mermas. Cada motivo se mapea a un tipo de movimiento fijo. Los motivos se pueden renombrar o archivar; los motivos archivados permanecen en el historial pero no están disponibles para nuevas salidas.",
+    // Panel de motivos activos
+    activeLabel: "Motivos activos",
+    noActiveReasons: "No hay motivos activos.",
+    // Etiquetas de tipo de movimiento (conjunto cerrado — 7 tipos de salida, venta excluida)
+    movementKind: "Tipo de salida",
+    // Acciones (tabla activa)
+    editDisplayName: "Renombrar",
+    archive: "Archivar",
+    restore: "Restaurar",
+    createNew: "Nuevo motivo",
+    // Modo edición en línea
+    displayNameLabel: "Nombre para mostrar",
+    displayNamePlaceholder: "p. ej. Envase dañado",
+    saveRename: "Guardar",
+    cancelRename: "Cancelar",
+    // Formulario de creación
+    createTitle: "Nuevo motivo de salida",
+    createDesc:
+      "Elegí un tipo de salida fijo para este motivo. El tipo no se puede cambiar después de creado.",
+    displayNameNewPlaceholder: "p. ej. Caducado sin vender",
+    movementKindLabel: "Tipo de salida *",
+    addReason: "Añadir motivo",
+    creating: "Añadiendo…",
+    // Validación
+    displayNameRequired: "El nombre para mostrar es obligatorio",
+    movementKindRequired: "El tipo de salida es obligatorio",
+    // Panel de archivados
+    archivedLabel: "Motivos archivados",
+    noArchivedReasons: "No hay motivos archivados.",
+    // Mensajes de error
+    archiveError: "No se pudo archivar el motivo: {msg}",
+    renameError: "No se pudo renombrar el motivo: {msg}",
+    createError: "No se pudo crear el motivo: {msg}",
+    restoreError: "No se pudo restaurar el motivo: {msg}",
+    loadError: "No se pudieron cargar los motivos: {msg}",
+    // Diálogos de confirmación
+    confirmArchive: "¿Archivar \"{name}\"?",
+    confirmArchiveBody:
+      "El motivo quedará oculto del selector de salidas. Permanecerá disponible en los registros históricos.",
+    confirmRestore: "¿Restaurar \"{name}\"?",
+    confirmRestoreBody:
+      "El motivo estará disponible de nuevo en el selector de salidas.",
+    confirmArchiveYes: "Archivar",
+    confirmRestoreYes: "Restaurar",
+    // Etiquetas de tipo de movimiento (7 tipos de salida cerrados, venta excluida).
+    // Las claves deben coincidir con los valores wire `ExitReasonMovementKind` del
+    // backend, p. ej. `exit:waste`, `exit:expired`, etc.
+    kinds: {
+      "exit:waste": "Merma",
+      "exit:expired": "Vencido",
+      "exit:damaged": "Dañado",
+      "exit:internal_consumption": "Consumo interno",
+      "exit:return_to_supplier": "Devolución a proveedor",
+      "exit:inventory_adjustment": "Ajuste de inventario",
+      "exit:other": "Otro",
+    },
+  },
+
   settings: {
     theme: {
       title: "Tema",

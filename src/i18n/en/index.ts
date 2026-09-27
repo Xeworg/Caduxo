@@ -1361,6 +1361,71 @@ const en: BaseTranslation = {
     confirmRestoreYes: "Restore",
   },
 
+  // Stock-out reasons catalog management in Configuration (ODD task 2.7e).
+  // The catalog is global; each entry maps to a closed movement_kind.
+  // Movement_kind is immutable after creation; only display_name is editable.
+  // No preset badge: the DTO does not distinguish seeded from custom entries.
+  stockOutReasons: {
+    sectionTitle: "Stock-out reasons",
+    description:
+      "Manage the exit reasons available when registering stock-outs. Each reason maps to a fixed movement type. Reasons can be renamed or archived; archived reasons remain in historical records but are not available for new stock-outs.",
+    // Active reasons panel
+    activeLabel: "Active reasons",
+    noActiveReasons: "No active reasons.",
+    // Movement-kind labels (closed set — 7 stock-out kinds, sale excluded)
+    movementKind: "Exit type",
+    // Actions (active table)
+    editDisplayName: "Rename",
+    archive: "Archive",
+    restore: "Restore",
+    createNew: "New reason",
+    // Inline edit mode
+    displayNameLabel: "Display name",
+    displayNamePlaceholder: "e.g. Damaged packaging",
+    saveRename: "Save",
+    cancelRename: "Cancel",
+    // Create reason form
+    createTitle: "New stock-out reason",
+    createDesc: "Choose a fixed exit type for this reason. The type cannot be changed after creation.",
+    displayNameNewPlaceholder: "e.g. Expired (unsold)",
+    movementKindLabel: "Exit type *",
+    addReason: "Add reason",
+    creating: "Adding…",
+    // Validation
+    displayNameRequired: "Display name is required",
+    movementKindRequired: "Exit type is required",
+    // Archived panel
+    archivedLabel: "Archived reasons",
+    noArchivedReasons: "No archived reasons.",
+    // Error messages
+    archiveError: "Could not archive reason: {msg}",
+    renameError: "Could not rename reason: {msg}",
+    createError: "Could not create reason: {msg}",
+    restoreError: "Could not restore reason: {msg}",
+    loadError: "Could not load reasons: {msg}",
+    // Confirmation dialogs
+    confirmArchive: "Archive \"{name}\"?",
+    confirmArchiveBody:
+      "The reason will be hidden from the stock-out selector. It remains available in historical records.",
+    confirmRestore: "Restore \"{name}\"?",
+    confirmRestoreBody:
+      "The reason will be available again in the stock-out selector.",
+    confirmArchiveYes: "Archive",
+    confirmRestoreYes: "Restore",
+    // Movement kind labels (7 closed stock-out kinds, sale excluded).
+    // Keys must match the colon-separated `ExitReasonMovementKind` wire values
+    // from the backend, e.g. `exit:waste`, `exit:expired`, etc.
+    kinds: {
+      "exit:waste": "Waste",
+      "exit:expired": "Expired",
+      "exit:damaged": "Damaged",
+      "exit:internal_consumption": "Internal consumption",
+      "exit:return_to_supplier": "Return to supplier",
+      "exit:inventory_adjustment": "Inventory adjustment",
+      "exit:other": "Other",
+    },
+  },
+
   settings: {
     theme: {
       title: "Theme",

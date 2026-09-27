@@ -4,7 +4,7 @@
 **Task File:** `odd/tasks/scanner-ux-improvements.md`
 **Baseline:** `main @ 0c84f93`
 **Branch:** `feat/scanner-ux-improvements`
-**Status:** In progress — Tasks 2.1–2.7c implemented; 2.7d–2.8 pending
+**Status:** In progress — Tasks 2.1–2.7d implemented; Task 2.7e in progress; Task 2.8 pending
 **Created:** 2026-09-26
 **Last Updated:** 2026-09-26
 
@@ -51,7 +51,7 @@ The following decisions were made based on approved user experience requirements
 - [ ] Add one concise dynamic explanation for the currently selected policy (user chose dynamic help).
 - [ ] Keep the existing general section explanation; selected-policy text adds specific behavior without replacing it.
 
-**Status: in progress.** A worker added rendered help and the combined UI checks passed, but the shared `ConfigurationPage.svelte` has not yet been independently verified or committed because it also contains Task 2.6b.
+**Status: complete — independently verified.** FEFO tooltip is pointer/keyboard accessible; selected-policy description updates dynamically and preserves the general description. Independent `npm run check`, Svelte warning-threshold check, i18n generation, build, and `git diff --check` passed. Work-unit commit: `5d87d5c` (combined with Task 2.6b due to the shared ConfigurationPage surface).
 
 ### Task 2.2: Preserve Submitted Scan Value
 - [x] Preserve the trimmed submitted scan in dedicated UI state before `scanInput` is cleared.
@@ -107,12 +107,12 @@ The following decisions were made based on approved user experience requirements
 **Status: complete — independently verified.**
 
 **Verification evidence:**
-- Worker: `npm run check`, `npm run i18n:generate`, `git diff --check` passed.
-- Independent verification: `npm run check`, `npm run i18n:generate`, `npm run build`, and `git diff --check` passed.
-- UI reuses existing backend surface (list, add, rename, archive, unarchive).
-- Archived units excluded from active selectors; available for historical resolution.
-- Stable IDs, key, and kind not editable.
-- i18n parity maintained; no manual browser/E2E harness.
+- Independent verification: `npm run check` (0 errors/warnings), `npx svelte-check --tsconfig ./tsconfig.json --threshold warning` (0/0), `npm run i18n:generate` (up to date, no generated changes), `npm run build`, and `git diff --check` passed.
+- UI reuses existing backend surface (list, add, rename, archive, unarchive); backend commands are registered.
+- Archived units are excluded from active selectors and available through the archived/history surface.
+- Stable IDs, key, and kind are not editable after creation.
+- No manual browser/E2E harness.
+- Work-unit commit: `5d87d5c` (combined with Task 2.1 due to the shared ConfigurationPage surface).
 
 ### Task 2.7: Global User-Managed Stock-Out Reasons
 
@@ -223,12 +223,15 @@ Seed one catalog entry per existing stock-out `movement_kind` with clear, user-f
 **Verification evidence:** `npm run check` (0 errors/warnings), `npx svelte-check --tsconfig ./tsconfig.json --threshold warning` (0/0), `npm run i18n:generate`, `npm run build`, and `git diff --check` passed. Independent review confirmed both stock-out surfaces submit `exit_reason_id`, sale remains unchanged, notes rules match backend, and movement history renders `movement_kind` plus snapshot. Rust full library suite passed 829/829; focused stock-out reason tests passed 34 and exit-reason tests passed 4. No browser/E2E harness.
 
 ##### Task 2.7e: Catalog Management UI
-- [ ] Build reason catalog management page (list active, list archived).
-- [ ] Create reason: display name input, read-only movement_kind selector (required, locked after creation).
-- [ ] Edit display name (in-place or modal); movement_kind selection not editable post-creation.
-- [ ] Archive/unarchive toggle with confirmation.
-- [ ] Archived reasons excluded from stock-out registration dropdown.
-- [ ] Follow existing Task 2.6 UI patterns for consistency.
+- [x] Build reason catalog management UI in `ConfigurationPage.svelte`, following the verified Task 2.6b catalog pattern (list active and archived).
+- [x] Create reason with display name and a closed `movement_kind` selector; movement kind is immutable after creation.
+- [x] Edit display name only; never expose ID or movement-kind edits.
+- [x] Archive/unarchive with confirmation; archived reasons remain excluded from stock-out registration dropdowns.
+- [x] Add a dedicated localized `stockOutReasons` namespace in EN/ES for management UI and the seven closed kinds; do not label the catalog through `lotMovements` UI namespace.
+- [x] Omit a “preset” badge: the current DTO does not distinguish seeded from custom entries.
+- [ ] Keep Rust formatting changes and other pre-existing dirty files outside this work unit.
+
+**Status: implementation independently verified; work-unit commit pending.** Independent verification caught and the implementation corrected two runtime defects: `loadReasonsCatalog()` was missing from `onMount`, and localized movement-kind dictionary keys used underscores instead of the backend `exit:` wire values. Final verification passed: `npm run check` (0 errors/warnings), `npx svelte-check --tsconfig ./tsconfig.json --threshold warning` (0/0), `npm run i18n:generate` (up to date, no mutation), `npm run build`, and `git diff --check`. No browser/E2E harness.
 
 ### Task 2.8: Shared Catalog UX
 - [ ] Reuse consistent archive confirmation and active/archived presentation where it fits both catalogs.
@@ -258,19 +261,19 @@ Seed one catalog entry per existing stock-out `movement_kind` with clear, user-f
 
 ## Task Order and Status
 
-1. Task 2.1 FEFO help — **in progress**; implementation added, but shared ConfigurationPage verification/commit pending.
+1. Task 2.1 FEFO help — **complete, independently verified**; commit `5d87d5c` (shared work unit with 2.6b).
 2. Task 2.2 submitted scan preservation — complete; commit `a63b574` also contains Tasks 2.3–2.5 as one cohesive scanner/input UX work unit; code-inspection verifier and frontend checks passed.
 3. Task 2.3 Active Store panel — complete; commit `a63b574` (multi-store selector retained; frontend checks/build passed).
 4. Task 2.4 DatePicker — complete; commit `a63b574` (input draft handling and local-date generation; frontend checks/build passed).
 5. Task 2.5 numeric constraints — complete; commits `88a4223` (positive DistributionEditor min/step) and `a63b574` (Input forwarding, field bounds, localized alert-day validation); frontend checks/build passed; no E2E harness.
 6a. Task 2.6a unit catalog backend — complete; commit `42ea9f3` (full Rust library suite 829 passed; checks and formatting passed; no schema migration; no hard deletes).
-6b. Task 2.6b unit catalog UI — implementation present but **not committed**; independent verifier passed npm checks/build, but parent review identified unresolved Svelte reactivity/type-safety concern in the shared `ConfigurationPage.svelte`; verify and reconcile before closing.
+6b. Task 2.6b unit catalog UI — **complete, independently verified**; commit `5d87d5c` (shared work unit with 2.1). Independent verifier reports no defects; npm checks/build/i18n and Svelte warning-threshold checks pass. Unrelated Rust formatting remains outside this work unit.
 7. Task 2.7 reason catalog — **architecture resolved**; subtasks:
    - 2.7a migration + schema + seed + backfill — **complete** (V20 tests 13 passed, migration suite 74 passed; TEXT stable IDs, seven seeded stock-out categories excluding sale, nullable exit_reason_id FK, reason snapshot unchanged, limited legacy backfill snapshot-only; worker + independent verifier confirmed; no code edits/commit)
    - 2.7b catalog repository/service/command CRUD — **complete** (independent verification: full Rust library suite 823 passed; stale migration-count assertions fixed)
    - 2.7c movement DTO/service snapshot + validations — **complete**, commit `30fcd58` (independent verification: full Rust library suite 829 passed; `cargo check` and `cargo fmt -- --check` passed)
    - 2.7d replace stock-out selector + history display — **complete**; commits `68253ab` (client API foundation) and `b37bef3` (selector, history, retry UI)
-   - 2.7e catalog management UI — pending
+   - 2.7e catalog management UI — **implemented and independently verified; work-unit commit pending**. Includes active/archived catalog management, create with closed kind selection, rename label only, and archive/restore confirmation. Corrections verified against backend wire kinds; frontend checks/build/i18n generation passed. No browser/E2E harness.
 8. Task 2.8 shared catalog UX — pending.
 
 Each task must be completed with proportionate tests and evidence before closure. Create a separate Conventional Commit for each verified work unit on this feature branch. Do not publish without explicit user authorization.

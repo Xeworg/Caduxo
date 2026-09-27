@@ -72,6 +72,15 @@
         type UnitDefinitionResponse,
     } from "../lib/unit_definitions.js";
     import type { UnitKind } from "../lib/products.js";
+    import {
+        listAllStockOutReasons,
+        createStockOutReason,
+        renameStockOutReason,
+        archiveStockOutReason,
+        unarchiveStockOutReason,
+        type StockOutReason,
+        type ExitReasonMovementKind,
+    } from "../lib/stock_out_reasons.js";
 
     // Per-locale display names. The dictionary keys live in
     // `configuration.language.names` keyed by `SupportedLocale` code, so
@@ -234,6 +243,353 @@
     let creatingUnit = $state(false);
     let createError = $state("");
 
+    // ─── Stock-out reasons catalog state ───────────────────────────────────────
+
+    // The seven closed stock-out movement kinds (sale excluded).
+    const AVAILABLE_MOVEMENT_KINDS: ExitReasonMovementKind[] = [
+        "exit:waste",
+        "exit:expired",
+        "exit:damaged",
+        "exit:internal_consumption",
+        "exit:return_to_supplier",
+        "exit:inventory_adjustment",
+        "exit:other",
+    ];
+
+    let loadingReasons = $state(true);
+    let reasonsLoadError = $state("");
+    let activeReasons = $state<StockOutReason[]>([]);
+    let archivedReasons = $state<StockOutReason[]>([]);
+    let showArchivedReasons = $state(false);
+
+    // Inline rename state.
+    let renamingReasonId: string | null = $state(null);
+    let renamingReasonValue = $state("");
+    let savingReasonRename = $state(false);
+    let renameReasonError = $state("");
+
+    // Archive confirmation state.
+    let archiveReasonTarget: StockOutReason | null = $state(null);
+    let confirmingReasonArchive = $state(false);
+    let archivingReason = $state(false);
+    let archiveReasonApiError = $state("");
+
+    // Restore confirmation state.
+    let restoreReasonTarget: StockOutReason | null = $state(null);
+    let confirmingReasonRestore = $state(false);
+    let restoringReason = $state(false);
+    let restoreReasonApiError = $state("");
+
+    // Create-reason form state.
+    let showCreateReasonForm = $state(false);
+    let createReasonDisplayName = $state("");
+    let createReasonMovementKind: ExitReasonMovementKind = $state("exit:waste");
+    let creatingReason = $state(false);
+    let createReasonError = $state("");
+
+    // ─── Unit catalog load ────────────────────────────────────────────────────
+
+    async function loadUnitCatalog() {
+        loadingUnits = true;
+        unitsLoadError = "";
+        try {
+            [activeUnits, archivedUnits] = await Promise.all([
+                listUnitDefinitions(),
+                listArchivedUnitDefinitions(),
+            ]);
+        } catch (e) {
+            unitsLoadError = $LL.unitCatalog.loadError({ msg: humanizeError(e) });
+        } finally {
+            loadingUnits = false;
+        }
+    }
+
+    // ─── Inline rename ────────────────────────────────────────────────────────
+
+    function startRename(unit: UnitDefinitionResponse) {
+        renamingId = unit.id;
+        renameValue = unit.display_name;
+        renameError = "";
+    }
+
+    function cancelRename() {
+        renamingId = null;
+        renameValue = "";
+        renameError = "";
+    }
+
+    async function submitRename() {
+        if (!renamingId || !renameValue.trim()) return;
+        savingRename = true;
+        renameError = "";
+        try {
+            const updated = await renameUnitDefinition({
+                id: renamingId,
+                display_name: renameValue.trim(),
+            });
+            // Replace and re-sort so the renamed unit lands in the correct position.
+            activeUnits = insertActiveSorted(
+                activeUnits.filter((u) => u.id !== renamingId),
+                updated,
+            );
+            renamingId = null;
+            renameValue = "";
+        } catch (e) {
+            renameError = $LL.unitCatalog.renameError({ msg: humanizeError(e) });
+        } finally {
+            savingRename = false;
+        }
+    }
+
+    // ─── Archive ─────────────────────────────────────────────────────────────
+
+    function requestArchive(unit: UnitDefinitionResponse) {
+        archiveTarget = unit;
+        confirmingArchive = true;
+        archiveApiError = "";
+    }
+
+    function cancelArchive() {
+        confirmingArchive = false;
+        archiveTarget = null;
+        archiveApiError = "";
+    }
+
+    async function confirmArchive() {
+        if (!archiveTarget) return;
+        archivingUnit = true;
+        archiveApiError = "";
+        const id = archiveTarget.id;
+        try {
+            await archiveUnitDefinition(id);
+            // Refetch to get correct archived_at timestamp and preserve order.
+            await loadUnitCatalog();
+            confirmingArchive = false;
+            archiveTarget = null;
+        } catch (e) {
+            archiveApiError = $LL.unitCatalog.archiveError({ msg: humanizeError(e) });
+        } finally {
+            archivingUnit = false;
+        }
+    }
+
+    // ─── Restore ─────────────────────────────────────────────────────────────
+
+    function requestRestore(unit: UnitDefinitionResponse) {
+        restoreTarget = unit;
+        confirmingRestore = true;
+        restoreApiError = "";
+    }
+
+    function cancelRestore() {
+        confirmingRestore = false;
+        restoreTarget = null;
+        restoreApiError = "";
+    }
+
+    async function confirmRestore() {
+        if (!restoreTarget) return;
+        restoringUnit = true;
+        restoreApiError = "";
+        const id = restoreTarget.id;
+        try {
+            const restored = await unarchiveUnitDefinition(id);
+            archivedUnits = archivedUnits.filter((u) => u.id !== id);
+            activeUnits = insertActiveSorted(activeUnits, restored);
+            confirmingRestore = false;
+            restoreTarget = null;
+        } catch (e) {
+            restoreApiError = $LL.unitCatalog.restoreError({ msg: humanizeError(e) });
+        } finally {
+            restoringUnit = false;
+        }
+    }
+
+    // ─── Create unit ─────────────────────────────────────────────────────────
+
+    function openCreateForm() {
+        showCreateForm = true;
+        createKey = "";
+        createDisplayName = "";
+        createKind = "integer";
+        createError = "";
+    }
+
+    function closeCreateForm() {
+        showCreateForm = false;
+        createError = "";
+    }
+
+    async function submitCreateUnit() {
+        if (!createKey.trim() || !createDisplayName.trim()) return;
+        creatingUnit = true;
+        createError = "";
+        try {
+            const created = await createUnitDefinition({
+                key: createKey.trim(),
+                display_name: createDisplayName.trim(),
+                kind: createKind,
+            });
+            activeUnits = insertActiveSorted(activeUnits, created);
+            closeCreateForm();
+        } catch (e) {
+            createError = $LL.unitCatalog.createError({ msg: humanizeError(e) });
+        } finally {
+            creatingUnit = false;
+        }
+    }
+
+    // ─── Stock-out reasons catalog load ───────────────────────────────────────
+
+    async function loadReasonsCatalog() {
+        loadingReasons = true;
+        reasonsLoadError = "";
+        try {
+            const all = await listAllStockOutReasons();
+            activeReasons = all.filter((r) => r.archived_at === null);
+            archivedReasons = all.filter((r) => r.archived_at !== null);
+        } catch (e) {
+            reasonsLoadError = $LL.stockOutReasons.loadError({ msg: humanizeError(e) });
+        } finally {
+            loadingReasons = false;
+        }
+    }
+
+    // ─── Inline rename reason ────────────────────────────────────────────────
+
+    function startReasonRename(reason: StockOutReason) {
+        renamingReasonId = reason.id;
+        renamingReasonValue = reason.display_name;
+        renameReasonError = "";
+    }
+
+    function cancelReasonRename() {
+        renamingReasonId = null;
+        renamingReasonValue = "";
+        renameReasonError = "";
+    }
+
+    async function submitReasonRename() {
+        if (!renamingReasonId || !renamingReasonValue.trim()) return;
+        savingReasonRename = true;
+        renameReasonError = "";
+        try {
+            const updated = await renameStockOutReason({
+                id: renamingReasonId,
+                display_name: renamingReasonValue.trim(),
+            });
+            // Replace in the active list with the updated entry.
+            activeReasons = activeReasons.map((r) =>
+                r.id === renamingReasonId ? updated : r,
+            );
+            renamingReasonId = null;
+            renamingReasonValue = "";
+        } catch (e) {
+            renameReasonError = $LL.stockOutReasons.renameError({ msg: humanizeError(e) });
+        } finally {
+            savingReasonRename = false;
+        }
+    }
+
+    // ─── Archive reason ──────────────────────────────────────────────────────
+
+    function requestReasonArchive(reason: StockOutReason) {
+        archiveReasonTarget = reason;
+        confirmingReasonArchive = true;
+        archiveReasonApiError = "";
+    }
+
+    function cancelReasonArchive() {
+        confirmingReasonArchive = false;
+        archiveReasonTarget = null;
+        archiveReasonApiError = "";
+    }
+
+    async function confirmReasonArchive() {
+        if (!archiveReasonTarget) return;
+        archivingReason = true;
+        archiveReasonApiError = "";
+        const id = archiveReasonTarget.id;
+        try {
+            await archiveStockOutReason(id);
+            await loadReasonsCatalog();
+            confirmingReasonArchive = false;
+            archiveReasonTarget = null;
+        } catch (e) {
+            archiveReasonApiError = $LL.stockOutReasons.archiveError({ msg: humanizeError(e) });
+        } finally {
+            archivingReason = false;
+        }
+    }
+
+    // ─── Restore reason ──────────────────────────────────────────────────────
+
+    function requestReasonRestore(reason: StockOutReason) {
+        restoreReasonTarget = reason;
+        confirmingReasonRestore = true;
+        restoreReasonApiError = "";
+    }
+
+    function cancelReasonRestore() {
+        confirmingReasonRestore = false;
+        restoreReasonTarget = null;
+        restoreReasonApiError = "";
+    }
+
+    async function confirmReasonRestore() {
+        if (!restoreReasonTarget) return;
+        restoringReason = true;
+        restoreReasonApiError = "";
+        const id = restoreReasonTarget.id;
+        try {
+            const restored = await unarchiveStockOutReason(id);
+            archivedReasons = archivedReasons.filter((r) => r.id !== id);
+            activeReasons = [...activeReasons, restored].sort(
+                (a, b) => a.sort_order - b.sort_order,
+            );
+            confirmingReasonRestore = false;
+            restoreReasonTarget = null;
+        } catch (e) {
+            restoreReasonApiError = $LL.stockOutReasons.restoreError({ msg: humanizeError(e) });
+        } finally {
+            restoringReason = false;
+        }
+    }
+
+    // ─── Create reason ───────────────────────────────────────────────────────
+
+    function openCreateReasonForm() {
+        showCreateReasonForm = true;
+        createReasonDisplayName = "";
+        createReasonMovementKind = "exit:waste";
+        createReasonError = "";
+    }
+
+    function closeCreateReasonForm() {
+        showCreateReasonForm = false;
+        createReasonError = "";
+    }
+
+    async function submitCreateReason() {
+        if (!createReasonDisplayName.trim()) return;
+        creatingReason = true;
+        createReasonError = "";
+        try {
+            const created = await createStockOutReason({
+                display_name: createReasonDisplayName.trim(),
+                movement_kind: createReasonMovementKind,
+            });
+            activeReasons = [...activeReasons, created].sort(
+                (a, b) => a.sort_order - b.sort_order,
+            );
+            closeCreateReasonForm();
+        } catch (e) {
+            createReasonError = $LL.stockOutReasons.createError({ msg: humanizeError(e) });
+        } finally {
+            creatingReason = false;
+        }
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
     function kindBadgeClass(kind: UnitKind): string {
@@ -306,6 +662,9 @@
         }
         // Unit catalog loads independently of settings so each can fail separately.
         await loadUnitCatalog();
+        // Reasons catalog also loads independently so the UI can populate even
+        // when the settings or unit catalog calls fail.
+        await loadReasonsCatalog();
     });
 
     // ─── Locale selector handler ────────────────────────────────────────────────
@@ -1128,6 +1487,360 @@
             {/if}
         </Card>
 
+        <!-- ─── Stock-out reasons catalog section (ODD task 2.7e) ────────────── -->
+        <Card tone="default">
+            <h2 class="section-title">
+                {$LL.stockOutReasons.sectionTitle()}
+            </h2>
+            <p class="section-desc">
+                {$LL.stockOutReasons.description()}
+            </p>
+
+            {#if loadingReasons}
+                <LoadingState
+                    variant="spinner"
+                    label={$LL.common.loading()}
+                />
+            {:else if reasonsLoadError}
+                <Alert variant="error">{reasonsLoadError}</Alert>
+            {:else}
+                <!-- ─── Active reasons ───────────────────────────────────────── -->
+                <div class="unit-block">
+                    <div class="unit-block-header">
+                        <span class="unit-block-label">
+                            {$LL.stockOutReasons.activeLabel()}
+                        </span>
+                        <span class="unit-count-badge">
+                            {activeReasons.length}
+                        </span>
+                    </div>
+
+                    {#if activeReasons.length === 0}
+                        <p class="unit-empty">{$LL.stockOutReasons.noActiveReasons()}</p>
+                    {:else}
+                        <div class="unit-list">
+                            {#each activeReasons as reason (reason.id)}
+                                <div class="unit-row">
+                                    <div class="unit-info">
+                                        <span class="unit-badge badge-outline">
+                                            {(() => {
+                                                const kinds = $LL.stockOutReasons.kinds as unknown as Record<
+                                                    ExitReasonMovementKind,
+                                                    () => string
+                                                >;
+                                                return kinds[reason.movement_kind as ExitReasonMovementKind]?.() ??
+                                                    reason.movement_kind;
+                                            })()}
+                                        </span>
+                                        {#if renamingReasonId === reason.id}
+                                            <input
+                                                class="input input-sm unit-rename-input"
+                                                type="text"
+                                                bind:value={renamingReasonValue}
+                                                onkeydown={(e) => {
+                                                    if (e.key === "Enter") submitReasonRename();
+                                                    if (e.key === "Escape") cancelReasonRename();
+                                                }}
+                                                disabled={savingReasonRename}
+                                                aria-label={$LL.stockOutReasons.displayNameLabel()}
+                                            />
+                                        {:else}
+                                            <span class="unit-display-name">{reason.display_name}</span>
+                                        {/if}
+                                    </div>
+                                    <div class="unit-actions">
+                                        {#if renamingReasonId === reason.id}
+                                            <Button
+                                                size="sm"
+                                                variant="primary"
+                                                loading={savingReasonRename}
+                                                onclick={submitReasonRename}
+                                            >
+                                                {$LL.stockOutReasons.saveRename()}
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onclick={cancelReasonRename}
+                                                disabled={savingReasonRename}
+                                            >
+                                                {$LL.stockOutReasons.cancelRename()}
+                                            </Button>
+                                        {:else}
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onclick={() => startReasonRename(reason)}
+                                            >
+                                                {$LL.stockOutReasons.editDisplayName()}
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onclick={() => requestReasonArchive(reason)}
+                                            >
+                                                {$LL.stockOutReasons.archive()}
+                                            </Button>
+                                        {/if}
+                                    </div>
+                                </div>
+                            {/each}
+                        </div>
+                    {/if}
+
+                    {#if renameReasonError}
+                        <div class="unit-error">
+                            <Alert variant="error">{renameReasonError}</Alert>
+                        </div>
+                    {/if}
+                </div>
+
+                <!-- ─── New reason form ─────────────────────────────────────── -->
+                {#if showCreateReasonForm}
+                    <div class="unit-create-form">
+                        <h3 class="unit-create-title">
+                            {$LL.stockOutReasons.createTitle()}
+                        </h3>
+                        <p class="unit-create-desc">
+                            {$LL.stockOutReasons.createDesc()}
+                        </p>
+
+                        <div class="unit-create-fields">
+                            <div class="unit-create-row">
+                                <div class="unit-create-field">
+                                    <label
+                                        class="fieldset-label"
+                                        for="create-reason-name"
+                                    >
+                                        {$LL.stockOutReasons.displayNameLabel()}
+                                        <span class="text-error" aria-hidden="true">*</span>
+                                    </label>
+                                    <input
+                                        id="create-reason-name"
+                                        class="input input-sm w-full"
+                                        type="text"
+                                        placeholder={$LL.stockOutReasons.displayNameNewPlaceholder()}
+                                        bind:value={createReasonDisplayName}
+                                        disabled={creatingReason}
+                                        onkeydown={(e) => {
+                                            if (
+                                                e.key === "Enter" &&
+                                                createReasonDisplayName.trim()
+                                            )
+                                                submitCreateReason();
+                                        }}
+                                    />
+                                </div>
+                                <div class="unit-create-field">
+                                    <label
+                                        class="fieldset-label"
+                                        for="create-reason-kind"
+                                    >
+                                        {$LL.stockOutReasons.movementKindLabel()}
+                                    </label>
+                                    <select
+                                        id="create-reason-kind"
+                                        class="select select-sm w-full"
+                                        bind:value={createReasonMovementKind}
+                                        disabled={creatingReason}
+                                    >
+                                        {#each AVAILABLE_MOVEMENT_KINDS as kind}
+                                            <option value={kind}>
+                                                {(() => {
+                                                    const kinds = $LL.stockOutReasons.kinds as unknown as Record<
+                                                        ExitReasonMovementKind,
+                                                        () => string
+                                                    >;
+                                                    return kinds[kind]?.() ?? kind;
+                                                })()}
+                                            </option>
+                                        {/each}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {#if createReasonError}
+                            <div class="unit-error">
+                                <Alert variant="error">{createReasonError}</Alert>
+                            </div>
+                        {/if}
+
+                        <div class="unit-create-actions">
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                loading={creatingReason}
+                                disabled={!createReasonDisplayName.trim()}
+                                onclick={submitCreateReason}
+                            >
+                                {$LL.stockOutReasons.addReason()}
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onclick={closeCreateReasonForm}
+                                disabled={creatingReason}
+                            >
+                                {$LL.common.cancel()}
+                            </Button>
+                        </div>
+                    </div>
+                {:else}
+                    <div class="unit-create-trigger">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onclick={openCreateReasonForm}
+                        >
+                            {$LL.stockOutReasons.createNew()}
+                        </Button>
+                    </div>
+                {/if}
+
+                <!-- ─── Archived reasons ────────────────────────────────────── -->
+                <div class="unit-block">
+                    <button
+                        class="unit-block-header unit-block-toggle"
+                        onclick={() => (showArchivedReasons = !showArchivedReasons)}
+                        aria-expanded={showArchivedReasons}
+                    >
+                        <span class="unit-block-label">
+                            {$LL.stockOutReasons.archivedLabel()}
+                        </span>
+                        <span class="unit-count-badge">
+                            {archivedReasons.length}
+                        </span>
+                        <span class="unit-toggle-icon">
+                            {showArchivedReasons ? "▲" : "▼"}
+                        </span>
+                    </button>
+
+                    {#if showArchivedReasons}
+                        {#if archivedReasons.length === 0}
+                            <p class="unit-empty">{$LL.stockOutReasons.noArchivedReasons()}</p>
+                        {:else}
+                            <div class="unit-list">
+                                {#each archivedReasons as reason (reason.id)}
+                                    <div class="unit-row unit-row-archived">
+                                        <div class="unit-info">
+                                            <span class="unit-badge badge-outline">
+                                                {(() => {
+                                                    const kinds = $LL.stockOutReasons.kinds as unknown as Record<
+                                                        ExitReasonMovementKind,
+                                                        () => string
+                                                    >;
+                                                    return kinds[reason.movement_kind as ExitReasonMovementKind]?.() ??
+                                                        reason.movement_kind;
+                                                })()}
+                                            </span>
+                                            <span class="unit-display-name unit-display-name-muted">
+                                                {reason.display_name}
+                                            </span>
+                                        </div>
+                                        <div class="unit-actions">
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onclick={() => requestReasonRestore(reason)}
+                                            >
+                                                {$LL.stockOutReasons.restore()}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                {/each}
+                            </div>
+                        {/if}
+                    {/if}
+                </div>
+
+                <!-- ─── Archive confirmation modal ─────────────────────────── -->
+                <Modal
+                    bind:open={confirmingReasonArchive}
+                    titleId="reason-archive-modal-title"
+                    descriptionId="reason-archive-modal-desc"
+                    closeOnBackdrop={false}
+                    onclose={() => { archiveReasonTarget = null; }}
+                >
+                    {#snippet children()}
+                        <h2 id="reason-archive-modal-title" class="modal-title">
+                            {$LL.stockOutReasons.confirmArchive({
+                                name: archiveReasonTarget?.display_name ?? "",
+                            })}
+                        </h2>
+                        <p id="reason-archive-modal-desc" class="modal-body">
+                            {$LL.stockOutReasons.confirmArchiveBody()}
+                        </p>
+                        {#if archiveReasonApiError}
+                            <div class="unit-error">
+                                <Alert variant="error">{archiveReasonApiError}</Alert>
+                            </div>
+                        {/if}
+                    {/snippet}
+                    {#snippet footer()}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onclick={cancelReasonArchive}
+                            disabled={archivingReason}
+                        >
+                            {$LL.common.cancel()}
+                        </Button>
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            loading={archivingReason}
+                            onclick={confirmReasonArchive}
+                        >
+                            {$LL.stockOutReasons.confirmArchiveYes()}
+                        </Button>
+                    {/snippet}
+                </Modal>
+
+                <!-- ─── Restore confirmation modal ─────────────────────────── -->
+                <Modal
+                    bind:open={confirmingReasonRestore}
+                    titleId="reason-restore-modal-title"
+                    descriptionId="reason-restore-modal-desc"
+                    closeOnBackdrop={false}
+                    onclose={() => { restoreReasonTarget = null; }}
+                >
+                    {#snippet children()}
+                        <h2 id="reason-restore-modal-title" class="modal-title">
+                            {$LL.stockOutReasons.confirmRestore({
+                                name: restoreReasonTarget?.display_name ?? "",
+                            })}
+                        </h2>
+                        <p id="reason-restore-modal-desc" class="modal-body">
+                            {$LL.stockOutReasons.confirmRestoreBody()}
+                        </p>
+                        {#if restoreReasonApiError}
+                            <div class="unit-error">
+                                <Alert variant="error">{restoreReasonApiError}</Alert>
+                            </div>
+                        {/if}
+                    {/snippet}
+                    {#snippet footer()}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onclick={cancelReasonRestore}
+                            disabled={restoringReason}
+                        >
+                            {$LL.common.cancel()}
+                        </Button>
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            loading={restoringReason}
+                            onclick={confirmReasonRestore}
+                        >
+                            {$LL.stockOutReasons.confirmRestoreYes()}
+                        </Button>
+                    {/snippet}
+                </Modal>
+            {/if}
+        </Card>
     {/if}
 </div>
 

@@ -4518,6 +4518,181 @@ type RootTranslation = {
 		 */
 		confirmRestoreYes: string
 	}
+	stockOutReasons: {
+		/**
+		 * S​t​o​c​k​-​o​u​t​ ​r​e​a​s​o​n​s
+		 */
+		sectionTitle: string
+		/**
+		 * M​a​n​a​g​e​ ​t​h​e​ ​e​x​i​t​ ​r​e​a​s​o​n​s​ ​a​v​a​i​l​a​b​l​e​ ​w​h​e​n​ ​r​e​g​i​s​t​e​r​i​n​g​ ​s​t​o​c​k​-​o​u​t​s​.​ ​E​a​c​h​ ​r​e​a​s​o​n​ ​m​a​p​s​ ​t​o​ ​a​ ​f​i​x​e​d​ ​m​o​v​e​m​e​n​t​ ​t​y​p​e​.​ ​R​e​a​s​o​n​s​ ​c​a​n​ ​b​e​ ​r​e​n​a​m​e​d​ ​o​r​ ​a​r​c​h​i​v​e​d​;​ ​a​r​c​h​i​v​e​d​ ​r​e​a​s​o​n​s​ ​r​e​m​a​i​n​ ​i​n​ ​h​i​s​t​o​r​i​c​a​l​ ​r​e​c​o​r​d​s​ ​b​u​t​ ​a​r​e​ ​n​o​t​ ​a​v​a​i​l​a​b​l​e​ ​f​o​r​ ​n​e​w​ ​s​t​o​c​k​-​o​u​t​s​.
+		 */
+		description: string
+		/**
+		 * A​c​t​i​v​e​ ​r​e​a​s​o​n​s
+		 */
+		activeLabel: string
+		/**
+		 * N​o​ ​a​c​t​i​v​e​ ​r​e​a​s​o​n​s​.
+		 */
+		noActiveReasons: string
+		/**
+		 * E​x​i​t​ ​t​y​p​e
+		 */
+		movementKind: string
+		/**
+		 * R​e​n​a​m​e
+		 */
+		editDisplayName: string
+		/**
+		 * A​r​c​h​i​v​e
+		 */
+		archive: string
+		/**
+		 * R​e​s​t​o​r​e
+		 */
+		restore: string
+		/**
+		 * N​e​w​ ​r​e​a​s​o​n
+		 */
+		createNew: string
+		/**
+		 * D​i​s​p​l​a​y​ ​n​a​m​e
+		 */
+		displayNameLabel: string
+		/**
+		 * e​.​g​.​ ​D​a​m​a​g​e​d​ ​p​a​c​k​a​g​i​n​g
+		 */
+		displayNamePlaceholder: string
+		/**
+		 * S​a​v​e
+		 */
+		saveRename: string
+		/**
+		 * C​a​n​c​e​l
+		 */
+		cancelRename: string
+		/**
+		 * N​e​w​ ​s​t​o​c​k​-​o​u​t​ ​r​e​a​s​o​n
+		 */
+		createTitle: string
+		/**
+		 * C​h​o​o​s​e​ ​a​ ​f​i​x​e​d​ ​e​x​i​t​ ​t​y​p​e​ ​f​o​r​ ​t​h​i​s​ ​r​e​a​s​o​n​.​ ​T​h​e​ ​t​y​p​e​ ​c​a​n​n​o​t​ ​b​e​ ​c​h​a​n​g​e​d​ ​a​f​t​e​r​ ​c​r​e​a​t​i​o​n​.
+		 */
+		createDesc: string
+		/**
+		 * e​.​g​.​ ​E​x​p​i​r​e​d​ ​(​u​n​s​o​l​d​)
+		 */
+		displayNameNewPlaceholder: string
+		/**
+		 * E​x​i​t​ ​t​y​p​e​ ​*
+		 */
+		movementKindLabel: string
+		/**
+		 * A​d​d​ ​r​e​a​s​o​n
+		 */
+		addReason: string
+		/**
+		 * A​d​d​i​n​g​…
+		 */
+		creating: string
+		/**
+		 * D​i​s​p​l​a​y​ ​n​a​m​e​ ​i​s​ ​r​e​q​u​i​r​e​d
+		 */
+		displayNameRequired: string
+		/**
+		 * E​x​i​t​ ​t​y​p​e​ ​i​s​ ​r​e​q​u​i​r​e​d
+		 */
+		movementKindRequired: string
+		/**
+		 * A​r​c​h​i​v​e​d​ ​r​e​a​s​o​n​s
+		 */
+		archivedLabel: string
+		/**
+		 * N​o​ ​a​r​c​h​i​v​e​d​ ​r​e​a​s​o​n​s​.
+		 */
+		noArchivedReasons: string
+		/**
+		 * C​o​u​l​d​ ​n​o​t​ ​a​r​c​h​i​v​e​ ​r​e​a​s​o​n​:​ ​{​m​s​g​}
+		 * @param {unknown} msg
+		 */
+		archiveError: RequiredParams<'msg'>
+		/**
+		 * C​o​u​l​d​ ​n​o​t​ ​r​e​n​a​m​e​ ​r​e​a​s​o​n​:​ ​{​m​s​g​}
+		 * @param {unknown} msg
+		 */
+		renameError: RequiredParams<'msg'>
+		/**
+		 * C​o​u​l​d​ ​n​o​t​ ​c​r​e​a​t​e​ ​r​e​a​s​o​n​:​ ​{​m​s​g​}
+		 * @param {unknown} msg
+		 */
+		createError: RequiredParams<'msg'>
+		/**
+		 * C​o​u​l​d​ ​n​o​t​ ​r​e​s​t​o​r​e​ ​r​e​a​s​o​n​:​ ​{​m​s​g​}
+		 * @param {unknown} msg
+		 */
+		restoreError: RequiredParams<'msg'>
+		/**
+		 * C​o​u​l​d​ ​n​o​t​ ​l​o​a​d​ ​r​e​a​s​o​n​s​:​ ​{​m​s​g​}
+		 * @param {unknown} msg
+		 */
+		loadError: RequiredParams<'msg'>
+		/**
+		 * A​r​c​h​i​v​e​ ​"​{​n​a​m​e​}​"​?
+		 * @param {unknown} name
+		 */
+		confirmArchive: RequiredParams<'name'>
+		/**
+		 * T​h​e​ ​r​e​a​s​o​n​ ​w​i​l​l​ ​b​e​ ​h​i​d​d​e​n​ ​f​r​o​m​ ​t​h​e​ ​s​t​o​c​k​-​o​u​t​ ​s​e​l​e​c​t​o​r​.​ ​I​t​ ​r​e​m​a​i​n​s​ ​a​v​a​i​l​a​b​l​e​ ​i​n​ ​h​i​s​t​o​r​i​c​a​l​ ​r​e​c​o​r​d​s​.
+		 */
+		confirmArchiveBody: string
+		/**
+		 * R​e​s​t​o​r​e​ ​"​{​n​a​m​e​}​"​?
+		 * @param {unknown} name
+		 */
+		confirmRestore: RequiredParams<'name'>
+		/**
+		 * T​h​e​ ​r​e​a​s​o​n​ ​w​i​l​l​ ​b​e​ ​a​v​a​i​l​a​b​l​e​ ​a​g​a​i​n​ ​i​n​ ​t​h​e​ ​s​t​o​c​k​-​o​u​t​ ​s​e​l​e​c​t​o​r​.
+		 */
+		confirmRestoreBody: string
+		/**
+		 * A​r​c​h​i​v​e
+		 */
+		confirmArchiveYes: string
+		/**
+		 * R​e​s​t​o​r​e
+		 */
+		confirmRestoreYes: string
+		kinds: {
+			/**
+			 * W​a​s​t​e
+			 */
+			'exit:waste': string
+			/**
+			 * E​x​p​i​r​e​d
+			 */
+			'exit:expired': string
+			/**
+			 * D​a​m​a​g​e​d
+			 */
+			'exit:damaged': string
+			/**
+			 * I​n​t​e​r​n​a​l​ ​c​o​n​s​u​m​p​t​i​o​n
+			 */
+			'exit:internal_consumption': string
+			/**
+			 * R​e​t​u​r​n​ ​t​o​ ​s​u​p​p​l​i​e​r
+			 */
+			'exit:return_to_supplier': string
+			/**
+			 * I​n​v​e​n​t​o​r​y​ ​a​d​j​u​s​t​m​e​n​t
+			 */
+			'exit:inventory_adjustment': string
+			/**
+			 * O​t​h​e​r
+			 */
+			'exit:other': string
+		}
+	}
 	settings: {
 		theme: {
 			/**
@@ -8903,6 +9078,174 @@ export type TranslationFunctions = {
 		 * Restore
 		 */
 		confirmRestoreYes: () => LocalizedString
+	}
+	stockOutReasons: {
+		/**
+		 * Stock-out reasons
+		 */
+		sectionTitle: () => LocalizedString
+		/**
+		 * Manage the exit reasons available when registering stock-outs. Each reason maps to a fixed movement type. Reasons can be renamed or archived; archived reasons remain in historical records but are not available for new stock-outs.
+		 */
+		description: () => LocalizedString
+		/**
+		 * Active reasons
+		 */
+		activeLabel: () => LocalizedString
+		/**
+		 * No active reasons.
+		 */
+		noActiveReasons: () => LocalizedString
+		/**
+		 * Exit type
+		 */
+		movementKind: () => LocalizedString
+		/**
+		 * Rename
+		 */
+		editDisplayName: () => LocalizedString
+		/**
+		 * Archive
+		 */
+		archive: () => LocalizedString
+		/**
+		 * Restore
+		 */
+		restore: () => LocalizedString
+		/**
+		 * New reason
+		 */
+		createNew: () => LocalizedString
+		/**
+		 * Display name
+		 */
+		displayNameLabel: () => LocalizedString
+		/**
+		 * e.g. Damaged packaging
+		 */
+		displayNamePlaceholder: () => LocalizedString
+		/**
+		 * Save
+		 */
+		saveRename: () => LocalizedString
+		/**
+		 * Cancel
+		 */
+		cancelRename: () => LocalizedString
+		/**
+		 * New stock-out reason
+		 */
+		createTitle: () => LocalizedString
+		/**
+		 * Choose a fixed exit type for this reason. The type cannot be changed after creation.
+		 */
+		createDesc: () => LocalizedString
+		/**
+		 * e.g. Expired (unsold)
+		 */
+		displayNameNewPlaceholder: () => LocalizedString
+		/**
+		 * Exit type *
+		 */
+		movementKindLabel: () => LocalizedString
+		/**
+		 * Add reason
+		 */
+		addReason: () => LocalizedString
+		/**
+		 * Adding…
+		 */
+		creating: () => LocalizedString
+		/**
+		 * Display name is required
+		 */
+		displayNameRequired: () => LocalizedString
+		/**
+		 * Exit type is required
+		 */
+		movementKindRequired: () => LocalizedString
+		/**
+		 * Archived reasons
+		 */
+		archivedLabel: () => LocalizedString
+		/**
+		 * No archived reasons.
+		 */
+		noArchivedReasons: () => LocalizedString
+		/**
+		 * Could not archive reason: {msg}
+		 */
+		archiveError: (arg: { msg: unknown }) => LocalizedString
+		/**
+		 * Could not rename reason: {msg}
+		 */
+		renameError: (arg: { msg: unknown }) => LocalizedString
+		/**
+		 * Could not create reason: {msg}
+		 */
+		createError: (arg: { msg: unknown }) => LocalizedString
+		/**
+		 * Could not restore reason: {msg}
+		 */
+		restoreError: (arg: { msg: unknown }) => LocalizedString
+		/**
+		 * Could not load reasons: {msg}
+		 */
+		loadError: (arg: { msg: unknown }) => LocalizedString
+		/**
+		 * Archive "{name}"?
+		 */
+		confirmArchive: (arg: { name: unknown }) => LocalizedString
+		/**
+		 * The reason will be hidden from the stock-out selector. It remains available in historical records.
+		 */
+		confirmArchiveBody: () => LocalizedString
+		/**
+		 * Restore "{name}"?
+		 */
+		confirmRestore: (arg: { name: unknown }) => LocalizedString
+		/**
+		 * The reason will be available again in the stock-out selector.
+		 */
+		confirmRestoreBody: () => LocalizedString
+		/**
+		 * Archive
+		 */
+		confirmArchiveYes: () => LocalizedString
+		/**
+		 * Restore
+		 */
+		confirmRestoreYes: () => LocalizedString
+		kinds: {
+			/**
+			 * Waste
+			 */
+			'exit:waste': () => LocalizedString
+			/**
+			 * Expired
+			 */
+			'exit:expired': () => LocalizedString
+			/**
+			 * Damaged
+			 */
+			'exit:damaged': () => LocalizedString
+			/**
+			 * Internal consumption
+			 */
+			'exit:internal_consumption': () => LocalizedString
+			/**
+			 * Return to supplier
+			 */
+			'exit:return_to_supplier': () => LocalizedString
+			/**
+			 * Inventory adjustment
+			 */
+			'exit:inventory_adjustment': () => LocalizedString
+			/**
+			 * Other
+			 */
+			'exit:other': () => LocalizedString
+		}
 	}
 	settings: {
 		theme: {
