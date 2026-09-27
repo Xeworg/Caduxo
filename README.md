@@ -103,6 +103,7 @@ sudo apt install \
   libpango1.0-dev \
   libatk1.0-dev \
   libglib2.0-dev \
+  libayatana-appindicator3-dev \
   patchelf
 ```
 
@@ -193,6 +194,7 @@ Output artifacts are placed in `src-tauri/target/release/bundle/`.
 | `libpango1.0-dev` | Text layout |
 | `libatk1.0-dev` | Accessibility |
 | `libglib2.0-dev` | Core system library |
+| `libayatana-appindicator3-dev` | System tray / app indicator support |
 
 The **AppImage** bundles WebKitGTK and runs portably without system packages.
 
@@ -333,6 +335,7 @@ sudo apt install \
   libpango1.0-dev \
   libatk1.0-dev \
   libglib2.0-dev \
+  libayatana-appindicator3-dev \
   patchelf
 ```
 
@@ -423,6 +426,7 @@ Los artefactos de salida se colocan en `src-tauri/target/release/bundle/`.
 | `libpango1.0-dev` | Layout de texto |
 | `libatk1.0-dev` | Accesibilidad |
 | `libglib2.0-dev` | Librería central del sistema |
+| `libayatana-appindicator3-dev` | Soporte para bandeja del sistema / app indicator |
 
 El **AppImage** incluye WebKitGTK y se ejecuta de forma portable sin paquetes del sistema.
 
