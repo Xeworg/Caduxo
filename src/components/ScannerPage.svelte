@@ -120,6 +120,11 @@
   let scanError = $state("");
   let debounceNotice = $state("");
 
+  // Preserves the trimmed submitted scan string independently of scanInput,
+  // which is cleared after each resolution. Used in Registration mode
+  // (lot_match / product_match) to render the exact original scan.
+  let submittedScan = $state("");
+
   // 400 ms debounce guard. Per spec scenario `rapid double-scan is debounced`,
   // a repeat of the same trimmed value within 400 ms of the previous
   // successful resolution is ignored.
@@ -790,11 +795,13 @@
       );
       lastResolvedAt = Date.now();
       lastResolvedValue = trimmed;
+      submittedScan = trimmed;
       applyResolveResult(result);
     } catch (e) {
       scanError = $LL.scanner.errors.lookupFailed({
         msg: humanizeError(e),
       });
+      submittedScan = "";
     } finally {
       scanBusy = false;
       scanInput = "";
@@ -985,6 +992,7 @@
     lotBalances = [];
     lastResolvedAt = 0;
     lastResolvedValue = "";
+    submittedScan = "";
   }
 
   function resetMutationForm(): void {
@@ -1004,6 +1012,7 @@
     lotBalances = [];
     lastResolvedAt = 0;
     lastResolvedValue = "";
+    submittedScan = "";
   }
 
   // ── Registration: existing-product lot creation ───────────────────────────
@@ -1027,6 +1036,7 @@
     lotBalances = [];
     lastResolvedAt = 0;
     lastResolvedValue = "";
+    submittedScan = "";
   }
 
   // ── Registration: quick product creation (Unknown) ────────────────────────
@@ -1067,6 +1077,7 @@
     lotBalances = [];
     lastResolvedAt = 0;
     lastResolvedValue = "";
+    submittedScan = "";
   }
 
   /**
@@ -1079,6 +1090,7 @@
     resolved = null;
     lastResolvedAt = 0;
     lastResolvedValue = "";
+    submittedScan = "";
   }
 
   /**
@@ -1164,20 +1176,23 @@
          this store via `LotForm.lockedStoreId`. PR
          `scanner-default-store-lock`. -->
     <section
-      class="store-picker active-store-context"
+      class="active-store-context"
+      class:active-store-context--card={pickerStoreOptions.length > 1}
       aria-labelledby="active-store-context-title"
     >
       <div class="active-store-context-header">
         <h2 id="active-store-context-title" class="picker-title">
           {$LL.scanner.activeStoreContext.title()}
         </h2>
-        <span
-          class="locked-badge"
-          aria-label={$LL.scanner.activeStoreContext.lockedBadge()}
-          title={$LL.scanner.activeStoreContext.lockedBadge()}
-        >
-          {$LL.scanner.activeStoreContext.lockedBadge()}
-        </span>
+        {#if pickerStoreOptions.length > 1}
+          <span
+            class="locked-badge"
+            aria-label={$LL.scanner.activeStoreContext.lockedBadge()}
+            title={$LL.scanner.activeStoreContext.lockedBadge()}
+          >
+            {$LL.scanner.activeStoreContext.lockedBadge()}
+          </span>
+        {/if}
       </div>
       <p class="picker-body">{$LL.scanner.activeStoreContext.body()}</p>
 
@@ -1196,8 +1211,10 @@
           onchange={(v: string) => void changeActiveStore(v)}
         />
       {:else}
-        <!-- Single store: read-only display so the user still sees
-             the store the Scanner is operating against. -->
+        <!-- Single store: compact read-only display — heading and
+             store name are visible; explanatory body is available
+             to screen readers via the section's aria-labelledby.
+             No full card chrome. -->
         <p class="active-store-name" data-testid="active-store-name">
           <strong>{activeStore?.name ?? settings?.last_selected_store_id ?? ""}</strong>
         </p>
@@ -1610,13 +1627,11 @@
 
             <p class="resolved-line">
               <strong>{$LL.scanner.registration.scannedValueLabel()}:</strong>
-              <code class="scanned-code">
-                {#if resolved.match_type === "lot_match"}
-                  {resolved.lot.batch_code ?? $LL.scanner.registration.scannedValuePlaceholder()}
-                {:else}
-                  {(resolved as ScannerProductMatch).lots[0]?.batch_code ?? $LL.scanner.registration.scannedValuePlaceholder()}
-                {/if}
-              </code>
+              <code class="scanned-code">{submittedScan || $LL.scanner.registration.scannedValuePlaceholder()}</code>
+            </p>
+            <p class="resolved-line">
+              <strong>{$LL.scanner.registration.scannedSkuLabel()}:</strong>
+              <span class="muted">{activeProduct.sku}</span>
             </p>
             {#if registrationLotFormOpen}
               <LotForm
@@ -2221,13 +2236,22 @@
 
   /* ── Active-store context (always-visible Scanner surface) ─────── */
 
-  /* The active-store context panel reuses the store-picker block to
-     keep the visual contract aligned with the missing/stale picker:
-     same border, padding, and body copy styling. Only the header
-     grows a "Locked for new lots" badge and the actions row is
-     replaced with an inline name or a Select. */
+  /* Multi-store: reuses the store-picker chrome (border, padding, bg).
+     Single-store: compact inline strip — heading + name only, no card.
+     The card chrome is gated behind the --card modifier so single-store
+     does not inherit it from .store-picker. */
   .active-store-context {
     margin-bottom: 4px;
+  }
+
+  .active-store-context--card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
+    border-radius: 8px;
+    background: color-mix(in oklch, var(--color-base-200) 50%, transparent);
   }
 
   .active-store-context-header {
@@ -2235,6 +2259,33 @@
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+  }
+
+  /* Single-store: compact inline row — no border/padding chrome.
+     Heading stays visible for ARIA region. Body is sr-only (available
+     to screen readers through the section's aria-labelledby). */
+  .active-store-context:not(.active-store-context--card) .active-store-context-header {
+    display: inline-flex;
+  }
+
+  .active-store-context:not(.active-store-context--card) .picker-body {
+    /* sr-only: not visible but still in the DOM for screen readers */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  .active-store-context:not(.active-store-context--card) .active-store-name {
+    display: inline;
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--color-base-content);
   }
 
   .locked-badge {

@@ -185,6 +185,8 @@ import { isFractionalForIntegerUnit } from "../lib/movementRules.js";
           bind:value={realQuantityAsString}
           invalid={false}
           disabled={submitting}
+          min={0}
+          step={isIntegerUnit ? 1 : 0.01}
         />
         <span class="hint">{$LL.lotMovements.currentInventory({ current: currentBalance })}{isIntegerUnit ? $LL.lotMovements.integerNote() : ""}</span>
       </div>

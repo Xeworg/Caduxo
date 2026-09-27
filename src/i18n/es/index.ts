@@ -90,6 +90,15 @@ const es: BaseTranslation = {
       label: "Selección de lote FEFO",
       description:
         "Controla cómo la pestaña Escáner elige un lote cuando un escaneo resuelve a un producto con varios lotes. Los escaneos directos por código de lote siempre omiten esta política y usan el lote escaneado.",
+      tooltip: "Primero Vencido, Primero Fuera",
+      // Descripciones breves y orientadas al usuario para la opción seleccionada,
+      // mostradas debajo del selector para que el usuario entienda de inmediato
+      // la política activa.
+      selectedDescription: {
+        suggest_fefo: "Sugiere el lote más próximo a vencer. Podés elegir otro.",
+        require_fefo: "Fija el lote más próximo a vencer. Debés usarlo.",
+        manual_lot_choice: "Sin sugerencia. Elegís qué lote usar cada vez.",
+      },
       names: {
         suggest_fefo: "Sugerir FEFO (permitir cambiar)",
         require_fefo: "Requerir FEFO (sin cambio)",
@@ -347,6 +356,7 @@ const es: BaseTranslation = {
     productCategory: "Categoría",
     productUnit: "Unidad",
     productAlertDays: "Días de alerta antes de la caducidad",
+    alertDaysRangeError: "Introducí un número entero del 0 al 3650.",
     productNotes: "Notas",
     productBarcode: "Código de barras",
     addBarcode: "Añadir código de barras",
@@ -1131,6 +1141,7 @@ const es: BaseTranslation = {
     registration: {
       unknownHeading: "Creación rápida de producto",
       unknownBody: "El código escaneado no coincide con ningún producto existente. Elige dónde usarlo como punto de partida para un producto nuevo, o reescribe el SKU / código de barras.",
+      scannedSkuLabel: "SKU del producto",
       scannedValueLabel: "Valor escaneado",
       scannedValuePlaceholder: "(vacío)",
       routeAsSku: "Usar como SKU",
@@ -1289,6 +1300,64 @@ const es: BaseTranslation = {
   // etiquetas de la sección de tema siguen la instrucción explícita
   // del PR 5 para introducir el árbol de claves `settings.theme.*`
   // en el selector de la página de Configuración.
+  // Gestión del catálogo de unidades en Configuración (tarea ODD 2.6b).
+  unitCatalog: {
+    sectionTitle: "Catálogo de unidades",
+    description:
+      "Gestiona las unidades disponibles al crear productos. Las unidades predefinidas se pueden renombrar o archivar (archivar solo tiene éxito cuando la unidad no está en uso); las unidades personalizadas se pueden renombrar o archivar. Archivar está bloqueado mientras algún producto use la unidad.",
+    // Panel de unidades activas
+    activeLabel: "Unidades activas",
+    noActiveUnits: "No hay unidades activas.",
+    // Etiquetas de tipo
+    kind: {
+      integer: "Entero",
+      decimal: "Decimal",
+    },
+    // Acciones (tabla activa)
+    editDisplayName: "Renombrar",
+    archive: "Archivar",
+    restore: "Restaurar",
+    preset: "Predefinida",
+    createCustom: "Nueva unidad",
+    // Modo edición en línea
+    displayNameLabel: "Nombre para mostrar",
+    displayNamePlaceholder: "p. ej. Mi unidad personalizada",
+    saveRename: "Guardar",
+    cancelRename: "Cancelar",
+    // Formulario de creación
+    createUnitTitle: "Nueva unidad personalizada",
+    createUnitDesc: "Las unidades personalizadas se pueden renombrar o archivar más tarde.",
+    keyLabel: "Clave",
+    keyPlaceholder: "p. ej. mi-unidad",
+    displayNameNewPlaceholder: "p. ej. Mi Unidad",
+    kindLabel: "Tipo",
+    addUnit: "Añadir unidad",
+    creating: "Añadiendo…",
+    // Mensajes de validación
+    keyRequired: "La clave es obligatoria",
+    displayNameRequired: "El nombre para mostrar es obligatorio",
+    keyPattern: "La clave debe tener de 1 a 16 letras minúsculas, dígitos, guiones o guiones bajos",
+    // Panel de archivadas
+    archivedLabel: "Unidades archivadas",
+    noArchivedUnits: "No hay unidades archivadas.",
+    showArchived: "Mostrar archivadas",
+    hideArchived: "Ocultar archivadas",
+    // Mensajes de error
+    archiveError: "No se pudo archivar la unidad: {msg}",
+    renameError: "No se pudo renombrar la unidad: {msg}",
+    createError: "No se pudo crear la unidad: {msg}",
+    restoreError: "No se pudo restaurar la unidad: {msg}",
+    loadError: "No se pudieron cargar las unidades: {msg}",
+    // Confirmación
+    confirmArchive: "¿Archivar \"{name}\"?",
+    confirmArchiveBody:
+      "La unidad quedará oculta del selector de productos. Archivar está bloqueado mientras algún producto use esta unidad.",
+    confirmRestore: "¿Restaurar \"{name}\"?",
+    confirmRestoreBody: "La unidad estará disponible de nuevo en el selector de productos.",
+    confirmArchiveYes: "Archivar",
+    confirmRestoreYes: "Restaurar",
+  },
+
   settings: {
     theme: {
       title: "Tema",

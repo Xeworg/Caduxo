@@ -194,6 +194,8 @@
                     label={$LL.lotMovements.resolution.quantityToResolve()}
                     bind:value={quantityAsString}
                     disabled={submitting}
+                    min={0}
+                    step={1}
                 />
 
                 <label>

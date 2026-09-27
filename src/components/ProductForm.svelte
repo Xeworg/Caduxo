@@ -88,6 +88,25 @@
   let defaultAlertDays = 30;
   $: defaultAlertDays =
     Number.parseInt(defaultAlertDaysStr, 10) || 0;
+
+  /**
+   * Validates the raw alert-days string for format + range.
+   * Returns null when valid, or a localised error message when not.
+   * Validates on the raw string to catch fractional inputs like "30.5"
+   * that parseInt silently truncates to "30".
+   */
+  function validateAlertDaysRaw(raw: string): string | null {
+    // Reject non-numeric or fractional input (e.g. "30.5", "abc", "-5").
+    if (!/^\d+$/.test(raw)) {
+      return $LL.products.alertDaysRangeError();
+    }
+    const n = Number.parseInt(raw, 10);
+    // Range check: 0..3650.
+    if (n < 0 || n > 3650) {
+      return $LL.products.alertDaysRangeError();
+    }
+    return null;
+  }
   let notes = "";
   let isActive = true;
 
@@ -268,8 +287,12 @@
       errorMsg = $LL.products.productDescription() + " " + $LL.common.required();
       return;
     }
-    if (defaultAlertDays < 0) {
-      errorMsg = $LL.products.productAlertDays() + " " + $LL.errors.generic();
+    // Alert days validation: validate raw string format (nonnegative whole
+    // decimal digits) and range 0..3650 before submission. The derived
+    // `defaultAlertDays` is used for the payload.
+    const alertDaysRawError = validateAlertDaysRaw(defaultAlertDaysStr);
+    if (alertDaysRawError) {
+      errorMsg = alertDaysRawError;
       return;
     }
     submitting = true;
@@ -468,6 +491,9 @@
       label={$LL.products.productAlertDays()}
       type="number"
       required
+      min={0}
+      max={3650}
+      step={1}
     />
 
     {#if showInlineUnitForm}

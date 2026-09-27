@@ -89,6 +89,14 @@ const en: BaseTranslation = {
       label: "FEFO lot selection",
       description:
         "Controls how the Scanner tab picks a lot when a scan resolves to a product with multiple lots. Direct lot-code scans always bypass this policy and use the scanned lot.",
+      tooltip: "First Expired, First Out",
+      // Concise, user-facing descriptions for the selected option, shown below
+      // the selector so the user immediately understands the active policy.
+      selectedDescription: {
+        suggest_fefo: "Suggests the lot nearest expiry. You can pick a different one.",
+        require_fefo: "Locks to the lot nearest expiry. You must use it.",
+        manual_lot_choice: "No suggestion. You choose which lot to use every time.",
+      },
       names: {
         suggest_fefo: "Suggest FEFO (allow override)",
         require_fefo: "Require FEFO (disable override)",
@@ -349,6 +357,7 @@ const en: BaseTranslation = {
     productCategory: "Category",
     productUnit: "Unit",
     productAlertDays: "Alert days before expiry",
+    alertDaysRangeError: "Enter a whole number from 0 to 3650.",
     productNotes: "Notes",
     productBarcode: "Barcode",
     addBarcode: "Add barcode",
@@ -1129,6 +1138,7 @@ const en: BaseTranslation = {
     registration: {
       unknownHeading: "Quick product creation",
       unknownBody: "The scanned code did not match any existing product. Choose where to use it as the starting point for a new product, or retype the SKU / barcode yourself.",
+      scannedSkuLabel: "Product SKU",
       scannedValueLabel: "Scanned value",
       scannedValuePlaceholder: "(empty)",
       routeAsSku: "Use as SKU",
@@ -1285,6 +1295,64 @@ const en: BaseTranslation = {
   // page-level labels like `pageTitle` and `section.*`). Theme-section
   // labels follow the explicit PR 5 instruction to introduce the
   // `settings.theme.*` key tree for the Configuration page switcher.
+  // Unit catalog management section in Configuration (ODD task 2.6b).
+  unitCatalog: {
+    sectionTitle: "Unit catalog",
+    description:
+      "Manage the unit definitions available when creating products. Preset units can be renamed or archived (archiving succeeds only when the unit is not in use); custom units can be renamed or archived. Archiving is blocked when a unit is still in use.",
+    // Active units panel
+    activeLabel: "Active units",
+    noActiveUnits: "No active units.",
+    // Kind labels
+    kind: {
+      integer: "Integer",
+      decimal: "Decimal",
+    },
+    // Actions (active table)
+    editDisplayName: "Rename",
+    archive: "Archive",
+    restore: "Restore",
+    preset: "Preset",
+    createCustom: "New unit",
+    // Inline edit mode
+    displayNameLabel: "Display name",
+    displayNamePlaceholder: "e.g. My Custom Unit",
+    saveRename: "Save",
+    cancelRename: "Cancel",
+    // Create unit form
+    createUnitTitle: "New custom unit",
+    createUnitDesc: "Custom units can be renamed or archived later.",
+    keyLabel: "Key",
+    keyPlaceholder: "e.g. my-unit",
+    displayNameNewPlaceholder: "e.g. My Unit",
+    kindLabel: "Kind",
+    addUnit: "Add unit",
+    creating: "Adding…",
+    // Validation messages
+    keyRequired: "Key is required",
+    displayNameRequired: "Display name is required",
+    keyPattern: "Key must be 1–16 lowercase letters, digits, hyphens or underscores",
+    // Archived panel
+    archivedLabel: "Archived units",
+    noArchivedUnits: "No archived units.",
+    showArchived: "Show archived",
+    hideArchived: "Hide archived",
+    // Error messages
+    archiveError: "Could not archive unit: {msg}",
+    renameError: "Could not rename unit: {msg}",
+    createError: "Could not create unit: {msg}",
+    restoreError: "Could not restore unit: {msg}",
+    loadError: "Could not load units: {msg}",
+    // Confirmation
+    confirmArchive: "Archive \"{name}\"?",
+    confirmArchiveBody:
+      "The unit will be hidden from the product picker. Archiving is blocked while any product still uses this unit.",
+    confirmRestore: "Restore \"{name}\"?",
+    confirmRestoreBody: "The unit will be available again in the product picker.",
+    confirmArchiveYes: "Archive",
+    confirmRestoreYes: "Restore",
+  },
+
   settings: {
     theme: {
       title: "Theme",

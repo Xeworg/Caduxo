@@ -119,9 +119,28 @@
     $: quantity = Number.parseFloat(quantityStr) || 0;
     let unit = "";
     let expiryDate = "";
-    let alertDaysStr = "30";
-    let alertDaysBefore = 30;
-    $: alertDaysBefore = Number.parseInt(alertDaysStr, 10) || 0;
+  let alertDaysStr = "30";
+  let alertDaysBefore = 30;
+  $: alertDaysBefore = Number.parseInt(alertDaysStr, 10) || 0;
+
+  /**
+   * Validates the raw alert-days string for format + range.
+   * Returns null when valid, or a localised error message when not.
+   * Validates on the raw string to catch fractional inputs like "30.5"
+   * that parseInt silently truncates to "30".
+   */
+  function validateAlertDaysRaw(raw: string): string | null {
+    // Reject non-numeric or fractional input (e.g. "30.5", "abc", "-5").
+    if (!/^\d+$/.test(raw)) {
+      return $LL.products.alertDaysRangeError();
+    }
+    const n = Number.parseInt(raw, 10);
+    // Range check: 0..3650.
+    if (n < 0 || n > 3650) {
+      return $LL.products.alertDaysRangeError();
+    }
+    return null;
+  }
     let batchCode = "";
     let notes = "";
 
@@ -201,10 +220,15 @@
                 } else if (stores.length > 0) {
                     selectedStoreId = stores[0].id;
                 }
-                // Default expiry date: today + alertDaysBefore.
+                // Default expiry date: today + alertDaysBefore, using local calendar
+                // (not UTC, which `toISOString()` would produce — can shift the date
+                // by −1 day in negative-UTC-offset timezones).
                 const d = new Date();
                 d.setDate(d.getDate() + (defaultAlertDays > 0 ? defaultAlertDays : 30));
-                expiryDate = d.toISOString().slice(0, 10);
+                const y = d.getFullYear();
+                const m = d.getMonth() + 1;
+                const day = d.getDate();
+                expiryDate = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
             }
         } catch (e: unknown) {
             errorMsg = humanizeError(e);
@@ -358,6 +382,14 @@
         if (mode === "create" && quantity <= 0) {
             errorMsg = $LL.lotForm.quantityGreaterThanZero();
             return;
+        }
+        // Alert days validation: validate raw string format (nonnegative whole
+        // decimal digits) and range 0..3650 before submission. The derived
+        // `alertDaysBefore` is used for the payload.
+        const alertDaysRawError = validateAlertDaysRaw(alertDaysStr);
+        if (alertDaysRawError) {
+          errorMsg = alertDaysRawError;
+          return;
         }
         // Distribution validation lives in the editor; re-check here as
         // a defensive belt-and-suspenders so the submit button is the
@@ -682,6 +714,8 @@
                     label={$LL.lotForm.quantityStar()}
                     type="number"
                     required
+                    min={productUnitKind === "decimal" ? 0.01 : 1}
+                    step={productUnitKind === "decimal" ? 0.01 : 1}
                 />
             {/if}
 
@@ -720,6 +754,9 @@
                 label={$LL.lotForm.alertDaysStar()}
                 type="number"
                 required
+                min={0}
+                max={3650}
+                step={1}
             />
         </div>
 

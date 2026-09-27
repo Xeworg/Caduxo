@@ -68,6 +68,12 @@
     maxlength?: number;
     /** Native `minlength` attribute. */
     minlength?: number;
+    /** Native `min` attribute for numeric types. */
+    min?: number;
+    /** Native `max` attribute for numeric types. */
+    max?: number;
+    /** Native `step` attribute for numeric types. */
+    step?: number;
     /** Plain accessible label override (rare). */
     "aria-label"?: string;
     /** id of an element that describes the input (helper text, error message). */
@@ -93,6 +99,9 @@
     name,
     maxlength,
     minlength,
+    min,
+    max,
+    step,
     "aria-label": ariaLabel,
     "aria-describedby": ariaDescribedBy,
     id,
@@ -153,6 +162,9 @@
     {disabled}
     {maxlength}
     {minlength}
+    {min}
+    {max}
+    {step}
     class="input {sizeClass} {invalidClass} motion-reduce:transition-none w-full"
     aria-label={ariaLabel}
     aria-describedby={effectiveDescribedBy}
