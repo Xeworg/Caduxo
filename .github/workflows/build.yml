@@ -101,7 +101,7 @@ jobs:
         shell: powershell
 
       - name: Upload bundle artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: caduxo-bundles-${{ runner.os }}
           path: ${{ matrix.tarball }}
@@ -117,7 +117,7 @@ jobs:
       contents: write
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           path: release-assets
           pattern: caduxo-bundles-*
