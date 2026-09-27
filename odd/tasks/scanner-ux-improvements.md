@@ -231,7 +231,7 @@ Seed one catalog entry per existing stock-out `movement_kind` with clear, user-f
 - [x] Omit a “preset” badge: the current DTO does not distinguish seeded from custom entries.
 - [ ] Keep Rust formatting changes and other pre-existing dirty files outside this work unit.
 
-**Status: implementation independently verified; work-unit commit pending.** Independent verification caught and the implementation corrected two runtime defects: `loadReasonsCatalog()` was missing from `onMount`, and localized movement-kind dictionary keys used underscores instead of the backend `exit:` wire values. Final verification passed: `npm run check` (0 errors/warnings), `npx svelte-check --tsconfig ./tsconfig.json --threshold warning` (0/0), `npm run i18n:generate` (up to date, no mutation), `npm run build`, and `git diff --check`. No browser/E2E harness.
+**Status: complete — independently verified.** Independent verification caught and the implementation corrected two runtime defects: `loadReasonsCatalog()` was missing from `onMount`, and localized movement-kind dictionary keys used underscores instead of the backend `exit:` wire values. Final verification passed: `npm run check` (0 errors/warnings), `npx svelte-check --tsconfig ./tsconfig.json --threshold warning` (0/0), `npm run i18n:generate` (up to date, no mutation), `npm run build`, and `git diff --check`. No browser/E2E harness. Work-unit commit: `099e580`.
 
 ### Task 2.8: Shared Catalog UX
 - [ ] Reuse consistent archive confirmation and active/archived presentation where it fits both catalogs.
@@ -273,7 +273,7 @@ Seed one catalog entry per existing stock-out `movement_kind` with clear, user-f
    - 2.7b catalog repository/service/command CRUD — **complete** (independent verification: full Rust library suite 823 passed; stale migration-count assertions fixed)
    - 2.7c movement DTO/service snapshot + validations — **complete**, commit `30fcd58` (independent verification: full Rust library suite 829 passed; `cargo check` and `cargo fmt -- --check` passed)
    - 2.7d replace stock-out selector + history display — **complete**; commits `68253ab` (client API foundation) and `b37bef3` (selector, history, retry UI)
-   - 2.7e catalog management UI — **implemented and independently verified; work-unit commit pending**. Includes active/archived catalog management, create with closed kind selection, rename label only, and archive/restore confirmation. Corrections verified against backend wire kinds; frontend checks/build/i18n generation passed. No browser/E2E harness.
+   - 2.7e catalog management UI — **complete**, commit `099e580`. Includes active/archived catalog management, create with closed kind selection, rename label only, and archive/restore confirmation. Corrections verified against backend wire kinds; frontend checks/build/i18n generation passed. No browser/E2E harness.
 8. Task 2.8 shared catalog UX — pending.
 
 Each task must be completed with proportionate tests and evidence before closure. Create a separate Conventional Commit for each verified work unit on this feature branch. Do not publish without explicit user authorization.
