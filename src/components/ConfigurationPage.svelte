@@ -54,12 +54,24 @@
     import Alert from "./ui/Alert.svelte";
     import Card from "./ui/Card.svelte";
     import LoadingState from "./ui/LoadingState.svelte";
+    import Modal from "./ui/Modal.svelte";
     import {
         AVAILABLE_THEMES,
         setTheme,
         theme,
         type ThemeName,
     } from "./ui/theme/themeStore.svelte.js";
+    import Button from "./ui/Button.svelte";
+    import {
+        listUnitDefinitions,
+        listArchivedUnitDefinitions,
+        createUnitDefinition,
+        renameUnitDefinition,
+        archiveUnitDefinition,
+        unarchiveUnitDefinition,
+        type UnitDefinitionResponse,
+    } from "../lib/unit_definitions.js";
+    import type { UnitKind } from "../lib/products.js";
 
     // Per-locale display names. The dictionary keys live in
     // `configuration.language.names` keyed by `SupportedLocale` code, so
@@ -118,25 +130,25 @@
 
     // ─── State ───────────────────────────────────────────────────────────────────
 
-    let loading = true;
-    let savingLocation = false;
-    let settings: SettingsResponse | null = null;
-    let errorMsg = "";
-    let localeErrorMsg = "";
+    let loading = $state(true);
+    let savingLocation = $state(false);
+    let settings: SettingsResponse | null = $state(null);
+    let errorMsg = $state("");
+    let localeErrorMsg = $state("");
 
     // Local toggle value; updated optimistically on click.
     // Reverted if the save fails.
-    let requireLocation: boolean = true;
+    let requireLocation: boolean = $state(true);
 
     // Local locale value for the selector; kept in sync with the rune.
-    let currentLocale: SupportedLocale = "en";
+    let currentLocale: SupportedLocale = $state("en");
 
     // Theme switcher state. `switchingTheme` is set true during the
     // optimistic apply; it clears when the IPC call resolves or
     // rejects. `themeError` carries the human-readable error message
     // surfaced in the inline `Alert.svelte` when `setTheme` rejects.
-    let switchingTheme = false;
-    let themeError = "";
+    let switchingTheme = $state(false);
+    let themeError = $state("");
 
     // Scanner FEFO policy selector (`scanner-quick-operations` PR 3).
     // `currentFefoPolicy` is the optimistic local copy; `savingFefoPolicy`
@@ -147,9 +159,9 @@
         "require_fefo",
         "manual_lot_choice",
     ];
-    let currentFefoPolicy: FefoPolicy = "suggest_fefo";
-    let savingFefoPolicy = false;
-    let fefoPolicyError = "";
+    let currentFefoPolicy: FefoPolicy = $state("suggest_fefo");
+    let savingFefoPolicy = $state(false);
+    let fefoPolicyError = $state("");
 
     // Close-window behaviour selector (`scanner-quick-operations` PR 3).
     // `currentCloseBehavior` mirrors the persisted value; `savingCloseBehavior`
@@ -159,9 +171,86 @@
         "minimize_to_tray",
         "exit_application",
     ];
-    let currentCloseBehavior: CloseBehavior = "minimize_to_tray";
-    let savingCloseBehavior = false;
-    let closeBehaviorError = "";
+    let currentCloseBehavior: CloseBehavior = $state("minimize_to_tray");
+    let savingCloseBehavior = $state(false);
+    let closeBehaviorError = $state("");
+
+    // ─── Unit catalog state ─────────────────────────────────────────────────────
+
+    // ─── Unit catalog helpers ──────────────────────────────────────────────────
+
+    // Kind-first, display-name-second order for the active unit rows.
+    // The sort mirrors the `groupedActive` derived grouping so the table
+    // renders in a consistent, predictable order without relying on
+    // server-return order.
+    const KIND_ORDER: Record<UnitKind, number> = { integer: 0, decimal: 1 };
+
+    function insertActiveSorted(
+        units: UnitDefinitionResponse[],
+        unit: UnitDefinitionResponse,
+    ): UnitDefinitionResponse[] {
+        const targetKind = KIND_ORDER[unit.kind];
+        for (let i = 0; i < units.length; i++) {
+            const u = units[i];
+            const uKind = KIND_ORDER[u.kind];
+            if (targetKind < uKind || (targetKind === uKind && unit.display_name < u.display_name)) {
+                const result = [...units];
+                result.splice(i, 0, unit);
+                return result;
+            }
+        }
+        return [...units, unit];
+    }
+
+    let loadingUnits = $state(true);
+    let unitsLoadError = $state("");
+    let activeUnits = $state<UnitDefinitionResponse[]>([]);
+    let archivedUnits = $state<UnitDefinitionResponse[]>([]);
+    let showArchived = $state(false);
+
+    // Inline rename state.
+    let renamingId: string | null = $state(null);
+    let renameValue = $state("");
+    let savingRename = $state(false);
+    let renameError = $state("");
+
+    // Archive confirmation state.
+    let archiveTarget: UnitDefinitionResponse | null = $state(null);
+    let confirmingArchive = $state(false);
+    let archivingUnit = $state(false);
+    let archiveApiError = $state("");
+
+    // Restore confirmation state.
+    let restoreTarget: UnitDefinitionResponse | null = $state(null);
+    let confirmingRestore = $state(false);
+    let restoringUnit = $state(false);
+    let restoreApiError = $state("");
+
+    // Create-unit form state.
+    let showCreateForm = $state(false);
+    let createKey = $state("");
+    let createDisplayName = $state("");
+    let createKind: UnitKind = $state("integer");
+    let creatingUnit = $state(false);
+    let createError = $state("");
+
+    // ─── Helpers ─────────────────────────────────────────────────────────────
+
+    function kindBadgeClass(kind: UnitKind): string {
+        return kind === "integer" ? "badge-neutral" : "badge-outline";
+    }
+
+    // Group active units by kind for ordered display.
+    const groupedActive = $derived.by(() => {
+        const groups: Record<UnitKind, UnitDefinitionResponse[]> = {
+            integer: [],
+            decimal: [],
+        };
+        for (const u of activeUnits) {
+            groups[u.kind].push(u);
+        }
+        return groups;
+    });
 
     // Per-option display names for the FEFO policy selector. The dictionary
     // keys live in `configuration.scannerFefoPolicy.names` keyed by the
@@ -215,6 +304,8 @@
         } finally {
             loading = false;
         }
+        // Unit catalog loads independently of settings so each can fail separately.
+        await loadUnitCatalog();
     });
 
     // ─── Locale selector handler ────────────────────────────────────────────────
@@ -528,9 +619,48 @@
                 <div class="setting-info">
                     <span class="setting-label">
                         {$LL.configuration.scannerFefoPolicy.label()}
+                        <!--
+                          Rendered FEFO tooltip — pointer + keyboard accessible.
+                          The `tooltip` key carries the acronym expansion
+                          ("First Expired, First Out" / "Primero Vencido,
+                          Primero Fuera") so the user understands the picker
+                          label at a glance. `title` provides the native browser
+                          tooltip on hover; `aria-label` ensures screen readers
+                          also announce the explanation on focus.
+                        -->
+                        <button
+                            type="button"
+                            class="fefo-tooltip-trigger"
+                            title={$LL.configuration.scannerFefoPolicy.tooltip()}
+                            aria-label={$LL.configuration.scannerFefoPolicy.tooltip()}
+                        >
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 16 16"
+                                fill="currentColor"
+                                class="fefo-tooltip-icon"
+                                aria-hidden="true"
+                                focusable="false"
+                            >
+                                <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 2.25a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5zM8.75 6a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 1.5 0V6z" />
+                            </svg>
+                        </button>
                     </span>
                     <span class="setting-desc">
                         {$LL.configuration.scannerFefoPolicy.description()}
+                    </span>
+                    <!--
+                      Dynamic selected-policy explanation. Uses the
+                      `selectedDescription` dictionary keyed by the current
+                      `currentFefoPolicy` value so the user immediately
+                      understands the active policy without having to re-read
+                      the general description above.
+                    -->
+                    <span class="fefo-selected-explanation">
+                        {(() => {
+                            const descriptions = $LL.configuration.scannerFefoPolicy.selectedDescription as unknown as Record<FefoPolicy, () => string>;
+                            return descriptions[currentFefoPolicy]?.() ?? "";
+                        })()}
                     </span>
                 </div>
 
@@ -630,6 +760,374 @@
                 </div>
             {/if}
         </Card>
+
+        <!-- ─── Unit catalog section (ODD task 2.6b) ─────────────────────── -->
+        <Card tone="default">
+            <h2 class="section-title">
+                {$LL.unitCatalog.sectionTitle()}
+            </h2>
+            <p class="section-desc">
+                {$LL.unitCatalog.description()}
+            </p>
+
+            {#if loadingUnits}
+                <LoadingState
+                    variant="spinner"
+                    label={$LL.common.loading()}
+                />
+            {:else if unitsLoadError}
+                <Alert variant="error">{unitsLoadError}</Alert>
+            {:else}
+                <!-- ─── Active units ─────────────────────────────────────── -->
+                <div class="unit-block">
+                    <div class="unit-block-header">
+                        <span class="unit-block-label">
+                            {$LL.unitCatalog.activeLabel()}
+                        </span>
+                        <span class="unit-count-badge">
+                            {activeUnits.length}
+                        </span>
+                    </div>
+
+                    {#if activeUnits.length === 0}
+                        <p class="unit-empty">{$LL.unitCatalog.noActiveUnits()}</p>
+                    {:else}
+                        {#each ([
+                            { kind: 'integer' as const, label: $LL.unitCatalog.kind.integer(), units: groupedActive.integer },
+                            { kind: 'decimal' as const, label: $LL.unitCatalog.kind.decimal(), units: groupedActive.decimal },
+                        ]) as group (group.kind)}
+                            {#if group.units.length > 0}
+                                <div class="unit-kind-group">
+                                    <span class="unit-kind-label">{group.label}</span>
+                                    <div class="unit-list">
+                                        {#each group.units as unit (unit.id)}
+                                            <div class="unit-row">
+                                                <div class="unit-info">
+                                                    <span class="unit-badge {kindBadgeClass(unit.kind)}">{group.label}</span>
+                                                    {#if renamingId === unit.id}
+                                                        <input
+                                                            class="input input-sm unit-rename-input"
+                                                            type="text"
+                                                            bind:value={renameValue}
+                                                            onkeydown={(e) => {
+                                                                if (e.key === "Enter") submitRename();
+                                                                if (e.key === "Escape") cancelRename();
+                                                            }}
+                                                            disabled={savingRename}
+                                                            aria-label={$LL.unitCatalog.displayNameLabel()}
+                                                        />
+                                                    {:else}
+                                                        <span class="unit-display-name">{unit.display_name}</span>
+                                                    {/if}
+                                                    {#if unit.is_preset}
+                                                        <span class="unit-preset-tag">{$LL.unitCatalog.preset()}</span>
+                                                    {/if}
+                                                </div>
+                                                <div class="unit-actions">
+                                                    {#if renamingId === unit.id}
+                                                        <Button
+                                                            size="sm"
+                                                            variant="primary"
+                                                            loading={savingRename}
+                                                            onclick={submitRename}
+                                                        >
+                                                            {$LL.unitCatalog.saveRename()}
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onclick={cancelRename}
+                                                            disabled={savingRename}
+                                                        >
+                                                            {$LL.unitCatalog.cancelRename()}
+                                                        </Button>
+                                                    {:else}
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onclick={() => startRename(unit)}
+                                                        >
+                                                            {$LL.unitCatalog.editDisplayName()}
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onclick={() => requestArchive(unit)}
+                                                        >
+                                                            {$LL.unitCatalog.archive()}
+                                                        </Button>
+                                                    {/if}
+                                                </div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                </div>
+                            {/if}
+                        {/each}
+                    {/if}
+
+                    {#if renameError}
+                        <div class="unit-error">
+                            <Alert variant="error">{renameError}</Alert>
+                        </div>
+                    {/if}
+                </div>
+
+                <!-- ─── New unit form ───────────────────────────────────── -->
+                {#if showCreateForm}
+                    <div class="unit-create-form">
+                        <h3 class="unit-create-title">
+                            {$LL.unitCatalog.createUnitTitle()}
+                        </h3>
+                        <p class="unit-create-desc">
+                            {$LL.unitCatalog.createUnitDesc()}
+                        </p>
+
+                        <div class="unit-create-fields">
+                            <div class="unit-create-row">
+                                <div class="unit-create-field">
+                                    <label
+                                        class="fieldset-label"
+                                        for="create-unit-key"
+                                    >
+                                        {$LL.unitCatalog.keyLabel()}
+                                        <span class="text-error" aria-hidden="true">*</span>
+                                    </label>
+                                    <input
+                                        id="create-unit-key"
+                                        class="input input-sm w-full"
+                                        type="text"
+                                        placeholder={$LL.unitCatalog.keyPlaceholder()}
+                                        bind:value={createKey}
+                                        disabled={creatingUnit}
+                                        onkeydown={(e) => {
+                                            if (
+                                                e.key === "Enter" &&
+                                                createKey.trim() &&
+                                                createDisplayName.trim()
+                                            )
+                                                submitCreateUnit();
+                                        }}
+                                    />
+                                </div>
+                                <div class="unit-create-field">
+                                    <label
+                                        class="fieldset-label"
+                                        for="create-unit-name"
+                                    >
+                                        {$LL.unitCatalog.displayNameLabel()}
+                                        <span class="text-error" aria-hidden="true">*</span>
+                                    </label>
+                                    <input
+                                        id="create-unit-name"
+                                        class="input input-sm w-full"
+                                        type="text"
+                                        placeholder={$LL.unitCatalog.displayNameNewPlaceholder()}
+                                        bind:value={createDisplayName}
+                                        disabled={creatingUnit}
+                                        onkeydown={(e) => {
+                                            if (
+                                                e.key === "Enter" &&
+                                                createKey.trim() &&
+                                                createDisplayName.trim()
+                                            )
+                                                submitCreateUnit();
+                                        }}
+                                    />
+                                </div>
+                                <div class="unit-create-field">
+                                    <label
+                                        class="fieldset-label"
+                                        for="create-unit-kind"
+                                    >
+                                        {$LL.unitCatalog.kindLabel()}
+                                    </label>
+                                    <select
+                                        id="create-unit-kind"
+                                        class="select select-sm w-full"
+                                        bind:value={createKind}
+                                        disabled={creatingUnit}
+                                    >
+                                        <option value="integer">{$LL.unitCatalog.kind.integer()}</option>
+                                        <option value="decimal">{$LL.unitCatalog.kind.decimal()}</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {#if createError}
+                            <div class="unit-error">
+                                <Alert variant="error">{createError}</Alert>
+                            </div>
+                        {/if}
+
+                        <div class="unit-create-actions">
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                loading={creatingUnit}
+                                disabled={!createKey.trim() || !createDisplayName.trim()}
+                                onclick={submitCreateUnit}
+                            >
+                                {$LL.unitCatalog.addUnit()}
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onclick={closeCreateForm}
+                                disabled={creatingUnit}
+                            >
+                                {$LL.common.cancel()}
+                            </Button>
+                        </div>
+                    </div>
+                {:else}
+                    <div class="unit-create-trigger">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onclick={openCreateForm}
+                        >
+                            {$LL.unitCatalog.createCustom()}
+                        </Button>
+                    </div>
+                {/if}
+
+                <!-- ─── Archived units ──────────────────────────────────── -->
+                <div class="unit-block">
+                    <button
+                        class="unit-block-header unit-block-toggle"
+                        onclick={() => (showArchived = !showArchived)}
+                        aria-expanded={showArchived}
+                    >
+                        <span class="unit-block-label">
+                            {$LL.unitCatalog.archivedLabel()}
+                        </span>
+                        <span class="unit-count-badge">
+                            {archivedUnits.length}
+                        </span>
+                        <span class="unit-toggle-icon">
+                            {showArchived ? "▲" : "▼"}
+                        </span>
+                    </button>
+
+                    {#if showArchived}
+                        {#if archivedUnits.length === 0}
+                            <p class="unit-empty">{$LL.unitCatalog.noArchivedUnits()}</p>
+                        {:else}
+                            <div class="unit-list">
+                                {#each archivedUnits as unit (unit.id)}
+                                    <div class="unit-row unit-row-archived">
+                                        <div class="unit-info">
+                                            <span class="unit-badge {kindBadgeClass(unit.kind)}">
+                                                {unit.kind === "integer"
+                                                    ? $LL.unitCatalog.kind.integer()
+                                                    : $LL.unitCatalog.kind.decimal()}
+                                            </span>
+                                            <span class="unit-display-name unit-display-name-muted">
+                                                {unit.display_name}
+                                            </span>
+                                        </div>
+                                        <div class="unit-actions">
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onclick={() => requestRestore(unit)}
+                                            >
+                                                {$LL.unitCatalog.restore()}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                {/each}
+                            </div>
+                        {/if}
+                    {/if}
+                </div>
+
+                <!-- ─── Archive confirmation modal ─────────────────────── -->
+                <Modal
+                    bind:open={confirmingArchive}
+                    titleId="archive-modal-title"
+                    descriptionId="archive-modal-desc"
+                    closeOnBackdrop={false}
+                    onclose={() => { archiveTarget = null; }}
+                >
+                    {#snippet children()}
+                        <h2 id="archive-modal-title" class="modal-title">
+                            {$LL.unitCatalog.confirmArchive({ name: archiveTarget?.display_name ?? '' })}
+                        </h2>
+                        <p id="archive-modal-desc" class="modal-body">
+                            {$LL.unitCatalog.confirmArchiveBody()}
+                        </p>
+                        {#if archiveApiError}
+                            <div class="unit-error">
+                                <Alert variant="error">{archiveApiError}</Alert>
+                            </div>
+                        {/if}
+                    {/snippet}
+                    {#snippet footer()}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onclick={cancelArchive}
+                            disabled={archivingUnit}
+                        >
+                            {$LL.common.cancel()}
+                        </Button>
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            loading={archivingUnit}
+                            onclick={confirmArchive}
+                        >
+                            {$LL.unitCatalog.confirmArchiveYes()}
+                        </Button>
+                    {/snippet}
+                </Modal>
+
+                <!-- ─── Restore confirmation modal ─────────────────────── -->
+                <Modal
+                    bind:open={confirmingRestore}
+                    titleId="restore-modal-title"
+                    descriptionId="restore-modal-desc"
+                    closeOnBackdrop={false}
+                    onclose={() => { restoreTarget = null; }}
+                >
+                    {#snippet children()}
+                        <h2 id="restore-modal-title" class="modal-title">
+                            {$LL.unitCatalog.confirmRestore({ name: restoreTarget?.display_name ?? '' })}
+                        </h2>
+                        <p id="restore-modal-desc" class="modal-body">
+                            {$LL.unitCatalog.confirmRestoreBody()}
+                        </p>
+                        {#if restoreApiError}
+                            <div class="unit-error">
+                                <Alert variant="error">{restoreApiError}</Alert>
+                            </div>
+                        {/if}
+                    {/snippet}
+                    {#snippet footer()}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onclick={cancelRestore}
+                            disabled={restoringUnit}
+                        >
+                            {$LL.common.cancel()}
+                        </Button>
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            loading={restoringUnit}
+                            onclick={confirmRestore}
+                        >
+                            {$LL.unitCatalog.confirmRestoreYes()}
+                        </Button>
+                    {/snippet}
+                </Modal>
+            {/if}
+        </Card>
+
     {/if}
 </div>
 
@@ -729,5 +1227,255 @@
     /* ─── Section status (loading / error) ───────────────────────────────────── */
     .section-status {
         margin-top: 12px;
+    }
+
+    /* ─── Section description ─────────────────────────────────────────────────── */
+    .section-desc {
+        font-size: 0.82rem;
+        color: var(--color-secondary);
+        line-height: 1.5;
+        margin: 0 0 16px 0;
+    }
+
+    /* ─── Unit catalog ───────────────────────────────────────────────────────── */
+
+    .unit-block {
+        margin-bottom: 16px;
+    }
+
+    .unit-block-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .unit-block-label {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--color-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .unit-count-badge {
+        font-size: 0.75rem;
+        background: color-mix(in oklch, var(--color-secondary) 15%, transparent);
+        color: var(--color-secondary);
+        border-radius: 999px;
+        padding: 1px 7px;
+        font-weight: 500;
+    }
+
+    .unit-block-toggle {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+        font: inherit;
+        text-align: left;
+        width: 100%;
+    }
+
+    .unit-toggle-icon {
+        font-size: 0.7rem;
+        color: var(--color-secondary);
+        margin-left: auto;
+    }
+
+    .unit-kind-group {
+        margin-bottom: 12px;
+    }
+
+    .unit-kind-label {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--color-secondary);
+        margin-bottom: 4px;
+        padding-left: 2px;
+    }
+
+    .unit-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .unit-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 6px 8px;
+        border-radius: 0.375rem;
+        border: 1px solid color-mix(in oklch, var(--color-base-300) 50%, transparent);
+    }
+
+    .unit-row-archived {
+        opacity: 0.75;
+    }
+
+    .unit-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        flex: 1;
+    }
+
+    .unit-badge {
+        font-size: 0.72rem;
+        padding: 2px 6px;
+        border-radius: 0.25rem;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .unit-display-name {
+        font-size: 0.9rem;
+        color: var(--color-base-content);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .unit-display-name-muted {
+        color: var(--color-secondary);
+        text-decoration: line-through;
+        opacity: 0.7;
+    }
+
+    .unit-preset-tag {
+        font-size: 0.68rem;
+        color: var(--color-secondary);
+        background: color-mix(in oklch, var(--color-secondary) 10%, transparent);
+        border: 1px solid color-mix(in oklch, var(--color-secondary) 25%, transparent);
+        border-radius: 0.25rem;
+        padding: 1px 5px;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .unit-rename-input {
+        min-width: 160px;
+        flex-shrink: 0;
+    }
+
+    .unit-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+    }
+
+    .unit-error {
+        margin-top: 8px;
+    }
+
+    .unit-empty {
+        font-size: 0.82rem;
+        color: var(--color-secondary);
+        padding: 8px 2px;
+        margin: 0;
+    }
+
+    /* ─── Create unit form ───────────────────────────────────────────────────── */
+
+    .unit-create-form {
+        border: 1px solid color-mix(in oklch, var(--color-base-300) 60%, transparent);
+        border-radius: 0.5rem;
+        padding: 12px;
+        margin-bottom: 16px;
+        background: color-mix(in oklch, var(--color-base-200) 30%, transparent);
+    }
+
+    .unit-create-title {
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: var(--color-base-content);
+        margin: 0 0 4px 0;
+    }
+
+    .unit-create-desc {
+        font-size: 0.8rem;
+        color: var(--color-secondary);
+        margin: 0 0 12px 0;
+    }
+
+    .unit-create-fields {
+        margin-bottom: 12px;
+    }
+
+    .unit-create-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .unit-create-field {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        flex: 1;
+        min-width: 120px;
+    }
+
+    .unit-create-actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    .unit-create-trigger {
+        margin-bottom: 16px;
+    }
+
+    /* ─── Modal content ─────────────────────────────────────────────────────── */
+
+    .modal-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--color-base-content);
+        margin: 0 0 8px 0;
+    }
+
+    .modal-body {
+        font-size: 0.85rem;
+        color: var(--color-secondary);
+        line-height: 1.5;
+        margin: 0 0 16px 0;
+    }
+
+    /* ─── FEFO tooltip trigger ─────────────────────────────────────────────── */
+
+    .fefo-tooltip-trigger {
+        background: none;
+        border: none;
+        padding: 0 2px;
+        cursor: help;
+        vertical-align: middle;
+        display: inline-flex;
+        align-items: center;
+        color: var(--color-secondary);
+    }
+
+    .fefo-tooltip-trigger:focus-visible {
+        outline: 2px solid var(--color-primary);
+        outline-offset: 2px;
+        border-radius: 2px;
+    }
+
+    .fefo-tooltip-icon {
+        width: 0.85em;
+        height: 0.85em;
+        pointer-events: none;
+    }
+
+    /* ─── FEFO selected-policy explanation ─────────────────────────────────── */
+
+    .fefo-selected-explanation {
+        font-size: 0.8rem;
+        color: var(--color-primary);
+        display: block;
+        font-style: italic;
     }
 </style>
