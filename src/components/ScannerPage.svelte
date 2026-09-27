@@ -69,13 +69,15 @@
     type EnrichedLocation,
   } from "../lib/locations.js";
   import {
-    NOTE_REQUIRED_EXITS,
-    getExitKindLabel,
-    EXIT_KINDS,
-    type ExitKind,
     buildMovementKindLabelRecord,
     getMovementKindLabel,
+    notesRequiredByMovementKind,
   } from "../lib/movementRules.js";
+  import {
+    listStockOutReasons,
+    listAllStockOutReasons,
+    type StockOutReason,
+  } from "../lib/stock_out_reasons.js";
   import {
     createLotMovement,
     getLotLocationBalances,
@@ -103,12 +105,7 @@
   // ── Mode union ────────────────────────────────────────────────────────────
   type Mode = "sale" | "registration" | "stock_out" | "lot_context" | "move_stock" | "adjust_count";
 
-  // Non-sale exit reasons for Stock-out mode. `exit:sale` is intentionally
-  // absent — Stock-out cannot record a sale (per spec scenario).
-  // Derived from the shared EXIT_KINDS; `getExitKindLabel` provides labels.
-  const STOCK_OUT_KINDS: readonly ExitKind[] = EXIT_KINDS.filter(
-    (k) => k !== "exit:sale",
-  );
+
 
   // ── State ─────────────────────────────────────────────────────────────────
 
@@ -119,6 +116,11 @@
   let scanBusy = $state(false);
   let scanError = $state("");
   let debounceNotice = $state("");
+
+  // Preserves the trimmed submitted scan string independently of scanInput,
+  // which is cleared after each resolution. Used in Registration mode
+  // (lot_match / product_match) to render the exact original scan.
+  let submittedScan = $state("");
 
   // 400 ms debounce guard. Per spec scenario `rapid double-scan is debounced`,
   // a repeat of the same trimmed value within 400 ms of the previous
@@ -167,8 +169,11 @@
   let loadingBalances = $state(false);
 
   // Stock-out specific state.
-  let exitReason = $state("");
+  let exitReasonId = $state("");
   let notes = $state("");
+  let stockOutReasons = $state<StockOutReason[]>([]);
+  let loadingStockOutReasons = $state(false);
+  let stockOutReasonsError = $state("");
 
   // Common mutation bookkeeping.
   let submitting = $state(false);
@@ -252,13 +257,40 @@
     return null;
   });
 
-  // Reason picker options for Stock-out (excludes `exit:sale`).
+  // Active catalog reasons for Stock-out. Loaded lazily when the mode is
+  // first activated so the Scanner only pays the round-trip once per visit.
   let stockOutReasonOptions = $derived(
-    STOCK_OUT_KINDS.map((r) => ({
-      value: r,
-      label: getExitKindLabel(r, $LL),
+    stockOutReasons.map((r) => ({
+      value: r.id,
+      label: r.display_name,
     })),
   );
+
+  // Set of archived reason IDs, populated from `listAllStockOutReasons`.
+  // Used to annotate historical movement rows with an "archived" badge when
+  // `movement.exit_reason_id` refers to a reason that has since been archived.
+  // Loads non-blocking; a failure leaves the set empty (safe default — no badge).
+  let archivedReasonIds = $state<Set<string>>(new Set());
+
+  async function loadArchivedReasonIds(): Promise<void> {
+    try {
+      const all = await listAllStockOutReasons();
+      archivedReasonIds = new Set(
+        all.filter((r) => r.archived_at !== null).map((r) => r.id),
+      );
+    } catch {
+      // Failure-safe: leave the set empty so no rows are incorrectly marked.
+      archivedReasonIds = new Set();
+    }
+  }
+
+  // Looks up the movement_kind for the currently selected catalog reason.
+  // Used to gate the notes requirement before submission.
+  let selectedReasonMovementKind = $derived.by((): string => {
+    if (!exitReasonId) return "";
+    const reason = stockOutReasons.find((r) => r.id === exitReasonId);
+    return reason?.movement_kind ?? "";
+  });
 
   // Lot picker options for ProductMatch (read-only when `require_fefo`).
   let lotPickerOptions = $derived.by((): Array<{ value: string; label: string }> => {
@@ -339,16 +371,16 @@
 
   let canConfirmStockOut = $derived.by((): boolean => {
     if (!resolvedLot) return false;
-    if (!exitReason) return false;
+    if (!exitReasonId) return false;
     if (quantity <= 0) return false;
     if (!locationId) return false;
     if (quantity > selectedBalance) return false;
-    if (NOTE_REQUIRED_EXITS.includes(exitReason as ExitKind) && !notes.trim()) return false;
+    if (requiresNotes && !notes.trim()) return false;
     return true;
   });
 
   let requiresNotes = $derived(
-    NOTE_REQUIRED_EXITS.includes(exitReason as ExitKind),
+    notesRequiredByMovementKind(selectedReasonMovementKind),
   );
 
   // Scanner-tab availability: the page is interactive only when settings
@@ -526,12 +558,30 @@
 
   let _lotContextKindLabels = $derived(buildMovementKindLabelRecord($LL));
 
-  function lotContextMovementLabel(kind: string, direction?: string | null): string {
+  /**
+   * Renders the movement-kind label for a ledger row.
+   *
+   * For inventory_adjustment with a direction, returns the direction-specific
+   * localized label. For all other kinds, returns the canonical movement_kind
+   * label from the i18n record.
+   *
+   * The immutable reason snapshot (when present) is rendered separately in the
+   * template — this function always returns the movement_kind label so the
+   * accounting kind remains visible alongside the reason snapshot.
+   */
+  function lotContextMovementLabel(
+    kind: string,
+    reason: string | null,
+    direction?: string | null,
+  ): string {
     if (kind === "inventory_adjustment" && direction) {
       return direction === "increase"
         ? $LL.lotMovements.movementKinds.inventoryAdjustmentIncrease()
         : $LL.lotMovements.movementKinds.inventoryAdjustmentDecrease();
     }
+
+    // Always show the movement_kind label. The reason snapshot (if present)
+    // is rendered as a separate element alongside it.
     return getMovementKindLabel(kind, direction, _lotContextKindLabels);
   }
 
@@ -602,6 +652,7 @@
       loadHasStore(),
       loadAvailableStores(),
       loadAllStoreLocations(),
+      loadArchivedReasonIds(),
     ]);
   });
 
@@ -702,6 +753,39 @@
     }
   }
 
+  // Load active catalog reasons for Stock-out on first entry to the mode.
+  // The effect re-arms only when the store id or the mode itself changes
+  // (the reactive dep on `mode` is read inside untrack so the debounce
+  // guard does not retrigger on every keystroke).
+  // Derived gate: reason picker and confirm are disabled when reasons are
+  // unavailable (loading or failed-to-load).
+  let stockOutPickerDisabled = $derived(
+    loadingStockOutReasons || !!stockOutReasonsError || stockOutReasons.length === 0,
+  );
+
+  async function loadStockOutReasons(): Promise<void> {
+    loadingStockOutReasons = true;
+    stockOutReasonsError = "";
+    try {
+      stockOutReasons = await listStockOutReasons();
+    } catch (e) {
+      stockOutReasons = [];
+      stockOutReasonsError = $LL.lotMovements.errors.loadStockOutReasonsFailed({
+        msg: humanizeError(e),
+      });
+    } finally {
+      loadingStockOutReasons = false;
+    }
+  }
+
+  $effect(() => {
+    const m = mode;
+    if (m !== "stock_out") return;
+    untrack(() => {
+      void loadStockOutReasons();
+    });
+  });
+
   async function loadLotBalances(lotId: string): Promise<void> {
     loadingBalances = true;
     try {
@@ -790,11 +874,13 @@
       );
       lastResolvedAt = Date.now();
       lastResolvedValue = trimmed;
+      submittedScan = trimmed;
       applyResolveResult(result);
     } catch (e) {
       scanError = $LL.scanner.errors.lookupFailed({
         msg: humanizeError(e),
       });
+      submittedScan = "";
     } finally {
       scanBusy = false;
       scanInput = "";
@@ -932,19 +1018,21 @@
       await createLotMovement(
         {
           lot_id: resolvedLot.lot.id,
-          kind: exitReason as MovementKind,
+          kind: "" as MovementKind,
           direction: null,
           quantity,
           source_location_id: locationId || null,
           destination_location_id: null,
           notes: notes.trim() || null,
+          exit_reason_id: exitReasonId || null,
         },
         locale.current,
       );
+      const reason = stockOutReasons.find((r) => r.id === exitReasonId);
       successNotice = $LL.scanner.stockOut.success({
         qty: quantity,
         sku: activeProduct?.sku ?? resolvedLot.lot.batch_code ?? "",
-        reason: getExitKindLabel(exitReason as ExitKind, $LL),
+        reason: reason?.display_name ?? selectedReasonMovementKind,
       });
       resetMutationFormWithoutContext();
     } catch (e) {
@@ -958,7 +1046,7 @@
 
   function invalidStockOutMessage(): string {
     if (!resolvedLot) return $LL.scanner.stockOut.invalid.lot();
-    if (!exitReason) return $LL.scanner.stockOut.invalid.reason();
+    if (!exitReasonId) return $LL.scanner.stockOut.invalid.reason();
     if (quantity <= 0) return $LL.scanner.stockOut.invalid.quantity();
     if (!locationId) return $LL.scanner.stockOut.invalid.location();
     if (quantity > selectedBalance) {
@@ -966,7 +1054,7 @@
         available: selectedBalance,
       });
     }
-    if (NOTE_REQUIRED_EXITS.includes(exitReason as ExitKind) && !notes.trim()) {
+    if (requiresNotes && !notes.trim()) {
       return $LL.scanner.stockOut.invalid.notes();
     }
     return $LL.scanner.stockOut.invalid.lot();
@@ -980,11 +1068,12 @@
     selectedLotId = "";
     quantityStr = "1";
     locationId = "";
-    exitReason = "";
+    exitReasonId = "";
     notes = "";
     lotBalances = [];
     lastResolvedAt = 0;
     lastResolvedValue = "";
+    submittedScan = "";
   }
 
   function resetMutationForm(): void {
@@ -999,11 +1088,12 @@
     selectedLotId = "";
     quantityStr = "1";
     locationId = "";
-    exitReason = "";
+    exitReasonId = "";
     notes = "";
     lotBalances = [];
     lastResolvedAt = 0;
     lastResolvedValue = "";
+    submittedScan = "";
   }
 
   // ── Registration: existing-product lot creation ───────────────────────────
@@ -1027,6 +1117,7 @@
     lotBalances = [];
     lastResolvedAt = 0;
     lastResolvedValue = "";
+    submittedScan = "";
   }
 
   // ── Registration: quick product creation (Unknown) ────────────────────────
@@ -1067,6 +1158,7 @@
     lotBalances = [];
     lastResolvedAt = 0;
     lastResolvedValue = "";
+    submittedScan = "";
   }
 
   /**
@@ -1079,6 +1171,7 @@
     resolved = null;
     lastResolvedAt = 0;
     lastResolvedValue = "";
+    submittedScan = "";
   }
 
   /**
@@ -1164,20 +1257,23 @@
          this store via `LotForm.lockedStoreId`. PR
          `scanner-default-store-lock`. -->
     <section
-      class="store-picker active-store-context"
+      class="active-store-context"
+      class:active-store-context--card={pickerStoreOptions.length > 1}
       aria-labelledby="active-store-context-title"
     >
       <div class="active-store-context-header">
         <h2 id="active-store-context-title" class="picker-title">
           {$LL.scanner.activeStoreContext.title()}
         </h2>
-        <span
-          class="locked-badge"
-          aria-label={$LL.scanner.activeStoreContext.lockedBadge()}
-          title={$LL.scanner.activeStoreContext.lockedBadge()}
-        >
-          {$LL.scanner.activeStoreContext.lockedBadge()}
-        </span>
+        {#if pickerStoreOptions.length > 1}
+          <span
+            class="locked-badge"
+            aria-label={$LL.scanner.activeStoreContext.lockedBadge()}
+            title={$LL.scanner.activeStoreContext.lockedBadge()}
+          >
+            {$LL.scanner.activeStoreContext.lockedBadge()}
+          </span>
+        {/if}
       </div>
       <p class="picker-body">{$LL.scanner.activeStoreContext.body()}</p>
 
@@ -1196,8 +1292,10 @@
           onchange={(v: string) => void changeActiveStore(v)}
         />
       {:else}
-        <!-- Single store: read-only display so the user still sees
-             the store the Scanner is operating against. -->
+        <!-- Single store: compact read-only display — heading and
+             store name are visible; explanatory body is available
+             to screen readers via the section's aria-labelledby.
+             No full card chrome. -->
         <p class="active-store-name" data-testid="active-store-name">
           <strong>{activeStore?.name ?? settings?.last_selected_store_id ?? ""}</strong>
         </p>
@@ -1610,13 +1708,11 @@
 
             <p class="resolved-line">
               <strong>{$LL.scanner.registration.scannedValueLabel()}:</strong>
-              <code class="scanned-code">
-                {#if resolved.match_type === "lot_match"}
-                  {resolved.lot.batch_code ?? $LL.scanner.registration.scannedValuePlaceholder()}
-                {:else}
-                  {(resolved as ScannerProductMatch).lots[0]?.batch_code ?? $LL.scanner.registration.scannedValuePlaceholder()}
-                {/if}
-              </code>
+              <code class="scanned-code">{submittedScan || $LL.scanner.registration.scannedValuePlaceholder()}</code>
+            </p>
+            <p class="resolved-line">
+              <strong>{$LL.scanner.registration.scannedSkuLabel()}:</strong>
+              <span class="muted">{activeProduct.sku}</span>
             </p>
             {#if registrationLotFormOpen}
               <LotForm
@@ -1681,18 +1777,30 @@
               {/if}
             </p>
 
+            {#if loadingStockOutReasons}
+              <LoadingState variant="text" label={$LL.common.loading()} />
+            {:else if stockOutReasonsError}
+              <Alert variant="error">
+                <p>{stockOutReasonsError}</p>
+                <Button variant="ghost" size="sm" onclick={() => void loadStockOutReasons()}>
+                  {$LL.common.retry()}
+                </Button>
+              </Alert>
+            {/if}
+
             <Listbox
-              value={exitReason}
+              value={exitReasonId}
               options={[
                 { value: "", label: $LL.scanner.stockOut.reasonPlaceholder(), disabled: true },
                 ...stockOutReasonOptions,
               ]}
               aria-label={$LL.scanner.stockOut.reasonLabel()}
               required
-              onchange={(v: string) => (exitReason = v)}
+              disabled={stockOutPickerDisabled}
+              onchange={(v: string) => (exitReasonId = v)}
             />
 
-            {#if loadingBalances}
+            {#if loadingBalances || stockOutPickerDisabled}
               <LoadingState variant="text" label={$LL.common.loading()} />
             {:else if availableBalances.length === 0}
               <Alert variant="warning">{$LL.scanner.stockOut.invalid.quantity()}</Alert>
@@ -1722,6 +1830,7 @@
                   const target = e.currentTarget as HTMLInputElement;
                   quantityStr = target.value;
                 }}
+                disabled={stockOutPickerDisabled}
               />
               {#if selectedBalance > 0}
                 <p class="label">
@@ -1740,6 +1849,7 @@
                 class="textarea textarea-md w-full motion-reduce:transition-none"
                 rows="3"
                 bind:value={notes}
+                disabled={stockOutPickerDisabled}
                 placeholder={requiresNotes
                   ? $LL.scanner.stockOut.notesRequiredHint()
                   : ""}
@@ -1752,7 +1862,7 @@
             <div class="confirm-row">
               <Button
                 variant="primary"
-                disabled={!canConfirmStockOut || submitting}
+                disabled={!canConfirmStockOut || submitting || stockOutPickerDisabled}
                 loading={submitting}
                 onclick={() => void confirmStockOut()}
               >
@@ -1802,18 +1912,30 @@
               </p>
             {/if}
 
+            {#if loadingStockOutReasons}
+              <LoadingState variant="text" label={$LL.common.loading()} />
+            {:else if stockOutReasonsError}
+              <Alert variant="error">
+                <p>{stockOutReasonsError}</p>
+                <Button variant="ghost" size="sm" onclick={() => void loadStockOutReasons()}>
+                  {$LL.common.retry()}
+                </Button>
+              </Alert>
+            {/if}
+
             <Listbox
-              value={exitReason}
+              value={exitReasonId}
               options={[
                 { value: "", label: $LL.scanner.stockOut.reasonPlaceholder(), disabled: true },
                 ...stockOutReasonOptions,
               ]}
               aria-label={$LL.scanner.stockOut.reasonLabel()}
               required
-              onchange={(v: string) => (exitReason = v)}
+              disabled={stockOutPickerDisabled}
+              onchange={(v: string) => (exitReasonId = v)}
             />
 
-            {#if loadingBalances}
+            {#if loadingBalances || stockOutPickerDisabled}
               <LoadingState variant="text" label={$LL.common.loading()} />
             {:else if availableBalances.length === 0}
               <Alert variant="warning">{$LL.scanner.stockOut.invalid.quantity()}</Alert>
@@ -1839,6 +1961,7 @@
                 step="0.01"
                 inputmode="decimal"
                 value={quantityStr}
+                disabled={stockOutPickerDisabled}
                 oninput={(e: Event) => {
                   const target = e.currentTarget as HTMLInputElement;
                   quantityStr = target.value;
@@ -1861,6 +1984,7 @@
                 class="textarea textarea-md w-full motion-reduce:transition-none"
                 rows="3"
                 bind:value={notes}
+                disabled={stockOutPickerDisabled}
                 placeholder={requiresNotes
                   ? $LL.scanner.stockOut.notesRequiredHint()
                   : ""}
@@ -1873,7 +1997,7 @@
             <div class="confirm-row">
               <Button
                 variant="primary"
-                disabled={!canConfirmStockOut || submitting}
+                disabled={!canConfirmStockOut || submitting || stockOutPickerDisabled}
                 loading={submitting}
                 onclick={() => void confirmStockOut()}
               >
@@ -1975,9 +2099,27 @@
                     movement.movement_kind,
                     movement.direction,
                   )}
+                  {@const reasonArchived = movement.exit_reason_id
+                    ? archivedReasonIds.has(movement.exit_reason_id)
+                    : false}
                   <div class="movement-row" role="listitem">
                     <div class="movement-kind">
-                      {lotContextMovementLabel(movement.movement_kind, movement.direction)}
+                      <span class="movement-kind-label">
+                        {lotContextMovementLabel(movement.movement_kind, movement.reason, movement.direction)}
+                      </span>
+                      {#if movement.reason}
+                        <span class="movement-reason-snapshot">
+                          {movement.reason}
+                          {#if reasonArchived}
+                            <span
+                              class="archived-reason-badge"
+                              title={$LL.lotMovements.errors.archived()}
+                            >
+                              {$LL.lotMovements.errors.archived()}
+                            </span>
+                          {/if}
+                        </span>
+                      {/if}
                     </div>
                     <div class="movement-locations">
                       <span class="movement-loc">{lotContextLocationName(movement.source_location_id)}</span>
@@ -2221,13 +2363,22 @@
 
   /* ── Active-store context (always-visible Scanner surface) ─────── */
 
-  /* The active-store context panel reuses the store-picker block to
-     keep the visual contract aligned with the missing/stale picker:
-     same border, padding, and body copy styling. Only the header
-     grows a "Locked for new lots" badge and the actions row is
-     replaced with an inline name or a Select. */
+  /* Multi-store: reuses the store-picker chrome (border, padding, bg).
+     Single-store: compact inline strip — heading + name only, no card.
+     The card chrome is gated behind the --card modifier so single-store
+     does not inherit it from .store-picker. */
   .active-store-context {
     margin-bottom: 4px;
+  }
+
+  .active-store-context--card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
+    border-radius: 8px;
+    background: color-mix(in oklch, var(--color-base-200) 50%, transparent);
   }
 
   .active-store-context-header {
@@ -2235,6 +2386,33 @@
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+  }
+
+  /* Single-store: compact inline row — no border/padding chrome.
+     Heading stays visible for ARIA region. Body is sr-only (available
+     to screen readers through the section's aria-labelledby). */
+  .active-store-context:not(.active-store-context--card) .active-store-context-header {
+    display: inline-flex;
+  }
+
+  .active-store-context:not(.active-store-context--card) .picker-body {
+    /* sr-only: not visible but still in the DOM for screen readers */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  .active-store-context:not(.active-store-context--card) .active-store-name {
+    display: inline;
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--color-base-content);
   }
 
   .locked-badge {
@@ -2362,11 +2540,47 @@
   }
 
   .movement-kind {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
     color: var(--color-base-content);
     font-weight: 500;
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  .movement-kind-label {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .movement-reason-snapshot {
+    font-size: 0.75em;
+    font-weight: 400;
+    color: var(--color-base-content);
+    opacity: 0.65;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .archived-reason-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-warning);
+    background: color-mix(in oklch, var(--color-warning) 12%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-warning) 35%, transparent);
+    border-radius: 999px;
+    padding: 1px 5px;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .movement-locations {

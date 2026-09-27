@@ -29,6 +29,7 @@ const es: BaseTranslation = {
     back: "Atrás",
     confirm: "Confirmar",
     dismiss: "Descartar",
+    retry: "Reintentar",
     yes: "Sí",
     no: "No",
     error: "Error",
@@ -90,6 +91,15 @@ const es: BaseTranslation = {
       label: "Selección de lote FEFO",
       description:
         "Controla cómo la pestaña Escáner elige un lote cuando un escaneo resuelve a un producto con varios lotes. Los escaneos directos por código de lote siempre omiten esta política y usan el lote escaneado.",
+      tooltip: "Primero Vencido, Primero Fuera",
+      // Descripciones breves y orientadas al usuario para la opción seleccionada,
+      // mostradas debajo del selector para que el usuario entienda de inmediato
+      // la política activa.
+      selectedDescription: {
+        suggest_fefo: "Sugiere el lote más próximo a vencer. Podés elegir otro.",
+        require_fefo: "Fija el lote más próximo a vencer. Debés usarlo.",
+        manual_lot_choice: "Sin sugerencia. Elegís qué lote usar cada vez.",
+      },
       names: {
         suggest_fefo: "Sugerir FEFO (permitir cambiar)",
         require_fefo: "Requerir FEFO (sin cambio)",
@@ -347,6 +357,7 @@ const es: BaseTranslation = {
     productCategory: "Categoría",
     productUnit: "Unidad",
     productAlertDays: "Días de alerta antes de la caducidad",
+    alertDaysRangeError: "Introducí un número entero del 0 al 3650.",
     productNotes: "Notas",
     productBarcode: "Código de barras",
     addBarcode: "Añadir código de barras",
@@ -748,6 +759,13 @@ const es: BaseTranslation = {
         other: "Otro",
       },
     },
+    // Mensajes de error y claves de visualización del historial de movimientos
+    errors: {
+      loadStockOutReasonsFailed: "No se pudieron cargar los motivos de salida: {msg}",
+      stockOutReason: "Motivo de salida",
+      movementKind: "Tipo de movimiento",
+      archived: "Archivado",
+    },
   },
 
   calendar: {
@@ -1131,6 +1149,7 @@ const es: BaseTranslation = {
     registration: {
       unknownHeading: "Creación rápida de producto",
       unknownBody: "El código escaneado no coincide con ningún producto existente. Elige dónde usarlo como punto de partida para un producto nuevo, o reescribe el SKU / código de barras.",
+      scannedSkuLabel: "SKU del producto",
       scannedValueLabel: "Valor escaneado",
       scannedValuePlaceholder: "(vacío)",
       routeAsSku: "Usar como SKU",
@@ -1289,6 +1308,130 @@ const es: BaseTranslation = {
   // etiquetas de la sección de tema siguen la instrucción explícita
   // del PR 5 para introducir el árbol de claves `settings.theme.*`
   // en el selector de la página de Configuración.
+  // Gestión del catálogo de unidades en Configuración (tarea ODD 2.6b).
+  unitCatalog: {
+    sectionTitle: "Catálogo de unidades",
+    description:
+      "Gestiona las unidades disponibles al crear productos. Las unidades predefinidas se pueden renombrar o archivar (archivar solo tiene éxito cuando la unidad no está en uso); las unidades personalizadas se pueden renombrar o archivar. Archivar está bloqueado mientras algún producto use la unidad.",
+    // Panel de unidades activas
+    activeLabel: "Unidades activas",
+    noActiveUnits: "No hay unidades activas.",
+    // Etiquetas de tipo
+    kind: {
+      integer: "Entero",
+      decimal: "Decimal",
+    },
+    // Acciones (tabla activa)
+    editDisplayName: "Renombrar",
+    archive: "Archivar",
+    restore: "Restaurar",
+    preset: "Predefinida",
+    createCustom: "Nueva unidad",
+    // Modo edición en línea
+    displayNameLabel: "Nombre para mostrar",
+    displayNamePlaceholder: "p. ej. Mi unidad personalizada",
+    saveRename: "Guardar",
+    cancelRename: "Cancelar",
+    // Formulario de creación
+    createUnitTitle: "Nueva unidad personalizada",
+    createUnitDesc: "Las unidades personalizadas se pueden renombrar o archivar más tarde.",
+    keyLabel: "Clave",
+    keyPlaceholder: "p. ej. mi-unidad",
+    displayNameNewPlaceholder: "p. ej. Mi Unidad",
+    kindLabel: "Tipo",
+    addUnit: "Añadir unidad",
+    creating: "Añadiendo…",
+    // Mensajes de validación
+    keyRequired: "La clave es obligatoria",
+    displayNameRequired: "El nombre para mostrar es obligatorio",
+    keyPattern: "La clave debe tener de 1 a 16 letras minúsculas, dígitos, guiones o guiones bajos",
+    // Panel de archivadas
+    archivedLabel: "Unidades archivadas",
+    noArchivedUnits: "No hay unidades archivadas.",
+    showArchived: "Mostrar archivadas",
+    hideArchived: "Ocultar archivadas",
+    // Mensajes de error
+    archiveError: "No se pudo archivar la unidad: {msg}",
+    renameError: "No se pudo renombrar la unidad: {msg}",
+    createError: "No se pudo crear la unidad: {msg}",
+    restoreError: "No se pudo restaurar la unidad: {msg}",
+    loadError: "No se pudieron cargar las unidades: {msg}",
+    // Confirmación
+    confirmArchive: "¿Archivar \"{name}\"?",
+    confirmArchiveBody:
+      "La unidad quedará oculta del selector de productos. Archivar está bloqueado mientras algún producto use esta unidad.",
+    confirmRestore: "¿Restaurar \"{name}\"?",
+    confirmRestoreBody: "La unidad estará disponible de nuevo en el selector de productos.",
+    confirmArchiveYes: "Archivar",
+    confirmRestoreYes: "Restaurar",
+  },
+
+  // Catálogo de motivos de salida en Configuración (tarea ODD 2.7e).
+  // El catálogo es global; cada entrada se mapea a un tipo de movimiento cerrado.
+  // El tipo de movimiento es inmutable tras la creación; solo el nombre es editable.
+  // Sin etiqueta predefinida: el DTO no distingue valores sembrados de personalizados.
+  stockOutReasons: {
+    sectionTitle: "Motivos de salida",
+    description:
+      "Gestiona los motivos de salida disponibles al registrar mermas. Cada motivo se mapea a un tipo de movimiento fijo. Los motivos se pueden renombrar o archivar; los motivos archivados permanecen en el historial pero no están disponibles para nuevas salidas.",
+    // Panel de motivos activos
+    activeLabel: "Motivos activos",
+    noActiveReasons: "No hay motivos activos.",
+    // Etiquetas de tipo de movimiento (conjunto cerrado — 7 tipos de salida, venta excluida)
+    movementKind: "Tipo de salida",
+    // Acciones (tabla activa)
+    editDisplayName: "Renombrar",
+    archive: "Archivar",
+    restore: "Restaurar",
+    createNew: "Nuevo motivo",
+    // Modo edición en línea
+    displayNameLabel: "Nombre para mostrar",
+    displayNamePlaceholder: "p. ej. Envase dañado",
+    saveRename: "Guardar",
+    cancelRename: "Cancelar",
+    // Formulario de creación
+    createTitle: "Nuevo motivo de salida",
+    createDesc:
+      "Elegí un tipo de salida fijo para este motivo. El tipo no se puede cambiar después de creado.",
+    displayNameNewPlaceholder: "p. ej. Caducado sin vender",
+    movementKindLabel: "Tipo de salida *",
+    addReason: "Añadir motivo",
+    creating: "Añadiendo…",
+    // Validación
+    displayNameRequired: "El nombre para mostrar es obligatorio",
+    movementKindRequired: "El tipo de salida es obligatorio",
+    // Panel de archivados
+    archivedLabel: "Motivos archivados",
+    noArchivedReasons: "No hay motivos archivados.",
+    // Mensajes de error
+    archiveError: "No se pudo archivar el motivo: {msg}",
+    renameError: "No se pudo renombrar el motivo: {msg}",
+    createError: "No se pudo crear el motivo: {msg}",
+    restoreError: "No se pudo restaurar el motivo: {msg}",
+    loadError: "No se pudieron cargar los motivos: {msg}",
+    // Diálogos de confirmación
+    confirmArchive: "¿Archivar \"{name}\"?",
+    confirmArchiveBody:
+      "El motivo quedará oculto del selector de salidas. Permanecerá disponible en los registros históricos.",
+    confirmRestore: "¿Restaurar \"{name}\"?",
+    confirmRestoreBody:
+      "El motivo estará disponible de nuevo en el selector de salidas.",
+    confirmArchiveYes: "Archivar",
+    confirmRestoreYes: "Restaurar",
+    // Etiquetas de tipo de movimiento (7 tipos de salida cerrados, venta excluida).
+    // Las claves deben coincidir con los valores wire `ExitReasonMovementKind` del
+    // backend, p. ej. `exit:waste`, `exit:expired`, etc.
+    kinds: {
+      "exit:waste": "Merma",
+      "exit:expired": "Vencido",
+      "exit:damaged": "Dañado",
+      "exit:internal_consumption": "Consumo interno",
+      "exit:return_to_supplier": "Devolución a proveedor",
+      "exit:inventory_adjustment": "Ajuste de inventario",
+      "exit:other": "Otro",
+    },
+  },
+
   settings: {
     theme: {
       title: "Tema",

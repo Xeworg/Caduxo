@@ -14,6 +14,7 @@
 
 import type { UnitKind } from "./products.js";
 import type { TranslationFunctions } from "../i18n/i18n-types.js";
+import type { ExitReasonMovementKind } from "./stock_out_reasons.js";
 
 // ── Exit reasons ───────────────────────────────────────────────────────────────
 
@@ -40,6 +41,28 @@ export const NOTE_REQUIRED_EXITS: readonly ExitKind[] = [
   "exit:inventory_adjustment",
   "exit:other",
 ] as const;
+
+/**
+ * Movement kinds (from stock-out reason catalog) that require notes.
+ * Used when the reason is selected from the catalog via `exit_reason_id`;
+ * the frontend derives the requirement from `movement_kind` before the backend
+ * resolves the accounting kind.
+ */
+export const NOTE_REQUIRED_MOVEMENT_KINDS: readonly ExitReasonMovementKind[] = [
+  "exit:inventory_adjustment",
+  "exit:other",
+] as const;
+
+/**
+ * True when the given catalog movement_kind requires notes on submission.
+ * Use this when the reason is selected via `exit_reason_id` and the frontend
+ * needs to gate the notes requirement before the backend resolves the kind.
+ */
+export function notesRequiredByMovementKind(
+  movementKind: ExitReasonMovementKind | string,
+): boolean {
+  return (NOTE_REQUIRED_MOVEMENT_KINDS as readonly string[]).includes(movementKind);
+}
 
 /** True when the given exit-kind requires notes. */
 export function exitRequiresNotes(kind: ExitKind | string): boolean {
@@ -148,18 +171,20 @@ export function locationDisplayLabel(loc: LocationWithStore): string {
  * same canonical resolver without duplicating the eight-case switch.
  */
 export function getExitKindLabel(
-  kind: ExitKind,
+  kind: ExitKind | string,
   LL: TranslationFunctions,
 ): string {
   switch (kind) {
-    case "exit:sale":                return LL.lotMovements.exitReasons.sale();
-    case "exit:waste":               return LL.lotMovements.exitReasons.waste();
-    case "exit:expired":             return LL.lotMovements.exitReasons.expired();
-    case "exit:damaged":             return LL.lotMovements.exitReasons.damaged();
-    case "exit:internal_consumption": return LL.lotMovements.exitReasons.internalConsumption();
-    case "exit:return_to_supplier":  return LL.lotMovements.exitReasons.returnToSupplier();
-    case "exit:inventory_adjustment": return LL.lotMovements.exitReasons.inventoryAdjustmentExit();
-    case "exit:other":               return LL.lotMovements.exitReasons.other();
+    case "exit:sale":                  return LL.lotMovements.exitReasons.sale();
+    case "exit:waste":                 return LL.lotMovements.exitReasons.waste();
+    case "exit:expired":               return LL.lotMovements.exitReasons.expired();
+    case "exit:damaged":               return LL.lotMovements.exitReasons.damaged();
+    case "exit:internal_consumption":  return LL.lotMovements.exitReasons.internalConsumption();
+    case "exit:return_to_supplier":    return LL.lotMovements.exitReasons.returnToSupplier();
+    case "exit:inventory_adjustment":  return LL.lotMovements.exitReasons.inventoryAdjustmentExit();
+    case "exit:other":                return LL.lotMovements.exitReasons.other();
+    default:
+      return kind;
   }
 }
 

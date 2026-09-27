@@ -164,3 +164,48 @@ export async function applyUnitReviewAction(
   locale: resolveLocale(locale),
  });
 }
+
+// ─── Archive / restore ────────────────────────────────────────────────────────
+
+/**
+ * Archives a unit. Rejected when any product still references it (the API error
+ * surface carries the "still referenced" boundary in the active locale).
+ *
+ * `locale` is forwarded so the not-found and "still referenced" boundaries
+ * reach the UI in the active locale. When omitted, the wrapper reads the
+ * active UI locale.
+ */
+export async function archiveUnitDefinition(
+ id: string,
+ locale?: SupportedLocale,
+): Promise<void> {
+ return invoke<void>("archive_unit_definition", {
+  id,
+  locale: resolveLocale(locale),
+ });
+}
+
+/** Lists all archived unit definitions ordered by kind then display_name. */
+export async function listArchivedUnitDefinitions(): Promise<
+ UnitDefinitionResponse[]
+> {
+ return invoke<UnitDefinitionResponse[]>("list_archived_unit_definitions");
+}
+
+/**
+ * Restores an archived unit. Rejected when the unit's key conflicts with an
+ * existing active unit (case-insensitive).
+ *
+ * `locale` is forwarded so the not-found and key-conflict boundaries reach
+ * the UI in the active locale. When omitted, the wrapper reads the active
+ * UI locale.
+ */
+export async function unarchiveUnitDefinition(
+ id: string,
+ locale?: SupportedLocale,
+): Promise<UnitDefinitionResponse> {
+ return invoke<UnitDefinitionResponse>("unarchive_unit_definition", {
+  id,
+  locale: resolveLocale(locale),
+ });
+}

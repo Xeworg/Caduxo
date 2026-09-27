@@ -54,12 +54,33 @@
     import Alert from "./ui/Alert.svelte";
     import Card from "./ui/Card.svelte";
     import LoadingState from "./ui/LoadingState.svelte";
+    import Modal from "./ui/Modal.svelte";
     import {
         AVAILABLE_THEMES,
         setTheme,
         theme,
         type ThemeName,
     } from "./ui/theme/themeStore.svelte.js";
+    import Button from "./ui/Button.svelte";
+    import {
+        listUnitDefinitions,
+        listArchivedUnitDefinitions,
+        createUnitDefinition,
+        renameUnitDefinition,
+        archiveUnitDefinition,
+        unarchiveUnitDefinition,
+        type UnitDefinitionResponse,
+    } from "../lib/unit_definitions.js";
+    import type { UnitKind } from "../lib/products.js";
+    import {
+        listAllStockOutReasons,
+        createStockOutReason,
+        renameStockOutReason,
+        archiveStockOutReason,
+        unarchiveStockOutReason,
+        type StockOutReason,
+        type ExitReasonMovementKind,
+    } from "../lib/stock_out_reasons.js";
 
     // Per-locale display names. The dictionary keys live in
     // `configuration.language.names` keyed by `SupportedLocale` code, so
@@ -118,25 +139,25 @@
 
     // ─── State ───────────────────────────────────────────────────────────────────
 
-    let loading = true;
-    let savingLocation = false;
-    let settings: SettingsResponse | null = null;
-    let errorMsg = "";
-    let localeErrorMsg = "";
+    let loading = $state(true);
+    let savingLocation = $state(false);
+    let settings: SettingsResponse | null = $state(null);
+    let errorMsg = $state("");
+    let localeErrorMsg = $state("");
 
     // Local toggle value; updated optimistically on click.
     // Reverted if the save fails.
-    let requireLocation: boolean = true;
+    let requireLocation: boolean = $state(true);
 
     // Local locale value for the selector; kept in sync with the rune.
-    let currentLocale: SupportedLocale = "en";
+    let currentLocale: SupportedLocale = $state("en");
 
     // Theme switcher state. `switchingTheme` is set true during the
     // optimistic apply; it clears when the IPC call resolves or
     // rejects. `themeError` carries the human-readable error message
     // surfaced in the inline `Alert.svelte` when `setTheme` rejects.
-    let switchingTheme = false;
-    let themeError = "";
+    let switchingTheme = $state(false);
+    let themeError = $state("");
 
     // Scanner FEFO policy selector (`scanner-quick-operations` PR 3).
     // `currentFefoPolicy` is the optimistic local copy; `savingFefoPolicy`
@@ -147,9 +168,9 @@
         "require_fefo",
         "manual_lot_choice",
     ];
-    let currentFefoPolicy: FefoPolicy = "suggest_fefo";
-    let savingFefoPolicy = false;
-    let fefoPolicyError = "";
+    let currentFefoPolicy: FefoPolicy = $state("suggest_fefo");
+    let savingFefoPolicy = $state(false);
+    let fefoPolicyError = $state("");
 
     // Close-window behaviour selector (`scanner-quick-operations` PR 3).
     // `currentCloseBehavior` mirrors the persisted value; `savingCloseBehavior`
@@ -159,9 +180,433 @@
         "minimize_to_tray",
         "exit_application",
     ];
-    let currentCloseBehavior: CloseBehavior = "minimize_to_tray";
-    let savingCloseBehavior = false;
-    let closeBehaviorError = "";
+    let currentCloseBehavior: CloseBehavior = $state("minimize_to_tray");
+    let savingCloseBehavior = $state(false);
+    let closeBehaviorError = $state("");
+
+    // ─── Unit catalog state ─────────────────────────────────────────────────────
+
+    // ─── Unit catalog helpers ──────────────────────────────────────────────────
+
+    // Kind-first, display-name-second order for the active unit rows.
+    // The sort mirrors the `groupedActive` derived grouping so the table
+    // renders in a consistent, predictable order without relying on
+    // server-return order.
+    const KIND_ORDER: Record<UnitKind, number> = { integer: 0, decimal: 1 };
+
+    function insertActiveSorted(
+        units: UnitDefinitionResponse[],
+        unit: UnitDefinitionResponse,
+    ): UnitDefinitionResponse[] {
+        const targetKind = KIND_ORDER[unit.kind];
+        for (let i = 0; i < units.length; i++) {
+            const u = units[i];
+            const uKind = KIND_ORDER[u.kind];
+            if (targetKind < uKind || (targetKind === uKind && unit.display_name < u.display_name)) {
+                const result = [...units];
+                result.splice(i, 0, unit);
+                return result;
+            }
+        }
+        return [...units, unit];
+    }
+
+    let loadingUnits = $state(true);
+    let unitsLoadError = $state("");
+    let activeUnits = $state<UnitDefinitionResponse[]>([]);
+    let archivedUnits = $state<UnitDefinitionResponse[]>([]);
+    let showArchived = $state(false);
+
+    // Inline rename state.
+    let renamingId: string | null = $state(null);
+    let renameValue = $state("");
+    let savingRename = $state(false);
+    let renameError = $state("");
+
+    // Archive confirmation state.
+    let archiveTarget: UnitDefinitionResponse | null = $state(null);
+    let confirmingArchive = $state(false);
+    let archivingUnit = $state(false);
+    let archiveApiError = $state("");
+
+    // Restore confirmation state.
+    let restoreTarget: UnitDefinitionResponse | null = $state(null);
+    let confirmingRestore = $state(false);
+    let restoringUnit = $state(false);
+    let restoreApiError = $state("");
+
+    // Create-unit form state.
+    let showCreateForm = $state(false);
+    let createKey = $state("");
+    let createDisplayName = $state("");
+    let createKind: UnitKind = $state("integer");
+    let creatingUnit = $state(false);
+    let createError = $state("");
+
+    // ─── Stock-out reasons catalog state ───────────────────────────────────────
+
+    // The seven closed stock-out movement kinds (sale excluded).
+    const AVAILABLE_MOVEMENT_KINDS: ExitReasonMovementKind[] = [
+        "exit:waste",
+        "exit:expired",
+        "exit:damaged",
+        "exit:internal_consumption",
+        "exit:return_to_supplier",
+        "exit:inventory_adjustment",
+        "exit:other",
+    ];
+
+    let loadingReasons = $state(true);
+    let reasonsLoadError = $state("");
+    let activeReasons = $state<StockOutReason[]>([]);
+    let archivedReasons = $state<StockOutReason[]>([]);
+    let showArchivedReasons = $state(false);
+
+    // Inline rename state.
+    let renamingReasonId: string | null = $state(null);
+    let renamingReasonValue = $state("");
+    let savingReasonRename = $state(false);
+    let renameReasonError = $state("");
+
+    // Archive confirmation state.
+    let archiveReasonTarget: StockOutReason | null = $state(null);
+    let confirmingReasonArchive = $state(false);
+    let archivingReason = $state(false);
+    let archiveReasonApiError = $state("");
+
+    // Restore confirmation state.
+    let restoreReasonTarget: StockOutReason | null = $state(null);
+    let confirmingReasonRestore = $state(false);
+    let restoringReason = $state(false);
+    let restoreReasonApiError = $state("");
+
+    // Create-reason form state.
+    let showCreateReasonForm = $state(false);
+    let createReasonDisplayName = $state("");
+    let createReasonMovementKind: ExitReasonMovementKind = $state("exit:waste");
+    let creatingReason = $state(false);
+    let createReasonError = $state("");
+
+    // ─── Unit catalog load ────────────────────────────────────────────────────
+
+    async function loadUnitCatalog() {
+        loadingUnits = true;
+        unitsLoadError = "";
+        try {
+            [activeUnits, archivedUnits] = await Promise.all([
+                listUnitDefinitions(),
+                listArchivedUnitDefinitions(),
+            ]);
+        } catch (e) {
+            unitsLoadError = $LL.unitCatalog.loadError({ msg: humanizeError(e) });
+        } finally {
+            loadingUnits = false;
+        }
+    }
+
+    // ─── Inline rename ────────────────────────────────────────────────────────
+
+    function startRename(unit: UnitDefinitionResponse) {
+        renamingId = unit.id;
+        renameValue = unit.display_name;
+        renameError = "";
+    }
+
+    function cancelRename() {
+        renamingId = null;
+        renameValue = "";
+        renameError = "";
+    }
+
+    async function submitRename() {
+        if (!renamingId || !renameValue.trim()) return;
+        savingRename = true;
+        renameError = "";
+        try {
+            const updated = await renameUnitDefinition({
+                id: renamingId,
+                display_name: renameValue.trim(),
+            });
+            // Replace and re-sort so the renamed unit lands in the correct position.
+            activeUnits = insertActiveSorted(
+                activeUnits.filter((u) => u.id !== renamingId),
+                updated,
+            );
+            renamingId = null;
+            renameValue = "";
+        } catch (e) {
+            renameError = $LL.unitCatalog.renameError({ msg: humanizeError(e) });
+        } finally {
+            savingRename = false;
+        }
+    }
+
+    // ─── Archive ─────────────────────────────────────────────────────────────
+
+    function requestArchive(unit: UnitDefinitionResponse) {
+        archiveTarget = unit;
+        confirmingArchive = true;
+        archiveApiError = "";
+    }
+
+    function cancelArchive() {
+        confirmingArchive = false;
+        archiveTarget = null;
+        archiveApiError = "";
+    }
+
+    async function confirmArchive() {
+        if (!archiveTarget) return;
+        archivingUnit = true;
+        archiveApiError = "";
+        const id = archiveTarget.id;
+        try {
+            await archiveUnitDefinition(id);
+            // Refetch to get correct archived_at timestamp and preserve order.
+            await loadUnitCatalog();
+            confirmingArchive = false;
+            archiveTarget = null;
+        } catch (e) {
+            archiveApiError = $LL.unitCatalog.archiveError({ msg: humanizeError(e) });
+        } finally {
+            archivingUnit = false;
+        }
+    }
+
+    // ─── Restore ─────────────────────────────────────────────────────────────
+
+    function requestRestore(unit: UnitDefinitionResponse) {
+        restoreTarget = unit;
+        confirmingRestore = true;
+        restoreApiError = "";
+    }
+
+    function cancelRestore() {
+        confirmingRestore = false;
+        restoreTarget = null;
+        restoreApiError = "";
+    }
+
+    async function confirmRestore() {
+        if (!restoreTarget) return;
+        restoringUnit = true;
+        restoreApiError = "";
+        const id = restoreTarget.id;
+        try {
+            const restored = await unarchiveUnitDefinition(id);
+            archivedUnits = archivedUnits.filter((u) => u.id !== id);
+            activeUnits = insertActiveSorted(activeUnits, restored);
+            confirmingRestore = false;
+            restoreTarget = null;
+        } catch (e) {
+            restoreApiError = $LL.unitCatalog.restoreError({ msg: humanizeError(e) });
+        } finally {
+            restoringUnit = false;
+        }
+    }
+
+    // ─── Create unit ─────────────────────────────────────────────────────────
+
+    function openCreateForm() {
+        showCreateForm = true;
+        createKey = "";
+        createDisplayName = "";
+        createKind = "integer";
+        createError = "";
+    }
+
+    function closeCreateForm() {
+        showCreateForm = false;
+        createError = "";
+    }
+
+    async function submitCreateUnit() {
+        if (!createKey.trim() || !createDisplayName.trim()) return;
+        creatingUnit = true;
+        createError = "";
+        try {
+            const created = await createUnitDefinition({
+                key: createKey.trim(),
+                display_name: createDisplayName.trim(),
+                kind: createKind,
+            });
+            activeUnits = insertActiveSorted(activeUnits, created);
+            closeCreateForm();
+        } catch (e) {
+            createError = $LL.unitCatalog.createError({ msg: humanizeError(e) });
+        } finally {
+            creatingUnit = false;
+        }
+    }
+
+    // ─── Stock-out reasons catalog load ───────────────────────────────────────
+
+    async function loadReasonsCatalog() {
+        loadingReasons = true;
+        reasonsLoadError = "";
+        try {
+            const all = await listAllStockOutReasons();
+            activeReasons = all.filter((r) => r.archived_at === null);
+            archivedReasons = all.filter((r) => r.archived_at !== null);
+        } catch (e) {
+            reasonsLoadError = $LL.stockOutReasons.loadError({ msg: humanizeError(e) });
+        } finally {
+            loadingReasons = false;
+        }
+    }
+
+    // ─── Inline rename reason ────────────────────────────────────────────────
+
+    function startReasonRename(reason: StockOutReason) {
+        renamingReasonId = reason.id;
+        renamingReasonValue = reason.display_name;
+        renameReasonError = "";
+    }
+
+    function cancelReasonRename() {
+        renamingReasonId = null;
+        renamingReasonValue = "";
+        renameReasonError = "";
+    }
+
+    async function submitReasonRename() {
+        if (!renamingReasonId || !renamingReasonValue.trim()) return;
+        savingReasonRename = true;
+        renameReasonError = "";
+        try {
+            const updated = await renameStockOutReason({
+                id: renamingReasonId,
+                display_name: renamingReasonValue.trim(),
+            });
+            // Replace in the active list with the updated entry.
+            activeReasons = activeReasons.map((r) =>
+                r.id === renamingReasonId ? updated : r,
+            );
+            renamingReasonId = null;
+            renamingReasonValue = "";
+        } catch (e) {
+            renameReasonError = $LL.stockOutReasons.renameError({ msg: humanizeError(e) });
+        } finally {
+            savingReasonRename = false;
+        }
+    }
+
+    // ─── Archive reason ──────────────────────────────────────────────────────
+
+    function requestReasonArchive(reason: StockOutReason) {
+        archiveReasonTarget = reason;
+        confirmingReasonArchive = true;
+        archiveReasonApiError = "";
+    }
+
+    function cancelReasonArchive() {
+        confirmingReasonArchive = false;
+        archiveReasonTarget = null;
+        archiveReasonApiError = "";
+    }
+
+    async function confirmReasonArchive() {
+        if (!archiveReasonTarget) return;
+        archivingReason = true;
+        archiveReasonApiError = "";
+        const id = archiveReasonTarget.id;
+        try {
+            await archiveStockOutReason(id);
+            await loadReasonsCatalog();
+            confirmingReasonArchive = false;
+            archiveReasonTarget = null;
+        } catch (e) {
+            archiveReasonApiError = $LL.stockOutReasons.archiveError({ msg: humanizeError(e) });
+        } finally {
+            archivingReason = false;
+        }
+    }
+
+    // ─── Restore reason ──────────────────────────────────────────────────────
+
+    function requestReasonRestore(reason: StockOutReason) {
+        restoreReasonTarget = reason;
+        confirmingReasonRestore = true;
+        restoreReasonApiError = "";
+    }
+
+    function cancelReasonRestore() {
+        confirmingReasonRestore = false;
+        restoreReasonTarget = null;
+        restoreReasonApiError = "";
+    }
+
+    async function confirmReasonRestore() {
+        if (!restoreReasonTarget) return;
+        restoringReason = true;
+        restoreReasonApiError = "";
+        const id = restoreReasonTarget.id;
+        try {
+            const restored = await unarchiveStockOutReason(id);
+            archivedReasons = archivedReasons.filter((r) => r.id !== id);
+            activeReasons = [...activeReasons, restored].sort(
+                (a, b) => a.sort_order - b.sort_order,
+            );
+            confirmingReasonRestore = false;
+            restoreReasonTarget = null;
+        } catch (e) {
+            restoreReasonApiError = $LL.stockOutReasons.restoreError({ msg: humanizeError(e) });
+        } finally {
+            restoringReason = false;
+        }
+    }
+
+    // ─── Create reason ───────────────────────────────────────────────────────
+
+    function openCreateReasonForm() {
+        showCreateReasonForm = true;
+        createReasonDisplayName = "";
+        createReasonMovementKind = "exit:waste";
+        createReasonError = "";
+    }
+
+    function closeCreateReasonForm() {
+        showCreateReasonForm = false;
+        createReasonError = "";
+    }
+
+    async function submitCreateReason() {
+        if (!createReasonDisplayName.trim()) return;
+        creatingReason = true;
+        createReasonError = "";
+        try {
+            const created = await createStockOutReason({
+                display_name: createReasonDisplayName.trim(),
+                movement_kind: createReasonMovementKind,
+            });
+            activeReasons = [...activeReasons, created].sort(
+                (a, b) => a.sort_order - b.sort_order,
+            );
+            closeCreateReasonForm();
+        } catch (e) {
+            createReasonError = $LL.stockOutReasons.createError({ msg: humanizeError(e) });
+        } finally {
+            creatingReason = false;
+        }
+    }
+
+    // ─── Helpers ─────────────────────────────────────────────────────────────
+
+    function kindBadgeClass(kind: UnitKind): string {
+        return kind === "integer" ? "badge-neutral" : "badge-outline";
+    }
+
+    // Group active units by kind for ordered display.
+    const groupedActive = $derived.by(() => {
+        const groups: Record<UnitKind, UnitDefinitionResponse[]> = {
+            integer: [],
+            decimal: [],
+        };
+        for (const u of activeUnits) {
+            groups[u.kind].push(u);
+        }
+        return groups;
+    });
 
     // Per-option display names for the FEFO policy selector. The dictionary
     // keys live in `configuration.scannerFefoPolicy.names` keyed by the
@@ -215,6 +660,11 @@
         } finally {
             loading = false;
         }
+        // Unit catalog loads independently of settings so each can fail separately.
+        await loadUnitCatalog();
+        // Reasons catalog also loads independently so the UI can populate even
+        // when the settings or unit catalog calls fail.
+        await loadReasonsCatalog();
     });
 
     // ─── Locale selector handler ────────────────────────────────────────────────
@@ -528,9 +978,48 @@
                 <div class="setting-info">
                     <span class="setting-label">
                         {$LL.configuration.scannerFefoPolicy.label()}
+                        <!--
+                          Rendered FEFO tooltip — pointer + keyboard accessible.
+                          The `tooltip` key carries the acronym expansion
+                          ("First Expired, First Out" / "Primero Vencido,
+                          Primero Fuera") so the user understands the picker
+                          label at a glance. `title` provides the native browser
+                          tooltip on hover; `aria-label` ensures screen readers
+                          also announce the explanation on focus.
+                        -->
+                        <button
+                            type="button"
+                            class="fefo-tooltip-trigger"
+                            title={$LL.configuration.scannerFefoPolicy.tooltip()}
+                            aria-label={$LL.configuration.scannerFefoPolicy.tooltip()}
+                        >
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 16 16"
+                                fill="currentColor"
+                                class="fefo-tooltip-icon"
+                                aria-hidden="true"
+                                focusable="false"
+                            >
+                                <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 2.25a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5zM8.75 6a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 1.5 0V6z" />
+                            </svg>
+                        </button>
                     </span>
                     <span class="setting-desc">
                         {$LL.configuration.scannerFefoPolicy.description()}
+                    </span>
+                    <!--
+                      Dynamic selected-policy explanation. Uses the
+                      `selectedDescription` dictionary keyed by the current
+                      `currentFefoPolicy` value so the user immediately
+                      understands the active policy without having to re-read
+                      the general description above.
+                    -->
+                    <span class="fefo-selected-explanation">
+                        {(() => {
+                            const descriptions = $LL.configuration.scannerFefoPolicy.selectedDescription as unknown as Record<FefoPolicy, () => string>;
+                            return descriptions[currentFefoPolicy]?.() ?? "";
+                        })()}
                     </span>
                 </div>
 
@@ -628,6 +1117,723 @@
                 <div class="section-status">
                     <Alert variant="error">{closeBehaviorError}</Alert>
                 </div>
+            {/if}
+        </Card>
+
+        <!-- ─── Unit catalog section (ODD task 2.6b) ─────────────────────── -->
+        <Card tone="default">
+            <h2 class="section-title">
+                {$LL.unitCatalog.sectionTitle()}
+            </h2>
+            <p class="section-desc">
+                {$LL.unitCatalog.description()}
+            </p>
+
+            {#if loadingUnits}
+                <LoadingState
+                    variant="spinner"
+                    label={$LL.common.loading()}
+                />
+            {:else if unitsLoadError}
+                <Alert variant="error">{unitsLoadError}</Alert>
+            {:else}
+                <!-- ─── Active units ─────────────────────────────────────── -->
+                <div class="unit-block">
+                    <div class="unit-block-header">
+                        <span class="unit-block-label">
+                            {$LL.unitCatalog.activeLabel()}
+                        </span>
+                        <span class="unit-count-badge">
+                            {activeUnits.length}
+                        </span>
+                    </div>
+
+                    {#if activeUnits.length === 0}
+                        <p class="unit-empty">{$LL.unitCatalog.noActiveUnits()}</p>
+                    {:else}
+                        {#each ([
+                            { kind: 'integer' as const, label: $LL.unitCatalog.kind.integer(), units: groupedActive.integer },
+                            { kind: 'decimal' as const, label: $LL.unitCatalog.kind.decimal(), units: groupedActive.decimal },
+                        ]) as group (group.kind)}
+                            {#if group.units.length > 0}
+                                <div class="unit-kind-group">
+                                    <span class="unit-kind-label">{group.label}</span>
+                                    <div class="unit-list">
+                                        {#each group.units as unit (unit.id)}
+                                            <div class="unit-row">
+                                                <div class="unit-info">
+                                                    <span class="unit-badge {kindBadgeClass(unit.kind)}">{group.label}</span>
+                                                    {#if renamingId === unit.id}
+                                                        <input
+                                                            class="input input-sm unit-rename-input"
+                                                            type="text"
+                                                            bind:value={renameValue}
+                                                            onkeydown={(e) => {
+                                                                if (e.key === "Enter") submitRename();
+                                                                if (e.key === "Escape") cancelRename();
+                                                            }}
+                                                            disabled={savingRename}
+                                                            aria-label={$LL.unitCatalog.displayNameLabel()}
+                                                        />
+                                                    {:else}
+                                                        <span class="unit-display-name">{unit.display_name}</span>
+                                                    {/if}
+                                                    {#if unit.is_preset}
+                                                        <span class="unit-preset-tag">{$LL.unitCatalog.preset()}</span>
+                                                    {/if}
+                                                </div>
+                                                <div class="unit-actions">
+                                                    {#if renamingId === unit.id}
+                                                        <Button
+                                                            size="sm"
+                                                            variant="primary"
+                                                            loading={savingRename}
+                                                            onclick={submitRename}
+                                                        >
+                                                            {$LL.unitCatalog.saveRename()}
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onclick={cancelRename}
+                                                            disabled={savingRename}
+                                                        >
+                                                            {$LL.unitCatalog.cancelRename()}
+                                                        </Button>
+                                                    {:else}
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onclick={() => startRename(unit)}
+                                                        >
+                                                            {$LL.unitCatalog.editDisplayName()}
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onclick={() => requestArchive(unit)}
+                                                        >
+                                                            {$LL.unitCatalog.archive()}
+                                                        </Button>
+                                                    {/if}
+                                                </div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                </div>
+                            {/if}
+                        {/each}
+                    {/if}
+
+                    {#if renameError}
+                        <div class="unit-error">
+                            <Alert variant="error">{renameError}</Alert>
+                        </div>
+                    {/if}
+                </div>
+
+                <!-- ─── New unit form ───────────────────────────────────── -->
+                {#if showCreateForm}
+                    <div class="unit-create-form">
+                        <h3 class="unit-create-title">
+                            {$LL.unitCatalog.createUnitTitle()}
+                        </h3>
+                        <p class="unit-create-desc">
+                            {$LL.unitCatalog.createUnitDesc()}
+                        </p>
+
+                        <div class="unit-create-fields">
+                            <div class="unit-create-row">
+                                <div class="unit-create-field">
+                                    <label
+                                        class="fieldset-label"
+                                        for="create-unit-key"
+                                    >
+                                        {$LL.unitCatalog.keyLabel()}
+                                        <span class="text-error" aria-hidden="true">*</span>
+                                    </label>
+                                    <input
+                                        id="create-unit-key"
+                                        class="input input-sm w-full"
+                                        type="text"
+                                        placeholder={$LL.unitCatalog.keyPlaceholder()}
+                                        bind:value={createKey}
+                                        disabled={creatingUnit}
+                                        onkeydown={(e) => {
+                                            if (
+                                                e.key === "Enter" &&
+                                                createKey.trim() &&
+                                                createDisplayName.trim()
+                                            )
+                                                submitCreateUnit();
+                                        }}
+                                    />
+                                </div>
+                                <div class="unit-create-field">
+                                    <label
+                                        class="fieldset-label"
+                                        for="create-unit-name"
+                                    >
+                                        {$LL.unitCatalog.displayNameLabel()}
+                                        <span class="text-error" aria-hidden="true">*</span>
+                                    </label>
+                                    <input
+                                        id="create-unit-name"
+                                        class="input input-sm w-full"
+                                        type="text"
+                                        placeholder={$LL.unitCatalog.displayNameNewPlaceholder()}
+                                        bind:value={createDisplayName}
+                                        disabled={creatingUnit}
+                                        onkeydown={(e) => {
+                                            if (
+                                                e.key === "Enter" &&
+                                                createKey.trim() &&
+                                                createDisplayName.trim()
+                                            )
+                                                submitCreateUnit();
+                                        }}
+                                    />
+                                </div>
+                                <div class="unit-create-field">
+                                    <span class="fieldset-label">
+                                        {$LL.unitCatalog.kindLabel()}
+                                    </span>
+                                    <Listbox
+                                        value={createKind}
+                                        options={[
+                                            { value: 'integer', label: $LL.unitCatalog.kind.integer() },
+                                            { value: 'decimal', label: $LL.unitCatalog.kind.decimal() },
+                                        ]}
+                                        size="sm"
+                                        aria-label={$LL.unitCatalog.kindLabel()}
+                                        disabled={creatingUnit}
+                                        onchange={(v: string) => (createKind = v as UnitKind)}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {#if createError}
+                            <div class="unit-error">
+                                <Alert variant="error">{createError}</Alert>
+                            </div>
+                        {/if}
+
+                        <div class="unit-create-actions">
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                loading={creatingUnit}
+                                disabled={!createKey.trim() || !createDisplayName.trim()}
+                                onclick={submitCreateUnit}
+                            >
+                                {$LL.unitCatalog.addUnit()}
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onclick={closeCreateForm}
+                                disabled={creatingUnit}
+                            >
+                                {$LL.common.cancel()}
+                            </Button>
+                        </div>
+                    </div>
+                {:else}
+                    <div class="unit-create-trigger">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onclick={openCreateForm}
+                        >
+                            {$LL.unitCatalog.createCustom()}
+                        </Button>
+                    </div>
+                {/if}
+
+                <!-- ─── Archived units ──────────────────────────────────── -->
+                <div class="unit-block">
+                    <button
+                        class="unit-block-header unit-block-toggle"
+                        onclick={() => (showArchived = !showArchived)}
+                        aria-expanded={showArchived}
+                    >
+                        <span class="unit-block-label">
+                            {$LL.unitCatalog.archivedLabel()}
+                        </span>
+                        <span class="unit-count-badge">
+                            {archivedUnits.length}
+                        </span>
+                        <span class="unit-toggle-icon">
+                            {showArchived ? "▲" : "▼"}
+                        </span>
+                    </button>
+
+                    {#if showArchived}
+                        {#if archivedUnits.length === 0}
+                            <p class="unit-empty">{$LL.unitCatalog.noArchivedUnits()}</p>
+                        {:else}
+                            <div class="unit-list">
+                                {#each archivedUnits as unit (unit.id)}
+                                    <div class="unit-row unit-row-archived">
+                                        <div class="unit-info">
+                                            <span class="unit-badge {kindBadgeClass(unit.kind)}">
+                                                {unit.kind === "integer"
+                                                    ? $LL.unitCatalog.kind.integer()
+                                                    : $LL.unitCatalog.kind.decimal()}
+                                            </span>
+                                            <span class="unit-display-name unit-display-name-muted">
+                                                {unit.display_name}
+                                            </span>
+                                        </div>
+                                        <div class="unit-actions">
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onclick={() => requestRestore(unit)}
+                                            >
+                                                {$LL.unitCatalog.restore()}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                {/each}
+                            </div>
+                        {/if}
+                    {/if}
+                </div>
+
+                <!-- ─── Archive confirmation modal ─────────────────────── -->
+                <Modal
+                    bind:open={confirmingArchive}
+                    titleId="archive-modal-title"
+                    descriptionId="archive-modal-desc"
+                    closeOnBackdrop={false}
+                    onclose={() => { archiveTarget = null; }}
+                >
+                    {#snippet children()}
+                        <h2 id="archive-modal-title" class="modal-title">
+                            {$LL.unitCatalog.confirmArchive({ name: archiveTarget?.display_name ?? '' })}
+                        </h2>
+                        <p id="archive-modal-desc" class="modal-body">
+                            {$LL.unitCatalog.confirmArchiveBody()}
+                        </p>
+                        {#if archiveApiError}
+                            <div class="unit-error">
+                                <Alert variant="error">{archiveApiError}</Alert>
+                            </div>
+                        {/if}
+                    {/snippet}
+                    {#snippet footer()}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onclick={cancelArchive}
+                            disabled={archivingUnit}
+                        >
+                            {$LL.common.cancel()}
+                        </Button>
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            loading={archivingUnit}
+                            onclick={confirmArchive}
+                        >
+                            {$LL.unitCatalog.confirmArchiveYes()}
+                        </Button>
+                    {/snippet}
+                </Modal>
+
+                <!-- ─── Restore confirmation modal ─────────────────────── -->
+                <Modal
+                    bind:open={confirmingRestore}
+                    titleId="restore-modal-title"
+                    descriptionId="restore-modal-desc"
+                    closeOnBackdrop={false}
+                    onclose={() => { restoreTarget = null; }}
+                >
+                    {#snippet children()}
+                        <h2 id="restore-modal-title" class="modal-title">
+                            {$LL.unitCatalog.confirmRestore({ name: restoreTarget?.display_name ?? '' })}
+                        </h2>
+                        <p id="restore-modal-desc" class="modal-body">
+                            {$LL.unitCatalog.confirmRestoreBody()}
+                        </p>
+                        {#if restoreApiError}
+                            <div class="unit-error">
+                                <Alert variant="error">{restoreApiError}</Alert>
+                            </div>
+                        {/if}
+                    {/snippet}
+                    {#snippet footer()}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onclick={cancelRestore}
+                            disabled={restoringUnit}
+                        >
+                            {$LL.common.cancel()}
+                        </Button>
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            loading={restoringUnit}
+                            onclick={confirmRestore}
+                        >
+                            {$LL.unitCatalog.confirmRestoreYes()}
+                        </Button>
+                    {/snippet}
+                </Modal>
+            {/if}
+        </Card>
+
+        <!-- ─── Stock-out reasons catalog section (ODD task 2.7e) ────────────── -->
+        <Card tone="default">
+            <h2 class="section-title">
+                {$LL.stockOutReasons.sectionTitle()}
+            </h2>
+            <p class="section-desc">
+                {$LL.stockOutReasons.description()}
+            </p>
+
+            {#if loadingReasons}
+                <LoadingState
+                    variant="spinner"
+                    label={$LL.common.loading()}
+                />
+            {:else if reasonsLoadError}
+                <Alert variant="error">{reasonsLoadError}</Alert>
+            {:else}
+                <!-- ─── Active reasons ───────────────────────────────────────── -->
+                <div class="unit-block">
+                    <div class="unit-block-header">
+                        <span class="unit-block-label">
+                            {$LL.stockOutReasons.activeLabel()}
+                        </span>
+                        <span class="unit-count-badge">
+                            {activeReasons.length}
+                        </span>
+                    </div>
+
+                    {#if activeReasons.length === 0}
+                        <p class="unit-empty">{$LL.stockOutReasons.noActiveReasons()}</p>
+                    {:else}
+                        <div class="unit-list">
+                            {#each activeReasons as reason (reason.id)}
+                                <div class="unit-row">
+                                    <div class="unit-info">
+                                        <span class="unit-badge badge-outline">
+                                            {(() => {
+                                                const kinds = $LL.stockOutReasons.kinds as unknown as Record<
+                                                    ExitReasonMovementKind,
+                                                    () => string
+                                                >;
+                                                return kinds[reason.movement_kind as ExitReasonMovementKind]?.() ??
+                                                    reason.movement_kind;
+                                            })()}
+                                        </span>
+                                        {#if renamingReasonId === reason.id}
+                                            <input
+                                                class="input input-sm unit-rename-input"
+                                                type="text"
+                                                bind:value={renamingReasonValue}
+                                                onkeydown={(e) => {
+                                                    if (e.key === "Enter") submitReasonRename();
+                                                    if (e.key === "Escape") cancelReasonRename();
+                                                }}
+                                                disabled={savingReasonRename}
+                                                aria-label={$LL.stockOutReasons.displayNameLabel()}
+                                            />
+                                        {:else}
+                                            <span class="unit-display-name">{reason.display_name}</span>
+                                        {/if}
+                                    </div>
+                                    <div class="unit-actions">
+                                        {#if renamingReasonId === reason.id}
+                                            <Button
+                                                size="sm"
+                                                variant="primary"
+                                                loading={savingReasonRename}
+                                                onclick={submitReasonRename}
+                                            >
+                                                {$LL.stockOutReasons.saveRename()}
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onclick={cancelReasonRename}
+                                                disabled={savingReasonRename}
+                                            >
+                                                {$LL.stockOutReasons.cancelRename()}
+                                            </Button>
+                                        {:else}
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onclick={() => startReasonRename(reason)}
+                                            >
+                                                {$LL.stockOutReasons.editDisplayName()}
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onclick={() => requestReasonArchive(reason)}
+                                            >
+                                                {$LL.stockOutReasons.archive()}
+                                            </Button>
+                                        {/if}
+                                    </div>
+                                </div>
+                            {/each}
+                        </div>
+                    {/if}
+
+                    {#if renameReasonError}
+                        <div class="unit-error">
+                            <Alert variant="error">{renameReasonError}</Alert>
+                        </div>
+                    {/if}
+                </div>
+
+                <!-- ─── New reason form ─────────────────────────────────────── -->
+                {#if showCreateReasonForm}
+                    <div class="unit-create-form">
+                        <h3 class="unit-create-title">
+                            {$LL.stockOutReasons.createTitle()}
+                        </h3>
+                        <p class="unit-create-desc">
+                            {$LL.stockOutReasons.createDesc()}
+                        </p>
+
+                        <div class="unit-create-fields">
+                            <div class="unit-create-row">
+                                <div class="unit-create-field">
+                                    <label
+                                        class="fieldset-label"
+                                        for="create-reason-name"
+                                    >
+                                        {$LL.stockOutReasons.displayNameLabel()}
+                                        <span class="text-error" aria-hidden="true">*</span>
+                                    </label>
+                                    <input
+                                        id="create-reason-name"
+                                        class="input input-sm w-full"
+                                        type="text"
+                                        placeholder={$LL.stockOutReasons.displayNameNewPlaceholder()}
+                                        bind:value={createReasonDisplayName}
+                                        disabled={creatingReason}
+                                        onkeydown={(e) => {
+                                            if (
+                                                e.key === "Enter" &&
+                                                createReasonDisplayName.trim()
+                                            )
+                                                submitCreateReason();
+                                        }}
+                                    />
+                                </div>
+                                <div class="unit-create-field">
+                                    <span class="fieldset-label">
+                                        {$LL.stockOutReasons.movementKindLabel()}
+                                    </span>
+                                    <Listbox
+                                        value={createReasonMovementKind}
+                                        options={AVAILABLE_MOVEMENT_KINDS.map((kind) => ({
+                                            value: kind,
+                                            label: (() => {
+                                                const kinds = $LL.stockOutReasons.kinds as unknown as Record<
+                                                    ExitReasonMovementKind,
+                                                    () => string
+                                                >;
+                                                return kinds[kind]?.() ?? kind;
+                                            })(),
+                                        }))}
+                                        size="sm"
+                                        aria-label={$LL.stockOutReasons.movementKindLabel()}
+                                        disabled={creatingReason}
+                                        onchange={(v: string) => (createReasonMovementKind = v as ExitReasonMovementKind)}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {#if createReasonError}
+                            <div class="unit-error">
+                                <Alert variant="error">{createReasonError}</Alert>
+                            </div>
+                        {/if}
+
+                        <div class="unit-create-actions">
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                loading={creatingReason}
+                                disabled={!createReasonDisplayName.trim()}
+                                onclick={submitCreateReason}
+                            >
+                                {$LL.stockOutReasons.addReason()}
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onclick={closeCreateReasonForm}
+                                disabled={creatingReason}
+                            >
+                                {$LL.common.cancel()}
+                            </Button>
+                        </div>
+                    </div>
+                {:else}
+                    <div class="unit-create-trigger">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onclick={openCreateReasonForm}
+                        >
+                            {$LL.stockOutReasons.createNew()}
+                        </Button>
+                    </div>
+                {/if}
+
+                <!-- ─── Archived reasons ────────────────────────────────────── -->
+                <div class="unit-block">
+                    <button
+                        class="unit-block-header unit-block-toggle"
+                        onclick={() => (showArchivedReasons = !showArchivedReasons)}
+                        aria-expanded={showArchivedReasons}
+                    >
+                        <span class="unit-block-label">
+                            {$LL.stockOutReasons.archivedLabel()}
+                        </span>
+                        <span class="unit-count-badge">
+                            {archivedReasons.length}
+                        </span>
+                        <span class="unit-toggle-icon">
+                            {showArchivedReasons ? "▲" : "▼"}
+                        </span>
+                    </button>
+
+                    {#if showArchivedReasons}
+                        {#if archivedReasons.length === 0}
+                            <p class="unit-empty">{$LL.stockOutReasons.noArchivedReasons()}</p>
+                        {:else}
+                            <div class="unit-list">
+                                {#each archivedReasons as reason (reason.id)}
+                                    <div class="unit-row unit-row-archived">
+                                        <div class="unit-info">
+                                            <span class="unit-badge badge-outline">
+                                                {(() => {
+                                                    const kinds = $LL.stockOutReasons.kinds as unknown as Record<
+                                                        ExitReasonMovementKind,
+                                                        () => string
+                                                    >;
+                                                    return kinds[reason.movement_kind as ExitReasonMovementKind]?.() ??
+                                                        reason.movement_kind;
+                                                })()}
+                                            </span>
+                                            <span class="unit-display-name unit-display-name-muted">
+                                                {reason.display_name}
+                                            </span>
+                                        </div>
+                                        <div class="unit-actions">
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onclick={() => requestReasonRestore(reason)}
+                                            >
+                                                {$LL.stockOutReasons.restore()}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                {/each}
+                            </div>
+                        {/if}
+                    {/if}
+                </div>
+
+                <!-- ─── Archive confirmation modal ─────────────────────────── -->
+                <Modal
+                    bind:open={confirmingReasonArchive}
+                    titleId="reason-archive-modal-title"
+                    descriptionId="reason-archive-modal-desc"
+                    closeOnBackdrop={false}
+                    onclose={() => { archiveReasonTarget = null; }}
+                >
+                    {#snippet children()}
+                        <h2 id="reason-archive-modal-title" class="modal-title">
+                            {$LL.stockOutReasons.confirmArchive({
+                                name: archiveReasonTarget?.display_name ?? "",
+                            })}
+                        </h2>
+                        <p id="reason-archive-modal-desc" class="modal-body">
+                            {$LL.stockOutReasons.confirmArchiveBody()}
+                        </p>
+                        {#if archiveReasonApiError}
+                            <div class="unit-error">
+                                <Alert variant="error">{archiveReasonApiError}</Alert>
+                            </div>
+                        {/if}
+                    {/snippet}
+                    {#snippet footer()}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onclick={cancelReasonArchive}
+                            disabled={archivingReason}
+                        >
+                            {$LL.common.cancel()}
+                        </Button>
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            loading={archivingReason}
+                            onclick={confirmReasonArchive}
+                        >
+                            {$LL.stockOutReasons.confirmArchiveYes()}
+                        </Button>
+                    {/snippet}
+                </Modal>
+
+                <!-- ─── Restore confirmation modal ─────────────────────────── -->
+                <Modal
+                    bind:open={confirmingReasonRestore}
+                    titleId="reason-restore-modal-title"
+                    descriptionId="reason-restore-modal-desc"
+                    closeOnBackdrop={false}
+                    onclose={() => { restoreReasonTarget = null; }}
+                >
+                    {#snippet children()}
+                        <h2 id="reason-restore-modal-title" class="modal-title">
+                            {$LL.stockOutReasons.confirmRestore({
+                                name: restoreReasonTarget?.display_name ?? "",
+                            })}
+                        </h2>
+                        <p id="reason-restore-modal-desc" class="modal-body">
+                            {$LL.stockOutReasons.confirmRestoreBody()}
+                        </p>
+                        {#if restoreReasonApiError}
+                            <div class="unit-error">
+                                <Alert variant="error">{restoreReasonApiError}</Alert>
+                            </div>
+                        {/if}
+                    {/snippet}
+                    {#snippet footer()}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onclick={cancelReasonRestore}
+                            disabled={restoringReason}
+                        >
+                            {$LL.common.cancel()}
+                        </Button>
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            loading={restoringReason}
+                            onclick={confirmReasonRestore}
+                        >
+                            {$LL.stockOutReasons.confirmRestoreYes()}
+                        </Button>
+                    {/snippet}
+                </Modal>
             {/if}
         </Card>
     {/if}
@@ -729,5 +1935,255 @@
     /* ─── Section status (loading / error) ───────────────────────────────────── */
     .section-status {
         margin-top: 12px;
+    }
+
+    /* ─── Section description ─────────────────────────────────────────────────── */
+    .section-desc {
+        font-size: 0.82rem;
+        color: var(--color-secondary);
+        line-height: 1.5;
+        margin: 0 0 16px 0;
+    }
+
+    /* ─── Unit catalog ───────────────────────────────────────────────────────── */
+
+    .unit-block {
+        margin-bottom: 16px;
+    }
+
+    .unit-block-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .unit-block-label {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--color-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .unit-count-badge {
+        font-size: 0.75rem;
+        background: color-mix(in oklch, var(--color-secondary) 15%, transparent);
+        color: var(--color-secondary);
+        border-radius: 999px;
+        padding: 1px 7px;
+        font-weight: 500;
+    }
+
+    .unit-block-toggle {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+        font: inherit;
+        text-align: left;
+        width: 100%;
+    }
+
+    .unit-toggle-icon {
+        font-size: 0.7rem;
+        color: var(--color-secondary);
+        margin-left: auto;
+    }
+
+    .unit-kind-group {
+        margin-bottom: 12px;
+    }
+
+    .unit-kind-label {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--color-secondary);
+        margin-bottom: 4px;
+        padding-left: 2px;
+    }
+
+    .unit-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .unit-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 6px 8px;
+        border-radius: 0.375rem;
+        border: 1px solid color-mix(in oklch, var(--color-base-300) 50%, transparent);
+    }
+
+    .unit-row-archived {
+        opacity: 0.75;
+    }
+
+    .unit-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        flex: 1;
+    }
+
+    .unit-badge {
+        font-size: 0.72rem;
+        padding: 2px 6px;
+        border-radius: 0.25rem;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .unit-display-name {
+        font-size: 0.9rem;
+        color: var(--color-base-content);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .unit-display-name-muted {
+        color: var(--color-secondary);
+        text-decoration: line-through;
+        opacity: 0.7;
+    }
+
+    .unit-preset-tag {
+        font-size: 0.68rem;
+        color: var(--color-secondary);
+        background: color-mix(in oklch, var(--color-secondary) 10%, transparent);
+        border: 1px solid color-mix(in oklch, var(--color-secondary) 25%, transparent);
+        border-radius: 0.25rem;
+        padding: 1px 5px;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .unit-rename-input {
+        min-width: 160px;
+        flex-shrink: 0;
+    }
+
+    .unit-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+    }
+
+    .unit-error {
+        margin-top: 8px;
+    }
+
+    .unit-empty {
+        font-size: 0.82rem;
+        color: var(--color-secondary);
+        padding: 8px 2px;
+        margin: 0;
+    }
+
+    /* ─── Create unit form ───────────────────────────────────────────────────── */
+
+    .unit-create-form {
+        border: 1px solid color-mix(in oklch, var(--color-base-300) 60%, transparent);
+        border-radius: 0.5rem;
+        padding: 12px;
+        margin-bottom: 16px;
+        background: color-mix(in oklch, var(--color-base-200) 30%, transparent);
+    }
+
+    .unit-create-title {
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: var(--color-base-content);
+        margin: 0 0 4px 0;
+    }
+
+    .unit-create-desc {
+        font-size: 0.8rem;
+        color: var(--color-secondary);
+        margin: 0 0 12px 0;
+    }
+
+    .unit-create-fields {
+        margin-bottom: 12px;
+    }
+
+    .unit-create-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .unit-create-field {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        flex: 1;
+        min-width: 120px;
+    }
+
+    .unit-create-actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    .unit-create-trigger {
+        margin-bottom: 16px;
+    }
+
+    /* ─── Modal content ─────────────────────────────────────────────────────── */
+
+    .modal-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--color-base-content);
+        margin: 0 0 8px 0;
+    }
+
+    .modal-body {
+        font-size: 0.85rem;
+        color: var(--color-secondary);
+        line-height: 1.5;
+        margin: 0 0 16px 0;
+    }
+
+    /* ─── FEFO tooltip trigger ─────────────────────────────────────────────── */
+
+    .fefo-tooltip-trigger {
+        background: none;
+        border: none;
+        padding: 0 2px;
+        cursor: help;
+        vertical-align: middle;
+        display: inline-flex;
+        align-items: center;
+        color: var(--color-secondary);
+    }
+
+    .fefo-tooltip-trigger:focus-visible {
+        outline: 2px solid var(--color-primary);
+        outline-offset: 2px;
+        border-radius: 2px;
+    }
+
+    .fefo-tooltip-icon {
+        width: 0.85em;
+        height: 0.85em;
+        pointer-events: none;
+    }
+
+    /* ─── FEFO selected-policy explanation ─────────────────────────────────── */
+
+    .fefo-selected-explanation {
+        font-size: 0.8rem;
+        color: var(--color-primary);
+        display: block;
+        font-style: italic;
     }
 </style>

@@ -29,6 +29,7 @@ const en: BaseTranslation = {
     back: "Back",
     confirm: "Confirm",
     dismiss: "Dismiss",
+    retry: "Retry",
     yes: "Yes",
     no: "No",
     error: "Error",
@@ -89,6 +90,14 @@ const en: BaseTranslation = {
       label: "FEFO lot selection",
       description:
         "Controls how the Scanner tab picks a lot when a scan resolves to a product with multiple lots. Direct lot-code scans always bypass this policy and use the scanned lot.",
+      tooltip: "First Expired, First Out",
+      // Concise, user-facing descriptions for the selected option, shown below
+      // the selector so the user immediately understands the active policy.
+      selectedDescription: {
+        suggest_fefo: "Suggests the lot nearest expiry. You can pick a different one.",
+        require_fefo: "Locks to the lot nearest expiry. You must use it.",
+        manual_lot_choice: "No suggestion. You choose which lot to use every time.",
+      },
       names: {
         suggest_fefo: "Suggest FEFO (allow override)",
         require_fefo: "Require FEFO (disable override)",
@@ -349,6 +358,7 @@ const en: BaseTranslation = {
     productCategory: "Category",
     productUnit: "Unit",
     productAlertDays: "Alert days before expiry",
+    alertDaysRangeError: "Enter a whole number from 0 to 3650.",
     productNotes: "Notes",
     productBarcode: "Barcode",
     addBarcode: "Add barcode",
@@ -747,6 +757,13 @@ const en: BaseTranslation = {
         other: "Other",
       },
     },
+    // Error messages for movement-related operations
+    errors: {
+      loadStockOutReasonsFailed: "Could not load stock-out reasons: {msg}",
+      stockOutReason: "Stock-out reason",
+      movementKind: "Movement kind",
+      archived: "Archived",
+    },
   },
 
   calendar: {
@@ -1129,6 +1146,7 @@ const en: BaseTranslation = {
     registration: {
       unknownHeading: "Quick product creation",
       unknownBody: "The scanned code did not match any existing product. Choose where to use it as the starting point for a new product, or retype the SKU / barcode yourself.",
+      scannedSkuLabel: "Product SKU",
       scannedValueLabel: "Scanned value",
       scannedValuePlaceholder: "(empty)",
       routeAsSku: "Use as SKU",
@@ -1285,6 +1303,129 @@ const en: BaseTranslation = {
   // page-level labels like `pageTitle` and `section.*`). Theme-section
   // labels follow the explicit PR 5 instruction to introduce the
   // `settings.theme.*` key tree for the Configuration page switcher.
+  // Unit catalog management section in Configuration (ODD task 2.6b).
+  unitCatalog: {
+    sectionTitle: "Unit catalog",
+    description:
+      "Manage the unit definitions available when creating products. Preset units can be renamed or archived (archiving succeeds only when the unit is not in use); custom units can be renamed or archived. Archiving is blocked when a unit is still in use.",
+    // Active units panel
+    activeLabel: "Active units",
+    noActiveUnits: "No active units.",
+    // Kind labels
+    kind: {
+      integer: "Integer",
+      decimal: "Decimal",
+    },
+    // Actions (active table)
+    editDisplayName: "Rename",
+    archive: "Archive",
+    restore: "Restore",
+    preset: "Preset",
+    createCustom: "New unit",
+    // Inline edit mode
+    displayNameLabel: "Display name",
+    displayNamePlaceholder: "e.g. My Custom Unit",
+    saveRename: "Save",
+    cancelRename: "Cancel",
+    // Create unit form
+    createUnitTitle: "New custom unit",
+    createUnitDesc: "Custom units can be renamed or archived later.",
+    keyLabel: "Key",
+    keyPlaceholder: "e.g. my-unit",
+    displayNameNewPlaceholder: "e.g. My Unit",
+    kindLabel: "Kind",
+    addUnit: "Add unit",
+    creating: "Adding…",
+    // Validation messages
+    keyRequired: "Key is required",
+    displayNameRequired: "Display name is required",
+    keyPattern: "Key must be 1–16 lowercase letters, digits, hyphens or underscores",
+    // Archived panel
+    archivedLabel: "Archived units",
+    noArchivedUnits: "No archived units.",
+    showArchived: "Show archived",
+    hideArchived: "Hide archived",
+    // Error messages
+    archiveError: "Could not archive unit: {msg}",
+    renameError: "Could not rename unit: {msg}",
+    createError: "Could not create unit: {msg}",
+    restoreError: "Could not restore unit: {msg}",
+    loadError: "Could not load units: {msg}",
+    // Confirmation
+    confirmArchive: "Archive \"{name}\"?",
+    confirmArchiveBody:
+      "The unit will be hidden from the product picker. Archiving is blocked while any product still uses this unit.",
+    confirmRestore: "Restore \"{name}\"?",
+    confirmRestoreBody: "The unit will be available again in the product picker.",
+    confirmArchiveYes: "Archive",
+    confirmRestoreYes: "Restore",
+  },
+
+  // Stock-out reasons catalog management in Configuration (ODD task 2.7e).
+  // The catalog is global; each entry maps to a closed movement_kind.
+  // Movement_kind is immutable after creation; only display_name is editable.
+  // No preset badge: the DTO does not distinguish seeded from custom entries.
+  stockOutReasons: {
+    sectionTitle: "Stock-out reasons",
+    description:
+      "Manage the exit reasons available when registering stock-outs. Each reason maps to a fixed movement type. Reasons can be renamed or archived; archived reasons remain in historical records but are not available for new stock-outs.",
+    // Active reasons panel
+    activeLabel: "Active reasons",
+    noActiveReasons: "No active reasons.",
+    // Movement-kind labels (closed set — 7 stock-out kinds, sale excluded)
+    movementKind: "Exit type",
+    // Actions (active table)
+    editDisplayName: "Rename",
+    archive: "Archive",
+    restore: "Restore",
+    createNew: "New reason",
+    // Inline edit mode
+    displayNameLabel: "Display name",
+    displayNamePlaceholder: "e.g. Damaged packaging",
+    saveRename: "Save",
+    cancelRename: "Cancel",
+    // Create reason form
+    createTitle: "New stock-out reason",
+    createDesc: "Choose a fixed exit type for this reason. The type cannot be changed after creation.",
+    displayNameNewPlaceholder: "e.g. Expired (unsold)",
+    movementKindLabel: "Exit type *",
+    addReason: "Add reason",
+    creating: "Adding…",
+    // Validation
+    displayNameRequired: "Display name is required",
+    movementKindRequired: "Exit type is required",
+    // Archived panel
+    archivedLabel: "Archived reasons",
+    noArchivedReasons: "No archived reasons.",
+    // Error messages
+    archiveError: "Could not archive reason: {msg}",
+    renameError: "Could not rename reason: {msg}",
+    createError: "Could not create reason: {msg}",
+    restoreError: "Could not restore reason: {msg}",
+    loadError: "Could not load reasons: {msg}",
+    // Confirmation dialogs
+    confirmArchive: "Archive \"{name}\"?",
+    confirmArchiveBody:
+      "The reason will be hidden from the stock-out selector. It remains available in historical records.",
+    confirmRestore: "Restore \"{name}\"?",
+    confirmRestoreBody:
+      "The reason will be available again in the stock-out selector.",
+    confirmArchiveYes: "Archive",
+    confirmRestoreYes: "Restore",
+    // Movement kind labels (7 closed stock-out kinds, sale excluded).
+    // Keys must match the colon-separated `ExitReasonMovementKind` wire values
+    // from the backend, e.g. `exit:waste`, `exit:expired`, etc.
+    kinds: {
+      "exit:waste": "Waste",
+      "exit:expired": "Expired",
+      "exit:damaged": "Damaged",
+      "exit:internal_consumption": "Internal consumption",
+      "exit:return_to_supplier": "Return to supplier",
+      "exit:inventory_adjustment": "Inventory adjustment",
+      "exit:other": "Other",
+    },
+  },
+
   settings: {
     theme: {
       title: "Theme",

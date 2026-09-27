@@ -259,3 +259,49 @@ pub async fn find_units_preset(
 ) -> Result<Option<UnitDefinitionResponse>, sqlx::Error> {
     find_by_key(pool, "units").await
 }
+
+/// Lists all archived unit definitions ordered by kind then display_name.
+pub async fn list_archived(pool: &DbPool) -> Result<Vec<UnitDefinitionResponse>, sqlx::Error> {
+    let rows: Vec<UnitDefinitionRow> = sqlx::query_as(
+        "SELECT id, key, display_name, kind, is_preset, archived_at, created_at, updated_at
+         FROM unit_definitions
+         WHERE archived_at IS NOT NULL
+         ORDER BY kind, display_name",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows.into_iter().map(|r| r.into_response()).collect())
+}
+
+/// Finds an archived unit by its `id`. Returns None if not found or not archived.
+pub async fn find_archived_by_id(
+    pool: &DbPool,
+    id: &str,
+) -> Result<Option<UnitDefinitionResponse>, sqlx::Error> {
+    let row: Option<UnitDefinitionRow> = sqlx::query_as(
+        "SELECT id, key, display_name, kind, is_preset, archived_at, created_at, updated_at
+         FROM unit_definitions
+         WHERE id = $1 AND archived_at IS NOT NULL",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|r| r.into_response()))
+}
+
+/// Restores an archived unit by clearing `archived_at`.
+/// Returns true if a row was updated (unit was archived).
+pub async fn unarchive(pool: &DbPool, id: &str, updated_at: &str) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query(
+        "UPDATE unit_definitions SET archived_at = NULL, updated_at = $2
+         WHERE id = $1 AND archived_at IS NOT NULL",
+    )
+    .bind(id)
+    .bind(updated_at)
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}

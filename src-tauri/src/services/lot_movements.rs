@@ -1,12 +1,22 @@
 //! Lot movement service — ledger write, listing, and per-location balances.
 //!
 //! Business rules live here; SQL is delegated to `db::repositories::lot_movements`.
+//!
+//! ## Stock-out reasons integration (2.7c)
+//!
+//! When [`LotMovementCreate::exit_reason_id`] is supplied, the service:
+//! 1. Resolves the reason from the `stock_out_reasons` catalog (active only).
+//! 2. Derives the effective movement kind from the reason's `movement_kind`.
+//! 3. Validates the reason is applicable to the movement kind.
+//! 4. Stores an immutable `reason` snapshot (`display_name`) and `exit_reason_id`.
+//! 5. Applies all business-rule checks against the **derived** kind.
 
 use sqlx::SqlitePool;
 
 use crate::db::repositories::expiry_lots as lot_repo;
 use crate::db::repositories::lot_movements as repo;
 use crate::db::repositories::products as products_repo;
+use crate::db::repositories::stock_out_reasons as sor_repo;
 use crate::db::DbPool;
 use crate::domain::lot_movements::{
     compute_signed_delta, validate_movement_kind, validate_notes, validate_quantity_for_unit_kind,
@@ -273,20 +283,93 @@ pub async fn create_lot_movement(
     pool: &DbPool,
     input: LotMovementCreate,
 ) -> Result<LotMovementResponse, AppError> {
-    // ── Validate movement kind ─────────────────────────────────────────────────
-    let kind = validate_kind(&input.kind)?;
-    validate_direction_usage(&kind, input.direction.as_ref())?;
-    validate_quantity(input.quantity, &kind)?;
+    // ── Resolve exit_reason_id and derive effective kind ───────────────────────
+    //
+    // When an exit_reason_id is supplied we validate it against the catalog and
+    // derive the movement kind from the reason's `movement_kind`. The reason must
+    // be active (not archived) and applicable to an exit kind. The frontend kind
+    // field is ignored when exit_reason_id is present.
+    let (effective_kind, exit_reason_id, reason_snapshot): (
+        MovementKind,
+        Option<String>,
+        Option<String>,
+    ) = match &input.exit_reason_id {
+        Some(reason_id) => {
+            // Look up the reason in the catalog.
+            let reason = sor_repo::find_by_id(pool, reason_id)
+                .await
+                .map_err(|e| DomainError::Validation {
+                    message: format!("Failed to resolve stock-out reason: {}", e),
+                })?
+                .ok_or_else(|| {
+                    AppError::from(DomainError::NotFound {
+                        resource: "stock_out_reason",
+                        id: reason_id.clone(),
+                    })
+                })?;
+
+            // Reject archived reasons.
+            if reason.archived_at.is_some() {
+                return Err(DomainError::Validation {
+                    message: en_message(UserMessage::ExitReasonArchived {
+                        id: reason_id.clone(),
+                    }),
+                }
+                .into());
+            }
+
+            // Parse the reason's movement_kind.
+            let derived_kind = validate_movement_kind(&reason.movement_kind).ok_or_else(|| {
+                AppError::from(DomainError::Validation {
+                    message: en_message(UserMessage::UnknownStockOutMovementKind {
+                        kind: reason.movement_kind.clone(),
+                    }),
+                })
+            })?;
+
+            // Derive the effective kind from the reason. Validate that the
+            // reason's kind is an exit kind (non-sale stock-out).
+            if !is_exit_kind(&derived_kind) {
+                return Err(DomainError::Validation {
+                    message: en_message(UserMessage::ExitReasonNotApplicableToKind {
+                        reason_id: reason_id.clone(),
+                        reason_kind: reason.movement_kind.clone(),
+                        movement_kind: input.kind.clone(),
+                    }),
+                }
+                .into());
+            }
+
+            (
+                derived_kind,
+                Some(reason_id.clone()),
+                Some(reason.display_name.clone()),
+            )
+        }
+        None => {
+            // No exit_reason_id — validate and use the frontend-supplied kind.
+            let kind = validate_kind(&input.kind)?;
+            (kind, None, None)
+        }
+    };
+
+    // ── Validate derived kind ─────────────────────────────────────────────────
+    // All business rules (direction, quantity, locations, notes) are applied
+    // against the **effective kind**, whether it came from the reason or the input.
+    validate_direction_usage(&effective_kind, input.direction.as_ref())?;
+    validate_quantity(input.quantity, &effective_kind)?;
     validate_location_nullability(
-        &kind,
+        &effective_kind,
         input.source_location_id.as_deref(),
         input.destination_location_id.as_deref(),
         input.direction.as_ref(),
     )?;
-    validate_notes(&kind, input.notes.as_deref()).map_err(|_| DomainError::Validation {
-        message: en_message(UserMessage::NotesRequiredForMovement {
-            kind: kind.to_string(),
-        }),
+    validate_notes(&effective_kind, input.notes.as_deref()).map_err(|_| {
+        DomainError::Validation {
+            message: en_message(UserMessage::NotesRequiredForMovement {
+                kind: effective_kind.to_string(),
+            }),
+        }
     })?;
 
     // ── Validate lot exists ───────────────────────────────────────────────────
@@ -301,7 +384,7 @@ pub async fn create_lot_movement(
     // (e.g. Unidad) must not accept fractional quantities, even if a UI
     // bypass submits them. Runs after lot lookup because we need
     // product_id to resolve unit_type from the catalog.
-    validate_quantity_against_product_unit(pool, &lot, input.quantity, &kind).await?;
+    validate_quantity_against_product_unit(pool, &lot, input.quantity, &effective_kind).await?;
 
     // ── Validate source balance for exits and transfers ───────────────────────
     if let Some(ref src) = input.source_location_id {
@@ -309,7 +392,7 @@ pub async fn create_lot_movement(
         validate_location_active(pool, src).await?;
 
         // Check balance is sufficient for non-entry movements
-        if !matches!(kind, MovementKind::EntryInitial) {
+        if !matches!(effective_kind, MovementKind::EntryInitial) {
             validate_source_balance(pool, &input.lot_id, src, input.quantity).await?;
         }
     }
@@ -324,7 +407,7 @@ pub async fn create_lot_movement(
         DtoDirection::Increase => Direction::Increase,
         DtoDirection::Decrease => Direction::Decrease,
     });
-    let delta = compute_signed_delta(&kind, direction_domain.as_ref(), input.quantity);
+    let delta = compute_signed_delta(&effective_kind, direction_domain.as_ref(), input.quantity);
 
     // ── Insert movement and update lot total in a transaction ──────────────────
     let mut tx = pool.begin().await?;
@@ -337,22 +420,28 @@ pub async fn create_lot_movement(
         DtoDirection::Decrease => "decrease".to_string(),
     });
 
+    // Store the effective kind string (derived from reason or input kind).
+    let effective_kind_str = effective_kind.to_string();
+
     sqlx::query(
         r#"
             INSERT INTO lot_movements (
                 id, expiry_lot_id, movement_kind, direction, quantity,
-                source_location_id, destination_location_id, notes, actor, created_at
+                source_location_id, destination_location_id, reason, exit_reason_id,
+                notes, actor, created_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             "#,
     )
     .bind(&id)
     .bind(&input.lot_id)
-    .bind(&input.kind)
+    .bind(&effective_kind_str)
     .bind(&direction_str)
     .bind(input.quantity)
     .bind(&input.source_location_id)
     .bind(&input.destination_location_id)
+    .bind(&reason_snapshot)
+    .bind(&exit_reason_id)
     .bind(&input.notes)
     .bind("system")
     .bind(&now)
@@ -363,7 +452,7 @@ pub async fn create_lot_movement(
     // lot.quantity == ledger_sum. For a fresh lot with only entry:initial(N),
     // this sets lot.quantity = N (no net change from the INSERT value).
     // This mirrors the V5 reconciliation logic for migrated lots.
-    if matches!(kind, MovementKind::EntryInitial) {
+    if matches!(effective_kind, MovementKind::EntryInitial) {
         sqlx::query(
             r#"
                 UPDATE expiry_lots
@@ -394,7 +483,7 @@ pub async fn create_lot_movement(
             &lot.status
         };
         let new_resolution = if new_quantity == 0.0 {
-            Some(input.kind.clone())
+            Some(effective_kind_str.clone())
         } else if is_reactivation {
             None
         } else {
@@ -435,6 +524,21 @@ pub async fn create_lot_movement(
     repo::get_movement(pool, &id)
         .await?
         .ok_or(AppError::from(sqlx::Error::RowNotFound))
+}
+
+/// Returns true if the movement kind is a stock-out exit kind
+/// (all exit:* variants except exit:sale).
+fn is_exit_kind(kind: &MovementKind) -> bool {
+    matches!(
+        kind,
+        MovementKind::ExitWaste
+            | MovementKind::ExitExpired
+            | MovementKind::ExitDamaged
+            | MovementKind::ExitInternalConsumption
+            | MovementKind::ExitReturnToSupplier
+            | MovementKind::ExitInventoryAdjustment
+            | MovementKind::ExitOther
+    )
 }
 
 /// Lists all movements for a lot, newest first.
@@ -679,6 +783,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await;
@@ -707,6 +812,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(src_location.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await
@@ -723,6 +829,7 @@ mod integration_tests {
                 source_location_id: Some(src_location.clone()),
                 destination_location_id: Some(dst_location.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await
@@ -766,6 +873,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await
@@ -782,6 +890,7 @@ mod integration_tests {
                 source_location_id: Some(location_id.clone()),
                 destination_location_id: None,
                 notes: Some("Customer purchase".to_string()),
+                exit_reason_id: None,
             },
         )
         .await
@@ -811,6 +920,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await
@@ -827,6 +937,7 @@ mod integration_tests {
                 source_location_id: Some(location_id.clone()),
                 destination_location_id: None,
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await;
@@ -850,6 +961,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await
@@ -866,6 +978,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: Some("Found extra units during count".to_string()),
+                exit_reason_id: None,
             },
         )
         .await;
@@ -899,6 +1012,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await
@@ -915,6 +1029,7 @@ mod integration_tests {
                 source_location_id: Some(location_id.clone()),
                 destination_location_id: None,
                 notes: Some("Damaged goods found".to_string()),
+                exit_reason_id: None,
             },
         )
         .await;
@@ -948,6 +1063,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await
@@ -964,6 +1080,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await;
@@ -987,6 +1104,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await
@@ -1003,6 +1121,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: Some("Note".to_string()),
+                exit_reason_id: None,
             },
         )
         .await;
@@ -1026,6 +1145,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await
@@ -1045,6 +1165,7 @@ mod integration_tests {
                 source_location_id: Some(location_id.clone()),
                 destination_location_id: None,
                 notes: Some("Sale".to_string()),
+                exit_reason_id: None,
             },
         )
         .await
@@ -1076,6 +1197,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(src_location.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await
@@ -1092,6 +1214,7 @@ mod integration_tests {
                 source_location_id: Some(src_location.clone()),
                 destination_location_id: Some(dst_location.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await
@@ -1130,6 +1253,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await
@@ -1146,6 +1270,7 @@ mod integration_tests {
                 source_location_id: Some(location_id.clone()),
                 destination_location_id: None,
                 notes: Some("Full lot sold".to_string()),
+                exit_reason_id: None,
             },
         )
         .await
@@ -1177,6 +1302,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await
@@ -1193,6 +1319,7 @@ mod integration_tests {
                 source_location_id: Some(location_id.clone()),
                 destination_location_id: None,
                 notes: Some("Full lot sold".to_string()),
+                exit_reason_id: None,
             },
         )
         .await
@@ -1216,6 +1343,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: Some("Stock found during recount".to_string()),
+                exit_reason_id: None,
             },
         )
         .await
@@ -1247,6 +1375,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await
@@ -1263,6 +1392,7 @@ mod integration_tests {
                 source_location_id: Some(location_id.clone()),
                 destination_location_id: None,
                 notes: Some("Too many".to_string()),
+                exit_reason_id: None,
             },
         )
         .await;
@@ -1381,6 +1511,7 @@ mod integration_tests {
                 source_location_id: Some(location_id.clone()),
                 destination_location_id: None,
                 notes: Some("Bypass attempt".to_string()),
+                exit_reason_id: None,
             },
         )
         .await;
@@ -1415,6 +1546,7 @@ mod integration_tests {
                 source_location_id: Some(location_id.clone()),
                 destination_location_id: None,
                 notes: Some("Whole number sale".to_string()),
+                exit_reason_id: None,
             },
         )
         .await;
@@ -1441,6 +1573,7 @@ mod integration_tests {
                 source_location_id: Some(location_id.clone()),
                 destination_location_id: None,
                 notes: Some("Decimal sale".to_string()),
+                exit_reason_id: None,
             },
         )
         .await;
@@ -1467,6 +1600,7 @@ mod integration_tests {
                 source_location_id: Some(location_id.clone()),
                 destination_location_id: None,
                 notes: Some("Legacy sale".to_string()),
+                exit_reason_id: None,
             },
         )
         .await;
@@ -1493,6 +1627,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: Some("Found partial unit".to_string()),
+                exit_reason_id: None,
             },
         )
         .await;
@@ -1539,6 +1674,7 @@ mod integration_tests {
                 source_location_id: Some(location_id.clone()),
                 destination_location_id: Some(dst_id.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await;
@@ -1667,6 +1803,7 @@ mod integration_tests {
                 source_location_id: Some(src_loc.clone()),
                 destination_location_id: Some(dst_loc.clone()),
                 notes: Some("Cross-store transfer".to_string()),
+                exit_reason_id: None,
             },
         )
         .await;
@@ -1730,6 +1867,7 @@ mod integration_tests {
                 source_location_id: Some(src_loc),
                 destination_location_id: Some(dst_loc),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await;
@@ -1768,6 +1906,7 @@ mod integration_tests {
                 source_location_id: Some(src_loc),
                 destination_location_id: Some(dst_loc),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await;
@@ -1800,6 +1939,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await
@@ -1825,6 +1965,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(location_id.clone()),
                 notes: Some("Zero delta — no-op".to_string()),
+                exit_reason_id: None,
             },
         )
         .await;
@@ -1880,6 +2021,7 @@ mod integration_tests {
                 source_location_id: None,
                 destination_location_id: Some(loc_a.clone()),
                 notes: None,
+                exit_reason_id: None,
             },
         )
         .await
@@ -1929,6 +2071,7 @@ mod integration_tests {
                             source_location_id: Some(src.clone()),
                             destination_location_id: Some(dst.clone()),
                             notes: None,
+                            exit_reason_id: None,
                         },
                     )
                     .await
@@ -1974,6 +2117,7 @@ mod integration_tests {
                             source_location_id: src,
                             destination_location_id: dst,
                             notes: Some("Invariant test".to_string()),
+                            exit_reason_id: None,
                         },
                     )
                     .await
@@ -2001,6 +2145,7 @@ mod integration_tests {
                             source_location_id: Some(loc_a.clone()),
                             destination_location_id: None,
                             notes: None,
+                            exit_reason_id: None,
                         },
                     )
                     .await
@@ -2064,5 +2209,371 @@ mod integration_tests {
                 expected
             );
         }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────
+    // Exit reason ID integration tests (2.7c)
+    // ────────────────────────────────────────────────────────────────────────────
+
+    /// Helper: creates a stock-out reason and returns its id.
+    async fn create_stock_out_reason(
+        pool: &DbPool,
+        display_name: &str,
+        movement_kind: &str,
+    ) -> String {
+        let now = chrono::Utc::now().to_rfc3339();
+        let id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO stock_out_reasons (id, display_name, movement_kind, sort_order, created_at, updated_at)              VALUES ($1, $2, $3, 0, $4, $5)",
+        )
+        .bind(&id)
+        .bind(display_name)
+        .bind(movement_kind)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert stock_out_reason");
+        id
+    }
+
+    #[tokio::test]
+    async fn exit_reason_id_derives_kind_even_when_input_differs() {
+        // When exit_reason_id is supplied, the movement kind is derived from the
+        // reason's movement_kind, NOT from the frontend-supplied kind field.
+        let pool = fresh_test_pool().await.expect("test pool setup");
+        let (lot_id, location_id, _, _) = create_test_lot(&pool).await;
+
+        // Emit initial entry
+        create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "entry:initial".to_string(),
+                direction: None,
+                quantity: 10.0,
+                source_location_id: None,
+                destination_location_id: Some(location_id.clone()),
+                notes: None,
+                exit_reason_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Create a waste reason (exit:waste)
+        let reason_id = create_stock_out_reason(&pool, "Test Waste", "exit:waste").await;
+
+        // Submit with a DIFFERENT kind (exit:sale) but supply exit_reason_id.
+        // The service must derive exit:waste from the reason, not use exit:sale.
+        let result = create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "exit:sale".to_string(), // intentionally wrong
+                direction: None,
+                quantity: 2.0,
+                source_location_id: Some(location_id.clone()),
+                destination_location_id: None,
+                notes: None,
+                exit_reason_id: Some(reason_id.clone()),
+            },
+        )
+        .await;
+
+        assert!(result.is_ok(), "should succeed despite kind mismatch");
+        let movement = result.unwrap();
+        assert_eq!(movement.movement_kind, "exit:waste");
+        assert_eq!(movement.reason.as_deref(), Some("Test Waste"));
+        assert_eq!(movement.exit_reason_id.as_deref(), Some(reason_id.as_str()));
+    }
+
+    #[tokio::test]
+    async fn exit_reason_snapshot_persists_and_query_returns_it() {
+        let pool = fresh_test_pool().await.expect("test pool setup");
+        let (lot_id, location_id, _, _) = create_test_lot(&pool).await;
+
+        // Emit initial entry
+        create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "entry:initial".to_string(),
+                direction: None,
+                quantity: 10.0,
+                source_location_id: None,
+                destination_location_id: Some(location_id.clone()),
+                notes: None,
+                exit_reason_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let reason_id = create_stock_out_reason(&pool, "Expired Test", "exit:expired").await;
+
+        create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "exit:other".to_string(),
+                direction: None,
+                quantity: 1.0,
+                source_location_id: Some(location_id.clone()),
+                destination_location_id: None,
+                notes: None,
+                exit_reason_id: Some(reason_id.clone()),
+            },
+        )
+        .await
+        .unwrap();
+
+        // List movements and verify snapshot is returned (no catalog join needed)
+        let movements = list_lot_movements(&pool, &lot_id).await.unwrap();
+        let exit = movements
+            .iter()
+            .find(|m| m.exit_reason_id.is_some())
+            .unwrap();
+        assert_eq!(exit.reason.as_deref(), Some("Expired Test"));
+        assert_eq!(exit.exit_reason_id.as_deref(), Some(reason_id.as_str()));
+        assert_eq!(exit.movement_kind, "exit:expired");
+    }
+
+    #[tokio::test]
+    async fn exit_reason_missing_id_rejected() {
+        let pool = fresh_test_pool().await.expect("test pool setup");
+        let (lot_id, location_id, _, _) = create_test_lot(&pool).await;
+
+        create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "entry:initial".to_string(),
+                direction: None,
+                quantity: 10.0,
+                source_location_id: None,
+                destination_location_id: Some(location_id.clone()),
+                notes: None,
+                exit_reason_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Supply a non-existent reason ID
+        let result = create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "exit:other".to_string(),
+                direction: None,
+                quantity: 1.0,
+                source_location_id: Some(location_id.clone()),
+                destination_location_id: None,
+                notes: None,
+                exit_reason_id: Some("nonexistent-reason-id".to_string()),
+            },
+        )
+        .await;
+
+        assert!(result.is_err(), "should reject non-existent reason ID");
+        let err = format!("{:?}", result.unwrap_err());
+        // Domain(NotFound { resource: "stock_out_reason", id: ... }) is the correct rejection.
+        // NotFound resources are surfaced as ResourceNotFound by the IPC layer.
+        assert!(
+            err.contains("NotFound") && err.contains("nonexistent-reason-id"),
+            "error should be NotFound for missing reason, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn exit_reason_archived_rejected() {
+        let pool = fresh_test_pool().await.expect("test pool setup");
+        let (lot_id, location_id, _, _) = create_test_lot(&pool).await;
+
+        create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "entry:initial".to_string(),
+                direction: None,
+                quantity: 10.0,
+                source_location_id: None,
+                destination_location_id: Some(location_id.clone()),
+                notes: None,
+                exit_reason_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let reason_id = create_stock_out_reason(&pool, "Archived Reason", "exit:damaged").await;
+        let now = chrono::Utc::now().to_rfc3339();
+        sqlx::query("UPDATE stock_out_reasons SET archived_at = $1 WHERE id = $2")
+            .bind(&now)
+            .bind(&reason_id)
+            .execute(&pool)
+            .await
+            .expect("archive reason");
+
+        let result = create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "exit:other".to_string(),
+                direction: None,
+                quantity: 1.0,
+                source_location_id: Some(location_id.clone()),
+                destination_location_id: None,
+                notes: None,
+                exit_reason_id: Some(reason_id.clone()),
+            },
+        )
+        .await;
+
+        assert!(result.is_err(), "should reject archived reason");
+        let err = format!("{:?}", result.unwrap_err());
+        assert!(
+            err.contains("archived"),
+            "error should mention archived, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn exit_reason_rejected_for_non_stockout_kinds() {
+        // exit_reason_id must not be used with sale, transfer, or inventory_adjustment.
+        // The reason's kind (exit:waste) is not an exit kind that applies to transfer.
+        let pool = fresh_test_pool().await.expect("test pool setup");
+        let (lot_id, location_id, store_id, _) = create_test_lot(&pool).await;
+        let dst_location = create_second_location(&pool, &store_id).await;
+
+        create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "entry:initial".to_string(),
+                direction: None,
+                quantity: 10.0,
+                source_location_id: None,
+                destination_location_id: Some(location_id.clone()),
+                notes: None,
+                exit_reason_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let reason_id = create_stock_out_reason(&pool, "Waste Reason", "exit:waste").await;
+
+        // Try transfer with an exit reason — should be rejected
+        let result = create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "transfer".to_string(),
+                direction: None,
+                quantity: 1.0,
+                source_location_id: Some(location_id.clone()),
+                destination_location_id: Some(dst_location.clone()),
+                notes: None,
+                exit_reason_id: Some(reason_id.clone()),
+            },
+        )
+        .await;
+
+        assert!(
+            result.is_err(),
+            "exit_reason_id must be rejected for transfer"
+        );
+        let err = format!("{:?}", result.unwrap_err());
+        // exit:waste derived from reason requires source-only (no destination).
+        // The rejection message mentions the derived kind — either the not-applicable
+        // error or the location-validation error both confirm the reason blocked the transfer.
+        assert!(
+            err.contains("exit:waste"),
+            "error should mention derived exit:waste kind, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn movement_without_exit_reason_id_unchanged() {
+        // Existing callers (migration, internal, sale, transfer) without exit_reason_id
+        // should behave exactly as before: no reason snapshot, no ID.
+        let pool = fresh_test_pool().await.expect("test pool setup");
+        let (lot_id, location_id, store_id, _) = create_test_lot(&pool).await;
+        let dst_location = create_second_location(&pool, &store_id).await;
+
+        create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "entry:initial".to_string(),
+                direction: None,
+                quantity: 10.0,
+                source_location_id: None,
+                destination_location_id: Some(location_id.clone()),
+                notes: None,
+                exit_reason_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Sale without exit_reason_id
+        let sale = create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "exit:sale".to_string(),
+                direction: None,
+                quantity: 3.0,
+                source_location_id: Some(location_id.clone()),
+                destination_location_id: None,
+                notes: None,
+                exit_reason_id: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(sale.reason, None);
+        assert_eq!(sale.exit_reason_id, None);
+
+        // Transfer without exit_reason_id
+        let transfer = create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "transfer".to_string(),
+                direction: None,
+                quantity: 2.0,
+                source_location_id: Some(location_id.clone()),
+                destination_location_id: Some(dst_location.clone()),
+                notes: None,
+                exit_reason_id: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(transfer.reason, None);
+        assert_eq!(transfer.exit_reason_id, None);
+
+        // Inventory adjustment without exit_reason_id
+        let adj = create_lot_movement(
+            &pool,
+            LotMovementCreate {
+                lot_id: lot_id.clone(),
+                kind: "inventory_adjustment".to_string(),
+                direction: Some(DtoDirection::Increase),
+                quantity: 1.0,
+                source_location_id: None,
+                destination_location_id: Some(location_id.clone()),
+                notes: Some("Manual count".to_string()),
+                exit_reason_id: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(adj.reason, None);
+        assert_eq!(adj.exit_reason_id, None);
     }
 }

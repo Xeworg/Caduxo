@@ -106,10 +106,21 @@ pub fn run() {
             commands::unit_definitions::list_unit_definitions,
             commands::unit_definitions::create_unit_definition,
             commands::unit_definitions::rename_unit_definition,
+            commands::unit_definitions::archive_unit_definition,
+            commands::unit_definitions::list_archived_unit_definitions,
+            commands::unit_definitions::unarchive_unit_definition,
             commands::unit_definitions::list_unrecognized_units,
             commands::unit_definitions::unit_audit_banner_state,
             commands::unit_definitions::dismiss_unit_audit_banner,
             commands::unit_definitions::apply_unit_review_action,
+            // Stock-out reasons catalog (2.7b)
+            commands::stock_out_reasons::list_stock_out_reasons,
+            commands::stock_out_reasons::list_all_stock_out_reasons,
+            commands::stock_out_reasons::get_stock_out_reason,
+            commands::stock_out_reasons::create_stock_out_reason,
+            commands::stock_out_reasons::rename_stock_out_reason,
+            commands::stock_out_reasons::archive_stock_out_reason,
+            commands::stock_out_reasons::unarchive_stock_out_reason,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

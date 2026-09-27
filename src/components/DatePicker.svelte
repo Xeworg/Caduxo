@@ -54,10 +54,23 @@
   // What the <input> currently renders — decoupled from `value`
   let displayText: string = value ?? "";
 
-  // Sync displayText when value changes externally (e.g. form reset)
-  $: if (value === "" && displayText !== "") {
+  // Tracks whether the user is actively typing so reactive sync never
+  // overwrites in-progress invalid text (design contract D6: no silent rewrite).
+  let isUserTyping = false;
+
+  // Tracks that the input contains an invalid draft that was confirmed on blur.
+  // Unlike isUserTyping (which resets on each keystroke), isDraft persists
+  // until the user corrects the text or a calendar/clear action resolves it.
+  // Together they block the reactive sync so invalid text survives blur.
+  let isDraft = false;
+
+  // Sync displayText when value changes externally (e.g. form reset).
+  // Guard with `!isUserTyping && !isDraft` so neither active typing nor an
+  // uncommitted invalid draft overwrites the input; calendar / clear actions
+  // resolve the draft by setting isDraft = false directly.
+  $: if (!isUserTyping && !isDraft && value === "" && displayText !== "") {
     // intentional: let user clear
-  } else if (value !== displayText) {
+  } else if (!isUserTyping && !isDraft && value !== displayText) {
     displayText = value;
   }
 
@@ -177,6 +190,9 @@
     displayText = e.detail;
     isInvalid = false;
     invalidReason = "";
+    // Resolve any pending invalid draft so external resets unblock sync.
+    isUserTyping = false;
+    isDraft = false;
     isOpen = false;
   }
 
@@ -205,6 +221,8 @@
     displayText = today;
     isInvalid = false;
     invalidReason = "";
+    isUserTyping = false;
+    isDraft = false;
     isOpen = false;
   }
 
@@ -219,12 +237,25 @@
     displayText = "";
     isInvalid = false;
     invalidReason = "";
+    isUserTyping = false;
+    isDraft = false;
     isOpen = false;
   }
 
   // ── Input handling ───────────────────────────────────────────────────────────
 
-  function onInput() {
+  function onInput(e: Event) {
+    // Read the actual input event value — displayText may lag behind when
+    // value is externally synchronized, so we always use the live event value.
+    const target = e.target as HTMLInputElement;
+    displayText = target.value;
+    // Only set isUserTyping on fresh keystrokes; if we are resolving a draft
+    // (isDraft = true from a prior blur), leave isUserTyping alone so it
+    // survives until the next blur that commits or resets the draft.
+    if (!isUserTyping) {
+      isUserTyping = true;
+    }
+
     // Re-validate on every keystroke; only update `isInvalid` (not `value`)
     const result = parseIsoDate(displayText, minDate, maxDate);
     if (displayText === "") {
@@ -245,31 +276,40 @@
 
   function onBlur() {
     if (displayText === "") {
+      // Empty field: commit clear or show required error.
       if (clearable) {
         value = "";
+        displayText = "";
         isInvalid = false;
         invalidReason = "";
       } else {
-        // Required: show invalid, revert to last good value
         displayText = value;
         isInvalid = true;
         invalidReason = "required";
       }
+      isUserTyping = false;
+      isDraft = false;
       return;
     }
 
     const result = parseIsoDate(displayText, minDate, maxDate);
     if (result.ok) {
+      // Valid: commit and unblock sync.
       value = result.iso;
       displayText = result.iso;
+      isUserTyping = false;
+      isDraft = false;
       isInvalid = false;
       invalidReason = "";
     } else {
-      // Commit nothing; show error
+      // Invalid: enter draft state. Both flags stay true so reactive sync
+      // remains blocked and the invalid text survives blur. The user can
+      // continue editing (onInput clears both on a valid entry); a calendar /
+      // clear / Today action resolves isDraft directly.
+      isUserTyping = true;
+      isDraft = true;
       isInvalid = true;
       invalidReason = result.reason;
-      // displayText stays as typed (no silent rewrite)
-      // value stays at last good value
     }
   }
 
@@ -313,7 +353,7 @@
       class:dp-invalid={isInvalid}
       value={displayText}
       on:focus={openPopover}
-      on:input={onInput}
+      on:input={(e) => onInput(e)}
       on:blur={onBlur}
       on:keydown={onInputKeydown}
     />

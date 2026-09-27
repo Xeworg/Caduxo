@@ -6,4 +6,5 @@
 pub mod expiry_status;
 pub mod lot_movements;
 pub mod lot_resolution;
+pub mod stock_out_reasons;
 pub mod validation;

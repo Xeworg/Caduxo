@@ -14,8 +14,8 @@ pub async fn get_movement(
     sqlx::query_as::<_, LotMovementResponse>(
         r#"
         SELECT id, expiry_lot_id, movement_kind, direction, quantity,
-               source_location_id, destination_location_id, reason, notes,
-               actor, created_at
+               source_location_id, destination_location_id, reason, exit_reason_id,
+               notes, actor, created_at
         FROM lot_movements
         WHERE id = $1
         "#,
@@ -37,8 +37,8 @@ pub async fn list_movements_by_lot(
     sqlx::query_as::<_, LotMovementResponse>(
         r#"
         SELECT id, expiry_lot_id, movement_kind, direction, quantity,
-               source_location_id, destination_location_id, reason, notes,
-               actor, created_at
+               source_location_id, destination_location_id, reason, exit_reason_id,
+               notes, actor, created_at
         FROM lot_movements
         WHERE expiry_lot_id = $1
         ORDER BY created_at DESC

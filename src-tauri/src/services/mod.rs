@@ -14,6 +14,7 @@ pub mod products;
 pub mod reports;
 pub mod scanner;
 pub mod settings;
+pub mod stock_out_reasons;
 pub mod stores;
 pub mod unit_audit;
 pub mod unit_definitions;

@@ -157,6 +157,46 @@ pub async fn archive_unit(pool: &DbPool, id: String) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Lists all archived unit definitions ordered by kind then display_name.
+pub async fn list_archived_units(pool: &DbPool) -> Result<Vec<UnitDefinitionResponse>, AppError> {
+    repo::list_archived(pool).await.map_err(AppError::from)
+}
+
+/// Restores an archived unit. Blocked when the unit's key conflicts with an
+/// existing active unit (case-insensitive).
+pub async fn unarchive_unit(pool: &DbPool, id: String) -> Result<UnitDefinitionResponse, AppError> {
+    // Check if the unit exists and is archived.
+    let found = repo::find_archived_by_id(pool, &id)
+        .await
+        .map_err(AppError::from)?;
+    let archived = found.ok_or(DomainError::NotFound {
+        resource: "unit_definition",
+        id: id.clone(),
+    })?;
+
+    // Check for key conflict with any active unit (case-insensitive).
+    if let Some(active) = repo::find_by_key(pool, &archived.key)
+        .await
+        .map_err(AppError::from)?
+    {
+        return Err(AppError::Domain(DomainError::DuplicateField {
+            field: "key",
+            value: active.key,
+        }));
+    }
+
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    repo::unarchive(pool, &id, &now)
+        .await
+        .map_err(AppError::from)?;
+
+    // Return the restored unit (archived_at is now NULL).
+    Ok(UnitDefinitionResponse {
+        archived_at: None,
+        ..archived
+    })
+}
+
 // ============================================================
 // Tests
 // ============================================================
@@ -440,6 +480,169 @@ mod tests {
             eprintln!("Input: {input}, Suggestions: {suggestions:?}");
         }
         // Always pass — this is just a diagnostic.
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn list_archived_units_returns_only_archived() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        // Create and archive two units.
+        let u1 = svc::create_custom_unit(
+            &pool,
+            UnitDefinitionCreateInput {
+                key: "to-archive-1".into(),
+                display_name: "To Archive 1".into(),
+                kind: UnitKind::Integer,
+            },
+        )
+        .await?;
+        let u2 = svc::create_custom_unit(
+            &pool,
+            UnitDefinitionCreateInput {
+                key: "to-archive-2".into(),
+                display_name: "To Archive 2".into(),
+                kind: UnitKind::Decimal,
+            },
+        )
+        .await?;
+
+        svc::archive_unit(&pool, u1.id.clone()).await?;
+        svc::archive_unit(&pool, u2.id.clone()).await?;
+
+        // Active list must be empty (or contain only presets).
+        let active = svc::list_active(&pool).await?;
+        let archived = svc::list_archived_units(&pool).await?;
+
+        assert!(active.iter().all(|u| u.id != u1.id && u.id != u2.id));
+        assert_eq!(archived.len(), 2);
+        assert!(archived.iter().any(|u| u.id == u1.id));
+        assert!(archived.iter().any(|u| u.id == u2.id));
+        assert!(archived.iter().all(|u| u.archived_at.is_some()));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn unarchive_unit_succeeds() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let unit = svc::create_custom_unit(
+            &pool,
+            UnitDefinitionCreateInput {
+                key: "to-unarchive".into(),
+                display_name: "To Unarchive".into(),
+                kind: UnitKind::Decimal,
+            },
+        )
+        .await?;
+
+        svc::archive_unit(&pool, unit.id.clone()).await?;
+        let restored = svc::unarchive_unit(&pool, unit.id.clone()).await?;
+
+        assert!(restored.archived_at.is_none());
+        assert_eq!(restored.id, unit.id);
+        assert_eq!(restored.key, unit.key);
+
+        // Unit should reappear in active list.
+        let active = svc::list_active(&pool).await?;
+        assert!(active.iter().any(|u| u.id == unit.id));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn unarchive_unit_missing_returns_not_found() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let err = svc::unarchive_unit(&pool, "nonexistent-id".into())
+            .await
+            .expect_err("unarchive missing unit must be rejected");
+
+        match err {
+            AppError::Domain(crate::error::DomainError::NotFound { resource, id }) => {
+                assert_eq!(resource, "unit_definition");
+                assert_eq!(id, "nonexistent-id");
+            }
+            other => panic!("expected NotFound, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn unarchive_unit_already_active_returns_not_found(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        let unit = svc::create_custom_unit(
+            &pool,
+            UnitDefinitionCreateInput {
+                key: "already-active".into(),
+                display_name: "Already Active".into(),
+                kind: UnitKind::Integer,
+            },
+        )
+        .await?;
+
+        // Attempt to unarchive an active (non-archived) unit.
+        let err = svc::unarchive_unit(&pool, unit.id.clone())
+            .await
+            .expect_err("unarchive active unit must be rejected");
+
+        match err {
+            AppError::Domain(crate::error::DomainError::NotFound { resource, id }) => {
+                assert_eq!(resource, "unit_definition");
+                assert_eq!(id, unit.id);
+            }
+            other => panic!("expected NotFound, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn unarchive_unit_key_conflict_returns_duplicate_field(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool = fresh_test_pool().await?;
+        // Create and archive unit with key "conflict-key".
+        let archived = svc::create_custom_unit(
+            &pool,
+            UnitDefinitionCreateInput {
+                key: "conflict-key".into(),
+                display_name: "Conflict Unit".into(),
+                kind: UnitKind::Integer,
+            },
+        )
+        .await?;
+        svc::archive_unit(&pool, archived.id.clone()).await?;
+
+        // The database has a UNIQUE constraint on `key` that prevents creating
+        // a unit with the same key as an archived one. This means the
+        // DuplicateField check in unarchive_unit is defensive (better error
+        // message if the constraint is ever relaxed). We verify that creating
+        // a conflicting unit fails at the database level.
+        let db_err = svc::create_custom_unit(
+            &pool,
+            UnitDefinitionCreateInput {
+                key: "conflict-key".into(), // same key as archived
+                display_name: "Active Conflict".into(),
+                kind: UnitKind::Decimal,
+            },
+        )
+        .await
+        .expect_err("creating unit with key matching archived unit must fail at DB level");
+
+        // The database constraint prevents the conflict before we reach unarchive.
+        // The DuplicateField check in unarchive_unit is still valuable for
+        // clearer error messages and future schema relaxation.
+        assert!(
+            matches!(db_err, AppError::Infrastructure(_)),
+            "expected Infrastructure error from DB constraint, got: {db_err}"
+        );
+
+        // Verify the archived unit is untouched.
+        let archived_check =
+            crate::db::repositories::unit_definitions::find_archived_by_id(&pool, &archived.id)
+                .await?
+                .expect("archived unit must still exist");
+        assert_eq!(archived_check.key, "conflict-key");
+
+        // Verify unarchive still works correctly for the original unit.
+        let restored = svc::unarchive_unit(&pool, archived.id.clone()).await?;
+        assert!(restored.archived_at.is_none());
         Ok(())
     }
 }

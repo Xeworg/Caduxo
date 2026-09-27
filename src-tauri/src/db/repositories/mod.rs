@@ -8,5 +8,6 @@ pub mod lot_movements;
 pub mod notification_log;
 pub mod products;
 pub mod settings;
+pub mod stock_out_reasons;
 pub mod stores;
 pub mod unit_definitions;
