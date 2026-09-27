@@ -147,3 +147,65 @@ pub async fn apply_unit_review_action(
         .map_err(|e| localize_internal(e, loc))
         .map_err(AppError::into)
 }
+
+/// Archives a unit. Blocked when any product still references it.
+///
+/// `locale` (BCP-47 tag, optional) is forwarded to `localize_not_found`
+/// and `localize_business_rule` so the unknown-id and
+/// "still referenced" boundaries reach the UI in the active locale.
+/// Unknown tags fall back to English via `Locale::parse`. Omitting the
+/// argument keeps English for backward compatibility.
+#[tauri::command]
+pub async fn archive_unit_definition(
+    state: State<'_, AppState>,
+    id: String,
+    locale: Option<String>,
+) -> Result<(), CommandError> {
+    let pool = state.pool().await;
+    let loc = resolve_locale(locale);
+    service::archive_unit(&pool, id)
+        .await
+        .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
+        .map_err(AppError::into)
+}
+
+/// Lists all archived unit definitions ordered by kind then display_name.
+#[tauri::command]
+pub async fn list_archived_unit_definitions(
+    state: State<'_, AppState>,
+) -> Result<Vec<UnitDefinitionResponse>, CommandError> {
+    let pool = state.pool().await;
+    service::list_archived_units(&pool)
+        .await
+        .map_err(Into::into)
+}
+
+/// Restores an archived unit. Blocked when the unit's key conflicts with an
+/// existing active unit (case-insensitive).
+///
+/// `locale` (BCP-47 tag, optional) is forwarded to `localize_not_found`
+/// and `localize_duplicate_field` so the unknown-id and key-conflict
+/// boundaries reach the UI in the active locale. Unknown tags fall back
+/// to English via `Locale::parse`. Omitting the argument keeps English for
+/// backward compatibility.
+#[tauri::command]
+pub async fn unarchive_unit_definition(
+    state: State<'_, AppState>,
+    id: String,
+    locale: Option<String>,
+) -> Result<UnitDefinitionResponse, CommandError> {
+    let pool = state.pool().await;
+    let loc = resolve_locale(locale);
+    service::unarchive_unit(&pool, id)
+        .await
+        .map_err(|e| localize_validation(e, loc))
+        .map_err(|e| localize_business_rule(e, loc))
+        .map_err(|e| localize_not_found(e, loc))
+        .map_err(|e| localize_duplicate_field(e, loc))
+        .map_err(|e| localize_internal(e, loc))
+        .map_err(AppError::into)
+}
