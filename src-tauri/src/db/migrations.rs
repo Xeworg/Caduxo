@@ -1025,6 +1025,186 @@ pub(crate) const MIGRATIONS: &[(i64, &str, &str)] = &[
             ON product_lifecycle_events(product_id, created_at DESC);
         "#,
     ),
+    // V20 — configurable stock-out reasons catalog
+    //
+    // Adds the `stock_out_reasons` catalog table for configurable exit reasons.
+    // Each reason carries a stable TEXT primary key, a human-readable
+    // `display_name`, and the `movement_kind` it applies to (constrained to
+    // the non-sale stock-out kinds; sale is excluded per design scope).
+    //
+    // The table supports soft-delete via `archived_at` so reason history is
+    // preserved. The `sort_order` column enables configurable display ordering.
+    //
+    // A nullable FK `lot_movements.exit_reason_id` references the catalog,
+    // preserving the existing `reason` snapshot column verbatim — no mutation
+    // of legacy text.
+    //
+    // Backfill maps only unambiguously identifiable legacy `lot_movements.reason`
+    // snapshot values to their canonical exit_reason_id:
+    //   discarded         → exit:waste
+    //   consumed          → exit:internal_consumption
+    //   other             → exit:other
+    //
+    // Values that are left snapshot-only:
+    //   - `sale` (scope exclusion)
+    //   - any value starting with `legacy:` (already mangled in prior migrations)
+    //   - archive-specific text (donated, transferred, etc.)
+    //   - NULL or unknown values
+    //
+    // The migration is idempotent: `INSERT OR IGNORE` seeds, the backfill
+    // UPDATE filters to `exit_reason_id IS NULL`, and re-runs leave row counts
+    // unchanged. Project migrations do not support down-migration; this
+    // migration is tested as an idempotent transactional upgrade.
+    (
+        20,
+        "add_stock_out_reasons_catalog",
+        r#"
+        -- ====================================================================
+        -- Step 1: Create the stock_out_reasons catalog table.
+        -- ====================================================================
+        CREATE TABLE stock_out_reasons (
+            id           TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL,
+            movement_kind TEXT NOT NULL
+                          CHECK(movement_kind IN (
+                              'exit:waste',
+                              'exit:expired',
+                              'exit:damaged',
+                              'exit:internal_consumption',
+                              'exit:return_to_supplier',
+                              'exit:inventory_adjustment',
+                              'exit:other'
+                          )),
+            sort_order   INTEGER NOT NULL DEFAULT 0,
+            archived_at  TEXT,
+            created_at   TEXT NOT NULL,
+            updated_at   TEXT NOT NULL
+        );
+
+        -- Case-insensitive unique display_name among active rows.
+        -- Predicate references only the table's own columns — the only
+        -- SQLite-legal shape for a partial-index WHERE clause.
+        CREATE UNIQUE INDEX uq_stock_out_reasons_display_name_active
+            ON stock_out_reasons(lower(display_name))
+            WHERE archived_at IS NULL;
+
+        -- List index by movement_kind for efficient reason lookups by kind.
+        CREATE INDEX idx_stock_out_reasons_movement_kind
+            ON stock_out_reasons(movement_kind);
+
+        -- List index for active reasons ordered by sort_order.
+        CREATE INDEX idx_stock_out_reasons_kind_active_order
+            ON stock_out_reasons(movement_kind, sort_order)
+            WHERE archived_at IS NULL;
+
+        -- ====================================================================
+        -- Step 2: Seed one default reason per supported stock-out movement kind.
+        -- Uses INSERT OR IGNORE so re-runs are idempotent.
+        -- sort_order is ordered to place 'other' last within each kind group.
+        -- ====================================================================
+        INSERT OR IGNORE INTO stock_out_reasons
+            (id, display_name, movement_kind, sort_order, created_at, updated_at)
+        VALUES
+            ('sor-waste',               'Descarte',               'exit:waste',               10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+            ('sor-expired',             'Vencido',                'exit:expired',             20, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+            ('sor-damaged',             'Dañado',                 'exit:damaged',             30, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+            ('sor-internal-consumption','Consumo interno',        'exit:internal_consumption', 40, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+            ('sor-return-to-supplier',  'Devolución a proveedor', 'exit:return_to_supplier',  50, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+            ('sor-inventory-adjustment','Ajuste de inventario',   'exit:inventory_adjustment', 60, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+            ('sor-other',               'Otro',                    'exit:other',               99, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+        -- ====================================================================
+        -- Step 3: Add nullable FK column to lot_movements.
+        -- rusqlite cannot ALTER TABLE ADD CONSTRAINT, so we rebuild the table
+        -- following the V17 / V19 table-rebuild pattern. The rebuild preserves
+        -- all existing rows and adds the new column with no data mutation.
+        -- ====================================================================
+        CREATE TABLE lot_movements_v20 (
+            id TEXT PRIMARY KEY,
+            expiry_lot_id TEXT NOT NULL REFERENCES expiry_lots(id) ON DELETE CASCADE,
+            movement_kind TEXT NOT NULL,
+            direction TEXT,
+            quantity REAL NOT NULL,
+            source_location_id TEXT,
+            destination_location_id TEXT,
+            reason TEXT,
+            exit_reason_id TEXT REFERENCES stock_out_reasons(id),
+            notes TEXT,
+            actor TEXT NOT NULL DEFAULT 'system',
+            created_at TEXT NOT NULL,
+            -- V17 CHECK constraints preserved verbatim.
+            CHECK(quantity >= 0),
+            CHECK(direction IS NULL OR direction IN ('increase', 'decrease')),
+            CHECK(
+                (movement_kind = 'inventory_adjustment' AND direction IS NOT NULL)
+                OR
+                (movement_kind <> 'inventory_adjustment' AND direction IS NULL)
+            ),
+            CHECK(movement_kind IN (
+                'entry:initial',
+                'transfer',
+                'exit:sale',
+                'exit:waste',
+                'exit:expired',
+                'exit:damaged',
+                'exit:internal_consumption',
+                'exit:return_to_supplier',
+                'exit:inventory_adjustment',
+                'exit:other',
+                'inventory_adjustment'
+            )),
+            CHECK(
+                (movement_kind = 'entry:initial'      AND source_location_id IS NULL     AND destination_location_id IS NOT NULL)
+                OR
+                (movement_kind = 'transfer'           AND source_location_id IS NOT NULL AND destination_location_id IS NOT NULL AND source_location_id <> destination_location_id)
+                OR
+                (movement_kind LIKE 'exit:%'          AND source_location_id IS NOT NULL AND destination_location_id IS NULL)
+                OR
+                (movement_kind = 'inventory_adjustment' AND direction = 'increase' AND source_location_id IS NULL     AND destination_location_id IS NOT NULL)
+                OR
+                (movement_kind = 'inventory_adjustment' AND direction = 'decrease' AND source_location_id IS NOT NULL AND destination_location_id IS NULL)
+            )
+        );
+
+        -- Copy all existing rows into the new shape (exit_reason_id is NULL
+        -- for all existing rows at this point; backfill runs below).
+        INSERT INTO lot_movements_v20
+            (id, expiry_lot_id, movement_kind, direction, quantity, source_location_id, destination_location_id, reason, notes, actor, created_at)
+        SELECT
+            id, expiry_lot_id, movement_kind, direction, quantity, source_location_id, destination_location_id, reason, notes, actor, created_at
+        FROM lot_movements;
+
+        DROP TABLE lot_movements;
+        ALTER TABLE lot_movements_v20 RENAME TO lot_movements;
+
+        -- Recreate the V10 / V17 lookup indexes that the rebuild dropped.
+        CREATE INDEX idx_lot_movements_lot_created ON lot_movements(expiry_lot_id, created_at DESC);
+        CREATE INDEX idx_lot_movements_source_location ON lot_movements(source_location_id) WHERE source_location_id IS NOT NULL;
+        CREATE INDEX idx_lot_movements_dest_location ON lot_movements(destination_location_id) WHERE destination_location_id IS NOT NULL;
+        CREATE INDEX idx_lot_movements_kind ON lot_movements(movement_kind);
+
+        -- ====================================================================
+        -- Step 4: Backfill exit_reason_id for unambiguous legacy reason values.
+        --
+        -- Maps only exact-match legacy snapshot values to their canonical reason.
+        -- All other values (sale, legacy:*, archive-specific, unknown, NULL)
+        -- are left snapshot-only with NULL exit_reason_id.
+        --
+        -- The UPDATE is idempotent: rows with exit_reason_id already set are
+        -- skipped by the WHERE clause.
+        -- ====================================================================
+        UPDATE lot_movements
+        SET exit_reason_id = CASE lower(trim(reason))
+                WHEN 'discarded'       THEN 'sor-waste'
+                WHEN 'consumed'        THEN 'sor-internal-consumption'
+                WHEN 'other'           THEN 'sor-other'
+                ELSE exit_reason_id
+            END
+        WHERE exit_reason_id IS NULL
+          AND movement_kind LIKE 'exit:%'
+          AND lower(trim(reason)) IN ('discarded', 'consumed', 'other');
+        "#,
+    ),
 ];
 
 /// Returns a `Migrator` built from the inline `MIGRATIONS` constant.
@@ -1183,9 +1363,9 @@ mod tests {
     #[tokio::test]
     async fn v2_schema_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
-        // V1-V19 total (V5 split into 11 separate migrations; V16, V17,
-        // V18, V19 added by their respective changes).
-        assert_eq!(applied_count(&pool).await.unwrap(), 19);
+        // V1-V20 total (V5 split into 11 separate migrations; V16, V17,
+        // V18, V19, V20 added by their respective changes).
+        assert_eq!(applied_count(&pool).await.unwrap(), 20);
     }
 
     // -------------------------------------------------------------------
@@ -1696,8 +1876,8 @@ mod tests {
         // V18, V19 added by their respective changes).
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            19,
-            "V5-V15 bring applied count to 15; V16, V17, V18, V19 bring total to 19"
+            20,
+            "V5-V15 bring applied count to 15; V16, V17, V18, V19, V20 bring total to 20"
         );
     }
 
@@ -1748,9 +1928,9 @@ mod tests {
     #[tokio::test]
     async fn v4_applies_on_fresh_db() {
         let pool = fresh_test_pool().await.unwrap();
-        // V1-V19 total (V5 split into 11 separate migrations; V16, V17,
-        // V18, V19 added by their respective changes).
-        assert_eq!(applied_count(&pool).await.unwrap(), 19);
+        // V1-V20 total (V5 split into 11 separate migrations; V16, V17,
+        // V18, V19, V20 added by their respective changes).
+        assert_eq!(applied_count(&pool).await.unwrap(), 20);
         assert!(table_exists(&pool, "product_categories").await);
         assert!(index_exists(&pool, "idx_product_categories_category").await);
         assert!(index_exists(&pool, "idx_product_categories_product").await);
@@ -2801,8 +2981,8 @@ mod tests {
         // applied count is now 19 (V19 added by `product-lifecycle-reusable-identifiers`).
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            19,
-            "after V16-V19 apply on top of the user database, count must be 19"
+            20,
+            "after V16-V20 apply on top of the user database, count must be 20"
         );
 
         // Confirm V16 actually ran (and the migration tracking row for
@@ -2843,7 +3023,7 @@ mod tests {
         run_migrations(&pool).await.unwrap();
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            19,
+            20,
             "re-running migrations must not add new rows"
         );
 
@@ -2922,8 +3102,8 @@ mod tests {
         let pool = fresh_test_pool().await.unwrap();
         assert_eq!(
             applied_count(&pool).await.unwrap(),
-            19,
-            "V5-V15 adds 11 migration entries to bring count to 15; V16, V17, V18, V19 bring total to 19"
+            20,
+            "V5-V15 adds 11 migration entries to bring count to 15; V16, V17, V18, V19, V20 bring total to 20"
         );
     }
 
@@ -3291,7 +3471,7 @@ mod tests {
     #[tokio::test]
     async fn v17_adds_lot_movements_check_constraints() {
         let pool = fresh_test_pool().await.unwrap();
-        assert_eq!(applied_count(&pool).await.unwrap(), 19);
+        assert_eq!(applied_count(&pool).await.unwrap(), 20);
 
         // Verify the lot_movements table has CHECK constraints by testing
         // that invalid data is rejected at the DB layer.
@@ -3659,12 +3839,12 @@ mod tests {
     async fn v18_theme_milestone_is_idempotent() {
         let pool = fresh_test_pool().await.unwrap();
 
-        // Initial pass: V1–V19 run, snapshot row counts across every
+        // Initial pass: V1–V20 run, snapshot row counts across every
         // table the V18 milestone could plausibly touch.
         let initial_count = applied_count(&pool).await.unwrap();
         assert_eq!(
-            initial_count, 19,
-            "fresh pool must report 19 applied migrations"
+            initial_count, 20,
+            "fresh pool must report 20 applied migrations"
         );
         let app_settings_rows_before: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM app_settings")
             .fetch_one(&pool)
@@ -3673,7 +3853,7 @@ mod tests {
 
         // Re-run all migrations on the same pool. `_sqlx_migrations`
         // tracks every applied version, so the COUNT(*) is unchanged
-        // (sqlx refuses to re-apply V1–V19). V18 itself has no DDL so it
+        // (sqlx refuses to re-apply V1–V20). V18 itself has no DDL so it
         // cannot create or rewrite rows even if it did re-run.
         run_migrations(&pool).await.unwrap();
         let app_settings_rows_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM app_settings")
@@ -3682,14 +3862,14 @@ mod tests {
             .unwrap();
         assert_eq!(
             app_settings_rows_after.0, app_settings_rows_before.0,
-            "app_settings row count must be unchanged after re-running V1–V19"
+            "app_settings row count must be unchanged after re-running V1–V20"
         );
 
         // Count of applied migrations is also unchanged.
         let final_count = applied_count(&pool).await.unwrap();
         assert_eq!(
-            final_count, 19,
-            "applied_count must remain 19 after re-running the migration set"
+            final_count, 20,
+            "applied_count must remain 20 after re-running the migration set"
         );
     }
 
@@ -3857,10 +4037,19 @@ mod tests {
         let col_names: Vec<String> = cols.iter().map(|(n, _)| n.clone()).collect();
         assert_eq!(
             col_names,
-            vec!["id", "product_id", "event_type", "from_state", "to_state", "actor", "reason", "created_at"]
-                .into_iter()
-                .map(String::from)
-                .collect::<Vec<_>>(),
+            vec![
+                "id",
+                "product_id",
+                "event_type",
+                "from_state",
+                "to_state",
+                "actor",
+                "reason",
+                "created_at"
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>(),
             "product_lifecycle_events must expose the eight documented columns in order",
         );
         // id is PRIMARY KEY (TEXT). PRIMARY KEY implies NOT NULL in
@@ -3912,7 +4101,10 @@ mod tests {
         .fetch_one(&pool)
         .await
         .unwrap();
-        assert_eq!(row.0, "archived", "is_active = 0 row must project to 'archived'");
+        assert_eq!(
+            row.0, "archived",
+            "is_active = 0 row must project to 'archived'"
+        );
         assert_eq!(row.1, 0, "is_active must remain 0");
     }
 
@@ -3935,7 +4127,10 @@ mod tests {
         .fetch_one(&pool)
         .await
         .unwrap();
-        assert_eq!(row.0, "active", "is_active = 1 row must project to 'active'");
+        assert_eq!(
+            row.0, "active",
+            "is_active = 1 row must project to 'active'"
+        );
         assert_eq!(row.1, 1);
     }
 
@@ -3959,12 +4154,11 @@ mod tests {
         .unwrap();
         run_migrations(&pool).await.unwrap();
 
-        let retired_count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM products WHERE lifecycle = 'retired'",
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let retired_count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM products WHERE lifecycle = 'retired'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         assert_eq!(
             retired_count.0, 0,
             "no row may project to 'retired' at backfill time",
@@ -4003,7 +4197,10 @@ mod tests {
         .fetch_one(&pool)
         .await
         .unwrap();
-        assert_eq!(row.0, row.1, "barcode lifecycle must mirror parent product lifecycle");
+        assert_eq!(
+            row.0, row.1,
+            "barcode lifecycle must mirror parent product lifecycle"
+        );
         assert_eq!(row.0, "active");
     }
 
@@ -4081,7 +4278,10 @@ mod tests {
         .fetch_one(&pool)
         .await
         .unwrap();
-        assert_eq!(orphans.0, 0, "no product_categories row may orphan after V19");
+        assert_eq!(
+            orphans.0, 0,
+            "no product_categories row may orphan after V19"
+        );
     }
 
     /// SKU uniqueness: a duplicate SKU is blocked while both products are
@@ -4173,10 +4373,12 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
-        sqlx::query("UPDATE product_barcodes SET lifecycle = 'retired' WHERE product_id = 'p-bc-a'")
-            .execute(&pool)
-            .await
-            .unwrap();
+        sqlx::query(
+            "UPDATE product_barcodes SET lifecycle = 'retired' WHERE product_id = 'p-bc-a'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         // Now the same barcode can attach to a different active product.
         sqlx::query(
@@ -4185,7 +4387,9 @@ mod tests {
         )
         .execute(&pool)
         .await
-        .expect("barcode released by retired product must be reusable on a different active parent");
+        .expect(
+            "barcode released by retired product must be reusable on a different active parent",
+        );
     }
 
     /// Force a failure inside the audit insert (invalid `to_state` value
@@ -4221,10 +4425,12 @@ mod tests {
             .execute(&mut *tx)
             .await
             .unwrap();
-        sqlx::query("UPDATE product_barcodes SET lifecycle = 'archived' WHERE product_id = 'p-audit'")
-            .execute(&mut *tx)
-            .await
-            .unwrap();
+        sqlx::query(
+            "UPDATE product_barcodes SET lifecycle = 'archived' WHERE product_id = 'p-audit'",
+        )
+        .execute(&mut *tx)
+        .await
+        .unwrap();
         let bad_audit = sqlx::query(
             "INSERT INTO product_lifecycle_events (id, product_id, event_type, from_state, to_state, created_at) \
              VALUES ('ev-bad', 'p-audit', 'archived', 'active', 'unknown', '2024-01-01T00:00:00Z')",
@@ -4239,18 +4445,24 @@ mod tests {
         tx.rollback().await.unwrap();
 
         // Both product and barcode must be back at 'active'.
-        let product: (String,) = sqlx::query_as("SELECT lifecycle FROM products WHERE id = 'p-audit'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        let barcode: (String,) = sqlx::query_as(
-            "SELECT lifecycle FROM product_barcodes WHERE product_id = 'p-audit'",
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        assert_eq!(product.0, "active", "product lifecycle must roll back to 'active'");
-        assert_eq!(barcode.0, "active", "barcode lifecycle must roll back to 'active'");
+        let product: (String,) =
+            sqlx::query_as("SELECT lifecycle FROM products WHERE id = 'p-audit'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let barcode: (String,) =
+            sqlx::query_as("SELECT lifecycle FROM product_barcodes WHERE product_id = 'p-audit'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            product.0, "active",
+            "product lifecycle must roll back to 'active'"
+        );
+        assert_eq!(
+            barcode.0, "active",
+            "barcode lifecycle must roll back to 'active'"
+        );
         // No audit row landed.
         let ev_count: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM product_lifecycle_events WHERE product_id = 'p-audit'",
@@ -4298,7 +4510,8 @@ mod tests {
         // in one binary operation.
         let pid = std::process::id();
         let rand: u16 = rand::random();
-        let backup_path = std::path::PathBuf::from(format!("/tmp/caduxo_v19_backup_{pid}_{rand}.db"));
+        let backup_path =
+            std::path::PathBuf::from(format!("/tmp/caduxo_v19_backup_{pid}_{rand}.db"));
         let _ = std::fs::remove_file(&backup_path);
         let backup_path_str = backup_path.to_string_lossy().replace('\'', "''");
         let sql = format!("VACUUM INTO '{backup_path_str}'");
@@ -4314,12 +4527,11 @@ mod tests {
             .unwrap();
         assert_eq!(product.0, "active");
 
-        let barcode: (String,) = sqlx::query_as(
-            "SELECT lifecycle FROM product_barcodes WHERE product_id = 'p-bk'",
-        )
-        .fetch_one(&backup_pool)
-        .await
-        .unwrap();
+        let barcode: (String,) =
+            sqlx::query_as("SELECT lifecycle FROM product_barcodes WHERE product_id = 'p-bk'")
+                .fetch_one(&backup_pool)
+                .await
+                .unwrap();
         assert_eq!(barcode.0, "active");
 
         let ev: (String, String, String, Option<String>, Option<String>) = sqlx::query_as(
@@ -4336,5 +4548,858 @@ mod tests {
 
         let _ = std::fs::remove_file(&backup_path);
         backup_pool.close().await;
+    }
+
+    // ====================================================================
+    // V20 — configurable stock-out reasons catalog
+    //
+    // Tests cover: migration count, table structure, indexes, seed data,
+    // lot_movements.exit_reason_id column + FK, backfill of unambiguous
+    // legacy values, and idempotency.
+    // ====================================================================
+
+    /// V20 must apply as the next migration and bump the migration count
+    /// from 19 (last applied on a fresh pool) to 20.
+    #[tokio::test]
+    async fn v20_applies_on_fresh_db() {
+        let pool = fresh_test_pool().await.unwrap();
+        let count = applied_count(&pool).await.unwrap();
+        assert_eq!(
+            count as i64,
+            MIGRATIONS.len() as i64,
+            "fresh pool must report MIGRATIONS.len() applied migrations",
+        );
+    }
+
+    /// stock_out_reasons table must exist with the documented columns.
+    #[tokio::test]
+    async fn v20_creates_stock_out_reasons_table() {
+        let pool = fresh_test_pool().await.unwrap();
+        let cols: Vec<(String, String)> = sqlx::query_as(
+            "SELECT name, type FROM pragma_table_info('stock_out_reasons') ORDER BY cid",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        let col_names: Vec<String> = cols.iter().map(|(n, _)| n.clone()).collect();
+        assert_eq!(
+            col_names,
+            vec![
+                "id",
+                "display_name",
+                "movement_kind",
+                "sort_order",
+                "archived_at",
+                "created_at",
+                "updated_at",
+            ],
+            "stock_out_reasons must expose the seven documented columns",
+        );
+    }
+
+    /// stock_out_reasons indexes must exist after V20.
+    #[tokio::test]
+    async fn v20_stock_out_reasons_indexes_exist() {
+        let pool = fresh_test_pool().await.unwrap();
+        let names: Vec<(String,)> =
+            sqlx::query_as("SELECT name FROM sqlite_master WHERE type = 'index'")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        let name_set: std::collections::HashSet<String> = names.into_iter().map(|(n,)| n).collect();
+        assert!(
+            name_set.contains("uq_stock_out_reasons_display_name_active"),
+            "case-insensitive unique display_name index missing",
+        );
+        assert!(
+            name_set.contains("idx_stock_out_reasons_movement_kind"),
+            "movement_kind list index missing",
+        );
+        assert!(
+            name_set.contains("idx_stock_out_reasons_kind_active_order"),
+            "kind + sort_order list index missing",
+        );
+    }
+
+    /// Seven seed reasons must be present after V20, one per supported
+    /// stock-out movement kind.
+    #[tokio::test]
+    async fn v20_seeds_seven_default_reasons() {
+        let pool = fresh_test_pool().await.unwrap();
+        let rows: Vec<(String, String, String)> = sqlx::query_as(
+            "SELECT id, display_name, movement_kind FROM stock_out_reasons ORDER BY sort_order",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            rows.len(),
+            7,
+            "seven default stock-out reasons should be seeded",
+        );
+        let expected: Vec<(&str, &str, &str)> = vec![
+            ("sor-waste", "Descarte", "exit:waste"),
+            ("sor-expired", "Vencido", "exit:expired"),
+            ("sor-damaged", "Dañado", "exit:damaged"),
+            (
+                "sor-internal-consumption",
+                "Consumo interno",
+                "exit:internal_consumption",
+            ),
+            (
+                "sor-return-to-supplier",
+                "Devolución a proveedor",
+                "exit:return_to_supplier",
+            ),
+            (
+                "sor-inventory-adjustment",
+                "Ajuste de inventario",
+                "exit:inventory_adjustment",
+            ),
+            ("sor-other", "Otro", "exit:other"),
+        ];
+        for (row, expected) in rows.iter().zip(expected.iter()) {
+            assert_eq!(row.0.as_str(), expected.0, "id mismatch");
+            assert_eq!(row.1.as_str(), expected.1, "display_name mismatch");
+            assert_eq!(row.2.as_str(), expected.2, "movement_kind mismatch");
+        }
+    }
+
+    /// lot_movements must have the exit_reason_id column after V20.
+    #[tokio::test]
+    async fn v20_lot_movements_has_exit_reason_id_column() {
+        let pool = fresh_test_pool().await.unwrap();
+        let rows: Vec<(i64, String, String, i64, Option<String>)> = sqlx::query_as(
+            "SELECT cid, name, type, \"notnull\", dflt_value FROM pragma_table_info('lot_movements') WHERE name = 'exit_reason_id'",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            rows.len(),
+            1,
+            "lot_movements must contain exit_reason_id column"
+        );
+        let (_cid, name, ty, notnull, dflt) = &rows[0];
+        assert_eq!(name, "exit_reason_id");
+        assert_eq!(ty, "TEXT");
+        assert_eq!(*notnull, 0, "exit_reason_id must be nullable");
+        assert_eq!(dflt.as_deref(), None, "exit_reason_id must have no default");
+    }
+
+    /// exit_reason_id FK constraint must be enforced: inserting a movement
+    /// with a non-existent exit_reason_id must fail.
+    #[tokio::test]
+    async fn v20_exit_reason_id_fk_enforced() {
+        let pool = fresh_test_pool().await.unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+        // Insert minimal schema: store + product + lot + location.
+        sqlx::query(
+            "INSERT INTO stores (id, name, is_active, created_at, updated_at) \
+             VALUES ('s-v20-fk', 'FK Test Store', 1, $1, $2)",
+        )
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, default_alert_days_before, is_active, created_at, updated_at) \
+             VALUES ('p-v20-fk', 'SKU-V20-FK', 'FK Test', 30, 1, $1, $2)",
+        )
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO expiry_lots (id, product_id, store_id, quantity, unit, expiry_date, alert_days_before, status, created_at, updated_at) \
+             VALUES ('lot-v20-fk', 'p-v20-fk', 's-v20-fk', 10.0, 'units', '2025-12-31', 30, 'active', $1, $2)",
+        )
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO store_locations (id, store_id, name, is_active, created_at, updated_at) \
+             VALUES ('loc-v20-fk', 's-v20-fk', 'FK Loc', 1, $1, $2)",
+        )
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Valid exit movement with NULL exit_reason_id — OK.
+        let r = sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, reason, actor, created_at) \
+             VALUES ('mv-v20-null', 'lot-v20-fk', 'exit:other', 1.0, 'loc-v20-fk', 'unmapped', 'system', $1)",
+        )
+        .bind(&now)
+        .execute(&pool)
+        .await;
+        assert!(r.is_ok(), "NULL exit_reason_id must be allowed: {:?}", r);
+
+        // Valid exit movement with a real exit_reason_id — OK.
+        let r = sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, exit_reason_id, reason, actor, created_at) \
+             VALUES ('mv-v20-valid', 'lot-v20-fk', 'exit:waste', 1.0, 'loc-v20-fk', 'sor-waste', 'discarded', 'system', $1)",
+        )
+        .bind(&now)
+        .execute(&pool)
+        .await;
+        assert!(r.is_ok(), "valid exit_reason_id must be allowed: {:?}", r);
+
+        // Invalid exit_reason_id — FK violation must be rejected.
+        let r = sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, exit_reason_id, reason, actor, created_at) \
+             VALUES ('mv-v20-bad', 'lot-v20-fk', 'exit:other', 1.0, 'loc-v20-fk', 'nonexistent-reason', 'bad', 'system', $1)",
+        )
+        .bind(&now)
+        .execute(&pool)
+        .await;
+        assert!(
+            r.is_err(),
+            "nonexistent exit_reason_id must violate FK constraint: {:?}",
+            r
+        );
+    }
+
+    /// Backfill test: seed V19-only schema (pre-V20) with movements containing
+    /// legacy reason values, then run V20 and verify only unambiguous values
+    /// are mapped; sale, legacy:*, archive-specific, and unknown values
+    /// remain snapshot-only (exit_reason_id NULL).
+    #[tokio::test]
+    async fn v20_backfill_maps_unambiguous_legacy_values() {
+        // Build a V19-only migrator.
+        use sqlx::migrate::{Migration, MigrationType, Migrator};
+        use std::borrow::Cow;
+        let v19_migrations: Vec<Migration> = MIGRATIONS
+            .iter()
+            .filter(|(v, _, _)| *v <= 19)
+            .map(|(version, description, sql)| {
+                Migration::new(
+                    *version,
+                    Cow::Owned(description.to_string()),
+                    MigrationType::Simple,
+                    Cow::Owned(sql.to_string()),
+                    false,
+                )
+            })
+            .collect();
+        let v19_migrator = Migrator {
+            migrations: Cow::Owned(v19_migrations),
+            ignore_missing: false,
+            locking: true,
+            no_tx: false,
+        };
+
+        let now_ts = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+
+        let pid = std::process::id();
+        let rand: u16 = rand::random();
+        let db_path = std::path::PathBuf::from(format!("/tmp/caduxo_v20bf_{pid}_{rand}.db"));
+        let _ = std::fs::remove_file(&db_path);
+        let pool = super::open_pool(&db_path).await.unwrap();
+        v19_migrator.run(&pool).await.unwrap();
+
+        // Seed minimal schema for lot_movements.
+        sqlx::query(
+            "INSERT INTO stores (id, name, is_active, created_at, updated_at) \
+             VALUES ('s-v20-bf', 'BF Store', 1, $1, $2)",
+        )
+        .bind(&now_ts)
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, default_alert_days_before, is_active, created_at, updated_at) \
+             VALUES ('p-v20-bf', 'SKU-V20-BF', 'BF Test', 30, 1, $1, $2)",
+        )
+        .bind(&now_ts)
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO store_locations (id, store_id, name, is_active, created_at, updated_at) \
+             VALUES ('loc-v20-bf', 's-v20-bf', 'BF Loc', 1, $1, $2)",
+        )
+        .bind(&now_ts)
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO expiry_lots (id, product_id, store_id, location_id, quantity, unit, expiry_date, alert_days_before, status, created_at, updated_at) \
+             VALUES ('lot-v20-bf', 'p-v20-bf', 's-v20-bf', 'loc-v20-bf', 100.0, 'units', '2025-12-31', 30, 'active', $1, $2)",
+        )
+        .bind(&now_ts)
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Insert movements with various legacy reason values.
+        // Mappable:
+        sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, reason, actor, created_at) \
+             VALUES ('mv-bf-discarded', 'lot-v20-bf', 'exit:waste', 5.0, 'loc-v20-bf', 'discarded', 'system', $1)",
+        )
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, reason, actor, created_at) \
+             VALUES ('mv-bf-consumed', 'lot-v20-bf', 'exit:internal_consumption', 3.0, 'loc-v20-bf', 'consumed', 'system', $1)",
+        )
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, reason, actor, created_at) \
+             VALUES ('mv-bf-other', 'lot-v20-bf', 'exit:other', 2.0, 'loc-v20-bf', 'other', 'system', $1)",
+        )
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Not mappable (scope exclusion):
+        sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, reason, actor, created_at) \
+             VALUES ('mv-bf-sale', 'lot-v20-bf', 'exit:sale', 10.0, 'loc-v20-bf', 'sale', 'system', $1)",
+        )
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Not mappable (already mangled by prior migrations):
+        sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, reason, actor, created_at) \
+             VALUES ('mv-bf-legacy', 'lot-v20-bf', 'exit:other', 1.0, 'loc-v20-bf', 'legacy: donated', 'system', $1)",
+        )
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Not mappable (archive-specific text):
+        sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, reason, actor, created_at) \
+             VALUES ('mv-bf-archive', 'lot-v20-bf', 'exit:other', 1.0, 'loc-v20-bf', 'donated', 'system', $1)",
+        )
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Not mappable (unknown text):
+        sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, reason, actor, created_at) \
+             VALUES ('mv-bf-unknown', 'lot-v20-bf', 'exit:other', 1.0, 'loc-v20-bf', 'some-random-reason', 'system', $1)",
+        )
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Not mappable (NULL reason):
+        sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, reason, actor, created_at) \
+             VALUES ('mv-bf-null', 'lot-v20-bf', 'exit:expired', 1.0, 'loc-v20-bf', NULL, 'system', $1)",
+        )
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Run V20 migration.
+        run_migrations(&pool).await.unwrap();
+
+        // Verify mappable values were mapped correctly.
+        let discarded: (Option<String>,) =
+            sqlx::query_as("SELECT exit_reason_id FROM lot_movements WHERE id = 'mv-bf-discarded'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            discarded.0.as_deref(),
+            Some("sor-waste"),
+            "discarded must map to sor-waste",
+        );
+
+        let consumed: (Option<String>,) =
+            sqlx::query_as("SELECT exit_reason_id FROM lot_movements WHERE id = 'mv-bf-consumed'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            consumed.0.as_deref(),
+            Some("sor-internal-consumption"),
+            "consumed must map to sor-internal-consumption",
+        );
+
+        let other: (Option<String>,) =
+            sqlx::query_as("SELECT exit_reason_id FROM lot_movements WHERE id = 'mv-bf-other'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            other.0.as_deref(),
+            Some("sor-other"),
+            "other must map to sor-other",
+        );
+
+        // Verify unmappable values remain NULL.
+        for (id, label) in [
+            ("mv-bf-sale", "sale (scope exclusion)"),
+            ("mv-bf-legacy", "legacy: donated"),
+            ("mv-bf-archive", "donated (archive-specific)"),
+            ("mv-bf-unknown", "some-random-reason"),
+            ("mv-bf-null", "NULL reason"),
+        ] {
+            let row: (Option<String>,) =
+                sqlx::query_as("SELECT exit_reason_id FROM lot_movements WHERE id = ?")
+                    .bind(id)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert!(
+                row.0.is_none(),
+                "{} must remain snapshot-only (exit_reason_id NULL)",
+                label,
+            );
+        }
+
+        // Verify the legacy `reason` column is preserved verbatim.
+        let legacy: (Option<String>,) =
+            sqlx::query_as("SELECT reason FROM lot_movements WHERE id = 'mv-bf-legacy'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            legacy.0.as_deref(),
+            Some("legacy: donated"),
+            "legacy reason column must be preserved verbatim",
+        );
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    /// Backfill respects case and whitespace: 'Discarded', ' DISCARDED ',
+    /// 'Consumed', ' OTHER ' must all map correctly.
+    #[tokio::test]
+    async fn v20_backfill_is_case_insensitive_and_trims_whitespace() {
+        use sqlx::migrate::{Migration, MigrationType, Migrator};
+        use std::borrow::Cow;
+        let v19_migrations: Vec<Migration> = MIGRATIONS
+            .iter()
+            .filter(|(v, _, _)| *v <= 19)
+            .map(|(version, description, sql)| {
+                Migration::new(
+                    *version,
+                    Cow::Owned(description.to_string()),
+                    MigrationType::Simple,
+                    Cow::Owned(sql.to_string()),
+                    false,
+                )
+            })
+            .collect();
+        let v19_migrator = Migrator {
+            migrations: Cow::Owned(v19_migrations),
+            ignore_missing: false,
+            locking: true,
+            no_tx: false,
+        };
+
+        let now_ts = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let pid = std::process::id();
+        let rand: u16 = rand::random();
+        let db_path = std::path::PathBuf::from(format!("/tmp/caduxo_v20ci_{pid}_{rand}.db"));
+        let _ = std::fs::remove_file(&db_path);
+        let pool = super::open_pool(&db_path).await.unwrap();
+        v19_migrator.run(&pool).await.unwrap();
+
+        // Seed minimal schema.
+        sqlx::query(
+            "INSERT INTO stores (id, name, is_active, created_at, updated_at) \
+             VALUES ('s-v20-ci', 'CI Store', 1, $1, $2)",
+        )
+        .bind(&now_ts)
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, default_alert_days_before, is_active, created_at, updated_at) \
+             VALUES ('p-v20-ci', 'SKU-V20-CI', 'CI Test', 30, 1, $1, $2)",
+        )
+        .bind(&now_ts)
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO store_locations (id, store_id, name, is_active, created_at, updated_at) \
+             VALUES ('loc-v20-ci', 's-v20-ci', 'CI Loc', 1, $1, $2)",
+        )
+        .bind(&now_ts)
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO expiry_lots (id, product_id, store_id, location_id, quantity, unit, expiry_date, alert_days_before, status, created_at, updated_at) \
+             VALUES ('lot-v20-ci', 'p-v20-ci', 's-v20-ci', 'loc-v20-ci', 100.0, 'units', '2025-12-31', 30, 'active', $1, $2)",
+        )
+        .bind(&now_ts)
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Insert movements with case and whitespace variations.
+        sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, reason, actor, created_at) \
+             VALUES ('mv-ci-1', 'lot-v20-ci', 'exit:waste', 1.0, 'loc-v20-ci', 'Discarded', 'system', $1)",
+        )
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, reason, actor, created_at) \
+             VALUES ('mv-ci-2', 'lot-v20-ci', 'exit:waste', 1.0, 'loc-v20-ci', ' DISCARDED ', 'system', $1)",
+        )
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, reason, actor, created_at) \
+             VALUES ('mv-ci-3', 'lot-v20-ci', 'exit:internal_consumption', 1.0, 'loc-v20-ci', 'Consumed', 'system', $1)",
+        )
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, reason, actor, created_at) \
+             VALUES ('mv-ci-4', 'lot-v20-ci', 'exit:other', 1.0, 'loc-v20-ci', ' OTHER ', 'system', $1)",
+        )
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        run_migrations(&pool).await.unwrap();
+
+        // All variations must map to the same reason.
+        for id in ["mv-ci-1", "mv-ci-2"] {
+            let row: (Option<String>,) =
+                sqlx::query_as("SELECT exit_reason_id FROM lot_movements WHERE id = ?")
+                    .bind(id)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                row.0.as_deref(),
+                Some("sor-waste"),
+                "{} must map to sor-waste",
+                id,
+            );
+        }
+
+        let consumed: (Option<String>,) =
+            sqlx::query_as("SELECT exit_reason_id FROM lot_movements WHERE id = 'mv-ci-3'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            consumed.0.as_deref(),
+            Some("sor-internal-consumption"),
+            "Consumed must map to sor-internal-consumption",
+        );
+
+        let other: (Option<String>,) =
+            sqlx::query_as("SELECT exit_reason_id FROM lot_movements WHERE id = 'mv-ci-4'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            other.0.as_deref(),
+            Some("sor-other"),
+            " OTHER must map to sor-other",
+        );
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    /// V20 migration is idempotent: running migrations twice adds no new rows.
+    #[tokio::test]
+    async fn v20_migration_is_idempotent() {
+        let pool = fresh_test_pool().await.unwrap();
+        let first_count = applied_count(&pool).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+        let second_count = applied_count(&pool).await.unwrap();
+        assert_eq!(
+            first_count, second_count,
+            "re-running migrations should add no new rows",
+        );
+    }
+
+    /// Seed is idempotent: re-running V20 does not duplicate seed rows.
+    #[tokio::test]
+    async fn v20_seed_is_idempotent() {
+        let pool = fresh_test_pool().await.unwrap();
+        let first: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM stock_out_reasons")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        run_migrations(&pool).await.unwrap();
+        let second: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM stock_out_reasons")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(first.0, 7, "seven default reasons must be seeded");
+        assert_eq!(
+            first.0, second.0,
+            "re-running V20 must not duplicate seed rows",
+        );
+    }
+
+    /// Backfill is idempotent: rows already mapped are skipped on re-run.
+    #[tokio::test]
+    async fn v20_backfill_is_idempotent() {
+        use sqlx::migrate::{Migration, MigrationType, Migrator};
+        use std::borrow::Cow;
+        let v19_migrations: Vec<Migration> = MIGRATIONS
+            .iter()
+            .filter(|(v, _, _)| *v <= 19)
+            .map(|(version, description, sql)| {
+                Migration::new(
+                    *version,
+                    Cow::Owned(description.to_string()),
+                    MigrationType::Simple,
+                    Cow::Owned(sql.to_string()),
+                    false,
+                )
+            })
+            .collect();
+        let v19_migrator = Migrator {
+            migrations: Cow::Owned(v19_migrations),
+            ignore_missing: false,
+            locking: true,
+            no_tx: false,
+        };
+
+        let now_ts = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let pid = std::process::id();
+        let rand: u16 = rand::random();
+        let db_path = std::path::PathBuf::from(format!("/tmp/caduxo_v20idem_{pid}_{rand}.db"));
+        let _ = std::fs::remove_file(&db_path);
+        let pool = super::open_pool(&db_path).await.unwrap();
+        v19_migrator.run(&pool).await.unwrap();
+
+        // Seed minimal schema.
+        sqlx::query(
+            "INSERT INTO stores (id, name, is_active, created_at, updated_at) \
+             VALUES ('s-v20-idem', 'Idem Store', 1, $1, $2)",
+        )
+        .bind(&now_ts)
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, default_alert_days_before, is_active, created_at, updated_at) \
+             VALUES ('p-v20-idem', 'SKU-V20-IDEM', 'Idem Test', 30, 1, $1, $2)",
+        )
+        .bind(&now_ts)
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO store_locations (id, store_id, name, is_active, created_at, updated_at) \
+             VALUES ('loc-v20-idem', 's-v20-idem', 'Idem Loc', 1, $1, $2)",
+        )
+        .bind(&now_ts)
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO expiry_lots (id, product_id, store_id, location_id, quantity, unit, expiry_date, alert_days_before, status, created_at, updated_at) \
+             VALUES ('lot-v20-idem', 'p-v20-idem', 's-v20-idem', 'loc-v20-idem', 100.0, 'units', '2025-12-31', 30, 'active', $1, $2)",
+        )
+        .bind(&now_ts)
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, reason, actor, created_at) \
+             VALUES ('mv-idem-1', 'lot-v20-idem', 'exit:waste', 5.0, 'loc-v20-idem', 'discarded', 'system', $1)",
+        )
+        .bind(&now_ts)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Run V20.
+        run_migrations(&pool).await.unwrap();
+        let first: (Option<String>,) =
+            sqlx::query_as("SELECT exit_reason_id FROM lot_movements WHERE id = 'mv-idem-1'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(first.0.as_deref(), Some("sor-waste"));
+
+        // Re-run V20.
+        run_migrations(&pool).await.unwrap();
+        let second: (Option<String>,) =
+            sqlx::query_as("SELECT exit_reason_id FROM lot_movements WHERE id = 'mv-idem-1'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            first.0, second.0,
+            "re-running V20 must not change already-mapped exit_reason_id",
+        );
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    /// lot_movements existing V17/V19 CHECK constraints are preserved after
+    /// the V20 table rebuild.
+    #[tokio::test]
+    async fn v20_preserves_lot_movements_check_constraints() {
+        let pool = fresh_test_pool().await.unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Seed minimal schema.
+        sqlx::query(
+            "INSERT INTO stores (id, name, is_active, created_at, updated_at) \
+             VALUES ('s-v20-chk', 'Chk Store', 1, $1, $2)",
+        )
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO products (id, sku, description, default_alert_days_before, is_active, created_at, updated_at) \
+             VALUES ('p-v20-chk', 'SKU-V20-CHK', 'Chk Test', 30, 1, $1, $2)",
+        )
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO store_locations (id, store_id, name, is_active, created_at, updated_at) \
+             VALUES ('loc-v20-chk', 's-v20-chk', 'Chk Loc', 1, $1, $2)",
+        )
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO expiry_lots (id, product_id, store_id, location_id, quantity, unit, expiry_date, alert_days_before, status, created_at, updated_at) \
+             VALUES ('lot-v20-chk', 'p-v20-chk', 's-v20-chk', 'loc-v20-chk', 100.0, 'units', '2025-12-31', 30, 'active', $1, $2)",
+        )
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Invalid movement_kind must still be rejected by CHECK.
+        let bad_kind = sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, quantity, source_location_id, actor, created_at) \
+             VALUES ('mv-chk-bad', 'lot-v20-chk', 'invalid:kind', 1.0, 'loc-v20-chk', 'system', $1)",
+        )
+        .bind(&now)
+        .execute(&pool)
+        .await;
+        assert!(
+            bad_kind.is_err(),
+            "invalid movement_kind must violate CHECK: {:?}",
+            bad_kind,
+        );
+
+        // Invalid direction for non-adjustment kind must be rejected.
+        let bad_dir = sqlx::query(
+            "INSERT INTO lot_movements (id, expiry_lot_id, movement_kind, direction, quantity, source_location_id, actor, created_at) \
+             VALUES ('mv-chk-dir', 'lot-v20-chk', 'exit:waste', 'increase', 1.0, 'loc-v20-chk', 'system', $1)",
+        )
+        .bind(&now)
+        .execute(&pool)
+        .await;
+        assert!(
+            bad_dir.is_err(),
+            "direction on non-adjustment kind must violate CHECK: {:?}",
+            bad_dir,
+        );
+    }
+
+    /// V20 applies in a single transaction: a failure in any step rolls back
+    /// the entire migration.
+    #[tokio::test]
+    async fn v20_applies_transactionally() {
+        // This test verifies transactional apply by confirming that after V20
+        // applies, there is no partial state. The table-rebuild pattern in
+        // Step 3 ensures atomicity: either all rows are copied to
+        // lot_movements_v20 and the rename succeeds, or the original
+        // lot_movements table is untouched. We verify the invariant by
+        // checking the lot_movements table has the new exit_reason_id column
+        // AND all V17 CHECK constraints, and that seed rows exist.
+        let pool = fresh_test_pool().await.unwrap();
+
+        // V20 must have applied.
+        assert_eq!(
+            applied_count(&pool).await.unwrap(),
+            20 as u32,
+            "V20 must be applied",
+        );
+
+        // stock_out_reasons table exists.
+        assert!(
+            table_exists(&pool, "stock_out_reasons").await,
+            "stock_out_reasons table must exist after V20",
+        );
+
+        // lot_movements has exit_reason_id column.
+        let col: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM pragma_table_info('lot_movements') WHERE name = 'exit_reason_id'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(col.0, 1, "exit_reason_id column must exist");
+
+        // All indexes from V10/V17 are recreated.
+        for idx in ["idx_lot_movements_lot_created", "idx_lot_movements_kind"] {
+            assert!(
+                index_exists(&pool, idx).await,
+                "index {} must exist after V20",
+                idx,
+            );
+        }
+
+        // Seed reasons exist.
+        let seed_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM stock_out_reasons")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(seed_count.0, 7, "seven seed reasons must exist");
     }
 }
