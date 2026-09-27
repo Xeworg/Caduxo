@@ -34,10 +34,10 @@ The following decisions were made based on approved user experience requirements
 
 - `unit_definitions` table exists and is seeded with defaults.
 - Backend services for create and rename-display-name exist.
-- **Archive service exists in domain/repo but is not yet exposed as a Tauri command** — this is a gap to close before UI can function.
-- **Unarchive service does not exist** — command, service method, and repo support are missing.
-- **No API endpoint returns the archived unit list** — `list` and `all` commands exist but exclude archived entries.
-- Task 2.6 backend scope: expose archive as Tauri command, implement unarchive lifecycle (command + service + repo), add archived-list API (or parameter) so the UI can show archived entries for resolution/historical reference.
+- Archive, unarchive, and archived-list services/commands have been implemented as part of Task 2.6a.
+- Unit definitions use `archived_at`; unarchive lifecycle is exposed with a duplicate-key guard.
+- A dedicated archived-unit list API supports management UI and historical resolution.
+- Task 2.6 backend scope is complete: expose archive, implement unarchive lifecycle, and list archived units.
 - Task 2.6 UI scope: build management UI using the completed backend surface.
 - `lot_movements.reason` is currently text and contains legacy values; preserve it as the historical label/snapshot.
 - Stock-out choices are currently represented by closed movement kinds in frontend, Rust domain logic, and SQLite constraints. Do not turn these accounting kinds into arbitrary catalog values.
@@ -47,9 +47,11 @@ The following decisions were made based on approved user experience requirements
 ## Implementation Checklist
 
 ### Task 2.1: FEFO Contextual Help
-- [x] Add translated tooltip explaining FEFO (First Expired, First Out).
-- [x] Add one concise dynamic explanation for the currently selected policy (user chose dynamic help).
-- [x] Keep the existing general section explanation; selected-policy text adds specific behavior without replacing it.
+- [ ] Add translated tooltip explaining FEFO (First Expired, First Out), accessible by pointer and keyboard.
+- [ ] Add one concise dynamic explanation for the currently selected policy (user chose dynamic help).
+- [ ] Keep the existing general section explanation; selected-policy text adds specific behavior without replacing it.
+
+**Status: in progress.** A worker added rendered help and the combined UI checks passed, but the shared `ConfigurationPage.svelte` has not yet been independently verified or committed because it also contains Task 2.6b.
 
 ### Task 2.2: Preserve Submitted Scan Value
 - [x] Preserve the trimmed submitted scan in dedicated UI state before `scanInput` is cleared.
@@ -70,7 +72,7 @@ The following decisions were made based on approved user experience requirements
 
 ### Task 2.5: Numeric Constraints
 - [x] Forward `min`, `max`, and `step` through the Input primitive.
-- [x] Apply field-appropriate constraints: positive integer quantities, positive decimal quantities, nonnegative movement adjustment, and nonnegative integer alert days (zero allowed).
+- [x] Apply field-appropriate constraints: positive integer quantities, positive decimal quantities, nonnegative movement adjustment, and nonnegative integer alert days (zero allowed). DistributionEditor now uses `min=1` for integer units and `min=0.01` for decimal units.
 - [x] Validate alert days as a nonnegative integer; preserve documented backend fallback behavior unless evidence supports changing it.
 
 **Implementation evidence:** Input primitive now forwards `min`, `max`, `step` attributes. Consumers receive unit-appropriate constraints (positive integer/decimal for quantities, nonnegative for adjustments and alert days). Raw alert-day field validates whole numbers 0–3650 inclusive with localized EN/ES error message before payload submission; backend fallback preserved. `npm run check`, `npm run build`, `npm run i18n:generate`, `git diff --check` passed. Independent verifier confirmed code; no E2E harness.
@@ -86,7 +88,9 @@ The following decisions were made based on approved user experience requirements
 - [x] No schema migration required; existing `archived_at` column reused.
 - [x] No hard deletes; archive sets `archived_at`, unarchive clears it.
 
-**Status: complete**
+**Status: complete — independently verified.**
+
+**Verification evidence:** Full Rust library suite passed (829 tests); `cargo check --lib`, `cargo check --bin caduxo`, `cargo check --all-targets`, and `cargo fmt -- --check` passed. Five lifecycle/list tests passed.
 
 **Verification evidence:**
 - Worker: `cargo test`, `cargo check`, `cargo fmt` passed.
@@ -100,11 +104,11 @@ The following decisions were made based on approved user experience requirements
 - [x] Expose archived entries in a way that supports historical resolution without polluting active choice lists.
 - [x] Do not expose ID mutation, key changes, or kind changes in place.
 
-**Status: complete**
+**Status: complete — independently verified.**
 
 **Verification evidence:**
 - Worker: `npm run check`, `npm run i18n:generate`, `git diff --check` passed.
-- Independent verification: `npm run build` passed.
+- Independent verification: `npm run check`, `npm run i18n:generate`, `npm run build`, and `git diff --check` passed.
 - UI reuses existing backend surface (list, add, rename, archive, unarchive).
 - Archived units excluded from active selectors; available for historical resolution.
 - Stable IDs, key, and kind not editable.
@@ -249,13 +253,13 @@ Seed one catalog entry per existing stock-out `movement_kind` with clear, user-f
 
 ## Task Order and Status
 
-1. Task 2.1 FEFO help — complete (tooltip + dynamic selected-policy description; `npm run i18n:generate`, `npm run check` passed).
-2. Task 2.2 submitted scan preservation — complete (dedicated `submittedScan` state; Registration displays exact submitted scan + SKU; resets clear it; unknown result unchanged; `npm run check` and `git diff --check` passed).
-3. Task 2.3 Active Store panel — complete (compact panel with multi-store selector retained; responsive behavior based on actual component/context; explanatory body screen-reader available; `npm run check`, `npm run build`, `git diff --check` passed).
-4. Task 2.4 DatePicker — complete (DatePicker captures input event text, protects drafts from reactive overwrite; valid/calendar/clear paths resolve state; LotForm uses local date formatting; `npm run check`, `npm run build`, `git diff --check` passed).
-5. Task 2.5 numeric constraints — complete (Input forwards min/max/step; unit-appropriate constraints in consumers; alert-day validates whole 0..3650 with localized EN/ES error before payload; `npm run check`, `npm run build`, `npm run i18n:generate`, `git diff --check` passed; independent verifier confirmed code, no E2E harness).
-6a. Task 2.6a unit catalog backend — complete (`cargo test`, `cargo check`, `cargo fmt` passed; independent verifier confirmed `cargo test`, `cargo check` passed; no schema migration; no hard deletes).
-6b. Task 2.6b unit catalog UI — complete (uses existing backend; supports add/rename/archive/restore/list; presets included in archive subject to reference guard; stable IDs/key/kind not edited; i18n parity; `npm run check`, `npm run i18n:generate`, `npm run build`, `git diff --check` passed; no manual browser/E2E).
+1. Task 2.1 FEFO help — **in progress**; implementation added, but shared ConfigurationPage verification/commit pending.
+2. Task 2.2 submitted scan preservation — complete; commit `a63b574` also contains Tasks 2.3–2.5 as one cohesive scanner/input UX work unit; code-inspection verifier and frontend checks passed.
+3. Task 2.3 Active Store panel — complete; commit `a63b574` (multi-store selector retained; frontend checks/build passed).
+4. Task 2.4 DatePicker — complete; commit `a63b574` (input draft handling and local-date generation; frontend checks/build passed).
+5. Task 2.5 numeric constraints — complete; commits `88a4223` (positive DistributionEditor min/step) and `a63b574` (Input forwarding, field bounds, localized alert-day validation); frontend checks/build passed; no E2E harness.
+6a. Task 2.6a unit catalog backend — complete; commit `42ea9f3` (full Rust library suite 829 passed; checks and formatting passed; no schema migration; no hard deletes).
+6b. Task 2.6b unit catalog UI — implementation present but **not committed**; independent verifier passed npm checks/build, but parent review identified unresolved Svelte reactivity/type-safety concern in the shared `ConfigurationPage.svelte`; verify and reconcile before closing.
 7. Task 2.7 reason catalog — **architecture resolved**; subtasks:
    - 2.7a migration + schema + seed + backfill — **complete** (V20 tests 13 passed, migration suite 74 passed; TEXT stable IDs, seven seeded stock-out categories excluding sale, nullable exit_reason_id FK, reason snapshot unchanged, limited legacy backfill snapshot-only; worker + independent verifier confirmed; no code edits/commit)
    - 2.7b catalog repository/service/command CRUD — **complete** (independent verification: full Rust library suite 823 passed; stale migration-count assertions fixed)
