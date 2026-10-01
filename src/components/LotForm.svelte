@@ -45,6 +45,7 @@
     } from "../lib/stores.js";
     import { LL } from "../i18n/i18n-svelte.js";
     import { humanizeError } from "../lib/errors.js";
+    import { isFractionalForIntegerUnit } from "../lib/movementRules.js";
 
     // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -383,6 +384,14 @@
             errorMsg = $LL.lotForm.quantityGreaterThanZero();
             return;
         }
+        // Guard against fractional quantity for integer-unit products.
+        // HTML min/step attributes enforce this in the browser, but programmatic
+        // form submission bypasses them — this guard closes the gap so the
+        // backend IPC is never reached with an invalid fractional quantity.
+        if (isFractionalForIntegerUnit(quantity, productUnitKind === "integer")) {
+            errorMsg = $LL.lotMovements.modal.integerQuantityError({ quantity });
+            return;
+        }
         // Alert days validation: validate raw string format (nonnegative whole
         // decimal digits) and range 0..3650 before submission. The derived
         // `alertDaysBefore` is used for the payload.
@@ -714,8 +723,8 @@
                     label={$LL.lotForm.quantityStar()}
                     type="number"
                     required
-                    min={productUnitKind === "decimal" ? 0.01 : 1}
-                    step={productUnitKind === "decimal" ? 0.01 : 1}
+                    min={productUnitKind !== "integer" ? 0.01 : 1}
+                    step={productUnitKind !== "integer" ? 0.01 : 1}
                 />
             {/if}
 
