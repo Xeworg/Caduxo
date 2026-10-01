@@ -110,7 +110,7 @@ All quantity-entry surfaces checked:
 - Planned version: 0.2.2 (SemVer bug-fix patch)
 
 ## Work-unit evidence
-- Commit: pending
+- Commit: `8ee0e78` (`fix(scanner): enforce integer quantity inputs`)
 - Version bump: 0.2.1 → 0.2.2 (package.json, package-lock.json, src-tauri/Cargo.toml, src-tauri/Cargo.lock [caduxo entry], src-tauri/tauri.conf.json)
 - Verification: `npm run check` → 0 errors, 0 warnings
 - Status: task 1 complete; task 2 complete; ProductDetailPage wiring done; follow-up done
