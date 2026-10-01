@@ -91,13 +91,11 @@
   import CalendarPage from "./components/CalendarPage.svelte";
   import ConfigurationPage from "./components/ConfigurationPage.svelte";
   import ScannerPage from "./components/ScannerPage.svelte";
+
   import { startPeriodicNotificationCheck } from "./lib/notifications.js";
   import { LL } from "./i18n/i18n-svelte.js";
-  import {
-    scannerNavigation,
-    SCANNER_EXIT_SIGNAL,
-    type ScannerNavigationValue,
-  } from "./lib/navigation.js";
+  import { scannerNavigation, SCANNER_EXIT_SIGNAL } from "./lib/navigation.js";
+
 
   type Tab = "dashboard" | "stores" | "products" | "calendar" | "reports" | "scanner" | "import" | "backup" | "settings";
 
@@ -198,14 +196,27 @@
       event.preventDefault();
       resetDocumentZoom();
     };
-    const blockContextMenu = (event: MouseEvent) => {
-      event.preventDefault();
-    };
     const blockKeyZoom = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey)) return;
       if (ZOOM_KEY_CODES.has(event.code) || event.code === "KeyP") {
         event.preventDefault();
       }
+    };
+    const usesNativeEditingMenu = (target: EventTarget | null): boolean => {
+      if (!(target instanceof Element)) return false;
+      const control = target.closest(
+        'textarea, input:not([type="button"]):not([type="checkbox"]):not([type="color"]):not([type="file"]):not([type="hidden"]):not([type="image"]):not([type="radio"]):not([type="range"]):not([type="reset"]):not([type="submit"]), [contenteditable]:not([contenteditable="false"])',
+      );
+      return control !== null && !control.hasAttribute("disabled");
+    };
+    const blockNonEditingContextMenu = (event: MouseEvent) => {
+      if (!usesNativeEditingMenu(event.target)) event.preventDefault();
+    };
+    const blockNonEditingContextMenuShortcut = (event: KeyboardEvent) => {
+      if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey)) return;
+      if (usesNativeEditingMenu(document.activeElement)) return;
+      event.preventDefault();
+      event.stopPropagation();
     };
 
     window.addEventListener("wheel", blockWheelZoom, {
@@ -218,8 +229,10 @@
     });
     window.addEventListener("keydown", blockKeyZoom, { capture: true });
     document.addEventListener("keydown", blockKeyZoom, { capture: true });
-    window.addEventListener("contextmenu", blockContextMenu, { capture: true });
-    document.addEventListener("contextmenu", blockContextMenu, {
+    document.addEventListener("contextmenu", blockNonEditingContextMenu, {
+      capture: true,
+    });
+    window.addEventListener("keydown", blockNonEditingContextMenuShortcut, {
       capture: true,
     });
     window.addEventListener("gesturestart", blockGestureZoom, {
@@ -258,10 +271,10 @@
       document.removeEventListener("keydown", blockKeyZoom, {
         capture: true,
       });
-      window.removeEventListener("contextmenu", blockContextMenu, {
+      document.removeEventListener("contextmenu", blockNonEditingContextMenu, {
         capture: true,
       });
-      document.removeEventListener("contextmenu", blockContextMenu, {
+      window.removeEventListener("keydown", blockNonEditingContextMenuShortcut, {
         capture: true,
       });
       window.removeEventListener("gesturestart", blockGestureZoom, {
