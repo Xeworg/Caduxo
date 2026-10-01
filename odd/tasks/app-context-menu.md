@@ -27,8 +27,9 @@ Keep the native WebView editing menu for editable text controls so system Copy/P
 
 ## Delivery
 - Branch: `feat/app-context-menu`, based on `fe257af`.
-- No commit, push, or PR created/requested.
-- Changed worktree includes `src/App.svelte` and generated `src/i18n/i18n-types.ts`; custom UI/helper were untracked feature files and are now removed. This task file is the ODD record.
+- Work-unit commit: `171b8f3 fix(ui): preserve native context menus for fields`.
+- No push or PR created.
+- Final working tree was clean after the commit.
 
 ## Next step
-Synchronize the patch version to `0.2.1` and verify metadata/build. Then test right-click and keyboard invocation in actual Tauri fields and non-editable surfaces. Commit only if explicitly requested.
+PR to `main` will run the GitHub Actions Ubuntu and Windows typecheck/production-build matrix. Manual Tauri runtime testing was done by the user and confirmed working.
