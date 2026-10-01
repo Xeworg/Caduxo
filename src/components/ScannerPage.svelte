@@ -72,6 +72,8 @@
     buildMovementKindLabelRecord,
     getMovementKindLabel,
     notesRequiredByMovementKind,
+    isFractionalForIntegerUnit,
+    qtyAttrs,
   } from "../lib/movementRules.js";
   import {
     listStockOutReasons,
@@ -257,6 +259,15 @@
     return null;
   });
 
+  // Unit kind from the active product — drives quantity input constraints
+  // for Sale and Stock-out modes. Mirrors the same prop used by LotForm
+  // and the movement modals so Scanner stays consistent with them.
+  let activeProductUnitKind = $derived(
+    (activeProduct?.unit_type ?? null) as UnitKind | null,
+  );
+  let isIntegerUnit = $derived(activeProductUnitKind === "integer");
+  let _qtyAttrs = $derived(qtyAttrs(isIntegerUnit));
+
   // Active catalog reasons for Stock-out. Loaded lazily when the mode is
   // first activated so the Scanner only pays the round-trip once per visit.
   let stockOutReasonOptions = $derived(
@@ -364,6 +375,7 @@
   let canConfirmSale = $derived.by((): boolean => {
     if (!resolvedLot) return false;
     if (quantity <= 0) return false;
+    if (isFractionalForIntegerUnit(quantity, isIntegerUnit)) return false;
     if (!locationId) return false;
     if (quantity > selectedBalance) return false;
     return true;
@@ -373,6 +385,7 @@
     if (!resolvedLot) return false;
     if (!exitReasonId) return false;
     if (quantity <= 0) return false;
+    if (isFractionalForIntegerUnit(quantity, isIntegerUnit)) return false;
     if (!locationId) return false;
     if (quantity > selectedBalance) return false;
     if (requiresNotes && !notes.trim()) return false;
@@ -963,6 +976,10 @@
       mutationError = invalidSaleMessage();
       return;
     }
+    if (isFractionalForIntegerUnit(quantity, isIntegerUnit)) {
+      mutationError = $LL.lotMovements.modal.integerQuantityError({ quantity });
+      return;
+    }
     submitting = true;
     mutationError = "";
     try {
@@ -995,6 +1012,9 @@
   function invalidSaleMessage(): string {
     if (!resolvedLot) return $LL.scanner.sale.invalid.lot();
     if (quantity <= 0) return $LL.scanner.sale.invalid.quantity();
+    if (isFractionalForIntegerUnit(quantity, isIntegerUnit)) {
+      return $LL.lotMovements.modal.integerQuantityError({ quantity });
+    }
     if (!locationId) return $LL.scanner.sale.invalid.location();
     if (quantity > selectedBalance) {
       return $LL.scanner.sale.invalid.quantityExceeds({
@@ -1010,6 +1030,10 @@
     if (!resolvedLot) return;
     if (!canConfirmStockOut) {
       mutationError = invalidStockOutMessage();
+      return;
+    }
+    if (isFractionalForIntegerUnit(quantity, isIntegerUnit)) {
+      mutationError = $LL.lotMovements.modal.integerQuantityError({ quantity });
       return;
     }
     submitting = true;
@@ -1048,6 +1072,9 @@
     if (!resolvedLot) return $LL.scanner.stockOut.invalid.lot();
     if (!exitReasonId) return $LL.scanner.stockOut.invalid.reason();
     if (quantity <= 0) return $LL.scanner.stockOut.invalid.quantity();
+    if (isFractionalForIntegerUnit(quantity, isIntegerUnit)) {
+      return $LL.lotMovements.modal.integerQuantityError({ quantity });
+    }
     if (!locationId) return $LL.scanner.stockOut.invalid.location();
     if (quantity > selectedBalance) {
       return $LL.scanner.stockOut.invalid.quantityExceeds({
@@ -1540,10 +1567,10 @@
               <input
                 type="number"
                 class="input input-md motion-reduce:transition-none w-full"
-                min="0"
+                min={_qtyAttrs.min}
                 max={selectedBalance}
-                step="0.01"
-                inputmode="decimal"
+                step={_qtyAttrs.step}
+                inputmode={_qtyAttrs.inputmode}
                 value={quantityStr}
                 oninput={(e: Event) => {
                   const target = e.currentTarget as HTMLInputElement;
@@ -1630,10 +1657,10 @@
               <input
                 type="number"
                 class="input input-md motion-reduce:transition-none w-full"
-                min="0"
+                min={_qtyAttrs.min}
                 max={selectedBalance}
-                step="0.01"
-                inputmode="decimal"
+                step={_qtyAttrs.step}
+                inputmode={_qtyAttrs.inputmode}
                 value={quantityStr}
                 oninput={(e: Event) => {
                   const target = e.currentTarget as HTMLInputElement;
@@ -1821,10 +1848,10 @@
               <input
                 type="number"
                 class="input input-md motion-reduce:transition-none w-full"
-                min="0"
+                min={_qtyAttrs.min}
                 max={selectedBalance}
-                step="0.01"
-                inputmode="decimal"
+                step={_qtyAttrs.step}
+                inputmode={_qtyAttrs.inputmode}
                 value={quantityStr}
                 oninput={(e: Event) => {
                   const target = e.currentTarget as HTMLInputElement;
@@ -1956,10 +1983,10 @@
               <input
                 type="number"
                 class="input input-md motion-reduce:transition-none w-full"
-                min="0"
+                min={_qtyAttrs.min}
                 max={selectedBalance}
-                step="0.01"
-                inputmode="decimal"
+                step={_qtyAttrs.step}
+                inputmode={_qtyAttrs.inputmode}
                 value={quantityStr}
                 disabled={stockOutPickerDisabled}
                 oninput={(e: Event) => {

@@ -786,6 +786,7 @@ on:click={() => onEdit(product)}
 {#if resolvingLot}
     <ResolveQuantityDialog
         lot={resolvingLot}
+        unitType={resolvingLot.unit_type ?? null}
         onResolved={onLotResolved}
         onClose={() => (resolvingLot = null)}
     />

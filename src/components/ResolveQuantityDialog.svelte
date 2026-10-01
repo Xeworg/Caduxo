@@ -18,6 +18,8 @@
         type ExpiryLotResolveResult,
         type LotResolutionEventResponse,
     } from "../lib/expiry_lots.js";
+    import { isFractionalForIntegerUnit, qtyAttrs } from "../lib/movementRules.js";
+    import type { UnitKind } from "../lib/products.js";
     import Modal from "./ui/Modal.svelte";
     import Input from "./ui/Input.svelte";
     import Button from "./ui/Button.svelte";
@@ -27,6 +29,13 @@
 
     /** The lot to resolve quantity from. */
     export let lot: ExpiryLotResponse;
+    /**
+     * Unit kind from the lot's product catalog link. Drives quantity input
+     * constraints and fractional validation. `null` (the default) means
+     * the product is uncatalogued / legacy — treated as decimal so fractional
+     * quantities are allowed without false positives.
+     */
+    export let unitType: UnitKind | null = null;
     /** Called after a successful resolve. */
     export let onResolved: (result: ExpiryLotResolveResult) => void;
     /** Called when the user dismisses the dialog. */
@@ -58,6 +67,11 @@
 
     let submitting = false;
     let errorMsg = "";
+
+    // Derived unit-kind state — mirrors the pattern from MoveStockModal
+    // and RegisterExitModal so the resolve dialog stays consistent.
+    $: isIntegerUnit = unitType === "integer";
+    $: _qtyAttrs = qtyAttrs(isIntegerUnit);
 
     // History panel
     let history: LotResolutionEventResponse[] = [];
@@ -121,6 +135,13 @@
         }
         if (quantity > lot.quantity) {
             errorMsg = $LL.lotMovements.resolution.quantityExceedsRemainingError({ quantity: lot.quantity });
+            return;
+        }
+        // Guard fractional input for integer-unit products before IPC.
+        // HTML min/step attributes enforce the same constraint in the browser;
+        // this guard catches programmatic submissions that bypass them.
+        if (isFractionalForIntegerUnit(quantity, isIntegerUnit)) {
+            errorMsg = $LL.lotMovements.modal.integerQuantityError({ quantity });
             return;
         }
         submitting = true;
@@ -194,8 +215,8 @@
                     label={$LL.lotMovements.resolution.quantityToResolve()}
                     bind:value={quantityAsString}
                     disabled={submitting}
-                    min={0}
-                    step={1}
+                    min={_qtyAttrs.min}
+                    step={_qtyAttrs.step}
                 />
 
                 <label>
